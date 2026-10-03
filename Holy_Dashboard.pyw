@@ -41,10 +41,12 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.22.1"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.22.2"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
+GONE = os.path.join(ROOT, "Holy_Gone.json")              # 🗃️ v3.22.2: أرقام البوتات المحذوفة (حتى الإجماليات ما تنقص بالحذف)
+COIN_LEDGER = os.path.join(ROOT, "Holy_CoinLedger.json") # 🪙 v3.22.2: الربح المحرّر بالعملات (DCA بيعي + عملة إعادة الاستثمار)
 ALIVE_WINDOW = 12.0
 PROCS, TG_LAST, WD_HIST = {}, {}, {}
 TG_MUTED = {"v": False}
@@ -2311,15 +2313,22 @@ def overview():
         if not unit: continue
         dca_coin[unit] = round(dca_coin.get(unit, 0) + float(d.get("coin_profit") or 0), 4)
     usd_dca = [b for b in bots if b.get("bot_type") == "dca_buy" and not b.get("demo")]
-    return {"t": time.time(), "total_profit": round(sum(b["profit"] for b in grid_bots)
+    _A = _safe(alltime_view, default=None) or {}
+    _today = datetime.now().strftime("%Y-%m-%d")
+    return {"t": time.time(), "total_profit": round(float(_A["rel"]), 4) if _A else round(sum(b["profit"] for b in grid_bots)
                                                     + sum(float((b.get("dca") or {}).get("coin_profit") or 0) for b in usd_dca), 4),
+            "coins_today": {k: v["t"] for k, v in (_safe(coins_period, _today, _today, default={}) or {}).items()},
+            "coins_all": _A.get("coins") or {},
+            "stats": _safe(trade_stats, default={"avg": 0.0, "month": 0.0, "best": None}),
             "dca_coin": dca_coin,
             "accum": _safe(acc_snapshot, default=[]),
             "accum_alloc": _safe(acc_alloc_summary, default=None),
             "auth_on": auth_enabled(), "lock_mins": auth_cfg()["mins"],
             "health_bad": sum(1 for b in bots if (b.get("health") or {}).get("state") == "bad"),
             "audit_bad": sum(1 for b in bots if (b.get("audit") or {}).get("ok") is False),
-            "today_profit": round(sum(b["today"] for b in grid_bots) + sum(b["today"] for b in usd_dca), 4),
+            # 📅 v3.22.2: المحرر اليوم من الدفتر (الجرد + DCA الشرائي · ويّا المحذوف اليوم) — كان مجموع البوتات الحية فينقص بالحذف
+            "today_profit": round(float(_safe(day_profit, _today, default=None) if _safe(day_profit, _today, default=None) is not None
+                                        else sum(b["today"] for b in grid_bots) + sum(b["today"] for b in usd_dca)), 4),
             # 📊 عدّاد مستقل تماماً — ما يمسّ الدفتر ولا المُراكِم ولا أي رقم قديم.
             #    يقرا سجل صفقات المحرك ويجمع ربح اليوم كاملاً، ويصفّر بنهاية اليوم.
             "day_full": _safe(_today_parts, default={"norm": 0.0, "ri": 0.0}),
@@ -2804,7 +2813,7 @@ def ledger_tick():
             key = os.path.relpath(b["dir"], ROOT)
             ent = led.get(key) if isinstance(led.get(key), dict) else None
             if ent is None:
-                ent = {"symbol": b["symbol"], "dca": True, "daily": {}, "monthly": {}, "trades_daily": {}, "hourly": {}, "dca_seen": []}
+                ent = {"symbol": b["symbol"], "dca": True, "type": "dca_buy", "daily": {}, "monthly": {}, "trades_daily": {}, "hourly": {}, "dca_seen": []}
             seen = list(ent.get("dca_seen") or [])
             sset = set(seen)
             for c in (st.get("cycles_log") or []):
@@ -5203,6 +5212,9 @@ _PV_WD = ("الاثنين", "الثلاثاء", "الأربعاء", "الخمي�
 def _pv_cfg_txt(c):
     """⚙️ إعدادات بوت الجرد بسطر واحد (للتقرير)."""
     try:
+        if str(c.get("bot_type") or "") in ("dca", "dca_buy"):
+            return (f"أساس {float(c.get('base_order_qty') or 0):g} · {int(float(c.get('max_safety_orders') or 0))} أمان "
+                    f"{float(c.get('first_deviation') or 0):g}% · هدف {float(c.get('take_profit_pct') or 0):g}%")
         g = float(c.get("grid_percentage") or 0) * 100
         s = f"{g:.2f}% · {float(c.get('usd_value') or 0):g}$"
         bt = str(c.get("bot_type") or "grid")
@@ -5246,10 +5258,14 @@ def profit_view(days=30):
     meta = {}
     for b in bot_dirs().values():
         c0 = b.get("cfg") or {}
-        if c0.get("is_demo") or c0.get("bot_type") in ("dca", "dca_buy"):
+        if c0.get("is_demo") or c0.get("bot_type") == "dca":
             continue
         meta[os.path.relpath(b["dir"], ROOT)] = {"sym": str(b.get("symbol") or c0.get("symbol") or ""),
                                                 "type": str(c0.get("bot_type") or "grid"), "cfg": c0}
+    _gone_t = {}
+    for _e in (((load_json(GONE) or {}).get("bots") or {}).values()):
+        if isinstance(_e, dict) and _e.get("key"):
+            _gone_t[_e["key"]] = str(_e.get("type") or "grid")
     keys = set(meta)
     for src in (led, arcb):
         for k, v in src.items():
@@ -5262,6 +5278,7 @@ def profit_view(days=30):
     for k in keys:
         le, ae = led.get(k), arcb.get(k)
         ld = (le.get("daily") or {}) if isinstance(le, dict) else {}
+        ltd = (le.get("trades_daily") or {}) if isinstance(le, dict) and le.get("dca") else None   # DCA شرائي: عدد الدورات
         ad = (ae.get("daily") or {}) if isinstance(ae, dict) else {}
         a0 = min(ad) if ad else None
         kd = [d for d, x in ld.items() if _pv_num(x)] + [d for d, x in ad.items() if isinstance(x, dict)]
@@ -5276,6 +5293,8 @@ def profit_view(days=30):
             a = ad.get(ds)
             if isinstance(a, dict):
                 n, r, c, s = float(a.get("n") or 0), float(a.get("r") or 0), int(a.get("c") or 0), "a"
+            elif ltd is not None:
+                n, r, c, s = lv, 0.0, int(ltd.get(ds) or 0), "a"   # 💵 DCA شرائي: الدفتر هو المصدر (صافي لكل دورة) · العدد = الدورات
             elif a0 is None or ds < a0:
                 n, r, c, s = max(0.0, lv), 0.0, None, "l"       # قبل ما يبدي الأرشيف: الدفتر
             else:
@@ -5307,8 +5326,20 @@ def profit_view(days=30):
         return str(k)
     syms = {k: _sym(k) for k in keys}
     bases = {k: (syms[k].split("-")[0] or k).upper() for k in keys}
+
+    def _typ(k):
+        if k in meta:
+            return meta[k]["type"]
+        if k in _gone_t:
+            return _gone_t[k]
+        le0 = led.get(k)
+        return "dca_buy" if isinstance(le0, dict) and le0.get("dca") else "grid"
+    types = {k: _typ(k) for k in keys}
     dup = {b0 for b0 in bases.values() if list(bases.values()).count(b0) > 1}
-    names = {k: (bases[k] + " · " + k if bases[k] in dup else bases[k]) + ("" if k in meta else " (محذوف)") for k in keys}
+    dup2 = {(bases[k], types[k]) for k in keys if sum(1 for j in keys if bases[j] == bases[k] and types[j] == types[k]) > 1}
+    # 🏷️ v3.22.2: بوتين بنفس العملة ⇒ يتميّزون بالنوع (لانهائية · مدى · بلس · DCA شرائي) · ونفس النوع كمان ⇒ + المجلد
+    names = {k: (bases[k] + (" · " + _PV_TYPE_ALL.get(types[k], "جرد") if bases[k] in dup else "")
+                 + (" · " + k if (bases[k], types[k]) in dup2 else "")) + ("" if k in meta else " (محذوف)") for k in keys}
 
     bots, dayt = [], {ds: 0.0 for ds in dl}
     for k in keys:
@@ -5335,8 +5366,8 @@ def profit_view(days=30):
         if k not in meta and n + r <= 1e-12 and lv <= 1e-12:
             continue                                            # بوت محذوف وماكو شي بالفترة
         m = meta.get(k) or {}
-        bots.append({"k": k, "sym": syms[k], "name": names[k], "type": m.get("type") or "",
-                     "tl": _PV_TYPE.get(m.get("type") or "", ""), "live": k in meta,
+        bots.append({"k": k, "sym": syms[k], "name": names[k], "type": types[k],
+                     "tl": _PV_TYPE_ALL.get(types[k], ""), "live": k in meta,
                      "cfg_txt": _pv_cfg_txt(m.get("cfg") or {}) if m else "",
                      "t": round(n + r, 6), "n": round(n, 6), "r": round(r, 6), "c": c, "cu": cu,
                      "led": round(lv, 6), "act": act,
@@ -5411,6 +5442,7 @@ def profit_view(days=30):
            "best": ({"d": bd, "v": round(dayt[bd], 6), "full": f"{_PV_WD[bdt.weekday()]} {bdt.day}/{bdt.month}/{bdt.year}"}
                     if bd and dayt[bd] > 1e-12 else None),
            "other": round(sum(b["t"] for b in oth), 6), "n_other": len(oth)}
+    tot["coins"] = {kk: vv["t"] for kk, vv in (_safe(coins_period, dl[0] if dl else today_s, today_s, default={}) or {}).items()}
     return {"ok": True, "from": dl[0] if dl else today_s, "to": today_s, "span": span, "req": days, "bucket": bk,
             "days": out_days, "bots": bots, "tot": tot, "ts": time.time()}
 
@@ -5998,7 +6030,7 @@ def trade_period(start, end):
             if is_ri and h is not None:
                 n, r, k = float(h["n"]), float(h["r"]), int(h["c"])
             else:                           # بلا إعادة استثمار، أو يوم قبل الأرشيف المفصّل
-                n, r, k = rel, 0.0, int((h or {}).get("c") or 0)
+                n, r, k = rel, 0.0, int((h or {}).get("c") or (le.get("trades_daily") or {}).get(d) or 0)
             for tgt in (per_day[d], c, bref):
                 tgt["n"] += n
                 tgt["r"] += r
@@ -6021,17 +6053,164 @@ def trade_period(start, end):
             "by_bot": bots_out}
 
 
-def _tp_alltime():
-    """📈 إجمالي التداول حتى الآن = إجمالي المحرر (نفس رقم الكرت) + 💠 داخل الأوامر + 💠 للمُراكِم."""
-    rel = held = ho = 0.0
-    for b in _tp_bots().values():
+_PV_TYPE_ALL = {"grid": "لانهائية", "grid_range": "مدى", "grid_plus": "بلس", "dca_buy": "DCA شرائي", "dca": "DCA بيعي"}
+
+
+def coin_ledger_tick():
+    """🪙 v3.22.2: «الربح المحرّر بالعملات» — مراقبة بس (ما يدخل أي حساب ثاني):
+    ربح DCA البيعي (صافي لكل دورة من `cycles_log`) + العملة المحرّرة من إعادة الاستثمار (تسليمات الطابور — للمُراكِم أو للمحفظة).
+    كل حدث مرة وحدة بمعرّفه (بوت|حدث) · بيومه الحقيقي · يبقى بعد حذف البوت."""
+    cl = load_json(COIN_LEDGER) or {}
+    if not isinstance(cl, dict):
+        cl = {}
+    seen_l = list(cl.get("seen") or [])
+    seen = set(seen_l)
+    daily = cl.setdefault("daily", {})
+    tot = {"dca": cl.setdefault("total_dca", {}), "ri": cl.setdefault("total_ri", {})}
+    bots = cl.setdefault("bots", {})
+    changed = False
+    for b in bot_dirs().values():
+        c0 = b.get("cfg") or {}
+        if c0.get("is_demo"):
+            continue
         st = _safe(load_json, paths_of(b)[0], default={}) or {}
+        key = os.path.relpath(b["dir"], ROOT)
+        base = str(b["symbol"]).split("-")[0].upper()
+        evs = []
+        if c0.get("bot_type") == "dca":
+            for c in (st.get("cycles_log") or []):
+                if c.get("id"):
+                    evs.append(("dca:" + str(c["id"]), c.get("profit"), c.get("ts"), "dca"))
+        for h in (_safe(_ri_handoffs_of, st, default=[]) or []):
+            evs.append(("ri:" + str(h.get("id")), h.get("coin"), h.get("ts"), "ri"))
+        for eid, q, ts, src in evs:
+            gid = key + "|" + eid
+            if gid in seen:
+                continue
+            try:
+                q = float(q or 0)
+                day = datetime.fromtimestamp(float(ts or time.time())).strftime("%Y-%m-%d")
+            except Exception:
+                continue
+            seen.add(gid); seen_l.append(gid); changed = True
+            if abs(q) < 1e-12:
+                continue
+            d = daily.setdefault(day, {})
+            e = d.setdefault(base, {"dca": 0.0, "ri": 0.0})
+            e[src] = round(float(e.get(src) or 0) + q, 10)
+            tot[src][base] = round(float(tot[src].get(base) or 0) + q, 10)
+            be = bots.setdefault(key, {"sym": b["symbol"], "type": c0.get("bot_type") or "grid"})
+            be[src] = round(float(be.get(src) or 0) + q, 10)
+    if changed:
+        cl["seen"] = seen_l[-30000:]
+        try:
+            save_json_atomic(COIN_LEDGER, cl)
+        except Exception:
+            pass
+    return cl
+
+
+def coins_period(start, end):
+    """🪙 الربح المحرّر بالعملات لفترة (تواريخ شاملة): {العملة: {"dca", "ri", "t"}} — من دفتر العملات."""
+    cl = load_json(COIN_LEDGER) or {}
+    out = {}
+    for d, row in ((cl.get("daily") or {}) if isinstance(cl, dict) else {}).items():
+        if not (start <= d <= end) or not isinstance(row, dict):
+            continue
+        for base, e in row.items():
+            o = out.setdefault(base, {"dca": 0.0, "ri": 0.0, "t": 0.0})
+            for k in ("dca", "ri"):
+                v = float((e or {}).get(k) or 0)
+                o[k] += v
+                o["t"] += v
+    return {k: {kk: round(vv, 10) for kk, vv in v.items()} for k, v in out.items() if abs(v["t"]) > 1e-12}
+
+
+def alltime_view():
+    """📈 v3.22.2: الإجماليات حتى الآن — البوتات الحية + **المحذوفة** (تنحفظ أرقامها لحظة الحذف) ⇒ ما تنقص لما تحذف بوت.
+    المحرر = الجرد (ربح الكرت × معامل العمولة) + DCA الشرائي (صافي) · التداول = المحرر + 💠 داخل الأوامر + 💠 للمُراكِم ·
+    العملات = DCA البيعي (ربح الكرت) + العملة المحرّرة من إعادة الاستثمار (دفتر العملات)."""
+    rel = held = ho = 0.0
+    coins = {}
+    for b in bot_dirs().values():
+        c0 = b.get("cfg") or {}
+        if c0.get("is_demo"):
+            continue
+        st = _safe(load_json, paths_of(b)[0], default={}) or {}
+        bt = c0.get("bot_type") or "grid"
+        if bt == "dca":
+            base = str(b["symbol"]).split("-")[0].upper()
+            coins[base] = coins.get(base, 0.0) + float(st.get("total_coin_profit") or 0)
+            continue
+        if bt == "dca_buy":
+            rel += float(st.get("total_coin_profit") or 0)
+            continue
         rel += round(float(st.get("total_profit") or 0) * _safe(net_factor, b, default=1.0), 4)
         rs = _safe(_ri_state_of, st, default=None)
         if rs:
             held += rs["held"]
             ho += rs["handoff"]
-    return {"rel": rel, "held": held, "handoff": ho, "trade": rel + held + ho}
+    g = load_json(GONE) or {}
+    for e in ((g.get("bots") or {}) if isinstance(g, dict) else {}).values():
+        try:
+            rel += float(e.get("rel") or 0)
+            held += float(e.get("held") or 0)
+            ho += float(e.get("handoff") or 0)
+            for base, q in (e.get("coin") or {}).items():
+                coins[base] = coins.get(base, 0.0) + float(q or 0)
+        except Exception:
+            continue
+    cl = load_json(COIN_LEDGER) or {}
+    for base, q in ((cl.get("total_ri") or {}) if isinstance(cl, dict) else {}).items():
+        coins[base] = coins.get(base, 0.0) + float(q or 0)
+    return {"rel": rel, "held": held, "handoff": ho, "trade": rel + held + ho,
+            "coins": {k: round(v, 8) for k, v in coins.items() if abs(v) > 1e-10}}
+
+
+def _tp_alltime():
+    """📈 إجمالي التداول حتى الآن = إجمالي المحرر (نفس رقم الكرت) + 💠 داخل الأوامر + 💠 للمُراكِم — ويّا المحذوفة (v3.22.2)."""
+    return alltime_view()
+
+
+_TS_CACHE = {"t": 0.0, "v": None}
+
+
+def trade_stats():
+    """📊 v3.22.2 للشريط: متوسط ربح التداول باليوم (آخر 30 يوم من أول يوم بيه ربح) · المعدل الشهري (×30) · أفضل يوم (آخر سنة)."""
+    if _TS_CACHE["v"] is not None and time.time() - _TS_CACHE["t"] < 120:
+        return _TS_CACHE["v"]
+    today = datetime.now()
+    end = today.strftime("%Y-%m-%d")
+    P = trade_period((today - timedelta(days=29)).strftime("%Y-%m-%d"), end)
+    vals = [(d, P["per_day"][d]["n"] + P["per_day"][d]["r"]) for d in P["days"]]
+    first = next((i for i, (d, v) in enumerate(vals) if abs(v) > 1e-12), None)
+    span = (len(vals) - first) if first is not None else 0
+    tot = sum(v for _, v in vals)
+    avg = tot / span if span else 0.0
+    P2 = trade_period((today - timedelta(days=364)).strftime("%Y-%m-%d"), end)
+    best = None
+    for d in P2["days"]:
+        v = P2["per_day"][d]["n"] + P2["per_day"][d]["r"]
+        if v > 1e-12 and (best is None or v > best[1]):
+            best = (d, v)
+    out = {"avg": round(avg, 6), "month": round(avg * 30, 6), "span": span,
+           "best": {"d": best[0], "v": round(best[1], 6)} if best else None}
+    _TS_CACHE.update(t=time.time(), v=out)
+    return out
+
+
+def _bot_label(key):
+    """اسم بوت للتقارير: العملة · النوع (· المجلد لو بوتين بنفس العملة والنوع) — والمحذوف يتعلّم."""
+    live = {os.path.relpath(b["dir"], ROOT): b for b in bot_dirs().values()}
+    b = live.get(key)
+    if b:
+        return _PV_TYPE_ALL.get((b.get("cfg") or {}).get("bot_type") or "grid", "جرد"), True
+    g = (load_json(GONE) or {}).get("bots") or {}
+    for e in g.values():
+        if e.get("key") == key:
+            return _PV_TYPE_ALL.get(e.get("type") or "grid", "جرد"), False
+    le = (load_json(LEDGER) or {}).get(key) or {}
+    return ("DCA شرائي" if le.get("dca") else "جرد"), False
 
 
 def trade_now():
@@ -6040,7 +6219,8 @@ def trade_now():
     T = trade_period(today, today)["tot"]
     A = _tp_alltime()
     return {"today": round(T["n"] + T["r"], 6), "n": round(T["n"], 6), "r": round(T["r"], 6),
-            "rel_today": round(T["rel"], 6), "held": round(A["held"], 6), "handoff": round(A["handoff"], 6)}
+            "rel_today": round(T["rel"], 6), "held": round(A["held"], 6), "handoff": round(A["handoff"], 6),
+            "rel_all": round(A["rel"], 6), "trade_all": round(A["trade"], 6), "coins_all": A.get("coins") or {}}
 
 
 def _tp_range(kind, ref=None):
@@ -6081,6 +6261,19 @@ def build_report(kind, ref=None):
         shown += 1
         nb = len(c["bots"])
         L.append(f"▫️ *{_tp_md(sym.split('-')[0])}*" + (f" ({_tp_cnt(nb, 'بوت', 'بوتين', 'بوتات', 'بوت')})" if nb > 1 else "") + f": `{tt:.4f}$`")
+        if nb > 1:                                   # 🏷️ v3.22.2: كل بوت بسطره (النوع · والمجلد لو نفس النوع)
+            _lb = {}
+            for bk in c["bots"]:
+                _lb[bk] = _safe(_bot_label, bk, default=("جرد", True)) or ("جرد", True)
+            _tl = [t for t, _ in _lb.values()]
+            for bk in sorted(c["bots"], key=lambda k: -((P["by_bot"].get(k) or {}).get("n", 0) + (P["by_bot"].get(k) or {}).get("r", 0))):
+                bb = P["by_bot"].get(bk) or {}
+                t0, live0 = _lb[bk]
+                nm = t0 + (f" · {bk}" if _tl.count(t0) > 1 else "") + ("" if live0 else " (محذوف)")
+                _dc = t0.startswith("DCA")
+                L.append(f"      · {_tp_md(nm)}: `{(bb.get('n', 0) + bb.get('r', 0)):.4f}$`"
+                         + (" · " + (_tp_cnt(int(bb.get("c") or 0), "دورة وحدة", "دورتين", "دورات", "دورة") if _dc
+                                     else _tp_cnt(int(bb.get("c") or 0), "بيعة وحدة", "بيعتين", "بيعات", "بيعة")) if bb.get("c") else ""))
         if c["ri"]:
             sub = f"      بدون `{c['n']:.4f}` + 💠 `{c['r']:.4f}`"
         else:
@@ -6133,9 +6326,20 @@ def build_report(kind, ref=None):
     L.append("      المحرر هو اللي يدخل الربح اليومي، والمُراكِم ياخذ نسبته منه")
     if kind == "daily":
         L += _safe(_flow_lines, 7, default=[]) or []      # 💵 من وين جت الأموال المحررة ووين راحت
+    # 🪙 v3.22.2: الربح المحرّر بالعملات (DCA بيعي + عملة إعادة الاستثمار — للمُراكِم أو للمحفظة) — مراقبة
+    CP = _safe(coins_period, start, end, default={}) or {}
+    if CP:
+        L.append(SEP)
+        L.append("🪙 *الربح المحرّر بالعملات*")
+        for base, v in sorted(CP.items(), key=lambda kv: kv[0]):
+            parts = ([f"DCA بيعي `{v['dca']:+.8g}`"] if abs(v.get("dca", 0)) > 1e-12 else []) \
+                + ([f"تحرير إعادة الاستثمار `{v['ri']:+.8g}`"] if abs(v.get("ri", 0)) > 1e-12 else [])
+            L.append(f"▫️ *{_tp_md(base)}*: `{v['t']:+.8g}`" + (" = " + " + ".join(parts) if len(parts) > 1 else (" · " + parts[0] if parts else "")))
     A = _tp_alltime()
     L.append(SEP)
     L.append(f"📈 إجمالي التداول `{A['trade']:.4f}$` · 💵 إجمالي المحرر `{A['rel']:.4f}$` (حتى الآن)")
+    if A.get("coins"):
+        L.append("🪙 إجمالي العملات المحرّرة: " + " · ".join(f"`{q:+.8g}` {_tp_md(base)}" for base, q in sorted(A["coins"].items())))
     return "\n".join(L)
 
 
@@ -7440,9 +7644,45 @@ def rebuild(b):
     tg_send(f"♻️ *إعادة بناء* — `{b['symbol']}` راح يرسم شبكة جديدة من السعر الحالي")
     return {"ok": ok, "msg": "♻️ انمسحت الذاكرة وانطلق ببناء شبكة جديدة" if ok else msg}
 
+def _gone_archive(b):
+    """🗃️ v3.22.2: لحظة الحذف — أرقام البوت الكلية تنحفظ (المحرر · 💠 داخل الأوامر · 💠 للمُراكِم · ربح العملة) ⇒ الإجماليات ما تنقص.
+    قبلها نلحّق الدفترين وأرشيف إعادة الاستثمار حتى آخر ربح ينحسب بيومه."""
+    c0 = b.get("cfg") or {}
+    if c0.get("is_demo"):
+        return
+    _safe(ledger_tick, default=None)
+    _safe(coin_ledger_tick, default=None)
+    _safe(reinvest_tick, default=None)
+    st = _safe(load_json, paths_of(b)[0], default={}) or {}
+    bt = c0.get("bot_type") or "grid"
+    key = os.path.relpath(b["dir"], ROOT)
+    base = str(b["symbol"]).split("-")[0].upper()
+    e = {"key": key, "sym": b["symbol"], "type": bt, "ts": time.time(), "rel": 0.0, "held": 0.0, "handoff": 0.0, "coin": {}}
+    if bt == "dca":
+        e["coin"] = {base: round(float(st.get("total_coin_profit") or 0), 10)}
+    elif bt == "dca_buy":
+        e["rel"] = round(float(st.get("total_coin_profit") or 0), 8)
+    else:
+        e["rel"] = round(float(st.get("total_profit") or 0) * _safe(net_factor, b, default=1.0), 8)
+        rs = _safe(_ri_state_of, st, default=None)
+        if rs:
+            e["held"], e["handoff"] = round(rs["held"], 8), round(rs["handoff"], 8)
+    if not (e["rel"] or e["held"] or e["handoff"] or any(e["coin"].values())):
+        return
+    g = load_json(GONE) or {}
+    if not isinstance(g, dict):
+        g = {}
+    g.setdefault("bots", {})[f"{key}@{int(e['ts'])}"] = e
+    save_json_atomic(GONE, g)
+
+
 def delete_bot(b):
     stop_bot(b)
     time.sleep(0.5)
+    try:
+        _gone_archive(b)
+    except Exception as ex:
+        log_event(f"⚠️ [{b['symbol']}] تعذّر حفظ أرقام البوت قبل الحذف: {ex}")
     arch = os.path.join(ROOT, "_archive")
     os.makedirs(arch, exist_ok=True)
     dest = os.path.join(arch, f"{time.strftime('%Y%m%d_%H%M%S')}_{os.path.basename(b['dir'])}")
@@ -8772,6 +9012,7 @@ def ledger_loop():
     while True:
         try:
             ledger_tick()
+            _safe(coin_ledger_tick, default=None)     # 🪙 v3.22.2: الربح المحرّر بالعملات
             if n % 10 == 0:              # كل ~5 دقائق — لقطة إعادة الاستثمار
                 _safe(reinvest_tick, default=None)
             n += 1
@@ -9543,7 +9784,7 @@ header{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:18px
 .tot b{font-size:21px;font-weight:600;background:linear-gradient(92deg,var(--cyan),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent}
 .tot .cur{font-size:12px;color:var(--mut)}
 .sep{width:1px;height:26px;background:var(--line)}
-#spark{opacity:.95}
+#spark{opacity:.32}
 nav.actions{display:flex;gap:8px;flex-wrap:wrap}
 button{font-family:inherit;color:var(--tx);cursor:pointer;border:1px solid var(--line);background:var(--glass);
   border-radius:12px;padding:8px 13px;font-size:13px;
@@ -9921,6 +10162,26 @@ nav.actions .gsep{width:1px;height:24px;background:var(--line);margin:0 4px;flex
 .hrow>.brand{grid-column:2;grid-row:1;justify-self:center}
 .hrow>.ops:not(.opsb){grid-column:3;grid-row:1;justify-self:end;margin:0!important}
 .hrow>.totals{grid-column:1/-1;grid-row:2;width:100%;justify-content:center;margin:0!important}
+.hrow>.stats{grid-column:1/-1;grid-row:2;width:100%;margin:0}
+/* 📊 v3.22.2: عشر خانات متساوية — خمسة اليوم فوق · خمسة الإجمالي تحت (الموبايل: كل خانة يمّ إجماليها) */
+.stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.st{position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:center;gap:5px;min-width:0;min-height:66px;
+  padding:10px 13px;border:1px solid var(--line);border-radius:12px;background:rgb(var(--ov-rgb)/.035)}
+.st .sl{font-size:11.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:relative;z-index:1}
+.st .sv{display:flex;align-items:baseline;gap:5px;min-width:0;font-size:20px;font-weight:600;white-space:nowrap;overflow:hidden;position:relative;z-index:1}
+.st .sv>span,.st .sv.rotv{background:linear-gradient(92deg,var(--cyan),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent;overflow:hidden;text-overflow:ellipsis}
+.st .sv small{font-size:12px;color:var(--mut);font-weight:400}
+.st .sv .cu{font-size:12px;color:var(--mut);font-weight:500;-webkit-text-fill-color:var(--mut)}
+.st.click{cursor:pointer}.st.click:hover{border-color:var(--cyan)}
+.st.rot .sv{transition:opacity .28s ease}.st.rot .sv.fade{opacity:0}
+.st .spk{position:absolute;left:0;right:0;bottom:0;width:100%;height:26px;opacity:.32;pointer-events:none}
+.st.pos .sv>span{background:linear-gradient(92deg,var(--green),var(--cyan));-webkit-background-clip:text;background-clip:text}
+.pc-kpi.stats{grid-template-columns:repeat(5,minmax(0,1fr));margin:4px 0 14px}
+@media (max-width:760px){
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(5,auto);grid-auto-flow:column;gap:6px}
+  .pc-kpi.stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .st{min-height:56px;padding:7px 10px;gap:3px;border-radius:10px}
+  .st .sl{font-size:10.5px}.st .sv{font-size:17px}}
 @media (max-width:760px){.hrow{column-gap:8px}}
 @media (max-width:380px){.hrow{column-gap:5px}.brand{gap:5px}}
 @media (prefers-reduced-motion:reduce){.navhint{animation:none!important}}
@@ -9980,10 +10241,7 @@ button.warn{border-color:rgb(var(--amber-rgb)/.55);color:var(--amber);box-shadow
   .brand{font-size:15px}.brand .bt b{display:none}
   .hrow{gap:8px}
   .hrow .totals{order:3;width:100%;display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0}
-  #totOrd{grid-column:1/-1;flex-wrap:nowrap;justify-content:space-between;align-items:center;padding:4px 10px}
-  #totOrd .lbl{flex-basis:auto}
-  #totOrd b{font-size:15px}
-  .totals .sep,#spark{display:none!important}
+  .totals .sep{display:none!important}
   .tk{margin:0 11px;font-size:11.5px}
   .ik{margin:0 9px;padding-inline-end:9px;gap:6px;font-size:11px}
   .fng{padding:2px 8px}
@@ -10036,6 +10294,7 @@ html[data-theme="light"] .modal{box-shadow:0 24px 60px rgb(60 40 120/.22)}
 html[data-theme="light"] button.primary,html[data-theme="light"] .dcabuy.loss{color:#fff}
 html[data-theme="light"] nav.actions .grp button[style*="gradient"]{color:#fff!important}
 html[data-theme="light"] .tot b{background:linear-gradient(92deg,#0e7490,#6d28d9);-webkit-background-clip:text;background-clip:text}
+html[data-theme="light"] .st .sv>span,html[data-theme="light"] .st .sv.rotv{background:linear-gradient(92deg,#0e7490,#6d28d9);-webkit-background-clip:text;background-clip:text}
 html[data-theme="light"] .card.dead{filter:saturate(.55) brightness(.97)}
 html[data-theme="light"] .orb{opacity:.42}
 html[data-theme="light"] ::-webkit-scrollbar-thumb{background:rgb(109 40 217/.22)}
@@ -10087,15 +10346,17 @@ html.lite .card:hover,html.lite button:hover{transform:none}
       <button id="bBell" title="سجل الإشعارات" onclick="toggleNotif()">🔔<span id="bellDot" class="belldot" style="display:none"></span></button>
     </div>
     <div class="brand">⚡ <span class="bt">The Holy <b>Dashboard</b></span> <span class="v">v__APPVER__</span> <span id="pulse" class="pulse off"></span></div>
-    <div class="totals">
-      <div class="tot" id="totTrade" onclick="openDayLog('trade')" style="cursor:pointer" title="ربح التداول اليوم: بدون إعادة استثمار + 💠 المعاد استثماره — يصفّر بنهاية اليوم"><span class="lbl">🔄 ربح التداول</span><b id="tTrade" class="num" style="color:var(--green)">0.00</b><span class="cur">$</span></div>
-      <div class="tot" id="totToday" onclick="openDayLog('rel')" style="cursor:pointer" title="اضغط للتفاصيل · الربح المحرر اليوم: الدولار اللي طلع من البوتات ربحاً عادياً — يدخل الربح اليومي والمُراكِم ياخذ نسبته"><span class="lbl">📅 الربح المحرر</span><b id="tToday" class="num">0.00</b><span class="cur">$</span></div>
-      <div class="sep"></div>
-      <div class="tot" id="totTradeAll" title="إجمالي التداول: إجمالي المحرر + 💠 الربح اللي لسه داخل الأوامر + 💠 اللي تسلّمه المُراكِم"><span class="lbl">📈 إجمالي التداول</span><b id="tTradeAll" class="num">0.00</b><span class="cur">$</span></div>
-      <div class="tot" id="totAll" title="إجمالي الربح المحرر — صافي بعد عمولة المنصة (صانع 0.08% لكل جهة)"><span class="lbl">💵 إجمالي الربح المحرر</span><b id="tTotal" class="num">0.00</b><span class="cur">$</span></div>
-      <div class="sep"></div>
-      <div class="tot" id="totOrd" title="أوامرك المفتوحة بالمنصة"><span class="lbl">📋 أوامر المنصة</span><b id="tEx" class="num">—</b></div>
-      <svg id="spark" width="118" height="34" viewBox="0 0 118 34" preserveAspectRatio="none"></svg>
+    <div class="stats" id="stats" aria-label="الأرباح">
+      <div class="st click" id="totTrade" onclick="openDayLog('trade')" title="ربح التداول اليوم: بدون إعادة استثمار + 💠 المعاد استثماره — يصفّر بنهاية اليوم · اضغط للتفاصيل"><span class="sl">🔄 ربح التداول</span><b class="sv"><span id="tTrade" class="num">0.00</span><small>$</small></b></div>
+      <div class="st click" id="totToday" onclick="openDayLog('rel')" title="الربح المحرر اليوم: الدولار اللي طلع من البوتات ربحاً (الجرد + DCA الشرائي) — يدخل الربح اليومي والمُراكِم ياخذ نسبته · اضغط للتفاصيل"><span class="sl">📅 ربح المحرر</span><b class="sv"><span id="tToday" class="num">0.00</span><small>$</small></b></div>
+      <div class="st click rot" id="stCoinD" onclick="coinsModal()" title="الربح المحرّر بالعملات اليوم: ربح DCA البيعي + العملة المحرّرة من إعادة الاستثمار (للمُراكِم أو للمحفظة) — يتقلّب بين العملات · اضغط للتفاصيل"><span class="sl">🪙 ربح المحرر للعملات</span><b class="sv" id="tCoinD">—</b></div>
+      <div class="st" id="stMonth" title="معدل ربح التداول الشهري = متوسط اليوم × 30"><span class="sl">📆 معدل ربح التداول الشهري</span><b class="sv"><span id="tMonth" class="num">0.00</span><small>$</small></b></div>
+      <div class="st" id="stAvg" title="متوسط ربح التداول باليوم — آخر 30 يوم (من أول يوم بيه ربح)"><span class="sl">📊 متوسط اليوم</span><b class="sv"><span id="tAvg" class="num">0.00</span><small>$</small></b><svg id="spark" class="spk" viewBox="0 0 118 34" preserveAspectRatio="none" aria-hidden="true"></svg></div>
+      <div class="st" id="totTradeAll" title="ربح التداول الإجمالي = المحرر الإجمالي + 💠 داخل الأوامر + 💠 اللي تسلّمه المُراكِم — ويّا البوتات المحذوفة"><span class="sl">📈 ربح التداول الإجمالي</span><b class="sv"><span id="tTradeAll" class="num">0.00</span><small>$</small></b></div>
+      <div class="st" id="totAll" title="ربح المحرر الإجمالي — صافي بعد عمولة المنصة · ويّا البوتات المحذوفة (ما ينقص بالحذف)"><span class="sl">💵 ربح المحرر الإجمالي</span><b class="sv"><span id="tTotal" class="num">0.00</span><small>$</small></b></div>
+      <div class="st click rot" id="stCoinA" onclick="coinsModal()" title="ربح العملات الإجمالي: DCA البيعي + العملة المحرّرة من إعادة الاستثمار — يتقلّب بين العملات · اضغط للتفاصيل"><span class="sl">🪙 ربح إجمالي العملات</span><b class="sv" id="tCoinA">—</b></div>
+      <div class="st" id="stBest" title="أفضل يوم ربح تداول (آخر سنة)"><span class="sl">🏆 أفضل يوم</span><b class="sv"><span id="tBest" class="num">—</span><small>$</small></b></div>
+      <div class="st" id="totOrd" title="أوامرك المفتوحة بالمنصة: بيع ↑ · شراء ↓"><span class="sl">📋 الأوامر المنشورة على المنصة</span><b class="sv" id="tEx">—</b></div>
     </div>
     <div class="ops" aria-label="التشغيل">
       <button class="primary" title="تشغيل كل البوتات" onclick="confirmStartAll()">▶️</button>
@@ -10627,7 +10888,30 @@ function syncCards(allBots){
   else if(allBots.length>0&&$('#empty').innerHTML.includes('ماكو عملة')){$('#empty').hidden=true}}
 
 /* ── الشريط العلوي ── */
-const sTot=spring($('#tTotal'),f2),sDay=spring($('#tToday'),f2),sTrade=spring($('#tTrade'),f2),sTradeAll=spring($('#tTradeAll'),f2);
+const sTot=spring($('#tTotal'),f2),sDay=spring($('#tToday'),f2),sTrade=spring($('#tTrade'),f2),sTradeAll=spring($('#tTradeAll'),f2),
+  sMonth=spring($('#tMonth'),f2),sAvg=spring($('#tAvg'),f2);
+/* 🪙 v3.22.2: خانات العملات تتقلّب بين العملات كل ~3 ثواني */
+function fmtCoin(q){q=+q||0;const a=Math.abs(q);let t=a>=100?q.toFixed(2):(a>=1?q.toFixed(4):(a>=0.0001?q.toFixed(6):q.toPrecision(3)));
+  t=t.includes('.')&&!t.includes('e')?t.replace(/0+$/,'').replace(/\.$/,''):t;return (q>0?'+':'')+t}
+const ROT=new Set();let ROTI=0;
+function rotSet(el,map){if(!el)return;const L=Object.entries(map||{}).filter(([k,v])=>Math.abs(+v)>1e-12).sort((a,b)=>a[0].localeCompare(b[0]));
+  const key=JSON.stringify(L);if(el._key===key)return;el._key=key;el._list=L;ROT.add(el);rotDraw(el)}
+function rotDraw(el){const L=el._list||[];
+  if(!L.length){el.classList.remove('rotv');el.innerHTML='<span>—</span>';return}
+  const[k,v]=L[ROTI%L.length];el.classList.add('rotv');
+  el.innerHTML=`${fmtCoin(v)} <span class="cu">${k}</span>${L.length>1?`<span class="cu" style="opacity:.6;font-size:10px">${(ROTI%L.length)+1}/${L.length}</span>`:''}`}
+setInterval(()=>{ROTI++;ROT.forEach(el=>{if(!document.body.contains(el)){ROT.delete(el);return}
+  if((el._list||[]).length<2)return;el.classList.add('fade');setTimeout(()=>{rotDraw(el);el.classList.remove('fade')},280)})},3200);
+function coinsModal(){
+  const D=DATA||{},T=D.coins_today||{},A=D.coins_all||{},ks=[...new Set([...Object.keys(T),...Object.keys(A)])].sort();
+  let h='';
+  if(!ks.length)h='<p style="color:var(--mut);font-size:12.5px">ماكو ربح محرّر بالعملات بعد — يجي من DCA البيعي (ربح كل دورة) ومن تحرير إعادة الاستثمار عملةً.</p>';
+  else{h='<div style="overflow-x:auto"><table class="dntbl"><thead><tr><th>العملة</th><th>اليوم</th><th>الإجمالي</th></tr></thead><tbody>'+
+    ks.map(k=>`<tr><td>${k}</td><td class="num">${T[k]!=null?fmtCoin(T[k]):'—'}</td><td class="num">${A[k]!=null?fmtCoin(A[k]):'—'}</td></tr>`).join('')+'</tbody></table></div>'}
+  showModal(`<h2>🪙 الربح المحرّر بالعملات</h2>${h}
+    <p style="font-size:11px;color:var(--mut2);margin-top:10px;line-height:1.8">من ربح DCA البيعي (صافي بعد العمولة لكل دورة) ومن العملة المحرّرة من إعادة الاستثمار — تروح للمُراكِم إذا مفتوح وإلا تبقى بالمحفظة. مراقبة بس (مثل الربح المحرر بالدولار) · الإجمالي ما ينقص لما تحذف بوت.</p>
+    <div class="mbtns"><button onclick="hideModal()">إغلاق</button></div>`);
+}
 function drawSpark(a){if(!a||!a.length){$('#spark').innerHTML='';return}
   a=a.map(x=>(x&&typeof x==='object')?(+x.v||0):(+x||0));   // 📈 الخادم يرسل {d,v} لكل يوم — كان يرسم NaN (نفس خلل چارت التقارير)
   const W=118,Hh=34,mx=Math.max(...a,0.0001),mn=Math.min(...a,0);
@@ -10637,9 +10921,13 @@ function drawSpark(a){if(!a||!a.length){$('#spark').innerHTML='';return}
    <stop offset="0" style="stop-color:var(--cyan)"/><stop offset="1" style="stop-color:var(--vio)"/></linearGradient></defs>
    <path d="${d}" fill="none" stroke="url(#sg)" stroke-width="2" stroke-linecap="round"/>`}
 function updTop(d){sTot.set(d.total_profit);sDay.set(d.today_profit);drawSpark(d.spark);
-  // 🔄 ربح التداول اليوم · 📈 إجمالي التداول — دائماً ظاهرين (v3.11)
+  // 🔄 ربح التداول اليوم · 📈 إجمالي التداول — دائماً ظاهرين (v3.11) · v3.22.2: عشر خانات
   const TP=d.trade||{}, tpN=+TP.n||0, tpR=+TP.r||0, tpAll=(+d.total_profit||0)+(+TP.held||0)+(+TP.handoff||0);
   sTrade.set(+TP.today||0); sTradeAll.set(tpAll); tapeSync(d); indicSync(d);
+  const ST=d.stats||{};sMonth.set(+ST.month||0);sAvg.set(+ST.avg||0);
+  const tb=$('#tBest');if(tb)tb.textContent=ST.best?(+ST.best.v).toFixed(2):'—';
+  const sb=$('#stBest');if(sb&&ST.best){const p=String(ST.best.d).split('-');sb.title=`أفضل يوم ربح تداول (آخر سنة): ${(+ST.best.v).toFixed(4)}$ · ${+p[2]}/${+p[1]}/${p[0]}`}
+  rotSet($('#tCoinD'),d.coins_today||{});rotSet($('#tCoinA'),d.coins_all||{});
   const eT=$('#totTrade'), eA=$('#totTradeAll');
   if(eT)eT.title=`ربح التداول اليوم ${(+TP.today||0).toFixed(4)}$ = بدون إعادة استثمار ${tpN.toFixed(4)}$ + 💠 معاد استثماره ${tpR.toFixed(4)}$ · يصفّر بنهاية اليوم · اضغط للتفاصيل`;
   if(eA)eA.title=`إجمالي التداول ${tpAll.toFixed(4)}$ = إجمالي المحرر ${(+d.total_profit||0).toFixed(4)}$ + 💠 داخل الأوامر ${(+TP.held||0).toFixed(4)}$`+((+TP.handoff||0)>0?` + 💠 للمُراكِم ${(+TP.handoff).toFixed(4)}$`:'');
@@ -10656,8 +10944,7 @@ function updTop(d){sTot.set(d.total_profit);sDay.set(d.today_profit);drawSpark(d
       title="ربح ${A.day}: ${A.profit}$ · وُزّع ${A.allocated}$ · غير مخصّص ${A.unallocated}$">
       📊 وُزّع ${A.allocated}$ / ${A.profit}$${full?'':' · متبقٍ '+A.unallocated+'$'}</span>`;
   }
-  if(d.dca_coin){for(const[u,v] of Object.entries(d.dca_coin)){if(Math.abs(v)<1e-9)continue;
-    s+=`<span style="padding:2px 8px;border-radius:8px;background:rgb(var(--vio3-rgb)/.12);color:var(--vio)" title="ربح بوتات DCA — بالعملة لا بالدولار">🪙 DCA ${v>=0?'+':''}${v} ${u}</span>`;}}
+  /* 🪙 v3.22.2: ربح DCA البيعي بالعملة صار بخانتي «العملات» */
   if(d.bal_err)s+=`<span style="padding:2px 8px;border-radius:8px;background:rgb(var(--amber2-rgb)/.15);color:var(--amber)" title="${String(d.bal_err).replace(/"/g,'')}">💰 تعذّر جلب الرصيد</span>`;
   if(d.health_bad>0)s+=`<span style="padding:2px 8px;border-radius:8px;background:rgb(var(--red2-rgb)/.15);color:var(--red)">🚨 ${d.health_bad} بوت أوامره تُرفض</span>`;
   if(d.audit_bad>0)s+=`<span style="padding:2px 8px;border-radius:8px;background:rgb(var(--amber2-rgb)/.15);color:var(--amber)">⚠️ ${d.audit_bad} سلّم فيه خلل</span>`;
@@ -10675,7 +10962,8 @@ function updTop(d){sTot.set(d.total_profit);sDay.set(d.today_profit);drawSpark(d
   _sf('#mGuard',x=>{x.textContent=gA.length?`🛡️ ${gA.length}`:'';x.style.color=gRed?'var(--red)':'var(--amber)'});
   _sf('#mPulse',x=>{const p=$('#pulse');if(p)x.className=p.className});
   const sw=$('#step_w');if(sw&&typeof d.wallets==='number')sw.textContent=d.wallets>0?'✅ المحفظة جاهزة':'1️⃣ 👛 أضف محفظة OKX';
-  $('#tEx').textContent=(typeof d.ex_b==='number')?`${d.ex_s}↑ ${d.ex_b}↓ · ${d.ex_b+d.ex_s}`:'—'}
+  $('#tEx').innerHTML=(typeof d.ex_b==='number')?`<span>${d.ex_s}↑ · ${d.ex_b}↓</span><small>${d.ex_b+d.ex_s}</small>`:'<span>—</span>';
+  if(PV&&$('#page_reports')&&$('#page_reports').classList.contains('on'))pcKpi(PV)}
 
 /* ── الدُرج ── */
 /* 📦 v3.21.2: اسما زري الإيقاف/الاستئناف بالكرت — نفس الحساب بالتحديث وبعد الضغط فوراً (العدّاد = المقطوع بس) */
@@ -12091,12 +12379,23 @@ async function loadProfit(){
   if(!v||!v.days){$('#pcSub').textContent='تعذّر تحميل البيانات';return}
   PV=v;pcKpi(v);pcBars(v);pcDonut(v);if(!$('#pcTbl').hidden)pcTable(v)}
 function pcKpi(v){
-  const T=v.tot||{},B=T.best,k=(l,val,sub)=>`<div class="pc-k"><small>${l}</small><b>${val}</b><i>${sub||'&nbsp;'}</i></div>`;
+  // 📊 v3.22.2: نفس العشر خانات — الفترة فوق · الإجمالي تحت (بلا سطور صغيرة حتى المربعات متساوية)
+  const T=v.tot||{},B=T.best,D=DATA||{},TP=D.trade||{},el=$('#pcKpi');
   $('#pcSub').textContent=`${v.span} يوم · من ${pcD(v.from)} إلى ${pcD(v.to)}`;
-  $('#pcKpi').innerHTML=k('ربح التداول',pcN(T.t)+' $',`مباشر ${pcN(T.n)} · معاد ${pcN(T.r)}`)
-    +k('متوسط اليوم',pcN(T.avg)+' $',(T.active||0)+' يوم بيه ربح')
-    +k('أفضل يوم',B?pcN(B.v)+' $':'—',B?B.full:'')
-    +k('البيعات',String(T.c||0),T.cu?'أيام قديمة بلا عدد':(((T.c||0)/Math.max(1,v.span)).toFixed(1)+' باليوم'))}
+  const c=(id,l,val,unit,tt)=>`<div class="st${id?' rot':''}" title="${tt||''}"><span class="sl">${l}</span><b class="sv"${id?` id="${id}"`:''}>${id?'':`<span class="num">${val}</span>${unit?`<small>${unit}</small>`:''}`}</b></div>`;
+  const all=(+D.total_profit||0)+(+TP.held||0)+(+TP.handoff||0);
+  el.className='pc-kpi stats';
+  el.innerHTML=c('','🔄 ربح التداول',pcN(T.t),'$',`مباشر ${pcN(T.n,4)} · معاد ${pcN(T.r,4)}`)
+    +c('','📅 ربح المحرر',pcN(T.led),'$','الربح المحرر بالفترة (الدفتر)')
+    +c('pcCoinP','🪙 ربح المحرر للعملات','','','ربح DCA البيعي + عملة إعادة الاستثمار بالفترة')
+    +c('','📆 معدل ربح التداول الشهري',pcN((+T.avg||0)*30),'$','متوسط اليوم × 30')
+    +c('','📊 متوسط اليوم',pcN(T.avg),'$',`${T.active||0} يوم بيه ربح من ${v.span}`)
+    +c('','📈 ربح التداول الإجمالي',pcN(all),'$','حتى الآن — ويّا البوتات المحذوفة')
+    +c('','💵 ربح المحرر الإجمالي',pcN(D.total_profit),'$','حتى الآن — ويّا البوتات المحذوفة')
+    +c('pcCoinA','🪙 ربح إجمالي العملات','','','حتى الآن')
+    +c('','🏆 أفضل يوم',B?pcN(B.v):'—','$',B?B.full:'')
+    +`<div class="st" title="أوامرك المفتوحة بالمنصة"><span class="sl">📋 الأوامر المنشورة على المنصة</span><b class="sv">${typeof D.ex_b==='number'?`<span>${D.ex_s}↑ · ${D.ex_b}↓</span><small>${D.ex_b+D.ex_s}</small>`:'<span>—</span>'}</b></div>`;
+  rotSet($('#pcCoinP'),T.coins||{});rotSet($('#pcCoinA'),D.coins_all||{})}
 function pcBars(v){
   const box=$('#pcBars'),days=v.days||[];
   if(!days.length||!((v.tot||{}).t>0)){box.innerHTML='<p class="pc-empty">ماكو ربح تداول مسجّل بالفترة بعد.</p>';return}
