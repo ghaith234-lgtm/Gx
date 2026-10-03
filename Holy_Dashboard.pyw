@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.22.2"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.22.3"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -5235,45 +5235,13 @@ def _pv_num(x):
         return False
 
 
-def profit_view(days=30):
-    """📊 ربح التداول **بيوم ما انكسب** (مو يوم ما انحرر) — لكل بوت جرد ولكل يوم.
+_RI_LEGACY_K = "_ri_legacy"      # 💠 أيام قبل v3.11: الأرشيف كان يخزّن مجموع المعاد استثماره بس (مو لكل بوت)
 
-    المصدر: أرشيف إعادة الاستثمار (بيعة بيعة من سجل كل بوت، يتحدّث كل ~5 دقائق ويعيش أشهر):
-      مباشر n (نزل للربح المحرر بيومه) + معاد استثماره r (دخل الأوامر) + بيعات c.
-    يوم قبل ما يبدي أرشيف البوت ⇒ الدفتر (وقتها الربح المحرر = المكسوب).
-    تحرير إعادة الاستثمار والسحب **تحويلات مو أرباح**: انعدّت يوم ما انكسبت، فما تنعد مرة ثانية.
-    الدفتر (المحرر) يرجع ويا كل يوم للمطابقة. يبدأ من أول يوم بيه ربح لو البوتات أصغر من المدة.
-    أكثر من 62 يوم ⇒ أسابيع · أكثر من 200 ⇒ أشهر (حتى يبقى الرسم مقروء)."""
-    try:
-        days = max(1, min(400, int(days or 30)))
-    except Exception:
-        days = 30
-    _safe(reinvest_tick, default=None)                  # 🔄 آخر البيعات (دمج بالأكبر — آمن ويا الحلقة)
-    led = load_json(LEDGER) or {}
-    arcb = (load_json(RI_LEDGER) or {}).get("bots") or {}
-    if not isinstance(led, dict):
-        led = {}
-    if not isinstance(arcb, dict):
-        arcb = {}
-    meta = {}
-    for b in bot_dirs().values():
-        c0 = b.get("cfg") or {}
-        if c0.get("is_demo") or c0.get("bot_type") == "dca":
-            continue
-        meta[os.path.relpath(b["dir"], ROOT)] = {"sym": str(b.get("symbol") or c0.get("symbol") or ""),
-                                                "type": str(c0.get("bot_type") or "grid"), "cfg": c0}
-    _gone_t = {}
-    for _e in (((load_json(GONE) or {}).get("bots") or {}).values()):
-        if isinstance(_e, dict) and _e.get("key"):
-            _gone_t[_e["key"]] = str(_e.get("type") or "grid")
-    keys = set(meta)
-    for src in (led, arcb):
-        for k, v in src.items():
-            if isinstance(v, dict) and not str(k).startswith("_"):
-                keys.add(str(k))
-    today = datetime.now().date()
-    today_s = today.strftime("%Y-%m-%d")
-    d0 = today - timedelta(days=days - 1)
+
+def _pv_per_rows(led, arcb, keys, d0, today, legacy=None):
+    """📚 v3.22.3: محرّك الأيام الوحيد — لكل بوت ولكل يوم (مباشر n · معاد r · بيعات c · الدفتر lv · المصدر).
+    التقرير والشريط والإجماليات والتقرير اليومي بتيليغرام كلها منه ⇒ ما يختلفون.
+    `legacy` (مجموع 💠 القديم لكل يوم): الزايد عن 💠 الموزّع على البوتات ⇒ صف «غير موزّع» (`_RI_LEGACY_K`) — ما يضيع."""
     per, first = {}, None
     for k in keys:
         le, ae = led.get(k), arcb.get(k)
@@ -5305,6 +5273,90 @@ def profit_view(days=30):
                     first = ds
             dd += timedelta(days=1)
         per[k] = rows
+    if isinstance(legacy, dict) and legacy:
+        rows, dd = {}, d0
+        while dd <= today:
+            ds = dd.strftime("%Y-%m-%d")
+            try:
+                ex = float(legacy.get(ds) or 0) - sum(x[ds][1] for x in per.values() if ds in x)
+            except Exception:
+                ex = 0.0
+            if ex > 1e-6:
+                rows[ds] = (0.0, ex, 0, 0.0, "a")
+                if first is None or ds < first:
+                    first = ds
+            dd += timedelta(days=1)
+        if rows:
+            per[_RI_LEGACY_K] = rows
+    return per, first
+
+
+def _arc_live(arcb, days=20):
+    """💠 الأرشيف لكل بوت + آخر البيعات من سجل صفقات البوتات الحية (دمج بالأكبر — نفس قاعدة `reinvest_tick` بلا كتابة)
+    ⇒ أرقام اليوم طازجة بكل مكان حتى بين نبضات الأرشيف (كل ~5 دقائق)."""
+    out = dict(arcb or {})
+    for key, b in _tp_bots().items():
+        live = _safe(_hist_day_parts, b, days, default={}) or {}
+        if not live:
+            continue
+        e = dict(out.get(key) or {})
+        dd = dict(e.get("daily") or {})
+        for d, v in live.items():
+            c_ = dd.get(d) or {}
+            dd[d] = {"n": round(max(float(c_.get("n") or 0), v["n"]), 6), "r": round(max(float(c_.get("r") or 0), v["r"]), 6),
+                     "c": max(int(c_.get("c") or 0), int(v["c"]))}
+        e["daily"] = dd
+        e.setdefault("symbol", b["symbol"])
+        out[key] = e
+    return out
+
+
+def profit_view(days=30, tick=True):
+    """📊 ربح التداول **بيوم ما انكسب** (مو يوم ما انحرر) — لكل بوت جرد ولكل يوم.
+
+    المصدر: أرشيف إعادة الاستثمار (بيعة بيعة من سجل كل بوت، يتحدّث كل ~5 دقائق ويعيش أشهر):
+      مباشر n (نزل للربح المحرر بيومه) + معاد استثماره r (دخل الأوامر) + بيعات c.
+    يوم قبل ما يبدي أرشيف البوت ⇒ الدفتر (وقتها الربح المحرر = المكسوب).
+    تحرير إعادة الاستثمار والسحب **تحويلات مو أرباح**: انعدّت يوم ما انكسبت، فما تنعد مرة ثانية.
+    الدفتر (المحرر) يرجع ويا كل يوم للمطابقة. يبدأ من أول يوم بيه ربح لو البوتات أصغر من المدة.
+    أكثر من 62 يوم ⇒ أسابيع · أكثر من 200 ⇒ أشهر (حتى يبقى الرسم مقروء)."""
+    try:
+        days = max(1, min(400, int(days or 30)))
+    except Exception:
+        days = 30
+    if tick:
+        _safe(reinvest_tick, default=None)              # 🔄 آخر البيعات (دمج بالأكبر — آمن ويا الحلقة)
+    led = load_json(LEDGER) or {}
+    arc0 = load_json(RI_LEDGER) or {}
+    arcb = (arc0.get("bots") or {}) if isinstance(arc0, dict) else {}
+    legacy = (arc0.get("daily") or {}) if isinstance(arc0, dict) else {}
+    if not isinstance(led, dict):
+        led = {}
+    if not isinstance(arcb, dict):
+        arcb = {}
+    arcb = _arc_live(arcb)
+    meta = {}
+    for b in bot_dirs().values():
+        c0 = b.get("cfg") or {}
+        if c0.get("is_demo") or c0.get("bot_type") == "dca":
+            continue
+        meta[os.path.relpath(b["dir"], ROOT)] = {"sym": str(b.get("symbol") or c0.get("symbol") or ""),
+                                                "type": str(c0.get("bot_type") or "grid"), "cfg": c0}
+    _gone_t = {}
+    for _e in (((load_json(GONE) or {}).get("bots") or {}).values()):
+        if isinstance(_e, dict) and _e.get("key"):
+            _gone_t[_e["key"]] = str(_e.get("type") or "grid")
+    keys = set(meta)
+    for src in (led, arcb):
+        for k, v in src.items():
+            if isinstance(v, dict) and not str(k).startswith("_"):
+                keys.add(str(k))
+    today = datetime.now().date()
+    today_s = today.strftime("%Y-%m-%d")
+    d0 = today - timedelta(days=days - 1)
+    per, first = _pv_per_rows(led, arcb, keys, d0, today, legacy)
+    if _RI_LEGACY_K in per:
+        keys.add(_RI_LEGACY_K)
     start = datetime.strptime(first, "%Y-%m-%d").date() if first else today
     if start < d0:
         start = d0
@@ -5335,11 +5387,15 @@ def profit_view(days=30):
         le0 = led.get(k)
         return "dca_buy" if isinstance(le0, dict) and le0.get("dca") else "grid"
     types = {k: _typ(k) for k in keys}
+    if _RI_LEGACY_K in types:
+        types[_RI_LEGACY_K] = "ri_legacy"                       # بلا اسم نوع (مو بوت)
     dup = {b0 for b0 in bases.values() if list(bases.values()).count(b0) > 1}
     dup2 = {(bases[k], types[k]) for k in keys if sum(1 for j in keys if bases[j] == bases[k] and types[j] == types[k]) > 1}
     # 🏷️ v3.22.2: بوتين بنفس العملة ⇒ يتميّزون بالنوع (لانهائية · مدى · بلس · DCA شرائي) · ونفس النوع كمان ⇒ + المجلد
     names = {k: (bases[k] + (" · " + _PV_TYPE_ALL.get(types[k], "جرد") if bases[k] in dup else "")
                  + (" · " + k if (bases[k], types[k]) in dup2 else "")) + ("" if k in meta else " (محذوف)") for k in keys}
+    if _RI_LEGACY_K in names:
+        names[_RI_LEGACY_K] = "💠 غير موزّع على عملة (قبل v3.11)"
 
     bots, dayt = [], {ds: 0.0 for ds in dl}
     for k in keys:
@@ -5363,8 +5419,8 @@ def profit_view(days=30):
                 act += 1
                 if best is None or t1 > best[1]:
                     best = (ds, t1)
-        if k not in meta and n + r <= 1e-12 and lv <= 1e-12:
-            continue                                            # بوت محذوف وماكو شي بالفترة
+        if k not in meta and abs(n + r) <= 1e-12 and abs(lv) <= 1e-12:
+            continue                                            # بوت محذوف وماكو شي بالفترة (السالب ينعرض ⇒ مجموع الصفوف = الإجمالي)
         m = meta.get(k) or {}
         bots.append({"k": k, "sym": syms[k], "name": names[k], "type": types[k],
                      "tl": _PV_TYPE_ALL.get(types[k], ""), "live": k in meta,
@@ -5975,40 +6031,41 @@ def _tp_bots():
 def trade_period(start, end):
     """🧮 ربح التداول لفترة (تواريخ شاملة) — لكل عملة ولكل يوم: بدون · 💠 · المحرر · البيعات.
 
-    بوت بلا إعادة استثمار: «بدون» = السجل اليومي نفسه (دقيق بالكامل، = المحرر).
-    بوت بإعادة استثمار: «بدون» و«💠» من سجل صفقاته (مؤرشف بالأكبر)، والمحرر من السجل اليومي —
-    فيوم التحرير يطلع المحرر أكبر من «بدون» بمبلغ التحرير، **وما ينحسب ربح تداول مرتين**."""
+    📚 v3.22.3: الأيام من محرّك واحد (`_pv_per_rows`) — نفس التقرير بالواجهة والشريط والإجماليات بالضبط:
+      يوم بيه بيعات بالأرشيف (أو بسجل الصفقات الحي) ⇒ «بدون» n + 💠 r بيوم البيعة (لكل بوت، بإعادة استثمار أو بدون)
+      يوم قبل ما يبدي أرشيف البوت ⇒ الدفتر (وقتها المحرر = المكسوب) · DCA الشرائي ⇒ الدفتر (صافي لكل دورة).
+    والمحرر من السجل اليومي — فيوم التحرير يطلع المحرر أكبر من «بدون» بمبلغ التحرير، **وما ينحسب ربح تداول مرتين**."""
     d0 = datetime.strptime(start, "%Y-%m-%d")
     d1 = datetime.strptime(end, "%Y-%m-%d")
     days = []
     while d0 <= d1:
         days.append(d0.strftime("%Y-%m-%d"))
         d0 += timedelta(days=1)
-    dset = set(days)
     led = load_json(LEDGER) or {}
     arc = load_json(RI_LEDGER) or {}
+    if not isinstance(led, dict):
+        led = {}
+    if not isinstance(arc, dict):
+        arc = {}
     abots = arc.get("bots") or {}
+    if not isinstance(abots, dict):
+        abots = {}
     cur = _tp_bots()
+    arcl = _arc_live(abots)                 # نفس نافذة `reinvest_tick` (20 يوم) — الأقدم بالأرشيف أصلاً
     keys = ({k for k, v in led.items() if not str(k).startswith("_") and isinstance(v, dict)}
-            | set(abots) | set(cur))
-    live_days = max(3, (datetime.now() - datetime.strptime(start, "%Y-%m-%d")).days + 2)
+            | {k for k in arcl if not str(k).startswith("_")} | set(cur))
+    per, _ = _pv_per_rows(led, arcl, keys, datetime.strptime(start, "%Y-%m-%d").date(),
+                          datetime.strptime(end, "%Y-%m-%d").date(), arc.get("daily") or {})
     per_day = {d: {"n": 0.0, "r": 0.0, "rel": 0.0, "c": 0} for d in days}
     coins, bots_out = {}, {}
     for key in sorted(keys):
         le = led.get(key) if isinstance(led.get(key), dict) else {}
-        ae = abots.get(key) or {}
+        ae = arcl.get(key) or {}
         b = cur.get(key)
         sym = (b or {}).get("symbol") or le.get("symbol") or ae.get("symbol") or key
         rs = None
         if b is not None:
             rs = _safe(_ri_state_of, _safe(load_json, paths_of(b)[0], default={}) or {}, default=None)
-        hday = {d: dict(v) for d, v in (ae.get("daily") or {}).items() if d in dset}
-        if b is not None:
-            for d, v in (_safe(_hist_day_parts, b, live_days, default={}) or {}).items():
-                if d in dset:
-                    c_ = hday.get(d) or {}
-                    hday[d] = {"n": max(float(c_.get("n") or 0), v["n"]), "r": max(float(c_.get("r") or 0), v["r"]),
-                               "c": max(int(c_.get("c") or 0), int(v["c"]))}
         is_ri = bool(rs and rs["used"]) or any(float((v or {}).get("r") or 0) > 0
                                                 for v in (ae.get("daily") or {}).values())
         c = coins.setdefault(sym, {"n": 0.0, "r": 0.0, "rel": 0.0, "c": 0, "bots": [], "ri": False,
@@ -6024,27 +6081,27 @@ def trade_period(start, end):
                 c["pct"] = float(pc_cfg) if pc_cfg is not None else rs["pct"]
                 c["on"] = c["on"] or rs["on"]
         bref = bots_out.setdefault(key, {"sym": sym, "n": 0.0, "r": 0.0, "rel": 0.0, "c": 0, "ri": is_ri})
+        rows = per.get(key) or {}
+        tdl = le.get("trades_daily") or {}
         for d in days:
-            rel = float((le.get("daily") or {}).get(d) or 0)
-            h = hday.get(d)
-            if is_ri and h is not None:
-                n, r, k = float(h["n"]), float(h["r"]), int(h["c"])
-            else:                           # بلا إعادة استثمار، أو يوم قبل الأرشيف المفصّل
-                n, r, k = rel, 0.0, int((h or {}).get("c") or (le.get("trades_daily") or {}).get(d) or 0)
+            x = rows.get(d)
+            if not x:
+                continue
+            n, r, k, rel = x[0], x[1], x[2], x[3]
+            if k is None:                   # يوم من الدفتر (قبل الأرشيف): عدد البيعات من الدفتر لو موجود
+                k = int(tdl.get(d) or 0)
             for tgt in (per_day[d], c, bref):
                 tgt["n"] += n
                 tgt["r"] += r
                 tgt["rel"] += rel
-                tgt["c"] += k
+                tgt["c"] += int(k)
         bref["ri"] = is_ri
-    # 💠 أيام قبل v3.11: الأرشيف القديم كان يخزّن المجموع بس — الزايد عن الموزّع ينعرض «غير موزّع»
+    # 💠 أيام قبل v3.11: الأرشيف القديم كان يخزّن المجموع بس — الزايد عن الموزّع ينعرض «غير موزّع» (نفس صف التقرير)
     unassigned = 0.0
-    legacy = arc.get("daily") or {}
-    for d in days:
-        extra = float(legacy.get(d) or 0) - per_day[d]["r"]
-        if extra > 1e-6:
-            per_day[d]["r"] += extra
-            unassigned += extra
+    for d, x in (per.get(_RI_LEGACY_K) or {}).items():
+        if d in per_day:
+            per_day[d]["r"] += x[1]
+            unassigned += x[1]
     tot = {"n": 0.0, "r": 0.0, "rel": 0.0, "c": 0}
     for d in days:
         for k in tot:
@@ -6130,7 +6187,7 @@ def alltime_view():
     """📈 v3.22.2: الإجماليات حتى الآن — البوتات الحية + **المحذوفة** (تنحفظ أرقامها لحظة الحذف) ⇒ ما تنقص لما تحذف بوت.
     المحرر = الجرد (ربح الكرت × معامل العمولة) + DCA الشرائي (صافي) · التداول = المحرر + 💠 داخل الأوامر + 💠 للمُراكِم ·
     العملات = DCA البيعي (ربح الكرت) + العملة المحرّرة من إعادة الاستثمار (دفتر العملات)."""
-    rel = held = ho = 0.0
+    held = ho = card = 0.0
     coins = {}
     for b in bot_dirs().values():
         c0 = b.get("cfg") or {}
@@ -6143,9 +6200,9 @@ def alltime_view():
             coins[base] = coins.get(base, 0.0) + float(st.get("total_coin_profit") or 0)
             continue
         if bt == "dca_buy":
-            rel += float(st.get("total_coin_profit") or 0)
+            card += float(st.get("total_coin_profit") or 0)
             continue
-        rel += round(float(st.get("total_profit") or 0) * _safe(net_factor, b, default=1.0), 4)
+        card += round(float(st.get("total_profit") or 0) * _safe(net_factor, b, default=1.0), 4)
         rs = _safe(_ri_state_of, st, default=None)
         if rs:
             held += rs["held"]
@@ -6153,7 +6210,6 @@ def alltime_view():
     g = load_json(GONE) or {}
     for e in ((g.get("bots") or {}) if isinstance(g, dict) else {}).values():
         try:
-            rel += float(e.get("rel") or 0)
             held += float(e.get("held") or 0)
             ho += float(e.get("handoff") or 0)
             for base, q in (e.get("coin") or {}).items():
@@ -6163,7 +6219,12 @@ def alltime_view():
     cl = load_json(COIN_LEDGER) or {}
     for base, q in ((cl.get("total_ri") or {}) if isinstance(cl, dict) else {}).items():
         coins[base] = coins.get(base, 0.0) + float(q or 0)
-    return {"rel": rel, "held": held, "handoff": ho, "trade": rel + held + ho,
+    tb = _safe(trade_book, default=None) or {}
+    # 📚 v3.22.3: المحرر الإجمالي = مجموع الدفتر اليومي · التداول الإجمالي = مجموع كل الأيام (n+r) — نفس محرّك التقرير
+    #    (كان من كروت البوتات الحية ⇒ أصغر من ربح 30 يوم لما ينحذف/ينعاد بناء بوت)
+    rel = float(tb.get("rel_all", card))
+    trade = float(tb.get("trade_all", card + held + ho))
+    return {"rel": rel, "held": held, "handoff": ho, "trade": trade, "cards": round(card, 6),
             "coins": {k: round(v, 8) for k, v in coins.items() if abs(v) > 1e-10}}
 
 
@@ -6172,31 +6233,80 @@ def _tp_alltime():
     return alltime_view()
 
 
+_TB_CACHE = {"t": 0.0, "v": None}
+
+
+def trade_book(force=False):
+    """📚 v3.22.3: أرقام الأيام بنفس محرّك التقرير (`_pv_per_rows`):
+    · الإجمالي = مجموع كل الأيام (تداول n+r · محرر = الدفتر) — ويّا البوتات المحذوفة والمعاد بناؤها (الدفتر والأرشيف يبقون)
+    · متوسط اليوم = آخر 30 يوم بنفس قاعدة التقرير (من أول يوم بيه رقم) · المعدل الشهري = كل التاريخ ÷ أيامه × 30
+    · أفضل يوم = أعلى يوم بكل التاريخ."""
+    if not force and _TB_CACHE["v"] is not None and time.time() - _TB_CACHE["t"] < 60:
+        return _TB_CACHE["v"]
+    led = load_json(LEDGER) or {}
+    arc0 = load_json(RI_LEDGER) or {}
+    arcb = (arc0.get("bots") or {}) if isinstance(arc0, dict) else {}
+    legacy = (arc0.get("daily") or {}) if isinstance(arc0, dict) else {}
+    if not isinstance(led, dict):
+        led = {}
+    if not isinstance(arcb, dict):
+        arcb = {}
+    arcb = _arc_live(arcb)
+    keys = set()
+    for b in bot_dirs().values():
+        c0 = b.get("cfg") or {}
+        if not c0.get("is_demo") and c0.get("bot_type") != "dca":
+            keys.add(os.path.relpath(b["dir"], ROOT))
+    dmin = None
+    for src in (led, arcb):
+        for k, v in src.items():
+            if isinstance(v, dict) and not str(k).startswith("_"):
+                keys.add(str(k))
+                for ds in (v.get("daily") or {}):
+                    if isinstance(ds, str) and len(ds) == 10 and (dmin is None or ds < dmin):
+                        dmin = ds
+    for ds, v0 in (legacy.items() if isinstance(legacy, dict) else ()):
+        if isinstance(ds, str) and len(ds) == 10 and _pv_num(v0) and (dmin is None or ds < dmin):
+            dmin = ds
+    today = datetime.now().date()
+
+    def _agg(d0):
+        per, first = _pv_per_rows(led, arcb, keys, d0, today, legacy)
+        dt, dl = {}, {}
+        for rows in per.values():
+            for ds, x in rows.items():
+                dt[ds] = dt.get(ds, 0.0) + x[0] + x[1]
+                dl[ds] = dl.get(ds, 0.0) + x[3]
+        start = datetime.strptime(first, "%Y-%m-%d").date() if first else today
+        if start < d0:
+            start = d0
+        return dt, dl, ((today - start).days + 1 if first else 0)
+    try:
+        d_all = datetime.strptime(dmin, "%Y-%m-%d").date() if dmin else today
+    except Exception:
+        d_all = today
+    if d_all > today:
+        d_all = today
+    dt, dl, span_all = _agg(d_all)
+    t_all, l_all = sum(dt.values()), sum(dl.values())
+    best = max(dt.items(), key=lambda kv: kv[1]) if dt else None
+    dt30, dl30, span30 = _agg(today - timedelta(days=29))
+    t30 = sum(dt30.values())
+    out = {"trade_all": round(t_all, 6), "rel_all": round(l_all, 6), "span_all": span_all,
+           "month": round(t_all / span_all * 30, 6) if span_all else 0.0,
+           "avg": round(t30 / span30, 6) if span30 else 0.0, "span30": span30, "t30": round(t30, 6),
+           "best": ({"d": best[0], "v": round(best[1], 6)} if best and best[1] > 1e-12 else None)}
+    _TB_CACHE.update(t=time.time(), v=out)
+    return out
+
+
 _TS_CACHE = {"t": 0.0, "v": None}
 
 
 def trade_stats():
-    """📊 v3.22.2 للشريط: متوسط ربح التداول باليوم (آخر 30 يوم من أول يوم بيه ربح) · المعدل الشهري (×30) · أفضل يوم (آخر سنة)."""
-    if _TS_CACHE["v"] is not None and time.time() - _TS_CACHE["t"] < 120:
-        return _TS_CACHE["v"]
-    today = datetime.now()
-    end = today.strftime("%Y-%m-%d")
-    P = trade_period((today - timedelta(days=29)).strftime("%Y-%m-%d"), end)
-    vals = [(d, P["per_day"][d]["n"] + P["per_day"][d]["r"]) for d in P["days"]]
-    first = next((i for i, (d, v) in enumerate(vals) if abs(v) > 1e-12), None)
-    span = (len(vals) - first) if first is not None else 0
-    tot = sum(v for _, v in vals)
-    avg = tot / span if span else 0.0
-    P2 = trade_period((today - timedelta(days=364)).strftime("%Y-%m-%d"), end)
-    best = None
-    for d in P2["days"]:
-        v = P2["per_day"][d]["n"] + P2["per_day"][d]["r"]
-        if v > 1e-12 and (best is None or v > best[1]):
-            best = (d, v)
-    out = {"avg": round(avg, 6), "month": round(avg * 30, 6), "span": span,
-           "best": {"d": best[0], "v": round(best[1], 6)} if best else None}
-    _TS_CACHE.update(t=time.time(), v=out)
-    return out
+    """📊 للشريط والتقارير — من `trade_book` (نفس محرّك التقرير): متوسط اليوم (آخر 30 يوم) · المعدل الشهري (كل التاريخ) · أفضل يوم (كل التاريخ)."""
+    tb = trade_book()
+    return {"avg": tb["avg"], "month": tb["month"], "span": tb["span30"], "span_all": tb["span_all"], "best": tb["best"]}
 
 
 def _bot_label(key):
@@ -6220,7 +6330,8 @@ def trade_now():
     A = _tp_alltime()
     return {"today": round(T["n"] + T["r"], 6), "n": round(T["n"], 6), "r": round(T["r"], 6),
             "rel_today": round(T["rel"], 6), "held": round(A["held"], 6), "handoff": round(A["handoff"], 6),
-            "rel_all": round(A["rel"], 6), "trade_all": round(A["trade"], 6), "coins_all": A.get("coins") or {}}
+            "rel_all": round(A["rel"], 6), "trade_all": round(A["trade"], 6), "coins_all": A.get("coins") or {},
+            "cards": A.get("cards", 0.0)}
 
 
 def _tp_range(kind, ref=None):
@@ -10178,10 +10289,13 @@ nav.actions .gsep{width:1px;height:24px;background:var(--line);margin:0 4px;flex
 .st.pos .sv>span{background:linear-gradient(92deg,var(--green),var(--cyan));-webkit-background-clip:text;background-clip:text}
 .pc-kpi.stats{grid-template-columns:repeat(5,minmax(0,1fr));margin:4px 0 14px}
 @media (max-width:760px){
-  .stats{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(5,auto);grid-auto-flow:column;gap:6px}
-  .pc-kpi.stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  /* 📱 v3.22.3: صفّين بالعرض (اليوم فوق · الإجمالي تحت) وتنسحب يمين/يسار — خمس خانات بعرض الهاتف تصير 70 بكسل وما تنقرا */
+  .stats,.pc-kpi.stats{grid-template-columns:repeat(5,minmax(136px,1fr));grid-auto-flow:row;gap:6px;overflow-x:auto;overscroll-behavior-x:contain;
+    scroll-snap-type:x proximity;scrollbar-width:none;-webkit-mask-image:linear-gradient(to left,transparent 0,#000 22px);mask-image:linear-gradient(to left,transparent 0,#000 22px);padding-inline-end:16px}
+  .stats::-webkit-scrollbar{display:none}
+  .st{scroll-snap-align:start}
   .st{min-height:56px;padding:7px 10px;gap:3px;border-radius:10px}
-  .st .sl{font-size:10.5px}.st .sv{font-size:17px}}
+  .st .sl{font-size:10.5px;white-space:normal;line-height:1.22;min-height:2.44em;display:flex;align-items:flex-end}.st .sv{font-size:17px}}   /* 📱 الاسم الطويل ينزل سطرين بدل ما ينقص — وكل الخانات بنفس الارتفاع */
 @media (max-width:760px){.hrow{column-gap:8px}}
 @media (max-width:380px){.hrow{column-gap:5px}.brand{gap:5px}}
 @media (prefers-reduced-motion:reduce){.navhint{animation:none!important}}
@@ -10350,12 +10464,12 @@ html.lite .card:hover,html.lite button:hover{transform:none}
       <div class="st click" id="totTrade" onclick="openDayLog('trade')" title="ربح التداول اليوم: بدون إعادة استثمار + 💠 المعاد استثماره — يصفّر بنهاية اليوم · اضغط للتفاصيل"><span class="sl">🔄 ربح التداول</span><b class="sv"><span id="tTrade" class="num">0.00</span><small>$</small></b></div>
       <div class="st click" id="totToday" onclick="openDayLog('rel')" title="الربح المحرر اليوم: الدولار اللي طلع من البوتات ربحاً (الجرد + DCA الشرائي) — يدخل الربح اليومي والمُراكِم ياخذ نسبته · اضغط للتفاصيل"><span class="sl">📅 ربح المحرر</span><b class="sv"><span id="tToday" class="num">0.00</span><small>$</small></b></div>
       <div class="st click rot" id="stCoinD" onclick="coinsModal()" title="الربح المحرّر بالعملات اليوم: ربح DCA البيعي + العملة المحرّرة من إعادة الاستثمار (للمُراكِم أو للمحفظة) — يتقلّب بين العملات · اضغط للتفاصيل"><span class="sl">🪙 ربح المحرر للعملات</span><b class="sv" id="tCoinD">—</b></div>
-      <div class="st" id="stMonth" title="معدل ربح التداول الشهري = متوسط اليوم × 30"><span class="sl">📆 معدل ربح التداول الشهري</span><b class="sv"><span id="tMonth" class="num">0.00</span><small>$</small></b></div>
+      <div class="st" id="stMonth" title="المعدل الشهري = ربح التداول بكل التاريخ ÷ عدد أيامه × 30"><span class="sl">📆 معدل ربح التداول الشهري</span><b class="sv"><span id="tMonth" class="num">0.00</span><small>$</small></b></div>
       <div class="st" id="stAvg" title="متوسط ربح التداول باليوم — آخر 30 يوم (من أول يوم بيه ربح)"><span class="sl">📊 متوسط اليوم</span><b class="sv"><span id="tAvg" class="num">0.00</span><small>$</small></b><svg id="spark" class="spk" viewBox="0 0 118 34" preserveAspectRatio="none" aria-hidden="true"></svg></div>
-      <div class="st" id="totTradeAll" title="ربح التداول الإجمالي = المحرر الإجمالي + 💠 داخل الأوامر + 💠 اللي تسلّمه المُراكِم — ويّا البوتات المحذوفة"><span class="sl">📈 ربح التداول الإجمالي</span><b class="sv"><span id="tTradeAll" class="num">0.00</span><small>$</small></b></div>
-      <div class="st" id="totAll" title="ربح المحرر الإجمالي — صافي بعد عمولة المنصة · ويّا البوتات المحذوفة (ما ينقص بالحذف)"><span class="sl">💵 ربح المحرر الإجمالي</span><b class="sv"><span id="tTotal" class="num">0.00</span><small>$</small></b></div>
+      <div class="st" id="totTradeAll" title="ربح التداول الإجمالي = مجموع ربح التداول بكل الأيام (مباشر + 💠 معاد) — ويّا البوتات المحذوفة"><span class="sl">📈 ربح التداول الإجمالي</span><b class="sv"><span id="tTradeAll" class="num">0.00</span><small>$</small></b></div>
+      <div class="st" id="totAll" title="ربح المحرر الإجمالي = مجموع الدفتر اليومي بكل الأيام — صافي بعد العمولة · ويّا البوتات المحذوفة"><span class="sl">💵 ربح المحرر الإجمالي</span><b class="sv"><span id="tTotal" class="num">0.00</span><small>$</small></b></div>
       <div class="st click rot" id="stCoinA" onclick="coinsModal()" title="ربح العملات الإجمالي: DCA البيعي + العملة المحرّرة من إعادة الاستثمار — يتقلّب بين العملات · اضغط للتفاصيل"><span class="sl">🪙 ربح إجمالي العملات</span><b class="sv" id="tCoinA">—</b></div>
-      <div class="st" id="stBest" title="أفضل يوم ربح تداول (آخر سنة)"><span class="sl">🏆 أفضل يوم</span><b class="sv"><span id="tBest" class="num">—</span><small>$</small></b></div>
+      <div class="st" id="stBest" title="أفضل يوم ربح تداول (كل التاريخ — نفس التقرير)"><span class="sl">🏆 أفضل يوم</span><b class="sv"><span id="tBest" class="num">—</span><small>$</small></b></div>
       <div class="st" id="totOrd" title="أوامرك المفتوحة بالمنصة: بيع ↑ · شراء ↓"><span class="sl">📋 الأوامر المنشورة على المنصة</span><b class="sv" id="tEx">—</b></div>
     </div>
     <div class="ops" aria-label="التشغيل">
@@ -10922,15 +11036,18 @@ function drawSpark(a){if(!a||!a.length){$('#spark').innerHTML='';return}
    <path d="${d}" fill="none" stroke="url(#sg)" stroke-width="2" stroke-linecap="round"/>`}
 function updTop(d){sTot.set(d.total_profit);sDay.set(d.today_profit);drawSpark(d.spark);
   // 🔄 ربح التداول اليوم · 📈 إجمالي التداول — دائماً ظاهرين (v3.11) · v3.22.2: عشر خانات
-  const TP=d.trade||{}, tpN=+TP.n||0, tpR=+TP.r||0, tpAll=(+d.total_profit||0)+(+TP.held||0)+(+TP.handoff||0);
+  const TP=d.trade||{}, tpN=+TP.n||0, tpR=+TP.r||0, tpAll=(TP.trade_all!=null)?(+TP.trade_all||0):((+d.total_profit||0)+(+TP.held||0)+(+TP.handoff||0));
   sTrade.set(+TP.today||0); sTradeAll.set(tpAll); tapeSync(d); indicSync(d);
   const ST=d.stats||{};sMonth.set(+ST.month||0);sAvg.set(+ST.avg||0);
   const tb=$('#tBest');if(tb)tb.textContent=ST.best?(+ST.best.v).toFixed(2):'—';
-  const sb=$('#stBest');if(sb&&ST.best){const p=String(ST.best.d).split('-');sb.title=`أفضل يوم ربح تداول (آخر سنة): ${(+ST.best.v).toFixed(4)}$ · ${+p[2]}/${+p[1]}/${p[0]}`}
+  const sb=$('#stBest');if(sb&&ST.best){const p=String(ST.best.d).split('-');sb.title=`أفضل يوم ربح تداول (كل التاريخ — نفس التقرير): ${(+ST.best.v).toFixed(4)}$ · ${+p[2]}/${+p[1]}/${p[0]}`}
   rotSet($('#tCoinD'),d.coins_today||{});rotSet($('#tCoinA'),d.coins_all||{});
   const eT=$('#totTrade'), eA=$('#totTradeAll');
   if(eT)eT.title=`ربح التداول اليوم ${(+TP.today||0).toFixed(4)}$ = بدون إعادة استثمار ${tpN.toFixed(4)}$ + 💠 معاد استثماره ${tpR.toFixed(4)}$ · يصفّر بنهاية اليوم · اضغط للتفاصيل`;
-  if(eA)eA.title=`إجمالي التداول ${tpAll.toFixed(4)}$ = إجمالي المحرر ${(+d.total_profit||0).toFixed(4)}$ + 💠 داخل الأوامر ${(+TP.held||0).toFixed(4)}$`+((+TP.handoff||0)>0?` + 💠 للمُراكِم ${(+TP.handoff).toFixed(4)}$`:'');
+  if(eA)eA.title=`ربح التداول الإجمالي ${tpAll.toFixed(4)}$ = مجموع ربح التداول بكل الأيام (مباشر + 💠 معاد استثماره) — نفس أيام التقرير، ويّا البوتات المحذوفة · منه لسه 💠 داخل الأوامر ${(+TP.held||0).toFixed(4)}$`+((+TP.handoff||0)>0?` · 💠 للمُراكِم ${(+TP.handoff).toFixed(4)}$`:'');
+  const eR=$('#totAll');if(eR)eR.title=`ربح المحرر الإجمالي ${(+d.total_profit||0).toFixed(4)}$ = مجموع الدفتر اليومي بكل الأيام (صافي بعد العمولة) — ويّا البوتات المحذوفة والمعاد بناؤها`;
+  const eM=$('#stMonth');if(eM)eM.title=`المعدل الشهري = ربح التداول بكل التاريخ ÷ ${ (d.stats||{}).span_all||0 } يوم × 30`;
+  const eV=$('#stAvg');if(eV)eV.title=`متوسط اليوم = ربح التداول آخر ${(d.stats||{}).span||0} يوم ÷ عدد الأيام (نفس تقرير 30 يوم)`;
   // 📊 أثر حركة السعر + مؤشرات الصحة
   let hb=$('#hbar');
   if(!hb){hb=document.createElement('div');hb.id='hbar';
@@ -12383,17 +12500,18 @@ function pcKpi(v){
   const T=v.tot||{},B=T.best,D=DATA||{},TP=D.trade||{},el=$('#pcKpi');
   $('#pcSub').textContent=`${v.span} يوم · من ${pcD(v.from)} إلى ${pcD(v.to)}`;
   const c=(id,l,val,unit,tt)=>`<div class="st${id?' rot':''}" title="${tt||''}"><span class="sl">${l}</span><b class="sv"${id?` id="${id}"`:''}>${id?'':`<span class="num">${val}</span>${unit?`<small>${unit}</small>`:''}`}</b></div>`;
-  const all=(+D.total_profit||0)+(+TP.held||0)+(+TP.handoff||0);
+  const all=(TP.trade_all!=null)?(+TP.trade_all||0):((+D.total_profit||0)+(+TP.held||0)+(+TP.handoff||0)),ST=D.stats||{},SB=ST.best;
+  const bfull=SB?(()=>{const p=String(SB.d).split('-');return `${+p[2]}/${+p[1]}/${p[0]}`})():'';
   el.className='pc-kpi stats';
   el.innerHTML=c('','🔄 ربح التداول',pcN(T.t),'$',`مباشر ${pcN(T.n,4)} · معاد ${pcN(T.r,4)}`)
     +c('','📅 ربح المحرر',pcN(T.led),'$','الربح المحرر بالفترة (الدفتر)')
     +c('pcCoinP','🪙 ربح المحرر للعملات','','','ربح DCA البيعي + عملة إعادة الاستثمار بالفترة')
-    +c('','📆 معدل ربح التداول الشهري',pcN((+T.avg||0)*30),'$','متوسط اليوم × 30')
+    +c('','📆 معدل ربح التداول الشهري',pcN(ST.month),'$',`ربح التداول بكل التاريخ ÷ ${ST.span_all||0} يوم × 30 (نفس الشريط)`)
     +c('','📊 متوسط اليوم',pcN(T.avg),'$',`${T.active||0} يوم بيه ربح من ${v.span}`)
-    +c('','📈 ربح التداول الإجمالي',pcN(all),'$','حتى الآن — ويّا البوتات المحذوفة')
-    +c('','💵 ربح المحرر الإجمالي',pcN(D.total_profit),'$','حتى الآن — ويّا البوتات المحذوفة')
+    +c('','📈 ربح التداول الإجمالي',pcN(all),'$','مجموع كل الأيام (مباشر + معاد) — ويّا المحذوفة')
+    +c('','💵 ربح المحرر الإجمالي',pcN(D.total_profit),'$','مجموع الدفتر اليومي بكل الأيام — ويّا المحذوفة')
     +c('pcCoinA','🪙 ربح إجمالي العملات','','','حتى الآن')
-    +c('','🏆 أفضل يوم',B?pcN(B.v):'—','$',B?B.full:'')
+    +c('','🏆 أفضل يوم',SB?pcN(SB.v):'—','$',SB?'كل التاريخ (نفس الشريط) · '+bfull:'')
     +`<div class="st" title="أوامرك المفتوحة بالمنصة"><span class="sl">📋 الأوامر المنشورة على المنصة</span><b class="sv">${typeof D.ex_b==='number'?`<span>${D.ex_s}↑ · ${D.ex_b}↓</span><small>${D.ex_b+D.ex_s}</small>`:'<span>—</span>'}</b></div>`;
   rotSet($('#pcCoinP'),T.coins||{});rotSet($('#pcCoinA'),D.coins_all||{})}
 function pcBars(v){
