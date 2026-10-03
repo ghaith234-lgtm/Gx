@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.22.0"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.22.1"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -541,7 +541,15 @@ def bot_snapshot(b):
         last_event = e.get("msg", "")[:140]
         break
     _bt = b["cfg"].get("bot_type")
-    if _bt in ("dca", "dca_buy"):
+    if _bt in ("dca", "dca_buy") and st.get("cycles_log"):
+        # 🧾 v3.22.1: ربح اليوم من سجل الدورات (صافي بعد العمولة) — بالشرائي دولار وبالبيعي عملة
+        for c in st.get("cycles_log") or []:
+            try:
+                if time.strftime("%Y-%m-%d", time.localtime(float(c.get("ts") or 0))) == today:
+                    today_profit += float(c.get("profit") or 0)
+            except Exception:
+                continue
+    elif _bt in ("dca", "dca_buy"):
         # 🪙 DCA ربحه بالعملة ولا يدخل السجل — نمسح كل أحداث اليوم (لا أول 400 فقط)
         for e in hist:
             if not isinstance(e, dict):
@@ -620,6 +628,96 @@ def bot_snapshot(b):
                     if b["cfg"].get("bot_type") in ("dca", "dca_buy") else None),
             "dca": _dca_snapshot(b, st) if b["cfg"].get("bot_type") in ("dca", "dca_buy") else None}
 
+DCA_FEE_MAKER = 0.0008      # 🧾 v3.22.1: أوامر الأمان الليمت (صانع)
+DCA_FEE_TAKER = 0.001       # الأساس والإغلاق والأوامر الفورية (آخذ)
+
+
+def _dca_tp(cfg):
+    """هدف الربح الفعلي بالمحرك: ما ينزل تحت 0.20% (حماية العمولات)"""
+    try:
+        return max(float(cfg.get("take_profit_pct") or 0), 0.20) / 100.0
+    except Exception:
+        return 0.002
+
+
+def _dca_live(st, cfg, is_buy, cp, trail_on):
+    """📋 v3.22.1 (ح٥/ح٦): كل مستوى بالدورة الحالية — حالته (✅ نفّذ · 🟢 بالمنصة · 📦 مخزون/🛡️ درع · ◐ جزئي)،
+    بعده عن السعر الآن، ولو وصله السعر: المتوسط وسعر الخروج والربح الصافي بعد العمولة (المنفّذ بأرقامه الفعلية والباقي بالخطة)."""
+    planned = [l for l in (st.get("planned_levels") or []) if isinstance(l, dict)]
+    if not planned:
+        return []
+    tp = _dca_tp(cfg)
+    fee_lv = DCA_FEE_TAKER if trail_on else DCA_FEE_MAKER
+    filled = [f for f in (st.get("filled") or []) if isinstance(f, dict)]
+    by_n, grp_first = {}, {}
+    for f in filled:
+        try:
+            n = int(f.get("n", 0))
+        except Exception:
+            continue
+        if n == -1:
+            ns = [int(x) for x in (f.get("ns") or [])]
+            if ns:
+                grp_first.setdefault(min(ns), []).append(f)
+                for x in ns:
+                    by_n.setdefault(x, [])
+        else:
+            by_n.setdefault(n, []).append(f)
+    live_n = {int(v.get("n", -9)): v for v in (st.get("active_sells") or {}).values() if isinstance(v, dict)}
+    pend_n = {}
+    for l in (st.get("pending_levels") or []):
+        try:
+            pend_n[int(l.get("n"))] = l
+        except Exception:
+            continue
+    cq = cv = cnet = 0.0
+    rows = []
+    for lv in sorted(planned, key=lambda l: int(l.get("n", 0))):
+        n = int(lv.get("n", 0))
+        px0, q0 = float(lv.get("price") or 0), float(lv.get("qty") or 0)
+        done = n in by_n
+        ents = list(by_n.get(n, [])) + list(grp_first.get(n, []))
+        fpx = fq = 0.0
+        for f in ents:
+            q, px = float(f.get("qty") or 0), float(f.get("price") or 0)
+            net = f.get("net")
+            if net is None:
+                net = q * (1 - DCA_FEE_TAKER) if is_buy else px * q * (1 - DCA_FEE_TAKER)
+            cq += q; cv += px * q; cnet += float(net)
+            fv = fpx * fq + px * q; fq += q; fpx = fv / fq if fq > 0 else 0.0
+        rest = 0.0
+        if n in pend_n:
+            rest = float(pend_n[n].get("qty") or 0)
+        elif n in live_n:
+            rest = float(live_n[n].get("qty") or 0)
+        elif not done:
+            rest = q0
+        if rest > 0:
+            f_r = DCA_FEE_TAKER if n == 0 else fee_lv
+            cq += rest; cv += px0 * rest
+            cnet += rest * (1 - f_r) if is_buy else px0 * rest * (1 - f_r)
+        if done and rest > 0:
+            stt = "part"
+        elif done:
+            stt = "done"
+        elif n in live_n:
+            stt = "live"
+        else:
+            stt = "trail" if trail_on else "mem"
+        avg = cv / cq if cq > 0 else 0.0
+        tgt = avg * (1 + tp) if is_buy else avg * (1 - tp)
+        if is_buy:
+            prof = cnet * tgt * (1 - DCA_FEE_TAKER) - cv
+            exitp = (tgt / px0 - 1) * 100 if px0 > 0 else 0.0
+        else:
+            prof = (cnet / tgt * (1 - DCA_FEE_TAKER) - cq) if tgt > 0 else 0.0
+            exitp = (1 - tgt / px0) * 100 if px0 > 0 else 0.0
+        rows.append({"n": n, "px": _pv_sig(px0), "q": round(q0, 6), "st": stt, "fpx": _pv_sig(fpx) if fq > 0 else 0,
+                     "dist": round((px0 / cp - 1) * 100, 3) if cp > 0 else 0, "avg": _pv_sig(avg), "tgt": _pv_sig(tgt),
+                     "exitp": round(exitp, 3), "prof": round(prof, 6 if is_buy else 4), "cq": round(cq, 4), "cv": round(cv, 2)})
+    return rows
+
+
 def _dca_snapshot(b, st):
     """بيانات كرت DCA: المتوسط، الهدف، تقدّم الدورة، الربح اللحظي لو اشترى الآن"""
     cfg = b["cfg"]
@@ -674,6 +772,11 @@ def _dca_snapshot(b, st):
         "sold_qty": round(sold_qty, 4), "total_usdt": round(total_usdt, 2),
         "total_net": round(total_net, 6 if is_buy else 2),
         "trail_on": trail_on, "trail_pct": trail_pct,
+        "stop_after": bool(st.get("stop_after_cycle")),
+        "rows": _safe(_dca_live, st, cfg, is_buy, cp, trail_on, default=[]) or [],
+        "tgt_prof": round(((total_net * target * (1 - DCA_FEE_TAKER) - total_usdt) if is_buy
+                           else (total_net / target * (1 - DCA_FEE_TAKER) - sold_qty)) if target > 0 and total_usdt > 0 else 0.0, 6 if is_buy else 4),
+        "dust": round(float(st.get("dust_usdt") or 0) if not is_buy else float(st.get("dust_coin") or 0), 6),
         "trail_peak": _pv_sig(float(_ts.get("peak") or _ts.get("low") or 0)),
         "trail_tp": _pv_sig(float(_tt.get("low") or _tt.get("high") or 0)),
         "safety_used": safety_used, "safety_max": n_safety,
@@ -1866,6 +1969,23 @@ def _ri_pending_handoffs(bst, grace=0.0):
     return [h for h in _ri_handoffs_of(bst) if str(h.get("id")) not in seen and now - float(h.get("ts") or now) >= grace]
 
 
+def _dca_handoffs_of(b, bst):
+    """🪙 v3.22.1 (ح٧): ربح DCA البيعي (عملة صافية بعد العمولة) لكل دورة = «ربح محرَّر عملة» ⇒ نفس طريق عملة الجرد:
+    للمُراكِم بنسبة العملة إذا مفتوح على نفس العملة والمحفظة، والباقي/بلا مُراكِم ⇒ المحفظة. المعرّف من سجل الدورات (ما ينعاد)."""
+    if (b.get("cfg") or {}).get("bot_type") != "dca":
+        return []
+    out = []
+    for c in (bst.get("cycles_log") or []):
+        try:
+            p, px = float(c.get("profit") or 0), float(c.get("px") or 0)
+        except Exception:
+            continue
+        if c.get("id") and p > 0 and px > 0:
+            out.append({"id": "dca:" + str(c["id"]), "coin": p, "avg_px": px, "symbol": b["symbol"],
+                        "why": f"ربح DCA — دورة #{c.get('n')}", "ts": float(c.get("ts") or 0)})
+    return out
+
+
 def _ri_eligible(b, cfgs=None):
     """(مُراكِمات مؤهلة، سبب الانتظار) — نفس العملة · مفعّل · نسبة عملة > 0 · **نفس المحفظة**.
 
@@ -1912,7 +2032,7 @@ def accum_coin_handoff():
                 bst = load_json(paths_of(b)[0]) or {}
             except Exception:
                 continue
-            his = [h for h in _ri_handoffs_of(bst) if h.get("id") not in seen_set]
+            his = [h for h in _ri_handoffs_of(bst) + _dca_handoffs_of(b, bst) if h.get("id") not in seen_set]
             if not his:
                 continue
             mine, _why = _ri_eligible(b, cfgs)
@@ -1946,7 +2066,8 @@ def accum_coin_handoff():
                     e["coin"] = round(float(e.get("coin", 0)) + q, 10)
                     e["spent"] = round(float(e.get("spent", 0)) + q * avg, 6)
                     e["buys"] = ([{"ts": time.time(), "qty": round(q, 10), "usd": round(q * avg, 6),
-                                   "px": round(avg, 10), "why": "إعادة استثمار", "hid": hid}] + list(e.get("buys") or []))[:400]
+                                   "px": round(avg, 10), "why": "ربح DCA" if str(hid).startswith("dca:") else "إعادة استثمار",
+                                   "hid": hid}] + list(e.get("buys") or []))[:400]
                     given += q
                     rows.append((a.get("name") or sym, float(a.get("coin_pct") or 0), q, e["coin"],
                                  (e["spent"] / e["coin"]) if e["coin"] > 0 else 0.0))
@@ -1967,13 +2088,14 @@ def accum_coin_handoff():
         st["_ri_seen"] = seen[-3000:]
         _acc_save(st)
     for sym, base, coin, avg, rows, left, why in done:
-        msg = (f"🪙 *عملة معاد استثمارها — للمُراكِم*\n`{sym}` · {why or 'تحرير'}\n━━━━━━━━━━━━━\n"
+        _dcah = str(why or "").startswith("ربح DCA")
+        msg = (f"🪙 *{'ربح DCA محرَّر (عملة)' if _dcah else 'عملة معاد استثمارها'} — {'للمُراكِم' if rows else 'للمحفظة'}*\n`{sym}` · {why or 'تحرير'}\n━━━━━━━━━━━━━\n"
                f"📦 المحرَّر: `{coin:.8f}` {base} @ `{avg:.8f}$` = `{coin * avg:.4f}$`\n━━━━━━━━━━━━━\n")
         for nm, pc, q, tq, ta in rows:
             msg += f"🏧 {_tp_md(nm)}: `{pc:.0f}%` ← `{q:.8f}` {base} · صار عنده `{tq:.8f}` بمعدل `{ta:.8f}$`\n"
         if left > 1e-12:
             msg += f"👛 {'تحررت للمحفظة' if not rows else 'بقى بالمحفظة'}: `{left:.8f}` {base}\n"
-        msg += "بلا شراء وبلا عمولة — انضافت مباشرة ومعدلها اندمج"
+        msg += ("بلا شراء وبلا عمولة — انضافت مباشرة ومعدلها اندمج" if rows else "ماكو مُراكِم مفتوح على هالعملة بنفس المحفظة — بقت حرة بمحفظتك")
         tg_send(msg)
         log_event(f"🪙 [إعادة استثمار] {sym}: سُلّم {coin - left:.8f}/{coin:.8f} {base} @ {avg:.8f}$ "
                   f"({why}) على {len(rows)} مُراكِم · الباقي {left:.8f} للمحفظة")
@@ -2183,17 +2305,21 @@ def overview():
     for b in bots:
         if b.get("demo") or b.get("bot_type") not in ("dca", "dca_buy"): continue
         d = b.get("dca") or {}
-        unit = "USDT" if d.get("is_buy") else (d.get("base_coin") or "")
+        if d.get("is_buy"):
+            continue                       # 💵 v3.22.1 (ح٧): الشرائي دولار ⇒ ضمن الربح المحرر (تحت)
+        unit = d.get("base_coin") or ""
         if not unit: continue
         dca_coin[unit] = round(dca_coin.get(unit, 0) + float(d.get("coin_profit") or 0), 4)
-    return {"t": time.time(), "total_profit": round(sum(b["profit"] for b in grid_bots), 4),
+    usd_dca = [b for b in bots if b.get("bot_type") == "dca_buy" and not b.get("demo")]
+    return {"t": time.time(), "total_profit": round(sum(b["profit"] for b in grid_bots)
+                                                    + sum(float((b.get("dca") or {}).get("coin_profit") or 0) for b in usd_dca), 4),
             "dca_coin": dca_coin,
             "accum": _safe(acc_snapshot, default=[]),
             "accum_alloc": _safe(acc_alloc_summary, default=None),
             "auth_on": auth_enabled(), "lock_mins": auth_cfg()["mins"],
             "health_bad": sum(1 for b in bots if (b.get("health") or {}).get("state") == "bad"),
             "audit_bad": sum(1 for b in bots if (b.get("audit") or {}).get("ok") is False),
-            "today_profit": round(sum(b["today"] for b in grid_bots), 4),
+            "today_profit": round(sum(b["today"] for b in grid_bots) + sum(b["today"] for b in usd_dca), 4),
             # 📊 عدّاد مستقل تماماً — ما يمسّ الدفتر ولا المُراكِم ولا أي رقم قديم.
             #    يقرا سجل صفقات المحرك ويجمع ربح اليوم كاملاً، ويصفّر بنهاية اليوم.
             "day_full": _safe(_today_parts, default={"norm": 0.0, "ri": 0.0}),
@@ -2557,6 +2683,34 @@ def kill_external(full):
         pass
     return False
 
+_DCA_FIN_SEEN = {}
+
+
+def _dca_finish_scan():
+    """🏁 v3.22.1 (ح٤): بوت DCA خلّص «آخر دورة» (phase=finished) ⇒ توقفه اللوحة وتطفّي الحارس (ما يرجّعه) وتبلّغ مرة وحدة."""
+    for b in bot_dirs().values():
+        if b["cfg"].get("bot_type") not in ("dca", "dca_buy"):
+            continue
+        sp, _, _ = paths_of(b)
+        st = load_json(sp) or {}
+        if st.get("phase") != "finished":
+            continue
+        fin = float(st.get("finished_at") or 0)
+        if _DCA_FIN_SEEN.get(b["dir"]) == fin:
+            continue
+        alive, _ = is_alive(b["dir"], sp)
+        if alive or b["cfg"].get("auto_restart"):
+            stop_bot(b, disable_auto=True)
+        _DCA_FIN_SEEN[b["dir"]] = fin
+        _isb = b["cfg"].get("bot_type") == "dca_buy"
+        _u = "USDT" if _isb else b["symbol"].split("-")[0]
+        tot = round(float(st.get("total_coin_profit") or 0), 4)
+        cyc = int(st.get("cycles_done") or 0)
+        tg_send(f"🏁 *آخر دورة انتهت — `{b['symbol']}`*\nالبوت وقف وما فتح دورة جديدة (الحارس انطفى عليه)\n"
+                f"📊 إجمالي الربح: `{tot}` {_u} · {cyc} دورة\n▶️ للتشغيل من جديد: زر التشغيل بالكرت")
+        log_event(f"🏁 [{b['symbol']}] آخر دورة انتهت — البوت وقف · الإجمالي {tot} {_u} · {cyc} دورة")
+
+
 def watchdog_loop():
     time.sleep(3)
     # عند الإقلاع: شغّل كل بوت معلَّم auto_restart (إقلاع مع ويندوز = اللوحة تقلع والبوتات وراها)
@@ -2569,6 +2723,10 @@ def watchdog_loop():
                     tg_send(f"🤖 *الحارس* — أعاد إطلاق `{b['symbol']}` عند الإقلاع")
             time.sleep(0.6)
     while True:
+        try:
+            _safe(_dca_finish_scan, default=None)       # 🏁 v3.22.1 (ح٤): «آخر دورة» خلصت ⇒ إيقاف + تبليغ
+        except Exception:
+            pass
         try:
             if WATCHDOG["on"]:
                 for b in bot_dirs().values():
@@ -2636,10 +2794,34 @@ def ledger_tick():
         #   • الديمو معزول تماماً (لا يلوّث الأرقام الحقيقية)
         #   • DCA ربحه بالعملة (total_coin_profit) ولا يكتب total_profit إطلاقاً،
         #     فإدخاله يقرأ صفراً ويصفّر خط الأساس → تضخّم لا نهائي بالسجل
-        if b["cfg"].get("is_demo") or b["cfg"].get("bot_type") in ("dca", "dca_buy"):
+        if b["cfg"].get("is_demo") or b["cfg"].get("bot_type") == "dca":
             continue
         sp, _, _ = paths_of(b)
         st = load_json(sp) or {}
+        if b["cfg"].get("bot_type") == "dca_buy":
+            # 💵 v3.22.1 (ح٧): ربح DCA الشرائي دولار صافي = ربح تداول + ربح محرَّر ⇒ الدفتر اليومي ⇒ المُراكِم ياخذ نسبته.
+            #    من سجل الدورات بمعرّفاتها (كل دورة مرة وحدة · الدورات قبل v3.22.1 ما تنحسب) · يوم ما شافها الدفتر (مثل الجرد)
+            key = os.path.relpath(b["dir"], ROOT)
+            ent = led.get(key) if isinstance(led.get(key), dict) else None
+            if ent is None:
+                ent = {"symbol": b["symbol"], "dca": True, "daily": {}, "monthly": {}, "trades_daily": {}, "hourly": {}, "dca_seen": []}
+            seen = list(ent.get("dca_seen") or [])
+            sset = set(seen)
+            for c in (st.get("cycles_log") or []):
+                cid = str(c.get("id") or "")
+                if not cid or cid in sset:
+                    continue
+                try:
+                    pv = float(c.get("profit") or 0)
+                except Exception:
+                    continue
+                ent.setdefault("daily", {})[today] = round(float(ent["daily"].get(today, 0.0)) + pv, 6)
+                ent.setdefault("trades_daily", {})[today] = int(ent["trades_daily"].get(today, 0)) + 1
+                seen.append(cid); sset.add(cid)
+                changed = True
+            ent["dca_seen"] = seen[-600:]
+            led[key] = ent
+            continue
         tot = float(st.get("total_profit") or 0)
         # 🔑 إصلاح: المفتاح = مجلد البوت (كان الرمز فقط → تصادم لو بوتان بنفس العملة)
         key = os.path.relpath(b["dir"], ROOT)
@@ -6917,97 +7099,78 @@ def wallet_keys(name):
     return None
 
 def compute_dca_table(cfg, base_price):
-    """يحسب جدول أوامر DCA (بيعي أو شرائي) من الإعدادات — للمعاينة قبل التشغيل"""
+    """📋 v3.22.1 (ح٥): جدول خطة DCA قبل النشر — **صافي بعد العمولة** بنفس حساب المحرك:
+    الأساس ماركت (آخذ 0.1%) · الأمان ليمت (صانع 0.08% · بالدرع فوري آخذ 0.1%) · الإغلاق فوري (آخذ 0.1%).
+    كل صف = لو السعر وصل لهالأمر ورجع للهدف: كم صرفت لحد هنا · متوسطك · سعر خروجك · كم لازم يرجع · ربحك الصافي."""
     try:
         base_qty = float(cfg.get("base_order_qty", 0))
         avg_qty = float(cfg.get("avg_order_qty", 0))
         first_dev = float(cfg.get("first_deviation", 0)) / 100.0
         step_mult = float(cfg.get("step_multiplier", 1))
         size_mult = float(cfg.get("size_multiplier", 1))
-        n_safety = int(cfg.get("max_safety_orders", 0))
+        n_safety = int(float(cfg.get("max_safety_orders", 0)))
         tp_raw = float(cfg.get("take_profit_pct", 0))
     except Exception:
         return []
     is_buy = str(cfg.get("bot_type") or cfg.get("dca_type") or "dca") == "dca_buy"  # 🎚️ اتجاه البوت
-    # 🛡️ حماية العمولات
+    trail = str(cfg.get("trail_on")).lower() in ("1", "true", "on", "yes")
     fee_min = 0.20
     fee_warn = tp_raw < fee_min
     tp_pct = max(tp_raw, fee_min) / 100.0
-    if base_price <= 0 or base_qty <= 0:
+    if base_price <= 0 or base_qty <= 0 or n_safety < 0:
         return []
+    f_lv = DCA_FEE_TAKER if trail else DCA_FEE_MAKER
 
     def _target(a):
-        # الشرائي: بيع فوق المتوسط · البيعي: شراء تحت المتوسط
         return a * (1 + tp_pct) if is_buy else a * (1 - tp_pct)
 
     rows = []
-    cum_qty = base_qty
-    cum_vol = base_price * base_qty
-    avg = cum_vol / cum_qty
-    rows.append({"n": 0, "label": "أساسي", "price": base_price, "order_qty": base_qty,
-                 "avg": avg, "target": _target(avg), "cum_qty": cum_qty, "cum_vol": cum_vol,
-                 "dev": 0.0, "step": 0.0})
-    cum_dev = 0.0; step_dev = first_dev; order_qty = avg_qty
-    for i in range(1, n_safety + 1):
-        cum_dev += step_dev
-        # الشرائي: الأمان تحت الأساس · البيعي: فوقه
-        price = base_price * (1 - cum_dev) if is_buy else base_price * (1 + cum_dev)
-        cum_qty += order_qty
-        cum_vol += price * order_qty
-        avg = cum_vol / cum_qty
-        rows.append({"n": i, "label": f"أمان {i}", "price": price, "order_qty": order_qty,
-                     "avg": avg, "target": _target(avg), "cum_qty": cum_qty, "cum_vol": cum_vol,
-                     "dev": cum_dev * 100, "step": step_dev * 100})
-        step_dev *= step_mult; order_qty *= size_mult
-    # ملخص
-    last = rows[-1]
-    if is_buy:
-        # يبيع كل العملة المتراكمة عند الهدف → دخل بالدولار، الربح = الدخل − المصروف
-        sold_for = last["cum_qty"] * last["target"]
-        usd_profit = sold_for - last["cum_vol"]
-        move_needed = (last["target"] / last["price"] - 1) * 100 if last["price"] > 0 else 0  # صعود مطلوب
-        summary = {
-            "total_sold": round(last["cum_qty"], 4), "total_usdt": round(last["cum_vol"], 2),
-            "final_avg": round(last["avg"], 6), "final_target": round(last["target"], 6),
-            "highest_sell": round(last["price"], 6), "drop_needed": round(move_needed, 3),
-            "bought_back": round(sold_for, 4), "coin_profit": round(usd_profit, 4),
-            "coin_profit_pct": round((usd_profit / last["cum_vol"] * 100) if last["cum_vol"] else 0, 3),
-            "capital_needed": round(last["cum_vol"], 2),
-            "fee_warn": fee_warn, "tp_used": round(max(tp_raw, fee_min), 3),
-            "is_buy": True,
-        }
-    else:
-        bought_back = last["cum_vol"] / last["target"] if last["target"] > 0 else 0
-        coin_profit = bought_back - last["cum_qty"]
-        drop_needed = (1 - last["target"] / last["price"]) * 100 if last["price"] > 0 else 0
-        summary = {
-            "total_sold": round(last["cum_qty"], 4), "total_usdt": round(last["cum_vol"], 2),
-            "final_avg": round(last["avg"], 6), "final_target": round(last["target"], 6),
-            "highest_sell": round(last["price"], 6), "drop_needed": round(drop_needed, 3),
-            "bought_back": round(bought_back, 4), "coin_profit": round(coin_profit, 4),
-            "coin_profit_pct": round((coin_profit / last["cum_qty"] * 100) if last["cum_qty"] else 0, 3),
-            "capital_needed": round(last["cum_qty"], 2),
-            "fee_warn": fee_warn, "tp_used": round(max(tp_raw, fee_min), 3),
-            "is_buy": False,
-        }
-    for r in rows:
-        r["gap"] = abs(r["target"] - r["avg"])
-        # 🔵 نسبة الحركة: الشرائي = صعود من سعر الأمر للهدف · البيعي = نزول
-        if is_buy:
-            r["gap_pct"] = ((r["target"] - r["price"]) / r["price"] * 100) if r["price"] > 0 else 0
-            sell_for = r["cum_vol"] * (r["target"] / r["avg"]) if r["avg"] > 0 else 0  # تقريب: بيع بنسبة الهدف/المتوسط
-            r["exit_profit"] = round(r["cum_qty"] * r["target"] - r["cum_vol"], 4)
+    cq = cv = cnet = 0.0
+    cum_dev, step_dev, order_qty = 0.0, first_dev, avg_qty
+    prev_px = base_price
+    for i in range(0, n_safety + 1):
+        if i == 0:
+            price, q, fee, step = base_price, base_qty, DCA_FEE_TAKER, 0.0
         else:
-            r["gap_pct"] = ((r["price"] - r["target"]) / r["price"] * 100) if r["price"] > 0 else 0
-            exit_bought = r["cum_vol"] / r["target"] if r["target"] > 0 else 0
-            r["exit_profit"] = round(exit_bought - r["cum_qty"], 4)
-        for k in ("price", "avg", "target", "cum_vol", "gap"):
-            r[k] = round(r[k], 6)
-        r["gap_pct"] = round(r["gap_pct"], 3)
-        r["order_qty"] = round(r["order_qty"], 4)
-        r["cum_qty"] = round(r["cum_qty"], 4)
-        r["dev"] = round(r["dev"], 3)
-        r["step"] = round(r.get("step", 0), 3)
+            cum_dev += step_dev
+            price = base_price * (1 - cum_dev) if is_buy else base_price * (1 + cum_dev)
+            q, fee, step = order_qty, f_lv, step_dev * 100
+            step_dev *= step_mult; order_qty *= size_mult
+        cq += q; cv += price * q
+        cnet += q * (1 - fee) if is_buy else price * q * (1 - fee)
+        avg = cv / cq
+        tgt = _target(avg)
+        if is_buy:
+            prof = cnet * tgt * (1 - DCA_FEE_TAKER) - cv
+            gap = (tgt / price - 1) * 100
+            prof_usd = prof
+        else:
+            prof = cnet / tgt * (1 - DCA_FEE_TAKER) - cq
+            gap = (1 - tgt / price) * 100
+            prof_usd = prof * tgt
+        rows.append({"n": i, "label": "أساسي" if i == 0 else f"أمان {i}", "price": round(price, 10), "order_qty": round(q, 4),
+                     "order_val": round(price * q, 2), "step": round(step, 3), "dev": round(cum_dev * 100, 3),
+                     "cum_qty": round(cq, 4), "cum_vol": round(cv, 2), "avg": round(avg, 10), "target": round(tgt, 10),
+                     "gap_pct": round(gap, 3), "exit_profit": round(prof, 4), "exit_usd": round(prof_usd, 4),
+                     "gap": round(abs(tgt - avg), 10)})
+        prev_px = price
+    last, first = rows[-1], rows[0]
+    cov = abs(last["price"] / base_price - 1) * 100
+    exit_vals = [r["gap_pct"] for r in rows]
+    summary = {
+        "is_buy": is_buy, "trail": trail, "tp_used": round(max(tp_raw, fee_min), 3), "fee_warn": fee_warn,
+        "coverage": round(cov, 3), "cov_warn": cov < 3.0,
+        "capital_needed": round(last["cum_vol"], 2) if is_buy else round(last["cum_qty"], 4),
+        "capital_usd": round(last["cum_vol"], 2),
+        "max_exit": round(max(exit_vals), 3), "avg_exit": round(sum(exit_vals) / len(exit_vals), 3),
+        "profit_base": first["exit_profit"], "profit_full": last["exit_profit"],
+        "profit_full_usd": last["exit_usd"],
+        "final_avg": last["avg"], "final_target": last["target"], "last_price": last["price"],
+        "fee_maker": DCA_FEE_MAKER * 100, "fee_taker": DCA_FEE_TAKER * 100,
+        # توافق مع الأسماء القديمة
+        "drop_needed": round(last["gap_pct"], 3), "coin_profit": last["exit_profit"],
+        "total_sold": last["cum_qty"], "total_usdt": last["cum_vol"],
+    }
     return {"rows": rows, "summary": summary}
 
 
@@ -7366,6 +7529,12 @@ def control(d_rel, action, value):
         alive, _ = is_alive(full, sp)
         if alive:
             return {"ok": False, "msg": "البوت شغّال أصلاً (منع الإطلاق المزدوج)"}
+        if b["cfg"].get("bot_type") in ("dca", "dca_buy"):
+            try:                                   # 🏁 v3.22.1 (ح٤): تشغيل بعد «آخر دورة» ⇒ يبدي دورة جديدة
+                if (load_json(sp) or {}).get("stop_after_cycle"):
+                    save_state_keys(sp, {"stop_after_cycle": False})
+            except Exception:
+                pass
         write_cfg_keys(b["cfg_path"], {"auto_restart": True})
         ok, msg = launch(b)
         if ok:
@@ -7512,6 +7681,18 @@ def control(d_rel, action, value):
         lp = float(stt.get("live_profit") or 0)
         _t = "البيع" if stt.get("bot_type") == "dca_buy" or b["cfg"].get("bot_type") == "dca_buy" else "الشراء"
         return {"ok": True, "msg": f"💰 أمر {_t} الفوري أُرسل — البوت يغلق الدورة بالسعر الحالي"}
+    if action in ("last_on", "last_off"):
+        if b["cfg"].get("bot_type") not in ("dca", "dca_buy"):
+            return {"ok": False, "msg": "«آخر دورة» لبوتات DCA بس"}
+        sp, _, _ = paths_of(b)
+        _on = action == "last_on"
+        if not save_state_keys(sp, {"stop_after_cycle": _on}):
+            stt = load_json(sp) or {}
+            stt["stop_after_cycle"] = _on
+            save_json_atomic(sp, stt)
+        _buy = b["cfg"].get("bot_type") == "dca_buy"
+        return {"ok": True, "msg": (f"🏁 يكمّل هالدورة لحد ما {'يبيع' if _buy else 'يشتري'} بالهدف، وبعدها يوقف — ما يفتح دورة جديدة"
+                                    if _on else "▶️ انلغى «آخر دورة» — يكمّل دورات عادي")}
     if action in ("trail_on", "trail_off"):
         if b["cfg"].get("bot_type") not in ("dca", "dca_buy"):
             return {"ok": False, "msg": "الدرع لبوتات DCA بس"}
@@ -9457,6 +9638,16 @@ body.boot .card{animation:rise .6s var(--ease) both;animation-delay:calc(var(--i
 .dcabuy:hover{box-shadow:0 6px 20px rgb(var(--green-rgb)/.3)}
 .dcabuy.loss{background:linear-gradient(94deg,var(--red),#dc2626);color:#fff}
 .dcabtns{display:grid;grid-template-columns:repeat(4,1fr) auto auto;gap:5px;margin-bottom:10px}
+.dcaopts{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+.dcaopts .dcashield{margin-bottom:0}
+.dcalast{width:100%;padding:9px 10px;border-radius:10px;font-size:12.5px;border:1px solid var(--line);background:rgb(var(--ov-rgb)/.03);color:var(--mut);text-align:center}
+.dcalast.on{border-color:rgb(var(--amber-rgb)/.5);background:rgb(var(--amber-rgb)/.12);color:var(--amber);font-weight:600}
+.dcaviz{margin:6px 0 10px;border:1px solid var(--line);border-radius:12px;background:rgb(var(--ov-rgb)/.02);padding:6px 4px 4px}
+.dcaviz svg{width:100%;height:auto;display:block;direction:ltr}
+.dcaviz .vcap{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;font-size:10.5px;color:var(--mut2);padding:2px 4px 0}
+.dcaviz .vempty{font-size:12px;color:var(--mut);text-align:center;padding:16px 8px}
+.dntbl small{color:var(--mut2);font-size:9.5px}
+.dnwarn{border-radius:9px;padding:9px 12px;margin-top:10px;font-size:11.5px;line-height:1.8}
 .dcashield{width:100%;padding:9px 10px;border-radius:10px;font-size:12.5px;margin-bottom:8px;border:1px solid var(--line);background:rgb(var(--ov-rgb)/.03);color:var(--mut);text-align:center}
 .dcashield.on{border-color:rgb(var(--green-rgb)/.45);background:rgb(var(--green-rgb)/.10);color:var(--green);font-weight:600}
 .dcaladbox{margin:0 0 12px;border-radius:12px;border:1px solid rgb(var(--amber-rgb)/.2);background:rgb(var(--amber-rgb)/.03);padding:10px;max-height:260px;overflow-y:auto}
@@ -10596,22 +10787,13 @@ function buildDcaCard(b,i){
       <div class="dcacell"><span class="dl">شهري≈</span><b class="num" data-k="rmon" style="font-size:12px">—</b></div>
       <div class="dcacell"><span class="dl">سنوي≈</span><b class="num" data-k="ryear" style="font-size:12px">—</b></div>
     </div>
-    <div class="dcarail">
-      <div class="drailtrack">
-        <div class="drailband" data-k="rband"></div>
-        <div class="dline avg" data-k="ravg"><span class="dlbl" data-k="ravgl">متوسط</span></div>
-        <div class="dline tgt" data-k="rtgt"><span class="dlbl" data-k="rtgtl">شراء</span></div>
-        <div class="dline cp" data-k="rcp"><span class="dlbl cp" data-k="rcpl">⚡</span></div>
-        <div data-k="rsells"></div>
-      </div>
-      <div class="drailft"><span data-k="rlon">🟢 على المنصة</span><span data-k="rdesc">${b.bot_type==='dca_buy'?'🔵 شراء · 🟠 متوسط · 🟢 بيع · ⚡ الآن':'🔴 بيع · 🟠 متوسط · 🟢 شراء · ⚡ الآن'}</span></div>
-    </div>
+    <div class="dcaviz" data-k="viz"></div>
     <div class="dcaprofit" data-k="lpbox">
       <span class="dl" data-k="lplbl">لو اشتريت الآن</span>
       <b class="num" data-k="lp">—</b>
     </div>
     <button class="dcabuy" data-k="buynow">${b.bot_type==='dca_buy'?'💰 بِع الآن وأغلق الدورة':'💰 اشترِ الآن وأغلق الدورة'}</button>
-    <button class="dcashield" data-k="dtrail">🛡️ الدرع —</button>
+    <div class="dcaopts"><button class="dcashield" data-k="dtrail">🛡️ الدرع —</button><button class="dcalast" data-k="dlast">🏁 آخر دورة ويخرج</button></div>
     <div class="dcabtns">
       <button data-k="dtable">📋 الجدول</button>
       <button data-k="dladder">🪜 السلم</button>
@@ -10630,6 +10812,7 @@ function buildDcaCard(b,i){
   R.dladder.onclick=()=>dcaLadderInline(el,botOf(b.dir)||b);
   R.dchart.onclick=()=>toggleChart(el,b);
   R.dtrail.onclick=()=>dcaShield(botOf(b.dir)||b);
+  R.dlast.onclick=()=>dcaLast(botOf(b.dir)||b);
   R.dpause.onclick=()=>{const bb=botOf(b.dir)||b,d=bb.dca||(bb.dca={}),p=!!d.paused;   // 🔁 الحالة الحالية + يتبدّل فوراً
     d.paused=!p;R.dpause.textContent=p?'⏸ إيقاف':'▶️ استئناف';ctl(b.dir,p?'resume':'pause')};
   R.ddel.onclick=()=>confirmPurge(b.dir);
@@ -10709,49 +10892,80 @@ function updDcaCard(el,b){
     R.buynow.className='dcabuy'+(lp>=0?'':' loss');
     R.buynow.textContent=lp>=0?`💰 ${_act} الآن (\u2066+${lp} ${_u}\u2069)`:`⚠️ ${_act} الآن (\u2066${lp} ${_u}\u2069)`;
   }else{R.lpbox.style.display='none';R.buynow.style.display='none'}
-  // تسمية خط الهدف بالسلم (شراء/بيع حسب الاتجاه)
-  if(R.rtgtl)R.rtgtl.textContent=d.is_buy?'بيع':'شراء';
-  // 📊 الخط البصري: فقط المنشور على المنصة + المتوسط + الشراء + السعر الحالي
-  (function(){
-    const active=(d.active_sells||[]);
-    const avg=d.avg_price||0,tgt=d.target_price||0,cur=cp||0;
-    if(!cur||!avg){R.rband&&(R.rband.style.width='0');return}
-    // التمركز حول المتوسط (50%): المتوسط بالوسط، الشراء يسار، أوامر البيع يمين
-    // هذا يوزّع النقاط بوضوح بدل ما تنحشر بالطرف
-    const sellsP=active.map(o=>o.price);
-    const allP=sellsP.concat([tgt,cur].filter(x=>x>0));
-    const maxDist=Math.max(0.0001,...allP.map(p=>Math.abs(p-avg)));
-    const span=maxDist*1.15;
-    const pos=p=>Math.max(4,Math.min(96, 50 + (p-avg)/span*46));
-    // المنطقة بين الهدف والمتوسط (الفرق = تباعد الخروج)
-    if(tgt>0){const a=pos(tgt),b2=pos(avg);R.rband.style.insetInlineStart=Math.min(a,b2)+'%';R.rband.style.width=Math.abs(b2-a)+'%'}
-    else R.rband.style.width='0';
-    // خط المتوسط (دائماً بالوسط ~50%)
-    R.ravg.style.display='';R.ravg.style.insetInlineStart=pos(avg)+'%';
-    // خط الشراء/الخروج
-    if(tgt>0){R.rtgt.style.display='';R.rtgt.style.insetInlineStart=pos(tgt)+'%'}else R.rtgt.style.display='none';
-    // السعر الحالي
-    R.rcp.style.insetInlineStart=pos(cur)+'%';
-    // نقاط البيع المنشورة فقط (حمراء) — بلا مخزون
-    let sh='';
-    active.forEach(o=>{sh+=`<div class="dsell" style="inset-inline-start:${pos(o.price)}%" title="أمان ${o.n}: ${f4(o.price)}"></div>`});
-    if(R.rsells._h!==sh){R.rsells.innerHTML=sh;R.rsells._h=sh}
-    R.rlon.textContent=`🟢 ${active.length} على المنصة`;
-  })();
+  // 📊 v3.22.1 (ح٦): سلم الدورة مرسوم — كل الأوامر بأسعارها وحالتها · المتوسط · الخروج · السعر الآن
+  dcaViz(R.viz,d,cp);
   // الحالة
   const _mp=d.is_buy
-    ?{init:'🔄 ينتظر دورة جديدة',waiting:'⏳ ينتظر بين الدورات',selling:'🟢 يشتري — ينتظر الهدف',buying:'🔴 يبيع الآن (إغلاق بلا خسارة)'}
-    :{init:'🔄 ينتظر دورة جديدة',waiting:'⏳ ينتظر بين الدورات',selling:'🔴 يبيع — ينتظر الهدف',buying:'🟢 يشتري الآن (إغلاق بلا خسارة)'};
+    ?{init:'🔄 ينتظر دورة جديدة',waiting:'⏳ ينتظر بين الدورات',selling:'🟢 يشتري — ينتظر الهدف',buying:'🔴 يبيع الآن (إغلاق بلا خسارة)',finished:'🏁 انتهت آخر دورة — موقوف'}
+    :{init:'🔄 ينتظر دورة جديدة',waiting:'⏳ ينتظر بين الدورات',selling:'🔴 يبيع — ينتظر الهدف',buying:'🟢 يشتري الآن (إغلاق بلا خسارة)',finished:'🏁 انتهت آخر دورة — موقوف'};
   const ph=d.paused?'⏸ متوقف مؤقتاً':(_mp[d.phase]||'—');
   // 🛡️ v3.22.0: الدرع + شنو يتتبّع هسه
   let trk='';
   if(d.trail_on&&d.trail_peak)trk=d.is_buy?` · 🛡️ يتتبّع القاع ${f4(d.trail_peak)}`:` · 🛡️ يتتبّع القمة ${f4(d.trail_peak)}`;
   else if(d.trail_on&&d.trail_tp)trk=d.is_buy?` · 🎯 يتتبّع القمة ${f4(d.trail_tp)} للبيع`:` · 🎯 يتتبّع القاع ${f4(d.trail_tp)} للشراء`;
-  R.status.textContent=ph+(d.cycles?` · ${d.cycles} دورة`:'')+trk;
+  R.status.textContent=ph+(d.cycles?` · ${d.cycles} دورة`:'')+trk+(d.stop_after&&d.phase!=='finished'?' · 🏁 آخر دورة':'');
+  if(R.dlast){const fin=d.phase==='finished',on=!!d.stop_after;
+    R.dlast.className='dcalast'+(on?' on':'');
+    R.dlast.textContent=fin?'🏁 انتهت':(on?'🏁 آخر دورة ✓':'🏁 آخر دورة ويخرج');
+    R.dlast.title=on&&!fin?'اضغط للإلغاء':'يكمّل الدورة الحالية لحد الهدف وبعدها يوقف'}
   if(R.dtrail){const on=!!d.trail_on;
     R.dtrail.className='dcashield'+(on?' on':'');
-    R.dtrail.textContent=on?`🛡️ الدرع شغّال · ارتداد ${d.trail_pct||0.3}%`:'🛡️ الدرع مطفي — اضغط للتشغيل';R.dtrail.title=on?'اضغط للإطفاء':'أوامر الأمان تتبع القمة/القاع — ولا مرة أسوأ من المستوى'}
+    R.dtrail.textContent=on?`🛡️ الدرع ✓ ${d.trail_pct||0.3}%`:'🛡️ الدرع: مطفي';R.dtrail.title=on?'اضغط للإطفاء':'أوامر الأمان تتبع القمة/القاع — ولا مرة أسوأ من المستوى'}
   R.dpause.textContent=d.paused?'▶️ استئناف':'⏸ إيقاف';
+}
+function dcaViz(el,d,cp){
+  if(!el)return;
+  const rows=d.rows||[];
+  const key=JSON.stringify([rows.map(r=>[r.n,r.st,r.px]),d.avg_price,d.target_price,cp,d.trail_on&&d.trail_peak,d.is_buy]);
+  if(el._k===key)return;el._k=key;
+  if(!rows.length||!cp){el.innerHTML='<div class="vempty">📊 الرسم يبين أول ما تبدي الدورة</div>';return}
+  const buy=!!d.is_buy,avg=+d.avg_price||0,tgt=+d.target_price||0,pk=d.trail_on?(+d.trail_peak||0):0;
+  const nL=rows.length+3+(pk>0?1:0),W=320,H=Math.max(180,Math.min(340,34+nL*18)),pt=12,pb=14,X0=60,X1=228;
+  const ps=rows.map(r=>+r.px).concat([avg,tgt,cp,pk].filter(x=>x>0));
+  let lo=Math.min(...ps),hi=Math.max(...ps);const pad=(hi-lo)*0.07||hi*0.002;lo-=pad;hi+=pad;
+  const y=p=>pt+(hi-p)/(hi-lo)*(H-pt-pb);
+  const cLv=buy?'var(--cyan)':'var(--red)',tagOf={done:'✅',part:'◐',live:'🟢',mem:'📦',trail:'🛡️'};
+  let g='',L=[];
+  if(tgt>0){const yt=y(tgt),y0=buy?pt-4:yt,y1=buy?yt:H-pb+4;
+    g+=`<rect x="${X0}" y="${y0}" width="${X1-X0}" height="${Math.max(0,y1-y0)}" fill="rgb(var(--green-rgb)/.09)"/>`;
+    const ym=(y0+y1)/2;if(Math.abs(y1-y0)>16)g+=`<text x="${(X0+X1)/2}" y="${ym+3}" font-size="9" fill="rgb(var(--green-rgb)/.75)" text-anchor="middle">منطقة الخروج</text>`}
+  rows.forEach(r=>{const yy=y(+r.px),st=r.st,mem=(st==='mem'||st==='trail');
+    g+=`<line x1="${X0}" y1="${yy}" x2="${X1}" y2="${yy}" stroke="${cLv}" stroke-width="${st==='done'?2.2:1.3}" ${mem?'stroke-dasharray="4 3"':''} opacity="${st==='done'?1:(mem?0.5:0.85)}"/>`;
+    const cx=X1-8;
+    if(st==='done'||st==='part')g+=`<circle cx="${cx}" cy="${yy}" r="4" fill="${cLv}"/>`;
+    else if(st==='live')g+=`<circle cx="${cx}" cy="${yy}" r="3.6" fill="none" stroke="${cLv}" stroke-width="1.6"/>`;
+    else g+=`<rect x="${cx-3}" y="${yy-3}" width="6" height="6" transform="rotate(45 ${cx} ${yy})" fill="none" stroke="${cLv}" stroke-width="1.2" opacity=".7"/>`;
+    L.push({y:yy,l:f4(r.px),r:(r.n===0?'أساس':'أمان '+r.n)+' '+tagOf[st],c:st==='done'||st==='part'?cLv:'var(--mut)'})});
+  if(avg>0){const ya=y(avg);g+=`<line x1="${X0}" y1="${ya}" x2="${X1}" y2="${ya}" stroke="var(--amber)" stroke-width="1.4" stroke-dasharray="6 3"/>`;
+    L.push({y:ya,l:f4(avg),r:'المتوسط',c:'var(--amber)'})}
+  if(tgt>0){const yt=y(tgt);g+=`<line x1="${X0}" y1="${yt}" x2="${X1}" y2="${yt}" stroke="var(--green)" stroke-width="2"/>`;
+    L.push({y:yt,l:f4(tgt),r:'🎯 الخروج',c:'var(--green)'})}
+  if(pk>0){const yp=y(pk);g+=`<line x1="${X0}" y1="${yp}" x2="${X1}" y2="${yp}" stroke="var(--green)" stroke-width="1" stroke-dasharray="1 3"/>`;
+    L.push({y:yp,l:f4(pk),r:buy?'🛡️ القاع':'🛡️ القمة',c:'var(--green)'})}
+  const yc=y(cp);g+=`<line x1="${X0-4}" y1="${yc}" x2="${X1+4}" y2="${yc}" stroke="var(--vio)" stroke-width="1.6"/><path d="M${X1+5} ${yc} l7 -4.5 v9 z" fill="var(--vio)"/>`;
+  L.push({y:yc,l:f4(cp),r:'⚡ الآن',c:'var(--vio)',b:1});
+  // الأسماء بمسافات متساوية بالترتيب (ما تتراكب أبداً) — وخط صغير يوصل كل اسم بخطّه الحقيقي
+  L.sort((a,b)=>a.y-b.y);const n=L.length,st=n>1?(H-pt-pb)/(n-1):0;
+  L.forEach((o,i)=>{const r=n>1?pt+i*st:o.y;o.ly=Math.abs(r-o.y)<st*0.45?o.y:r});
+  for(let i=1;i<n;i++)if(L[i].ly-L[i-1].ly<15)L[i].ly=L[i-1].ly+15;
+  L.forEach(o=>{const ly=o.ly+4,w=o.b?700:400;
+    if(Math.abs(o.ly-o.y)>1.5)g+=`<path d="M${X0} ${o.y} L${X0-5} ${o.ly}" stroke="${o.c}" stroke-width=".7" opacity=".6" fill="none"/><path d="M${X1} ${o.y} L${X1+12} ${o.ly}" stroke="${o.c}" stroke-width=".7" opacity=".6" fill="none"/>`;
+    g+=`<text x="${X0-6}" y="${ly}" font-size="11" fill="${o.c}" text-anchor="end" font-weight="${w}" font-family="ui-monospace,monospace">${o.l}</text>`;
+    g+=`<text x="${X1+14}" y="${ly}" font-size="11" fill="${o.c}" text-anchor="start" font-weight="${w}">${o.r}</text>`});
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="سلم الدورة">${g}</svg>
+    <div class="vcap"><span>● منفّذ</span><span>○ بالمنصة</span><span>◇ ${d.trail_on?'بالذاكرة — الدرع يتتبّعه':'مخزون'}</span><span style="color:var(--green)">▬ الخروج</span><span style="color:var(--amber)">┅ المتوسط</span></div>`;
+}
+function dcaLast(b){
+  const d=b.dca||{},on=!!d.stop_after,fin=d.phase==='finished',buy=d.is_buy;
+  if(fin){toast('🏁 انتهت آخر دورة والبوت موقوف — للتشغيل من جديد زر ▶️ بالكرت',true);return}
+  const open=d.phase==='selling'||d.phase==='buying';
+  const txt=on?'يلغي «آخر دورة» ويكمّل يفتح دورات عادي.'
+    :(open?`يكمّل الدورة الحالية لحد ما ${buy?'يبيع':'يشتري'} بالهدف (الإغلاق بلا خسارة مثل العادة)، وبعدها <b>يوقف</b> ويطفّي الحارس عليه — <b>ما يفتح دورة جديدة</b> (ما ${buy?'يشتري':'يبيع'} أول أمر). تگدر تلغيه بأي وقت قبل الإغلاق.`
+          :'ماكو دورة مفتوحة هسه — البوت يوقف بدون ما يفتح دورة جديدة.');
+  showModal(`<h2>🏁 ${on?'إلغاء آخر دورة':'آخر دورة ويخرج'} — ${b.symbol}</h2>
+    <p style="color:var(--mut);font-size:13px;line-height:1.9;margin-bottom:14px">${txt}</p>
+    <div class="mbtns"><button class="primary" onclick="hideModal();ctl('${b.dir}','${on?'last_off':'last_on'}')">${on?'إلغاء «آخر دورة»':'🏁 نعم، آخر دورة'}</button>
+    <button onclick="hideModal()">رجوع</button></div>`);
 }
 function dcaShield(b){
   const d=b.dca||{},on=!!d.trail_on,buy=d.is_buy,pc=d.trail_pct||0.3;
@@ -10800,10 +11014,29 @@ function dcaLadder(b){
     <div class="mbtns"><button onclick="hideModal()">إغلاق</button></div>`);
 }
 function dcaTable(b){
-  const d=b.dca||{};
-  showModal(`<h2>📋 جدول أوامر — ${b.symbol}</h2>
-    <p style="color:var(--mut);font-size:12px;margin-bottom:12px">المتوسط ${d.avg_price?f4(d.avg_price):'—'} · الهدف ${d.target_price?f4(d.target_price):'—'} · باع ${d.sold_qty||0} ${d.base_coin||''}</p>
-    <p style="color:var(--mut2);font-size:11.5px">الجدول التفصيلي الكامل (كل المستويات المخططة) يُعرض هنا — قيد الإكمال بالمرحلة القادمة.</p>
+  const d=b.dca||{},buy=!!d.is_buy,base=d.base_coin||'',unit=buy?'USDT':base,rows=d.rows||[];
+  const sg=v=>(v>=0?'+':'')+v,arrU=buy?'▼':'▲';
+  const stl={done:'✅ نفّذ',part:'◐ جزئي',live:'🟢 بالمنصة',mem:'📦 مخزون',trail:'🛡️ يتتبّعه الدرع'};
+  let h=`<div class="dnsum">
+    <div class="dnstat"><span>المتوسط</span><b class="num">${d.avg_price?f4(d.avg_price):'—'}</b></div>
+    <div class="dnstat"><span>🎯 سعر الخروج</span><b class="num" style="color:var(--green)">${d.target_price?f4(d.target_price):'—'}</b></div>
+    <div class="dnstat"><span>باقي للخروج</span><b class="num" style="color:var(--cyan)">${d.dist_to_target>0?(buy?'▲ ':'▼ ')+d.dist_to_target+'%':(d.target_price?'✓ وصل':'—')}</b></div>
+    <div class="dnstat"><span>💎 ربح صافي لو خرج بالهدف</span><b class="num" style="color:${(d.tgt_prof||0)>=0?'var(--green)':'var(--red)'}">${sg(d.tgt_prof||0)} ${unit}</b></div>
+    <div class="dnstat"><span>منفّذ</span><b class="num">أمان ${d.safety_used||0}/${d.safety_max||0}</b></div>
+    <div class="dnstat"><span>${buy?'العملة الصافية عنده':'الدولار الصافي عنده'}</span><b class="num">${d.total_net||0} ${buy?base:'$'}</b></div>
+  </div>`;
+  if(!rows.length)h+='<p style="color:var(--mut);font-size:12px;margin-top:12px">ماكو دورة مفتوحة الآن — الجدول يبين أول ما تبدي الدورة.</p>';
+  else{h+=`<div class="dnsec">📋 كل أوامر الدورة</div><div style="overflow-x:auto"><table class="dntbl"><thead><tr>
+    <th>الأمر</th><th>السعر</th><th>الكمية ${base}</th><th>الحالة</th><th>بعده عن السعر</th><th>المتوسط<br><small>لو نفّذ</small></th><th>🎯 الخروج<br><small>لو نفّذ</small></th><th>💎 ربح صافي<br><small>لو خرج</small></th></tr></thead><tbody>`;
+    rows.forEach(r=>{const dn=r.st==='done';
+      h+=`<tr><td>${r.n===0?'أساسي':'أمان '+r.n}</td><td class="num">${f4(r.px)}</td><td class="num">${r.q}</td>
+      <td style="white-space:nowrap">${stl[r.st]||r.st}${(dn||r.st==='part')&&r.fpx?` <small>@${f4(r.fpx)}</small>`:''}</td>
+      <td class="num" style="color:var(--mut);white-space:nowrap">${dn?'—':(r.dist>0?'▲ ':'▼ ')+Math.abs(r.dist)+'%'}</td>
+      <td class="num">${f4(r.avg)}</td><td class="num" style="color:var(--green)">${f4(r.tgt)}</td>
+      <td class="num" style="color:${r.prof>=0?'var(--green)':'var(--red)'}">${sg(r.prof)}</td></tr>`});
+    h+='</tbody></table></div>';
+    h+=`<p style="font-size:10.5px;color:var(--mut2);margin-top:8px;line-height:1.8">💡 «لو نفّذ» = لو السعر وصل لهالأمر ورجع للهدف: هذا المتوسط وسعر الخروج والربح — صافي بعد عمولة OKX (المنفّذ بأسعاره وعمولته الفعلية والباقي بالخطة). «بعده عن السعر» ${arrU} = كم لازم يتحرك السعر حتى يوصله.</p>`}
+  showModal(`<h2>📋 جدول الدورة — ${b.symbol}${d.cycles!=null?` <small style="color:var(--mut2);font-size:12px">(دورة #${(d.cycles||0)+1})</small>`:''}</h2>${h}
     <div class="mbtns"><button onclick="hideModal()">إغلاق</button></div>`);
 }
 function cfb(el,b){if(el.dataset.alt){el.src=el.dataset.alt;el.dataset.alt=''}else{const s=document.createElement('span');s.className='coinltr';s.textContent=(b||'?')[0];el.replaceWith(s)}}
@@ -12447,7 +12680,7 @@ async function openDeployDca(){
     <div class="fld"><label>المحفظة</label><select id="dn_wallet">${ws.map(w=>`<option>${w.name}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>
   </div>
   <div class="cklist" style="margin-top:12px"><label class="ck"><input type="checkbox" id="dn_auto" checked>🤖 يشمله الحارس</label>
-    <label class="ck"><input type="checkbox" id="dn_trail" onchange="$('#dn_trail_box').style.display=this.checked?'':'none'">🛡️ درع الحركة القوية</label></div>
+    <label class="ck"><input type="checkbox" id="dn_trail" onchange="$('#dn_trail_box').style.display=this.checked?'':'none';dcaPreview()">🛡️ درع الحركة القوية</label></div>
   <div id="dn_trail_box" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid rgb(var(--green-rgb)/.3);border-radius:10px;background:rgb(var(--green-rgb)/.06)">
     <div class="fld"><label>🛡️ ارتداد الدرع %</label><input id="dn_trail_pct" class="num" value="0.3"></div>
     <p style="color:var(--mut);font-size:11.5px;line-height:1.8;margin-top:6px">أوامر الأمان تبقى بالذاكرة: لما السعر يعبر مستوى، البوت يلاحق القمة (القاع بالشرائي) وينفّذ عند ارتداد هالنسبة — <b>ولا مرة بسعر أسوأ من المستوى</b>. وبعد الهدف يلاحق السعر ويغلق عند الارتداد — <b>ولا مرة أسوأ من الهدف</b>. تگدر تطفّيه وتشغّله من الكرت بأي وقت.</p>
@@ -12488,41 +12721,34 @@ async function dcaPreview(){
   let res;try{res=await api('/api/dca_preview',body)}catch(e){return}
   const box=$('#dn_preview');
   if(!res||!res.rows||!res.rows.length){box.innerHTML='<p style="color:var(--mut);font-size:12px">أكمل الأرقام لرؤية الجدول</p>';return}
-  const s=res.summary,base=(body.symbol.split('-')[0]||'عملة');
-  // حساب التغطية الكلية ومتوسط نسبة الخروج
-  const cov=res.rows.length>1?((res.rows[res.rows.length-1].price/res.rows[0].price-1)*100):0;
-  const exitVals=res.rows.slice(1).map(r=>r.gap_pct);
-  const avgExit=exitVals.length?exitVals.reduce((a,b)=>a+b,0)/exitVals.length:0;
-  const maxExit=exitVals.length?Math.max(...exitVals):0;
-  // الجدول — مع عمود نسبة الخروج بارز
-  let tbl=`<div class="dnsec">📋 جدول الأوامر</div><div style="overflow-x:auto"><table class="dntbl"><thead><tr>
-    <th>الأمر</th><th>السعر</th><th>المسافة</th><th>المتوسط</th><th>الهدف</th><th>🔵 نسبة الخروج</th><th>كمية ${base}</th><th>مجموع USDT</th><th>ربح الخروج</th></tr></thead><tbody>`;
-  res.rows.forEach(r=>{
-    const ep=r.exit_profit>=0;
-    tbl+=`<tr><td>${r.label}</td><td class="num">${f4(r.price)}</td>
-    <td class="num" style="color:var(--vio)">${r.n===0?'—':'+'+r.step+'%'}</td>
-    <td class="num">${f4(r.avg)}</td>
-    <td class="num" style="color:var(--green)">${f4(r.target)}</td>
-    <td class="num" style="color:var(--cyan);font-weight:700">${r.gap_pct}%</td>
-    <td class="num">${r.cum_qty}</td>
-    <td class="num" style="color:var(--mut)">${r.cum_vol}</td>
-    <td class="num" style="color:${ep?'var(--green)':'var(--red)'}">${ep?'+':''}${r.exit_profit}</td></tr>`});
-  tbl+='</tbody></table></div>';
-  tbl+='<p style="font-size:10.5px;color:var(--mut2);margin-top:6px">💡 «نسبة الخروج» = كم % لازم ينزل السعر من هذا الأمر ليغلق الدورة بربح. «المسافة» = بُعد كل أمان عن الذي قبله. «ربح الخروج» = ربحك لو أغلقت هنا</p>';
-  // الملخص
-  const prof=s.coin_profit>=0;
-  if(s.fee_warn){tbl+=`<div style="background:rgb(var(--amber-rgb)/.12);border:1px solid rgb(var(--amber-rgb)/.3);border-radius:9px;padding:9px 12px;margin-top:10px;font-size:11.5px;color:var(--amber)">🛡️ هدفك أقل من العمولات — رُفع تلقائياً لـ ${s.tp_used}% لضمان ربح صافٍ</div>`}
-  tbl+=`<div class="dnsum">
-    <div class="dnstat"><span>📈 التغطية (مدى الصعود)</span><b style="color:var(--vio)">+${cov.toFixed(2)}%</b></div>
-    <div class="dnstat"><span>🔵 متوسط نسبة الخروج</span><b style="color:var(--cyan)">${avgExit.toFixed(2)}%</b></div>
-    <div class="dnstat"><span>🔵 أقصى نسبة خروج</span><b style="color:var(--cyan)">${maxExit.toFixed(2)}%</b></div>
-    <div class="dnstat"><span>النزول للهدف</span><b style="color:var(--cyan)">${s.drop_needed}%</b></div>
-    <div class="dnstat"><span>ربح ${base}</span><b style="color:${prof?'var(--green)':'var(--red)'}">${prof?'+':''}${s.coin_profit}</b></div>
-    <div class="dnstat"><span>رأس المال</span><b>${s.capital_needed} ${base}</b></div>
+  const s=res.summary,base=(body.symbol.split('-')[0]||'عملة'),buy=!!s.is_buy,unit=buy?'USDT':base;
+  const arr=buy?'▼':'▲',back=buy?'▲':'▼',sg=v=>(v>=0?'+':'')+v;
+  // 📋 v3.22.1 (ح٥): الخلاصة — كم تصرف · لوين يغطي · كم لازم يرجع · كم تربح صافي
+  let h=`<div class="dnsum">
+    <div class="dnstat"><span>📏 التغطية (${buy?'مدى النزول':'مدى الصعود'})</span><b style="color:var(--vio)">${arr} ${s.coverage}%</b></div>
+    <div class="dnstat"><span>💰 رأس المال لو نفّذ الكل</span><b>${buy?s.capital_needed+' USDT':s.capital_needed+' '+base}</b>${buy?'':`<small style="color:var(--mut2);font-size:10px">≈ ${s.capital_usd}$</small>`}</div>
+    <div class="dnstat"><span>🎯 أقصى ${buy?'صعود':'رجوع'} للخروج</span><b style="color:var(--cyan)">${back} ${s.max_exit}%</b></div>
+    <div class="dnstat"><span>💎 ربح صافي — الأساس بس</span><b style="color:var(--green)">${sg(s.profit_base)} ${unit}</b></div>
+    <div class="dnstat"><span>💎 ربح صافي — السلم كامل</span><b style="color:var(--green)">${sg(s.profit_full)} ${unit}</b>${buy?'':`<small style="color:var(--mut2);font-size:10px">≈ ${s.profit_full_usd}$</small>`}</div>
+    <div class="dnstat"><span>🎯 هدف الربح المستعمل</span><b>${s.tp_used}%</b></div>
   </div>`;
-  // المخطط: نسبة الخروج لكل أمر كخط بياني
-  tbl+='<div class="dnsec">📈 مخطط نسبة الخروج لكل أمر</div>'+dcaChart(res.rows,s,base);
-  box.innerHTML=tbl;
+  if(s.cov_warn)h+=`<div class="dnwarn" style="background:rgb(var(--red-rgb)/.10);border:1px solid rgb(var(--red-rgb)/.3);color:var(--red)">⚠️ التغطية ${s.coverage}% بس — يوم عادي يتحرك 3–6%، فالسلم ممكن يخلص بحركة عادية ويبقى ينتظر الرجوع. زيد «عدد أوامر الأمان» أو «المسافة» أو «تغيّر المسافة» (مثلاً 1.2)، أو شغّل 🛡️ الدرع.</div>`;
+  if(s.fee_warn)h+=`<div class="dnwarn" style="background:rgb(var(--amber-rgb)/.12);border:1px solid rgb(var(--amber-rgb)/.3);color:var(--amber)">🛡️ هدفك أقل من العمولات — المحرك يرفعه تلقائياً لـ${s.tp_used}% (الجدول محسوب عليه)</div>`;
+  h+=`<div class="dnsec">📋 جدول الأوامر — كل صف: لو السعر وصل لهالأمر ورجع للهدف</div><div style="overflow-x:auto"><table class="dntbl"><thead><tr>
+    <th>الأمر</th><th>السعر</th><th>المسافة<br><small>من اللي قبله · من الأساس</small></th><th>الكمية ${base}</th><th>قيمته $</th><th>المجموع<br><small>${base} · $</small></th>
+    <th>المتوسط</th><th>🎯 سعر الخروج</th><th>${buy?'الصعود':'الرجوع'} للخروج</th><th>💎 ربح صافي<br><small>${unit}</small></th></tr></thead><tbody>`;
+  res.rows.forEach(r=>{const ep=r.exit_profit>=0;
+    h+=`<tr><td>${r.label}</td><td class="num">${f4(r.price)}</td>
+    <td class="num" style="color:var(--vio);white-space:nowrap">${r.n===0?'—':arr+' '+r.step+'% · '+r.dev+'%'}</td>
+    <td class="num">${r.order_qty}</td><td class="num" style="color:var(--mut)">${r.order_val}</td>
+    <td class="num" style="white-space:nowrap">${r.cum_qty} · <span style="color:var(--mut)">${r.cum_vol}$</span></td>
+    <td class="num">${f4(r.avg)}</td><td class="num" style="color:var(--green)">${f4(r.target)}</td>
+    <td class="num" style="color:var(--cyan);font-weight:700">${back} ${r.gap_pct}%</td>
+    <td class="num" style="color:${ep?'var(--green)':'var(--red)'}">${sg(r.exit_profit)}</td></tr>`});
+  h+='</tbody></table></div>';
+  h+=`<p style="font-size:10.5px;color:var(--mut2);margin-top:6px;line-height:1.8">💡 صافي بعد عمولة OKX: الأساس آخذ ${s.fee_taker}% · الأمان صانع ${s.fee_maker}%${s.trail?' (بالدرع آخذ '+s.fee_taker+'%)':''} · الإغلاق آخذ ${s.fee_taker}%. «${buy?'الصعود':'الرجوع'} للخروج» = كم % لازم يتحرك السعر من هالأمر حتى يطلع بربح. الأرقام على سعر المعاينة — البوت يحسب من سعر التنفيذ الفعلي.</p>`;
+  h+='<div class="dnsec">📈 مخطط نسبة الخروج لكل أمر</div>'+dcaChart(res.rows,s,base);
+  box.innerHTML=h;
 }
 function dcaChart(rows,s,base){
   const W=600,H=240,pad=46;
@@ -12565,7 +12791,7 @@ function dcaChart(rows,s,base){
 
   svg+=`<text x="${(W)/2}" y="${H-6}" fill="var(--mut2)" font-size="8.5" text-anchor="middle">رقم الأمر</text>`;
   svg+='</svg>';
-  svg+='<p style="font-size:10.5px;color:var(--mut2);text-align:center;margin-top:6px">🔵 نسبة الخروج لكل أمر (كم % ينزل السعر ليغلق بربح) · 🟢 أول 4 أوامر (هدف كامل)</p>';
+  svg+=`<p style="font-size:10.5px;color:var(--mut2);text-align:center;margin-top:6px">🔵 نسبة الخروج لكل أمر (كم % ${s&&s.is_buy?'يصعد':'ينزل'} السعر ليغلق بربح صافي)</p>`;
   return svg;
 }
 function uiUnlockOn(){try{return localStorage.getItem('ui_unlock_sound')!=='off'}catch(e){return true}}
@@ -13350,317 +13576,333 @@ def _file_fp(path):
 ENGINE_VERSION = _eng_fp(ENGINE_SRC)
 
 _DCA_B64 = (
-"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"
+"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"
 )
 DCA_SRC = _zlib.decompress(_b64.b64decode(_DCA_B64)).decode("utf-8")
 DCA_VERSION = _eng_fp(DCA_SRC)
 
 _DCAB_B64 = (
-"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"
+"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"
 )
 DCAB_SRC = _zlib.decompress(_b64.b64decode(_DCAB_B64)).decode("utf-8")
 DCAB_VERSION = _eng_fp(DCAB_SRC)
