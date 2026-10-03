@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.22.3"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.22.4"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -10275,17 +10275,18 @@ nav.actions .gsep{width:1px;height:24px;background:var(--line);margin:0 4px;flex
 .hrow>.totals{grid-column:1/-1;grid-row:2;width:100%;justify-content:center;margin:0!important}
 .hrow>.stats{grid-column:1/-1;grid-row:2;width:100%;margin:0}
 /* 📊 v3.22.2: عشر خانات متساوية — خمسة اليوم فوق · خمسة الإجمالي تحت (الموبايل: كل خانة يمّ إجماليها) */
-.stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
-.st{position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:center;gap:5px;min-width:0;min-height:66px;
-  padding:10px 13px;border:1px solid var(--line);border-radius:12px;background:rgb(var(--ov-rgb)/.035)}
-.st .sl{font-size:11.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:relative;z-index:1}
-.st .sv{display:flex;align-items:baseline;gap:5px;min-width:0;font-size:20px;font-weight:600;white-space:nowrap;overflow:hidden;position:relative;z-index:1}
+.stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+/* 📏 v3.22.4: الخانات أقصر (66 ⇐ 48 بكسل) حتى الكروت تبين بالحاسوب */
+.st{position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:0;min-height:0;
+  padding:5px 12px;border:1px solid var(--line);border-radius:11px;background:rgb(var(--ov-rgb)/.035)}
+.st .sl{font-size:11px;line-height:1.25;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:relative;z-index:1}
+.st .sv{display:flex;align-items:baseline;gap:5px;min-width:0;font-size:18px;line-height:1.15;font-weight:600;white-space:nowrap;overflow:hidden;position:relative;z-index:1}
 .st .sv>span,.st .sv.rotv{background:linear-gradient(92deg,var(--cyan),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent;overflow:hidden;text-overflow:ellipsis}
 .st .sv small{font-size:12px;color:var(--mut);font-weight:400}
 .st .sv .cu{font-size:12px;color:var(--mut);font-weight:500;-webkit-text-fill-color:var(--mut)}
 .st.click{cursor:pointer}.st.click:hover{border-color:var(--cyan)}
 .st.rot .sv{transition:opacity .28s ease}.st.rot .sv.fade{opacity:0}
-.st .spk{position:absolute;left:0;right:0;bottom:0;width:100%;height:26px;opacity:.32;pointer-events:none}
+.st .spk{position:absolute;left:0;right:0;bottom:0;width:100%;height:22px;opacity:.32;pointer-events:none}
 .st.pos .sv>span{background:linear-gradient(92deg,var(--green),var(--cyan));-webkit-background-clip:text;background-clip:text}
 .pc-kpi.stats{grid-template-columns:repeat(5,minmax(0,1fr));margin:4px 0 14px}
 @media (max-width:760px){
@@ -10301,8 +10302,6 @@ nav.actions .gsep{width:1px;height:24px;background:var(--line);margin:0 4px;flex
 @media (prefers-reduced-motion:reduce){.navhint{animation:none!important}}
 html.lite .navhint{animation:none!important}
 nav.actions button{padding:7px 12px;font-size:12.8px}
-#hbar{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;font-size:10.5px}
-#hbar:empty{display:none}
 button.warn{border-color:rgb(var(--amber-rgb)/.55);color:var(--amber);box-shadow:0 0 12px rgb(var(--amber-rgb)/.18)}
 /* ═══ 📈 شريط الأسعار ═══ */
 .tape{overflow:hidden;white-space:nowrap;direction:ltr;border-bottom:1px solid var(--line);
@@ -10348,6 +10347,12 @@ button.warn{border-color:rgb(var(--amber-rgb)/.55);color:var(--amber);box-shadow
 .tkchip button{padding:0 3px;font-size:11px;line-height:1;border:0;background:none;color:var(--red);cursor:pointer}
 #totTrade:hover,#totToday:hover{border-color:var(--cyan)}
 #mbar{display:none}
+/* 🖥️ v3.22.4: الشريط العلوي يمشي ويّا الصفحة بالحاسوب هم (مثل الموبايل) — كان ثابت فوق (268 بكسل) ويغطّي راس الكروت ·
+   أول ما يطلع من الشاشة ينزل شريط رفيع بالأرقام (يضغط ⇒ يرجع للأعلى) */
+header{position:relative}
+#mbar{position:fixed;top:0;left:0;right:0;z-index:60;align-items:center;justify-content:center;gap:16px;padding:7px 12px;
+  background:rgb(var(--surf2-rgb)/.9);backdrop-filter:blur(16px);border-bottom:1px solid var(--line);font-size:12.5px;cursor:pointer}
+body.pastTop #mbar{display:flex}
 /* 🖥️ خمس بطاقات أرباح: بالشاشات الاعتيادية تنزل لسطرها وسط الشريط بدل ما تزحزح الهوية لسطر وحدها */
 @media (min-width:761px) and (max-width:1680px){.hrow .totals{order:3;width:100%;justify-content:center;margin:0}.hrow .ops{margin-inline-start:auto}}
 @media (max-width:760px){
@@ -10496,11 +10501,10 @@ html.lite .card:hover,html.lite button:hover{transform:none}
   <span class="navhint l" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><svg viewBox="0 0 24 24"><path d="M14 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
   <span class="navhint r" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><svg viewBox="0 0 24 24"><path d="M10 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
   </div>
-  <div id="hbar"></div>
 </header>
 <div id="tape" class="tape" style="display:none" title="أسعار حية — من الإعدادات ⚙️ ← 📈 شريط الأسعار"><div id="tapein" class="tapein"></div></div>
 <div id="tape2" class="tape tape2" style="display:none" title="مؤشرات العملات المختارة — من ⚙️ الإعدادات ← 📈 شريط الأسعار"><span id="fng" class="fng"></span><div class="tapewrap"><div id="tape2in" class="tapein"></div></div></div>
-<div id="mbar" onclick="goTop()" title="ارجع للأعلى"><span id="mPulse" class="pulse off"></span><span title="إجمالي الربح المحرر">💵 <b id="mTotal" class="num">0.00</b></span><span title="الربح المحرر اليوم">📅 <b id="mToday" class="num">0.00</b></span><span id="mGuard"></span></div>
+<div id="mbar" onclick="goTop()" title="ارجع للأعلى"><span id="mPulse" class="pulse off"></span><span title="ربح التداول اليوم">🔄 <b id="mTrade" class="num">0.00</b></span><span title="إجمالي الربح المحرر">💵 <b id="mTotal" class="num">0.00</b></span><span title="الربح المحرر اليوم">📅 <b id="mToday" class="num">0.00</b></span><span id="mGuard"></span></div>
 <div class="toolbar">
   <div class="srch">
     <span class="si">🔍</span>
@@ -11048,35 +11052,21 @@ function updTop(d){sTot.set(d.total_profit);sDay.set(d.today_profit);drawSpark(d
   const eR=$('#totAll');if(eR)eR.title=`ربح المحرر الإجمالي ${(+d.total_profit||0).toFixed(4)}$ = مجموع الدفتر اليومي بكل الأيام (صافي بعد العمولة) — ويّا البوتات المحذوفة والمعاد بناؤها`;
   const eM=$('#stMonth');if(eM)eM.title=`المعدل الشهري = ربح التداول بكل التاريخ ÷ ${ (d.stats||{}).span_all||0 } يوم × 30`;
   const eV=$('#stAvg');if(eV)eV.title=`متوسط اليوم = ربح التداول آخر ${(d.stats||{}).span||0} يوم ÷ عدد الأيام (نفس تقرير 30 يوم)`;
-  // 📊 أثر حركة السعر + مؤشرات الصحة
-  let hb=$('#hbar');
-  if(!hb){hb=document.createElement('div');hb.id='hbar';
-    hb.style.cssText='display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:6px 0 2px;font-size:10.5px';
-    const t=$('#top')||document.body;t.appendChild(hb);}
-  let s='';
-  /* 📉 v3.21.7: «أثر السعر» انتقل لنافذة 💰 محفظتي */
-  if(d.accum_alloc&&(d.accum_alloc.profit>0||d.accum_alloc.allocated>0)){
-    const A=d.accum_alloc, full=Math.abs(A.unallocated)<0.01;
-    s+=`<span style="padding:2px 8px;border-radius:8px;background:rgb(var(--vio3-rgb)/.12);color:var(--vio);cursor:pointer" onclick="accAlloc()"
-      title="ربح ${A.day}: ${A.profit}$ · وُزّع ${A.allocated}$ · غير مخصّص ${A.unallocated}$">
-      📊 وُزّع ${A.allocated}$ / ${A.profit}$${full?'':' · متبقٍ '+A.unallocated+'$'}</span>`;
-  }
-  /* 🪙 v3.22.2: ربح DCA البيعي بالعملة صار بخانتي «العملات» */
-  if(d.bal_err)s+=`<span style="padding:2px 8px;border-radius:8px;background:rgb(var(--amber2-rgb)/.15);color:var(--amber)" title="${String(d.bal_err).replace(/"/g,'')}">💰 تعذّر جلب الرصيد</span>`;
-  if(d.health_bad>0)s+=`<span style="padding:2px 8px;border-radius:8px;background:rgb(var(--red2-rgb)/.15);color:var(--red)">🚨 ${d.health_bad} بوت أوامره تُرفض</span>`;
-  if(d.audit_bad>0)s+=`<span style="padding:2px 8px;border-radius:8px;background:rgb(var(--amber2-rgb)/.15);color:var(--amber)">⚠️ ${d.audit_bad} سلّم فيه خلل</span>`;
-  hb.innerHTML=s;hb.style.display=s?'flex':'none';     // 🧹 v3.21.7: فاضي ⇒ ما ياخذ مكان
+  /* 🧹 v3.22.4: صف «📊 وُزّع» وجنبه (تعذّر جلب الرصيد · أوامر تُرفض · سلّم فيه خلل) انشال من الشريط بطلب المالك:
+     المحاسبة بنافذة 🪙 المُراكِم (زر «📊 التوزيع») · الرصيد ⚠️ بكل كرت · الرفض والخلل على زر 🛡️ الرقابة وعلى كرت البوت نفسه */
   // الأزرار الصغيرة انتقلت لدرج الإعدادات — نحدّثها لو مفتوح
   const _sf=(id,fn)=>{const x=$(id);if(x)fn(x)};
   _sf('#bWd',x=>x.className=d.watchdog?'on':'');
   _sf('#bBoot',x=>x.className=d.boot?'on':'');
   // 🛡️ شارة الرقابة بالقائمة (أحمر = يحتاج قرار · أصفر = انتبه) + الشريط المصغّر
-  const gA=(d.guard||[]), gb=$('#bGuard'), gRed=gA.some(a=>a.sev==='🔴');
-  if(gb){gb.className=gA.length?(gRed?'danger':'warn'):'';
-    gb.textContent=gA.length?`🛡️ ${gA.length} تنبيه`:'🛡️ الرقابة';}
+  const gA=(d.guard||[]), gb=$('#bGuard'), hBad=+d.health_bad||0, aBad=+d.audit_bad||0, gRed=gA.some(a=>a.sev==='🔴')||hBad>0, gN=gA.length+hBad+aBad;
+  if(gb){gb.className=gN?(gRed?'danger':'warn'):'';
+    gb.textContent=gN?`🛡️ ${gN} تنبيه`:'🛡️ الرقابة';
+    gb.title='الرقابة: مطابقة الأرصدة والأوامر مع المنصة وكشف البوت الميت'+(hBad?` · 🚨 ${hBad} بوت أوامره تُرفض`:'')+(aBad?` · ⚠️ ${aBad} سلّم فيه خلل`:'');}
+  _sf('#mTrade',x=>x.textContent=(+((d.trade||{}).today)||0).toFixed(2));
   _sf('#mTotal',x=>x.textContent=(+d.total_profit||0).toFixed(2));
   _sf('#mToday',x=>x.textContent=(+d.today_profit||0).toFixed(2));
-  _sf('#mGuard',x=>{x.textContent=gA.length?`🛡️ ${gA.length}`:'';x.style.color=gRed?'var(--red)':'var(--amber)'});
+  _sf('#mGuard',x=>{x.textContent=gN?`🛡️ ${gN}`:'';x.style.color=gRed?'var(--red)':'var(--amber)'});
   _sf('#mPulse',x=>{const p=$('#pulse');if(p)x.className=p.className});
   const sw=$('#step_w');if(sw&&typeof d.wallets==='number')sw.textContent=d.wallets>0?'✅ المحفظة جاهزة':'1️⃣ 👛 أضف محفظة OKX';
   $('#tEx').innerHTML=(typeof d.ex_b==='number')?`<span>${d.ex_s}↑ · ${d.ex_b}↓</span><small>${d.ex_b+d.ex_s}</small>`:'<span>—</span>';
@@ -12814,7 +12804,8 @@ async function accEdit(a){
     يأخذ نسبة من <b>ربح كل بوتاتك اليومي</b> ويشتري بها عملة تختارها.
     ربح أمس: <b style="color:var(--green)">${(pv.yday_profit||0).toFixed(4)}$</b> ·
     المتبقي: 💵 من الربح <b>${Math.max(0,100-used).toFixed(0)}%</b>
- · 🪙 من عملة ${_cb||'—'} <b>${Math.max(0,100-_cu).toFixed(0)}%</b></p>
+ · 🪙 من عملة ${_cb||'—'} <b>${Math.max(0,100-_cu).toFixed(0)}%</b>
+ · <a href="#" onclick="event.preventDefault();accAlloc()" style="color:var(--vio)" title="كم وُزّع من ربح أمس · لمن · وكم بقي غير مخصّص">📊 التوزيع</a></p>
  <p style="color:var(--mut2);font-size:11px;margin-top:-4px">
  نسبة الربح تُقسَّم على <b>كل</b> المُراكِمات · أما نسبة العملة فمحصورة
  بمُراكِمات <b>نفس العملة</b> فقط، والباقي يروح للمحفظة.</p>
