@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.22.9"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.23.0"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -6760,9 +6760,10 @@ def coins_period(start, end):
 
 
 # ───────────── 🗺️ v3.22.8: خريطة الأرباح + 💰 صناديق الربح — مراقبة بس (التوزيعات نفسها ما تنلمس ولا سطر) ─────────────
-#   الربح ينزل باتجاه واحد من البوتات: 💵 دولار (يتوزّع نهاية اليوم على المُراكِمات بنسبها والباقي ⇒ الربح) ·
-#   🪙 عملة (للمُراكِم بنسبة العملة — نفس العملة ونفس المحفظة — والباقي/بلا مُراكِم ⇒ الربح) · 💸 الطرح من المتراكم ⇒ الربح.
-#   «الربح» لكل محفظة لحالها · بيه صناديق بنسب تحددها (مصروفي …) — دفتر للعرض: الصرف والتصفير ما يحرّكون شي بالمنصة.
+#   v3.23.0 — لكل محفظة (مفتاح API): 📥 صندوق الربح المحرر (ربح البوتات بالدولار قبل التوزيع) ⇒ نهاية اليوم للمُراكِمات بنسبها
+#   والباقي ⇒ 💰 الصندوق النهائي · بلا مُراكِم ⇒ للنهائي مباشرة · 🪙 العملة (للمُراكِم بنسبة العملة — نفس العملة ونفس المحفظة —
+#   والباقي/بلا مُراكِم ⇒ النهائي) · المُراكِم ⇒ النهائي: 💸 الطرح · 💰 البيع (ربح أو خسارة) · 🛑 الإنهاء (عملته ودولاره).
+#   النهائي بيه صناديق بنسب تحددها (مصروفي …) للدولار · العملات تخصّصها بيدك — دفتر للعرض: الصرف والتصفير ما يحرّكون شي بالمنصة.
 PROFIT_FILE = os.path.join(ROOT, "Holy_Profit.json")
 _PF_LOCK = threading.RLock()
 _PF_RUN = {"t": 0.0}
@@ -6833,13 +6834,30 @@ def _pf_W(pb, wid):
     for k, v in (("free", 0.0), ("env", []), ("coins", {}), ("in_usd", 0.0), ("in_coin", {}), ("out_usd", 0.0), ("out_coin", {}),
                  ("reset_usd", 0.0), ("reset_coin", {})):
         W.setdefault(k, v)
+    for e in W["env"]:
+        if isinstance(e, dict):
+            e.setdefault("coins", {})        # 🪙 v3.23.0: عملات خصّصتها للصندوق بيدك (ما تتقسّم لحالها مثل الدولار)
     return W
 
 
-def _pf_log(pb, wid, kind, amt, ccy, src="", note=""):
-    pb.setdefault("log", []).insert(0, {"ts": round(time.time(), 3), "w": wid, "k": kind, "a": round(float(amt), 10),
-                                        "c": ccy, "s": str(src)[:80], "n": str(note)[:160]})
-    del pb["log"][1500:]
+def _pf_log(pb, wid, kind, amt, ccy, src="", note="", merge=None):
+    """سطر بسجل الصندوق · `merge` (v3.23.0): الربح المباشر ينزل دفعات صغيرة طول اليوم ⇒ يتجمّع بسطر واحد لكل بوت ويوم (ولا يغرق السجل)"""
+    L = pb.setdefault("log", [])
+    if merge:
+        for i, x in enumerate(L[:40]):
+            if x.get("m") == merge and x.get("w") == wid and x.get("k") == kind and x.get("c") == ccy:
+                L.pop(i)
+                x["a"] = round(float(x.get("a") or 0) + float(amt), 10)
+                x["ts"] = round(time.time(), 3)
+                x["x"] = int(x.get("x") or 1) + 1
+                L.insert(0, x)
+                return
+    ent = {"ts": round(time.time(), 3), "w": wid, "k": kind, "a": round(float(amt), 10),
+           "c": ccy, "s": str(src)[:80], "n": str(note)[:160]}
+    if merge:
+        ent["m"] = merge
+    L.insert(0, ent)
+    del L[1500:]
 
 
 def _pf_edge(pb, eid, amt, ccy):
@@ -6848,8 +6866,8 @@ def _pf_edge(pb, eid, amt, ccy):
     e["c"] = ccy
 
 
-def _pf_add_usd(pb, wid, amt, src, note):
-    """💵 دولار نزل للربح ⇒ يتقسّم على الصناديق بنسبها · الباقي «غير مقسّم» (بالضبط — ولا كسر يضيع)."""
+def _pf_add_usd(pb, wid, amt, src, note, merge=None):
+    """💵 دولار نزل للصندوق النهائي ⇒ يتقسّم على الصناديق بنسبها · الباقي «غير مقسّم» (بالضبط — ولا كسر يضيع)."""
     W = _pf_W(pb, wid)
     given = 0.0
     for e in W["env"]:
@@ -6860,31 +6878,61 @@ def _pf_add_usd(pb, wid, amt, src, note):
             given += p
     W["free"] = round(float(W.get("free") or 0) + amt - given, 8)
     W["in_usd"] = round(float(W.get("in_usd") or 0) + amt, 8)
-    _pf_log(pb, wid, "in_usd", amt, "USDT", src, note)
+    _pf_log(pb, wid, "in_usd", amt, "USDT", src, note, merge=merge)
 
 
 def _pf_add_coin(pb, wid, base, q, src, note):
+    """🪙 عملة نزلت للصندوق النهائي — تبقى «غير مخصّصة» (ما تتقسّم بالنسب) لحد ما تخصّصها لصندوق بيدك"""
     W = _pf_W(pb, wid)
     W["coins"][base] = round(float(W["coins"].get(base) or 0) + q, 10)
     W["in_coin"][base] = round(float(W["in_coin"].get(base) or 0) + q, 10)
     _pf_log(pb, wid, "in_coin", q, base, src, note)
 
 
+_PF_STALE_DAYS = 8          # المُراكِم ما يرجع يوزّع يوم أقدم من 8 أيام (`_stale` بـaccum_tick) ⇒ أنصبته لذاك اليوم ثابتة
+
+
+def _pf_lo(pb, today=None):
+    """أقدم يوم بنافذة اللحاق — اللي قبله انحسم"""
+    today = today or datetime.now().strftime("%Y-%m-%d")
+    return max(pb.get("since") or today, (datetime.now() - timedelta(days=_PF_LATE_DAYS)).strftime("%Y-%m-%d"))
+
+
+def _pf_ghost_add(pb, a, e, why):
+    """👻 v3.23.0: مُراكِم انتهى أو انتقل لمحفظة ثانية ⇒ أنصبته المسجّلة (أيام نافذة اللحاق، من يوم بدايته على هالمحفظة)
+    تبقى محسوبة عليه بمحفظته — هو فعلاً استلمها ⇒ ولا تنحسب مرة ثانية للصندوق النهائي لو ربح ذاك اليوم زاد بعدين."""
+    st0 = str((a or {}).get("start") or "")
+    lo = _pf_lo(pb)
+    days = {}
+    for d, v in ((e or {}).get("days") or {}).items():
+        if v is None or d < lo or (st0 and d < st0):
+            continue
+        days[d] = round(float(v or 0), 6)
+    if days:
+        pb.setdefault("ghost", []).append({"aid": a["id"], "w": acc_wid(a) or "?", "why": why, "ts": round(time.time(), 3),
+                                           "name": str(a.get("name") or a.get("symbol") or a["id"])[:40], "days": days})
+
+
 def profit_tick():
-    """💰 يقيّد اللي نزل للربح (مو للمُراكِم) — من نفس الدفاتر وبنفس التوزيع بالضبط، بلا ما يغيّر أي شي:
-      💵 كل يوم منتهي وزّعه المُراكِم: ربح كل بوت − نصيب كل مُراكِم منه (نصيب المُراكِم من اليوم × حصة البوت من ربح اليوم) ⇒ ربح محفظة البوت
-      🪙 باقي كل تسليم عملة (`_ri_left_log`) ⇒ عملات ربح محفظة البوت · وتسليمات المُراكِم (`buys[].hid`) ⇒ خط البوت ⇐ المُراكِم
-      💸 الطرح من المتراكم (`wlog`) ⇒ ربح محفظة المُراكِم
-    كل حدث مرة وحدة (علامات) · يوم ما وزّعه المُراكِم بعد ⇒ ينتظر · فرق يوم زاد بعدين ⇒ يلحق (9 أيام) · أول تشغيل يبدي من اليوم."""
+    """💰 v3.23.0 — لكل محفظة (= مفتاح API) صندوقين · دفتر للعرض (ولا شي يتحرك بالمنصة):
+      📥 صندوق الربح المحرر = ربح بوتات المحفظة بالدولار قبل التوزيع · نهاية اليوم يتوزّع على مُراكِماتها بأنصبتهم
+         (نفس `accum_tick` بالضبط — نصيب كل مُراكِم من اليوم × حصة البوت من ربح المحفظة) والباقي ⇒ 💰 الصندوق النهائي.
+         محفظة ما عليها مُراكِم لهاليوم ⇒ الربح يروح للنهائي **مباشرة** (لحظياً — حتى ربح اليوم نفسه).
+      🪙 العملة: باقي كل تسليم (`_ri_left_log`) ⇒ عملات النهائي · تسليمات المُراكِم (`buys[].hid`) ⇒ خط البوت ⇐ المُراكِم
+      💸 الطرح من المتراكم (`wlog`) · 💰 بيع المُراكِم (`sells` — المبلغ كله، ربح أو خسارة) ⇒ النهائي بمحفظة المُراكِم
+      🛑 إنهاء مُراكِم ⇒ `profit_close_acc` · مُراكِم انتهى/انتقل ⇒ أنصبته القديمة تبقى عليه (`ghost`)
+    كل حدث مرة وحدة (علامات) · اللي انقيّد ما ينعاد ولا ينقص · فرق يوم زاد بعدين ⇒ يلحق (9 أيام) · أول تشغيل يبدي من اليوم."""
     with _PF_LOCK:
         pb = _pf_load()
         now = time.time()
         today = datetime.now().strftime("%Y-%m-%d")
         fresh = not pb.get("since")
         if fresh:
-            pb = {"v": 1, "since": today, "since_ts": now, "W": {}, "edges": {}, "ub": {}, "wmap": {}, "wlab": {},
-                  "cseen": [], "aseen": [], "wseen": [], "log": []}
+            pb = {"v": 2, "since": today, "since_ts": now, "s_from": now, "W": {}, "edges": {}, "ub": {}, "wmap": {}, "wlab": {},
+                  "cseen": [], "aseen": [], "wseen": [], "sseen": [], "ghost": [], "xseen": [], "log": []}
         ch = fresh
+        if not pb.get("s_from"):
+            pb["s_from"] = now; ch = True    # ⬆️ ترقية من v3.22.x: بيع المُراكِم ينقيّد من هسه (ولا بيع قديم بأثر رجعي)
         wm, lab, _ = _pf_wallets()
         wmap = pb.setdefault("wmap", {})
         for k, w in wm.items():
@@ -6901,60 +6949,123 @@ def profit_tick():
         if not isinstance(led, dict):
             led = {}
         live = _live_wmap()
-        # ── 💵 الدولار: الأيام المنتهية اللي وزّعها المُراكِم ──
-        since = pb.get("since") or today
-        lo = max(since, (datetime.now() - timedelta(days=_PF_LATE_DAYS)).strftime("%Y-%m-%d"))
+        # ── 💵 الدولار: 📥 المحرر ⇒ المُراكِمات (نهاية اليوم) · الباقي / بلا مُراكِم ⇒ 💰 النهائي ──
+        lo = _pf_lo(pb, today)
+        stale = (datetime.now() - timedelta(days=_PF_STALE_DAYS)).strftime("%Y-%m-%d")
         keys = [k for k, e in led.items() if not str(k).startswith("_") and isinstance(e, dict)]
-        days = sorted({d for k in keys for d in (led[k].get("daily") or {}) if lo <= d < today})
+        days = sorted({d for k in keys for d in (led[k].get("daily") or {}) if lo <= d <= today})
         ub = pb.setdefault("ub", {})
+        gl = pb.setdefault("ghost", [])
+        for g in list(gl):
+            gd = g.get("days") if isinstance(g, dict) else None
+            if not isinstance(gd, dict) or not g.get("aid"):
+                gl.remove(g); ch = True; continue
+            for d in [d for d in gd if d < lo]:
+                gd.pop(d, None); ch = True
+            if not gd:
+                gl.remove(g); ch = True
+        byw = {}
+        for a in cfgs:
+            if a.get("id"):
+                byw.setdefault(acc_wid(a) or "?", []).append(a)
         for d in days:
-            shares, ready, saw = {}, True, {}
-            for a in cfgs:
-                if a.get("start") and d < a["start"]:
-                    continue
-                rec = ((ast.get(a.get("id")) or {}).get("days") or {}).get(d)
-                if rec is None:
-                    ready = False            # المُراكِم ما وزّع هذا اليوم بعد (نهاية اليوم) ⇒ ننتظر — حتى ما تنحسب حصته ربح
-                    break
-                shares[a["id"]] = float(rec or 0)
-                saw[a["id"]] = acc_wid(a)
-            if not ready:
-                continue
-            Pw = {}                          # 👛 v3.22.9: ربح كل محفظة لليوم — نفس رقم مُراكِماتها بالضبط
+            grp = {}
             for k in keys:
                 v = float((led[k].get("daily") or {}).get(d) or 0)
-                if v <= 0:
-                    continue
-                kw = _led_wid(k, led[k], live)
-                if kw and kw not in Pw:
-                    Pw[kw] = day_profit_w(d, kw, led, live)
-                P = Pw.get(kw) or 0.0
-                to = ({aid: round(v * s2 / P, 8) for aid, s2 in shares.items() if s2 > 0 and saw.get(aid) == kw}
-                      if kw and P > 0 else {})
-                pf = round(v - sum(to.values()), 8)
-                prev = (ub.get(k) or {}).get(d) or [0.0, {}, 0.0]
-                if abs(v - float(prev[0] or 0)) < 1e-10 and abs(pf - float(prev[2] or 0)) < 1e-10 and all(
-                        abs(x - float((prev[1] or {}).get(aid) or 0)) < 1e-10 for aid, x in to.items()):
-                    continue
-                for aid, x in to.items():
-                    dx = round(x - float((prev[1] or {}).get(aid) or 0), 10)
-                    if dx > 1e-10:
-                        _pf_edge(pb, f"u|{k}|{aid}", dx, "USDT")
-                dpf = round(pf - float(prev[2] or 0), 10)
-                wid = _led_wid(k, led[k], live) or wmap.get(k) or "?"
-                if dpf > 1e-10:
-                    _pf_edge(pb, f"up|{k}", dpf, "USDT")
-                    _pf_add_usd(pb, wid, dpf, k, f"يوم {d}")
-                    _safe(journal, "profit", f"💰 للربح ({wl.get(wid) or wid}): {dpf:+.6f}$ من {k} — يوم {d} (الباقي بعد المُراكِمات)", "ok",
-                          bot=k, day=d, amount=dpf, wallet=wid, default=None)
-                ub.setdefault(k, {})[d] = [v, to, pf]
-                ch = True
+                if abs(v) > 1e-12:              # حتى اليوم الخسران (دورة DCA شرائي بخسارة) — ينقص من نفس المحفظة
+                    grp.setdefault(_led_wid(k, led[k], live) or "", []).append((k, v))
+            for kw, rows in grp.items():
+                gh = {}
+                for g in gl:
+                    if kw and g.get("w") == kw and d in g["days"]:
+                        gh[g["aid"]] = round(gh.get(g["aid"], 0.0) + float(g["days"][d] or 0), 8)
+                act = ([a for a in byw.get(kw, []) if a["id"] not in gh and not (a.get("start") and d < a["start"])]
+                       if kw else [])
+                P = 0.0
+                if not act and not gh:
+                    mode = "l"                   # ⚡ ماكو مُراكِم على المحفظة لهاليوم ⇒ مباشر للنهائي (حتى اليوم نفسه)
+                elif act and d >= today:
+                    continue                     # ⏳ يتوزّع نهاية اليوم
+                else:
+                    P = day_profit_w(d, kw, led, live)
+                    shares, ok = dict(gh), True
+                    for a in act:
+                        e = ast.get(a["id"]) or {}
+                        rec = (e.get("days") or {}).get(d)
+                        if rec is None:
+                            ok = False           # المُراكِم ما وزّع هاليوم بعد ⇒ ننتظر — حتى ما تنحسب حصته ربح
+                            break
+                        if d >= stale:           # ربح اليوم زاد بعد ما وزّع ⇒ ننتظر يلحق الفرق (accum_tick) — ولا كسر يروح للمكان الغلط
+                            pc = float((e.get("dpct") or {}).get(d, a.get("pct", 0)) or 0)
+                            if float(rec or 0) + 1e-6 < round(P * pc / 100.0, 6):
+                                ok = False
+                                break
+                        shares[a["id"]] = float(rec or 0)
+                    if not ok:
+                        continue
+                    mode = "e"
+                pos = [(k, v) for k, v in rows if v > 0]
+                Ppos = sum(v for _, v in pos)
+                neg = round(sum(v for _, v in rows if v < 0), 10)
+                pv_ = {k: (ub.get(k) or {}).get(d) or [0.0, {}, 0.0] for k, _ in rows}
+                # 📥 نصيب كل مُراكِم من اليوم (S) يتوزّع على بوتات المحفظة بحصصها — اللي انقيّد لبوت ما ينقص أبداً،
+                #    والمجموع = S بالضبط: يوم ثابت أو مُراكِم انتهى/انتقل ⇒ نصيبه ما يزيد ⇒ أي ربح متأخر كله للنهائي
+                alloc = {}
+                if mode == "e" and Ppos > 0:
+                    for aid, S in shares.items():
+                        if S <= 0:
+                            continue
+                        prevs = {k: float(((pv_[k][1] or {}).get(aid)) or 0) for k, _ in pos}
+                        R_ = round(S - sum(prevs.values()), 10)
+                        if R_ <= 1e-10:
+                            continue
+                        defs = {k: max(0.0, v * S / Ppos - prevs[k]) for k, v in pos}
+                        sd = sum(defs.values())
+                        if sd <= 1e-12:
+                            continue
+                        f = min(1.0, R_ / sd)
+                        for k, _ in pos:
+                            if defs[k] > 1e-12:
+                                alloc.setdefault(k, {})[aid] = round(prevs[k] + defs[k] * f, 8)
+                tos, pfs = {}, {}
+                for k, v in pos:
+                    bto = {aid: float(x or 0) for aid, x in (pv_[k][1] or {}).items()}   # اللي راح للمُراكِمات ما يرجع
+                    for aid, x in (alloc.get(k) or {}).items():
+                        if x > bto.get(aid, 0.0) + 1e-10:
+                            _pf_edge(pb, f"u|{k}|{aid}", round(x - bto.get(aid, 0.0), 10), "USDT")
+                            bto[aid] = x
+                    tos[k] = bto
+                    pfs[k] = v - sum(bto.values())
+                spf = sum(max(0.0, p) for p in pfs.values())
+                if neg < 0 and spf > 0:          # 📉 بوت خسران بنفس اليوم والمحفظة ⇒ ينقص من الباقي (الصافي — مثل المُراكِم)
+                    cut = min(1.0, -neg / spf)
+                    pfs = {k: p - max(0.0, p) * cut for k, p in pfs.items()}
+                for k, v in rows:
+                    prev = pv_[k]
+                    if v <= 0:
+                        row = [round(v, 8), dict(prev[1] or {}), float(prev[2] or 0), mode]
+                    else:
+                        pf = round(pfs[k], 8)
+                        ppf = float(prev[2] or 0)
+                        dpf = round(pf - ppf, 10)
+                        wid = kw or wmap.get(k) or "?"
+                        if dpf > 1e-10:
+                            _pf_edge(pb, ("ul|" if mode == "l" else "up|") + k, dpf, "USDT")
+                            _pf_add_usd(pb, wid, dpf, k, f"يوم {d}" + (" · ⚡ مباشر (ماكو مُراكِم)" if mode == "l" else " · الباقي بعد المُراكِمات"),
+                                        merge=f"{k}|{d}|{mode}")
+                            _safe(journal, "profit", f"💰 للصندوق النهائي ({wl.get(wid) or wid}): {dpf:+.6f}$ من {k} — يوم {d}"
+                                  + (" ⚡ مباشر (ماكو مُراكِم على المحفظة)" if mode == "l" else " (الباقي بعد المُراكِمات)"), "ok",
+                                  bot=k, day=d, amount=dpf, wallet=wid, rl=(f"pfl:{k}:{d}" if mode == "l" else None), default=None)
+                        row = [round(v, 8), {aid: round(x, 8) for aid, x in tos[k].items()}, round(max(pf, ppf), 8), mode]
+                    if row != list(prev):
+                        ub.setdefault(k, {})[d] = row
+                        ch = True
         for k in list(ub):                  # الأقدم من نافذة اللحاق انحسم — ما نحتاجه
             for d in [d for d in ub[k] if d < lo]:
                 ub[k].pop(d, None); ch = True
             if not ub[k]:
                 ub.pop(k, None)
-        # ── 🪙 العملة: باقي التسليمات ⇒ الربح · تسليمات المُراكِم ⇒ خطوطها ──
+        # ── 🪙 العملة: باقي التسليمات ⇒ النهائي · تسليمات المُراكِم ⇒ خطوطها ──
         hm = None
         cseen_l = list(pb.get("cseen") or []); cseen = set(cseen_l)
         cwait = pb.setdefault("cwait", {})
@@ -6971,7 +7082,7 @@ def profit_tick():
                 t0 = float(cwait.setdefault(hid, now))
                 if now - t0 > 3600:          # ساعة وما انعرف بوته (انحذف قبل ما ينقرا؟) ⇒ نسجّل ونمشي
                     cseen.add(hid); cseen_l.append(hid); cwait.pop(hid, None); ch = True
-                    _safe(journal, "profit", f"⚠️ تسليم عملة {hid} ({q}) ما انعرف بوته — ما انقيّد بالربح", "warn", default=None)
+                    _safe(journal, "profit", f"⚠️ تسليم عملة {hid} ({q}) ما انعرف بوته — ما انقيّد بالصندوق النهائي", "warn", default=None)
                 continue
             key, sym = kk
             base = sym.split("-")[0].upper()
@@ -6980,14 +7091,17 @@ def profit_tick():
             if q > 0:
                 _pf_edge(pb, f"cp|{key}|{base}", q, base)
                 _pf_add_coin(pb, wid, base, q, key, "باقي تسليم " + hid)
-                _safe(journal, "profit", f"💰🪙 للربح ({wl.get(wid) or wid}): {q:+.8g} {base} من {key}", "ok", bot=key, coin=q, base=base, wallet=wid, default=None)
+                _safe(journal, "profit", f"💰🪙 للصندوق النهائي ({wl.get(wid) or wid}): {q:+.8g} {base} من {key}", "ok", bot=key, coin=q, base=base, wallet=wid, default=None)
             cseen.add(hid); cseen_l.append(hid); cwait.pop(hid, None); ch = True
         aseen_l = list(pb.get("aseen") or []); aseen = set(aseen_l)
         wseen_l = list(pb.get("wseen") or []); wseen = set(wseen_l)
+        sseen_l = list(pb.get("sseen") or []); sseen = set(sseen_l)
+        s_from = float(pb.get("s_from") or now)
         for a in cfgs:
             aid = a.get("id")
             e = ast.get(aid) or {}
             base = str(a.get("symbol") or "").split("-")[0].upper()
+            nm = a.get("name") or aid
             for bu in (e.get("buys") or []):
                 hid = bu.get("hid") if isinstance(bu, dict) else None
                 if not hid:
@@ -7004,6 +7118,7 @@ def profit_tick():
                     continue                 # يلحق بالدورة الجاية (دفتر العملات يقراه خلال 30 ثانية)
                 _pf_edge(pb, f"c|{kk[0]}|{aid}", float(bu.get("qty") or 0), base)
                 aseen.add(sk); aseen_l.append(sk); ch = True
+            accw = acc_wid(a) or "?"                        # 👛 النهائي بمحفظة المُراكِم نفسه
             for w in (e.get("wlog") or []):
                 sk = f"{aid}|{w.get('ts')}"
                 if sk in wseen:
@@ -7012,19 +7127,107 @@ def profit_tick():
                 usd = float(w.get("usd") or 0)
                 if fresh or usd <= 0:
                     continue
-                accw = acc_wid(a) or "?"                    # 👛 v3.22.9: ربح محفظة المُراكِم نفسه
                 _pf_edge(pb, f"w|{aid}", usd, "USDT")
-                _pf_add_usd(pb, accw, usd, aid, f"💸 طرح من المتراكم ({a.get('name') or aid})")
-                _safe(journal, "profit", f"💰 للربح ({wl.get(accw) or accw}): {usd:+.4f}$ طرح من متراكم {a.get('name') or aid}", "ok", bot=aid, amount=usd, wallet=accw, default=None)
+                _pf_add_usd(pb, accw, usd, aid, f"💸 طرح من المتراكم ({nm})")
+                _safe(journal, "profit", f"💰 للصندوق النهائي ({wl.get(accw) or accw}): {usd:+.4f}$ طرح من متراكم {nm}", "ok", bot=aid, amount=usd, wallet=accw, default=None)
+            for s in (e.get("sells") or []):                # 💰 v3.23.0: بيع المُراكِم (ربح أو خسارة) ⇒ المبلغ كله للنهائي
+                if not isinstance(s, dict):
+                    continue
+                sk = f"{aid}|s|{s.get('ts')}"
+                if sk in sseen:
+                    continue
+                sseen.add(sk); sseen_l.append(sk); ch = True
+                usd = float(s.get("usd") or 0)
+                if fresh or usd <= 0 or float(s.get("ts") or 0) < s_from:
+                    continue
+                _pf_edge(pb, f"s|{aid}", usd, "USDT")
+                _pf_add_usd(pb, accw, usd, aid, f"💰 بيع {float(s.get('qty') or 0):.8g} {base} من المُراكِم ({nm}) · ربحه {float(s.get('profit') or 0):+.4f}$")
+                _safe(journal, "profit", f"💰 للصندوق النهائي ({wl.get(accw) or accw}): {usd:+.4f}$ بيع {float(s.get('qty') or 0):.8g} {base} من المُراكِم {nm}"
+                      f" (ربح {float(s.get('profit') or 0):+.4f}$)", "ok", bot=aid, amount=usd, wallet=accw, default=None)
         pb["cseen"], pb["aseen"], pb["wseen"] = cseen_l[-20000:], aseen_l[-20000:], wseen_l[-20000:]
+        pb["sseen"] = sseen_l[-20000:]
         if ch:
             _pf_save(pb)
         return pb
 
 
+def profit_close_acc(aid):
+    """🛑 v3.23.0: إنهاء مُراكِم — اللي جمّعه كله ربح ⇒ 💰 الصندوق النهائي بمحفظته: المخزون كعملة (ما تتقسّم لحالها) ·
+    المتراكم + قيد الشراء دولار. العملة فعلاً باقية بحسابك بالمنصة (ولا شي يتحرك) ⇒ الرقابة تبقى تتوقعها (`_ri_left_w`).
+    قبلها يقيّد كل شي ينتظر (بيع · طرح · أيام) · أمر ينتظر تأكيد المنصة ⇒ يرفض. يرجع (نجح، رسالة)."""
+    with _ACC_IO:
+        c = app_cfg()
+        lst = c.get("accumulators") or []
+        a = next((x for x in lst if x.get("id") == aid), None)
+        if a is None:
+            return False, "غير موجود"
+        e = acc_state().get(aid) or {}
+        if e.get("inflight") or e.get("sell_inflight"):
+            return False, "⏳ في أمر ينتظر تأكيد المنصة — أنهِه بعد ما يتسوّى (دقيقة)"
+        _safe(profit_tick, default=None)          # البيع/الطرح/الأيام اللي تنتظر ⇒ تنقيّد قبل لا يختفي
+        wid = acc_wid(a) or "?"
+        sym = str(a.get("symbol") or "")
+        base = sym.split("-")[0]
+        bu = base.upper()
+        name = str(a.get("name") or sym or aid)
+        coin = round(max(0.0, float(e.get("coin") or 0)), 10)
+        usd = round(max(0.0, float(e.get("pending") or 0)) + max(0.0, float(e.get("pool") or 0)), 8)
+        with _PF_LOCK:
+            pb = _pf_load()
+            if not pb.get("since"):
+                pb = profit_tick() or _pf_load()
+            xs = pb.setdefault("xseen", [])
+            if aid not in xs:
+                _pf_ghost_add(pb, a, e, "end")
+                if coin > 1e-12:
+                    _pf_edge(pb, f"xc|{aid}|{bu}", coin, bu)
+                    _pf_add_coin(pb, wid, bu, coin, aid, f"🛑 إنهاء المُراكِم «{name}» — مخزونه")
+                if usd > 1e-8:
+                    _pf_edge(pb, f"x|{aid}", usd, "USDT")
+                    _pf_add_usd(pb, wid, usd, aid, f"🛑 إنهاء المُراكِم «{name}» — المتراكم وقيد الشراء")
+                xs.append(aid)
+                del xs[:-2000]
+                _pf_save(pb)
+        c = app_cfg()                             # نقرا الإعدادات من جديد (ولا نكتب فوق تغيير صار أثناء التقييد)
+        c["accumulators"] = [x for x in (c.get("accumulators") or []) if x.get("id") != aid]
+        save_app_cfg(c)
+        st = acc_state()
+        if coin > 1e-12:                          # 🛡️ العملة باقية بحسابك ⇒ الرقابة تبقى تتوقعها (نفس باقي التسليمات)
+            lf = st.setdefault("_ri_left", {})
+            lf[base] = round(float(lf.get(base) or 0) + coin, 10)
+            lw = st.setdefault("_ri_left_w", {}).setdefault(wid, {})
+            lw[base] = round(float(lw.get(base) or 0) + coin, 10)
+        st.setdefault("_closed", []).insert(0, {
+            "id": aid, "name": name, "sym": sym, "wid": wid, "ts": round(time.time(), 3), "coin": coin, "usd": usd,
+            "spent": round(float(e.get("spent") or 0), 6), "realized": round(float(e.get("realized") or 0), 6),
+            "sold": round(sum(float(s.get("usd") or 0) for s in (e.get("sells") or []) if isinstance(s, dict)), 6)})
+        del st["_closed"][100:]
+        st.pop(aid, None)
+        _acc_save(st)
+    lab = (_pf_load().get("wlab") or {}).get(wid) or wid
+    parts = ([f"{coin:.8g} {base}"] if coin > 1e-12 else []) + ([f"{usd:.2f}$"] if usd > 1e-8 else [])
+    _safe(journal, "accum", f"🛑 انتهى المُراكِم {name} ({lab}): " + (" + ".join(parts) if parts else "ماكو رصيد") + " ⇒ 💰 الصندوق النهائي",
+          "ok", bot=aid, sym=sym, coin=coin, usd=usd, wallet=wid, default=None)
+    return True, ("🛑 انتهى المُراكِم — " + (" + ".join(parts) + " راحت للصندوق النهائي 💰" if parts else "ماكو رصيد ينتقل"))
+
+
+def profit_move_acc(prev):
+    """👛 v3.23.0: نقل مُراكِم لمحفظة ثانية ⇒ أنصبته المسجّلة تبقى على محفظته القديمة (`ghost`) — قبلها يقيّد اللي ينتظر"""
+    with _ACC_IO:
+        _safe(profit_tick, default=None)
+        e = acc_state().get(prev.get("id")) or {}
+        with _PF_LOCK:
+            pb = _pf_load()
+            if not pb.get("since"):
+                return
+            _pf_ghost_add(pb, prev, e, "move")
+            _pf_save(pb)
+
+
 def profit_op(data):
-    """💰 أوامر صناديق الربح (دفتر للعرض — ولا شي يتحرك بالمنصة):
-    env_add · env_edit · env_del · spend (صرف للمحفظة) · resplit (إعادة تقسيم بالنسب) · reset (تصفير)."""
+    """💰 أوامر الصندوق النهائي (دفتر للعرض — ولا شي يتحرك بالمنصة):
+    env_add · env_edit · env_del · spend (صرف للمحفظة — دولار أو عملة) · assign (🪙 v3.23.0: تخصيص عملة لصندوق/رجوعها) ·
+    resplit (إعادة تقسيم الدولار بالنسب) · reset (تصفير)."""
     act = str(data.get("act") or "")
     wid = str(data.get("wid") or "")
     with _PF_LOCK:
@@ -7054,9 +7257,32 @@ def profit_op(data):
             used = sum(float(e.get("pct") or 0) for e in envs)
             if used + p > 100.0001:
                 return {"ok": False, "msg": f"مجموع النسب يتجاوز 100% (المتبقي {100 - used:g}%)"}
-            envs.append({"id": "e" + str(int(time.time()))[-6:] + _sc.token_hex(2), "name": name, "pct": p, "usd": 0.0, "in": 0.0, "out": 0.0})
+            envs.append({"id": "e" + str(int(time.time()))[-6:] + _sc.token_hex(2), "name": name, "pct": p, "usd": 0.0, "in": 0.0, "out": 0.0, "coins": {}})
             _pf_log(pb, wid, "env_add", p, "%", name)
             msg = f"➕ صندوق «{name}» · {p:g}% من الربح الجاي"
+        elif act == "assign":
+            # 🪙 v3.23.0: العملة بالصندوق النهائي ما تتقسّم لحالها مثل الدولار ⇒ تخصّصها بيدك لصندوق (أو ترجعها)
+            e = next((x for x in envs if x.get("id") == data.get("id")), None)
+            base = str(data.get("base") or "").strip().upper()
+            if e is None:
+                return {"ok": False, "msg": "الصندوق مو موجود"}
+            if not base:
+                return {"ok": False, "msg": "اختر العملة"}
+            back = bool(data.get("back"))
+            ec = e.setdefault("coins", {})
+            bal = round(float((ec if back else W["coins"]).get(base) or 0), 10)
+            amt = _pf_amt(data.get("amount"), bal, coin=True)
+            if isinstance(amt, str):
+                return {"ok": False, "msg": amt}
+            if back:
+                ec[base] = round(bal - amt, 10)
+                W["coins"][base] = round(float(W["coins"].get(base) or 0) + amt, 10)
+                msg = f"↩ رجع {amt:.8g} {base} من «{e['name']}» لغير المخصّص"
+            else:
+                W["coins"][base] = round(bal - amt, 10)
+                ec[base] = round(float(ec.get(base) or 0) + amt, 10)
+                msg = f"📁 تخصّص {amt:.8g} {base} لـ«{e['name']}»"
+            _pf_log(pb, wid, "assign", -amt if back else amt, base, e["name"], "رجوع لغير المخصّص" if back else "تخصيص")
         elif act in ("env_edit", "env_del") and not data.get("id"):
             return {"ok": False, "msg": "الصندوق مو موجود"}
         elif act in ("env_edit", "env_del", "spend") and data.get("id") not in (None, "", "free") and not str(data.get("id")).startswith("coin:"):
@@ -7077,9 +7303,24 @@ def profit_op(data):
             elif act == "env_del":
                 bal = float(e.get("usd") or 0)
                 W["free"] = round(float(W["free"]) + bal, 8)
+                ec = {k2: float(v2 or 0) for k2, v2 in (e.get("coins") or {}).items() if abs(float(v2 or 0)) > 1e-12}
+                for k2, v2 in ec.items():                  # 🪙 عملاته ترجع «غير مخصّصة» — ولا ذرة تضيع
+                    W["coins"][k2] = round(float(W["coins"].get(k2) or 0) + v2, 10)
                 envs.remove(e)
-                _pf_log(pb, wid, "env_del", bal, "USDT", e["name"])
-                msg = f"🗑️ انحذف «{e['name']}» — رصيده {bal:.2f}$ رجع لغير المقسّم"
+                _pf_log(pb, wid, "env_del", bal, "USDT", e["name"], json.dumps(ec, ensure_ascii=False)[:150] if ec else "")
+                msg = (f"🗑️ انحذف «{e['name']}» — رصيده {bal:.2f}$ رجع لغير المقسّم"
+                       + (" · وعملاته (" + " · ".join(f"{v2:.8g} {k2}" for k2, v2 in ec.items()) + ") رجعت غير مخصّصة" if ec else ""))
+            elif str(data.get("ccy") or "USDT").strip().upper() != "USDT":
+                base = str(data.get("ccy")).strip().upper()     # 🪙 v3.23.0: صرف عملة من صندوق
+                ec = e.setdefault("coins", {})
+                bal = round(float(ec.get(base) or 0), 10)
+                amt = _pf_amt(data.get("amount"), bal, coin=True)
+                if isinstance(amt, str):
+                    return {"ok": False, "msg": amt}
+                ec[base] = round(bal - amt, 10)
+                W["out_coin"][base] = round(float(W["out_coin"].get(base) or 0) + amt, 10)
+                _pf_log(pb, wid, "spend", amt, base, e["name"])
+                msg = f"💸 انصرف {amt:.8g} {base} من «{e['name']}» للمحفظة — الباقي {ec[base]:.8g}"
             else:
                 bal = round(float(e.get("usd") or 0), 8)
                 amt = _pf_amt(data.get("amount"), bal)
@@ -7126,7 +7367,12 @@ def profit_op(data):
             msg = f"🔄 انقسم {tot:.2f}$ من جديد على الصناديق بنسبها"
         elif act == "reset":
             tot = round(float(W["free"]) + sum(float(e.get("usd") or 0) for e in envs), 8)
-            coins = {k: v for k, v in W["coins"].items() if abs(float(v or 0)) > 1e-12}
+            coins = {k: float(v) for k, v in W["coins"].items() if abs(float(v or 0)) > 1e-12}
+            for e in envs:                                   # 🪙 حتى العملات المخصّصة للصناديق
+                for k2, v2 in (e.get("coins") or {}).items():
+                    if abs(float(v2 or 0)) > 1e-12:
+                        coins[k2] = round(float(coins.get(k2) or 0) + float(v2), 10)
+                e["coins"] = {}
             W["free"] = 0.0
             for e in envs:
                 e["usd"] = 0.0
@@ -7135,7 +7381,7 @@ def profit_op(data):
             for k2, v2 in coins.items():
                 W["reset_coin"][k2] = round(float(W["reset_coin"].get(k2) or 0) + float(v2), 10)
             _pf_log(pb, wid, "reset", tot, "USDT", json.dumps(coins, ensure_ascii=False)[:150])
-            msg = f"🧹 تصفّر ربح {lab}: {tot:.2f}$" + (" + " + " · ".join(f"{v:.8g} {k}" for k, v in coins.items()) if coins else "") + " — يبدي من جديد (الصناديق ونسبها باقية)"
+            msg = f"🧹 تصفّر الصندوق النهائي ({lab}): {tot:.2f}$" + (" + " + " · ".join(f"{v:.8g} {k}" for k, v in coins.items()) if coins else "") + " — يبدي من جديد (الصناديق ونسبها باقية)"
         else:
             return {"ok": False, "msg": "?"}
         _pf_save(pb)
@@ -7161,8 +7407,9 @@ def _pf_amt(x, bal, coin=False):
 
 
 def flow_view():
-    """🗺️ لقطة الخريطة: البوتات (لكل محفظة) ⇐ المُراكِمات ⇐ الربح — الخطوط من الإعدادات الحالية بالضبط (نسبة صفر = ماكو خط)،
-    والأرقام على الخطوط مجاميع من يوم التفعيل (`Holy_Profit.json`) · مراقبة بس."""
+    """🗺️ لقطة الخريطة (v3.23.0) — لكل محفظة: البوتات ⇒ 📥 صندوق الربح المحرر ⇒ المُراكِمات (نهاية اليوم بنسبها) و💰 الصندوق النهائي
+    (الباقي — أو مباشر لو ماكو مُراكِم) · 🪙 العملة من البوت للمُراكِم/النهائي مباشرة · المُراكِم ⇒ النهائي (طرح · بيع · إنهاء).
+    الخطوط من الإعدادات الحالية بالضبط (نسبة صفر = ماكو خط) والأرقام مجاميع من يوم التفعيل (`Holy_Profit.json`) · مراقبة بس."""
     if time.time() - _PF_RUN["t"] > 5:
         _PF_RUN["t"] = time.time()
         _safe(profit_tick, default=None)
@@ -7173,9 +7420,10 @@ def flow_view():
     led = load_json(LEDGER) or {}
     if not isinstance(led, dict):
         led = {}
+    live = _live_wmap()
     cfgs = acc_cfgs()
     ast = acc_state()
-    aws = {acc_wid(a) for a in cfgs if acc_wid(a)}          # 👛 v3.22.9: كل مُراكِم على محفظته
+    aws = {acc_wid(a) for a in cfgs if acc_wid(a)}          # 👛 كل مُراكِم على محفظته
     wm, lab, wbots = _pf_wallets()
     wlab = dict(pb.get("wlab") or {})
     wlab.update(lab)
@@ -7186,11 +7434,35 @@ def flow_view():
         pass
     ub = pb.get("ub") or {}
     edges = pb.get("edges") or {}
+    E = lambda eid: float((edges.get(eid) or {}).get("t") or 0)
     since = pb.get("since") or today
-    sumw = {}
+    lo = _pf_lo(pb, today)
+    started = lambda a: not (a.get("start") and today < a["start"])
+    sumw, actw = {}, {}
     for a in cfgs:
-        sumw[acc_wid(a)] = round(sumw.get(acc_wid(a), 0.0) + float(a.get("pct") or 0), 6)
+        w = acc_wid(a)
+        sumw[w] = round(sumw.get(w, 0.0) + float(a.get("pct") or 0), 6)
+        if started(a):
+            actw[w] = round(actw.get(w, 0.0) + float(a.get("pct") or 0), 6)
     sum_pct = max(sumw.values()) if sumw else 0.0
+    # 📒 مجاميع الخطوط لكل محفظة (حتى البوتات المحذوفة — من وسم الدفتر)
+    kwid = dict(pb.get("wmap") or {})
+    for k, e in led.items():
+        if not str(k).startswith("_") and isinstance(e, dict):
+            kwid[k] = _led_wid(k, e, live) or kwid.get(k) or "?"
+    kt, rp_w, ra_w = {}, {}, {}
+    for eid, ed in edges.items():
+        t = float((ed or {}).get("t") or 0)
+        if eid.startswith(("up|", "ul|")):
+            k = eid[3:]
+            kt[k] = kt.get(k, 0.0) + t
+            w = kwid.get(k, "?")
+            rp_w[w] = rp_w.get(w, 0.0) + t
+        elif eid.startswith("u|"):
+            k, aid = eid[2:].rsplit("|", 1)
+            kt[k] = kt.get(k, 0.0) + t
+            w = kwid.get(k, "?")
+            ra_w[(w, aid)] = ra_w.get((w, aid), 0.0) + t
     try:
         wh = int(app_cfg().get("acc_window_h") or ACC_WINDOW_H)
     except Exception:
@@ -7198,10 +7470,17 @@ def flow_view():
     midnight = datetime(dnow.year, dnow.month, dnow.day) + timedelta(days=1)
     order = sorted(set(wbots) | set((pb.get("W") or {})) | aws,
                    key=lambda w: (w not in aws, wlab.get(w) or w))
+    closed = [x for x in (ast.get("_closed") or []) if isinstance(x, dict)]
+    aw_of = {a.get("id"): acc_wid(a) for a in cfgs}
+    for x in closed:
+        aw_of.setdefault(x.get("id"), x.get("wid") or "?")
     wallets, lines = [], []
     pnode = lambda w: "p:" + w
+    rnode = lambda w: "r:" + w
     for wi, wid in enumerate(order):
         bl = []
+        mine = [a for a in cfgs if acc_wid(a) == wid]
+        mode = "eod" if any(started(a) for a in mine) else "live"
         for b in wbots.get(wid) or []:
             cfg = b.get("cfg") or {}
             bt = cfg.get("bot_type") or "grid"
@@ -7216,8 +7495,9 @@ def flow_view():
             coin_bot = bt == "dca" or isinstance(st.get("reinvest"), dict)   # 🪙 DCA بيعي · أو بوت بيه إعادة استثمار (يحرّر عملة بالسحب/الإطفاء)
             daily = (led.get(key) or {}).get("daily") or {}
             u_today = float(daily.get(today) or 0)
-            u_wait = u_today + sum(max(0.0, float(v or 0) - float(((ub.get(key) or {}).get(d) or [0])[0] or 0))
-                                   for d, v in daily.items() if since <= d < today)
+            # ⏳ اللي ما انقيّد بعد (يتوزّع نهاية اليوم) — من نافذة اللحاق بس (الأقدم انحسم)
+            u_wait = sum(max(0.0, float(v or 0) - float(((ub.get(key) or {}).get(d) or [0])[0] or 0))
+                         for d, v in daily.items() if lo <= d <= today)
             c_today = 0.0
             for h in (_safe(_ri_handoffs_of, st, default=[]) or []) + (_safe(_dca_handoffs_of, b, st, default=[]) or []):
                 try:
@@ -7237,45 +7517,67 @@ def flow_view():
                        "u_today": round(u_today, 6), "u_wait": round(u_wait, 6), "c_today": round(c_today, 10),
                        "u_tot": round(sum(float(v or 0) for d, v in daily.items() if d >= since), 6),
                        "dca_paused": bool(st.get("paused"))})
-            if usd_flow:
-                for a in cfgs:
-                    p = float(a.get("pct") or 0)
-                    if p > 0 and acc_wid(a) == wid:              # 👛 مُراكِمات محفظة البوت بس
-                        eid = f"u|{key}|{a['id']}"
-                        lines.append({"id": eid, "from": nid, "to": "a:" + a["id"], "k": "usd", "pct": p,
-                                      "dash": not a.get("enabled", True), "t": float((edges.get(eid) or {}).get("t") or 0), "c": "USDT"})
-                if sumw.get(wid, 0.0) < 100 - 1e-9:
-                    eid = f"up|{key}"
-                    lines.append({"id": eid, "from": nid, "to": pnode(wid), "k": "usd", "pct": round(100 - sumw.get(wid, 0.0), 6),
-                                  "t": float((edges.get(eid) or {}).get("t") or 0), "c": "USDT"})
+            if usd_flow:                                     # 💵 البوت ⇒ 📥 المحرر (كل دولاره — قبل التوزيع)
+                lines.append({"id": f"ur|{key}", "from": nid, "to": rnode(wid), "k": "usd", "pct": None,
+                              "t": round(kt.get(key, 0.0), 10), "c": "USDT"})
             if coin_bot:
-                mine, why = (_safe(_ri_eligible, b, cfgs, default=([], "")) or ([], ""))
-                tot = sum(float(a.get("coin_pct") or 0) for a in mine)
+                mine_c, why = (_safe(_ri_eligible, b, cfgs, default=([], "")) or ([], ""))
+                tot = sum(float(a.get("coin_pct") or 0) for a in mine_c)
                 sc = 100.0 / tot if tot > 100.0 else 1.0
                 given = 0.0
-                for a in mine:
+                for a in mine_c:
                     p = round(float(a.get("coin_pct") or 0) * sc, 6)
                     given += p
                     eid = f"c|{key}|{a['id']}"
-                    lines.append({"id": eid, "from": nid, "to": "a:" + a["id"], "k": "coin", "pct": p,
-                                  "t": float((edges.get(eid) or {}).get("t") or 0), "c": base})
+                    lines.append({"id": eid, "from": nid, "to": "a:" + a["id"], "k": "coin", "pct": p, "t": E(eid), "c": base})
                 if given < 100 - 1e-9:
                     eid = f"cp|{key}|{base}"
                     lines.append({"id": eid, "from": nid, "to": pnode(wid), "k": "coin", "pct": round(100 - given, 6),
-                                  "why": why or "", "t": float((edges.get(eid) or {}).get("t") or 0), "c": base})
+                                  "why": why or "", "t": E(eid), "c": base})
+        has_r = any(x["usd"] for x in bl) or bool(mine) or rp_w.get(wid, 0) > 0 or any(w == wid for (w, _a) in ra_w)
+        rel = None
+        if has_r:
+            split = []
+            for a in mine:
+                p = float(a.get("pct") or 0)
+                fut = not started(a)
+                split.append({"aid": a["id"], "name": a.get("name") or a.get("symbol"), "pct": p, "enabled": a.get("enabled", True),
+                              "start": a.get("start"), "future": fut})
+                if p > 0:
+                    lines.append({"id": f"ra|{wid}|{a['id']}", "from": rnode(wid), "to": "a:" + a["id"], "k": "usd", "pct": p,
+                                  "dash": (not a.get("enabled", True)) or fut, "t": round(ra_w.get((wid, a["id"]), 0.0), 10), "c": "USDT"})
+            rest = 100.0 if mode == "live" else max(0.0, round(100 - actw.get(wid, 0.0), 6))
+            if rest > 1e-9 or rp_w.get(wid, 0) > 0:
+                lines.append({"id": f"rp|{wid}", "from": rnode(wid), "to": pnode(wid), "k": "usd", "pct": rest,
+                              "live": mode == "live", "t": round(rp_w.get(wid, 0.0), 10), "c": "USDT"})
+            rel = {"id": rnode(wid), "mode": mode, "today": round(sum(x["u_today"] for x in bl if x["usd"]), 6),
+                   "wait": round(sum(x["u_wait"] for x in bl if x["usd"]), 6), "split": split, "rest": rest,
+                   "to_acc": round(sum(t for (w, _a), t in ra_w.items() if w == wid), 8), "to_final": round(rp_w.get(wid, 0.0), 8)}
         W = (pb.get("W") or {}).get(wid) or {}
         envs = [{"id": e.get("id"), "name": e.get("name"), "pct": float(e.get("pct") or 0), "usd": round(float(e.get("usd") or 0), 8),
-                 "in": round(float(e.get("in") or 0), 8), "out": round(float(e.get("out") or 0), 8)} for e in (W.get("env") or [])]
+                 "in": round(float(e.get("in") or 0), 8), "out": round(float(e.get("out") or 0), 8),
+                 "coins": {k: round(float(v), 10) for k, v in (e.get("coins") or {}).items() if abs(float(v or 0)) > 1e-12}}
+                for e in (W.get("env") or [])]
         free = round(float(W.get("free") or 0), 8)
+        coins_free = {k: round(float(v), 10) for k, v in (W.get("coins") or {}).items() if abs(float(v or 0)) > 1e-12}
+        coins_all = dict(coins_free)
+        for e in envs:
+            for k, v in e["coins"].items():
+                coins_all[k] = round(coins_all.get(k, 0.0) + v, 10)
+        src = {"rest": round(rp_w.get(wid, 0.0), 8)}
+        for pre, nm_ in (("s|", "sold"), ("w|", "wd"), ("x|", "end")):
+            src[nm_] = round(sum(float((t or {}).get("t") or 0) for eid, t in edges.items()
+                                 if eid.startswith(pre) and aw_of.get(eid[2:], "?") == wid), 8)
         wallets.append({"wid": wid, "label": wlab.get(wid) or ("محفظة غير معروفة" if wid == "?" else wid), "ci": wi, "acc": wid in aws,
-                        "sum_pct": sumw.get(wid, 0.0),
+                        "sum_pct": sumw.get(wid, 0.0), "act_pct": actw.get(wid, 0.0), "mode": mode,
                         "bots": bl, "u_today": round(sum(x["u_today"] for x in bl), 6), "u_wait": round(sum(x["u_wait"] for x in bl), 6),
-                        "held": round(sum((x["ri"] or {}).get("held", 0) for x in bl), 6),
+                        "held": round(sum((x["ri"] or {}).get("held", 0) for x in bl), 6), "rel": rel,
                         "profit": {"id": pnode(wid), "free": free, "env": envs, "env_pct": round(sum(e["pct"] for e in envs), 4),
                                    "usd": round(free + sum(e["usd"] for e in envs), 8),
-                                   "coins": {k: round(float(v), 10) for k, v in (W.get("coins") or {}).items() if abs(float(v or 0)) > 1e-12},
+                                   "coins": coins_free, "coins_all": coins_all,
                                    "in_usd": round(float(W.get("in_usd") or 0), 8), "out_usd": round(float(W.get("out_usd") or 0), 8),
-                                   "in_coin": W.get("in_coin") or {}, "out_coin": W.get("out_coin") or {},
+                                   "in_coin": W.get("in_coin") or {}, "out_coin": W.get("out_coin") or {}, "src": src,
+                                   "closed": [{k: x.get(k) for k in ("name", "sym", "coin", "usd", "ts")} for x in closed if x.get("wid") == wid][:10],
                                    "log": [x for x in (pb.get("log") or []) if x.get("w") == wid][:40]}})
     accs = []
     in_win = acc_in_window()
@@ -7292,8 +7594,11 @@ def flow_view():
         out_rng = bool(px) and ((lo_ > 0 and px < lo_) or (hi_ > 0 and px > hi_))
         bought = e.get("last_buy_day") == today
         err = (e.get("buy_err") or {}).get("msg") if isinstance(e.get("buy_err"), dict) else ""
+        fut = not started(a)
         if e.get("inflight") or e.get("sell_inflight"):
             light, why = "y", "⏳ أمر ينتظر تأكيد المنصة"
+        elif fut:
+            light, why = "o", f"🕐 يبدي ياخذ من ربح {a.get('start')} — ربح اليوم راح للصندوق النهائي مباشرة"
         elif not a.get("enabled", True):
             light, why = "o", "⏸ الشراء الآلي موقوف — نصيبه يروح للمتراكم"
         elif err and pool >= 1:
@@ -7314,49 +7619,77 @@ def flow_view():
                      "pct": float(a.get("pct") or 0), "coin_pct": float(a.get("coin_pct") or 0), "enabled": a.get("enabled", True),
                      "pool": round(pool, 6), "pending": round(pend, 6), "coin": round(coin, 10), "spent": round(spent, 4),
                      "avg": round(spent / coin, 8) if coin > 0 else None, "px": px, "value": round(coin * px, 4) if px else None,
-                     "min_buy": minb, "light": light, "why": why, "wid": acc_wid(a),
-                     "wd": float((edges.get(f"w|{aid}") or {}).get("t") or 0)})
-        lines.append({"id": f"w|{aid}", "from": "a:" + aid, "to": pnode(acc_wid(a) or "?"), "k": "wd", "pct": None,
-                      "t": float((edges.get(f"w|{aid}") or {}).get("t") or 0), "c": "USDT"})
+                     "min_buy": minb, "light": light, "why": why, "wid": acc_wid(a), "start": a.get("start"), "future": fut,
+                     "wd": E(f"w|{aid}"), "sold": E(f"s|{aid}")})
+        lines.append({"id": f"ap|{aid}", "from": "a:" + aid, "to": pnode(acc_wid(a) or "?"), "k": "wd", "pct": None,
+                      "t": round(E(f"w|{aid}") + E(f"s|{aid}"), 10), "c": "USDT"})
     return {"ok": True, "since": since, "today": today, "now": now, "to_midnight": round((midnight - dnow).total_seconds()),
             "window_h": wh, "in_window": in_win, "sum_pct": sum_pct, "sum_w": sumw,
             "wallets": wallets, "accs": accs, "lines": lines}
 
 
 def profit_audit():
-    """🧮 تدقيق دفتر الربح (للتقرير التشخيصي): كل يوم مقيّد = ربح البوتات − نصيب المُراكِمات بالسنت · رصيد كل محفظة = داخل − مصروف − مصفّر."""
+    """🧮 تدقيق دفتر الربح (للتقرير التشخيصي) — 👛 لكل محفظة ولكل يوم:
+    ربح بوتاتها = اللي راح للمُراكِمات + اللي نزل للصندوق النهائي (بالسنت) · نصيب كل مُراكِم = اللي انقيّد له من بوتات محفظته ·
+    رصيد كل صندوق نهائي = داخل − مصروف − مصفّر (الدولار والعملات — حتى المخصّصة للصناديق)."""
     out = []
     pb = _safe(profit_tick, default=None) or _pf_load()
     if not pb.get("since"):
         return out
     st_all = acc_state()
     near = lambda a, b, e: abs(float(a or 0) - float(b or 0)) <= e
+    led = load_json(LEDGER) or {}
+    live = _live_wmap()
     ub = pb.get("ub") or {}
+    ghost = [g for g in (pb.get("ghost") or []) if isinstance(g, dict)]
+    acfg = [a for a in acc_cfgs() if a.get("id")]
+    kw = lambda k: _led_wid(k, led.get(k) or {}, live) or ""
     bad = []
     for d in sorted({d for k in ub for d in (ub[k] or {})}):
-        rows = [ub[k][d] for k in ub if (ub[k] or {}).get(d)]
-        v = sum(float(r[0] or 0) for r in rows)
-        pf = sum(float(r[2] or 0) for r in rows)
-        ta = {}
-        for r in rows:
-            for aid, x in (r[1] or {}).items():
-                ta[aid] = ta.get(aid, 0.0) + float(x or 0)
-        P = day_profit(d)
-        sh = {a["id"]: float(((st_all.get(a["id"]) or {}).get("days") or {}).get(d) or 0) for a in acc_cfgs()}
-        # 👛 v3.22.9: كل مُراكِم ياخذ من محفظته بس ⇒ نصيبه = مجموع اللي انقيّد له من بوتات محفظته (أي محفظة ما إلها بوتات بهاليوم ⇒ صفر)
-        if not near(v, P, 1e-6) or not near(v, pf + sum(ta.values()), 1e-6) or any(
-                not near(ta.get(aid, 0), s2, 1e-5) for aid, s2 in sh.items() if s2 > 0 or aid in ta):
-            bad.append(f"{d}: بوتات {v:.6f} / اليوم {P:.6f} · ربح {pf:.6f} + مُراكِمات {sum(ta.values()):.6f} {ta} مقابل {sh}")
-    out.append(("💰 دفتر الربح: كل يوم = ربح البوتات − نصيب المُراكِمات (بالسنت)", not bad,
+        byw = {}
+        for k in ub:
+            r = (ub[k] or {}).get(d)
+            if r:
+                byw.setdefault(kw(k), []).append(r)
+        for w, rows in byw.items():
+            v = sum(float(r[0] or 0) for r in rows)
+            pf = sum(float(r[2] or 0) for r in rows)
+            ta = {}
+            for r in rows:
+                for aid, x in (r[1] or {}).items():
+                    ta[aid] = ta.get(aid, 0.0) + float(x or 0)
+            P = day_profit_w(d, w, led, live) if w else v
+            sh = {}
+            if any((r[3] if len(r) > 3 else "e") == "e" for r in rows):
+                for a in acfg:
+                    if acc_wid(a) == w and not (a.get("start") and d < a["start"]):
+                        rec = ((st_all.get(a["id"]) or {}).get("days") or {}).get(d)
+                        if rec is not None:
+                            sh[a["id"]] = float(rec or 0)
+            for g in ghost:                        # 👻 مُراكِم انتهى/انتقل ⇒ أنصبته المحفوظة
+                if g.get("w") == w and d in (g.get("days") or {}):
+                    sh[g["aid"]] = float(g["days"][d] or 0)
+            for aid in ta:
+                sh.setdefault(aid, None)           # مُراكِم انحذف قبل v3.23.0 (بلا أثر) ⇒ ما نگدر نقارن نصيبه
+            if not near(v, P, 1e-6) or not near(v, pf + sum(ta.values()), 1e-6) or any(
+                    s2 is not None and not near(ta.get(aid, 0), s2, 1e-5) for aid, s2 in sh.items()):
+                bad.append(f"{d} {(pb.get('wlab') or {}).get(w) or w or '؟'}: بوتات {v:.6f} / المحفظة {P:.6f} · نهائي {pf:.6f} + مُراكِمات {sum(ta.values()):.6f} {ta} مقابل {sh}")
+    out.append(("💰 دفتر الربح: لكل محفظة ويوم — ربح البوتات = المُراكِمات + الصندوق النهائي (بالسنت)", not bad,
                 "كل الأيام المقيّدة متطابقة" if not bad else " · ".join(bad)[:900]))
     for wid, W in (pb.get("W") or {}).items():
-        bal = float(W.get("free") or 0) + sum(float(e.get("usd") or 0) for e in W.get("env") or [])
+        envs = [e for e in (W.get("env") or []) if isinstance(e, dict)]
+        bal = float(W.get("free") or 0) + sum(float(e.get("usd") or 0) for e in envs)
         exp = float(W.get("in_usd") or 0) - float(W.get("out_usd") or 0) - float(W.get("reset_usd") or 0)
-        cb = [c for c in set(W.get("in_coin") or {}) | set(W.get("coins") or {})
-              if not near(float((W.get("coins") or {}).get(c) or 0), float((W.get("in_coin") or {}).get(c) or 0) - float((W.get("out_coin") or {}).get(c) or 0) - float((W.get("reset_coin") or {}).get(c) or 0), 1e-9)]
+        held = dict((W.get("coins") or {}))
+        for e in envs:
+            for c, q in (e.get("coins") or {}).items():
+                held[c] = float(held.get(c) or 0) + float(q or 0)
+        cb = [c for c in set(W.get("in_coin") or {}) | set(held)
+              if not near(float(held.get(c) or 0), float((W.get("in_coin") or {}).get(c) or 0) - float((W.get("out_coin") or {}).get(c) or 0) - float((W.get("reset_coin") or {}).get(c) or 0), 1e-9)]
+        neg = [f"{e.get('name')}" for e in envs if float(e.get("usd") or 0) < -1e-9 or any(float(q or 0) < -1e-12 for q in (e.get("coins") or {}).values())]
         lab = (pb.get("wlab") or {}).get(wid) or wid
-        out.append((f"💰 رصيد ربح {lab}: داخل − مصروف − مصفّر = الصناديق", near(bal, exp, 1e-6) and not cb,
-                    f"الصناديق {bal:.6f}$ · المتوقّع {exp:.6f}$" + (f" · عملات مختلفة {cb}" if cb else "")))
+        out.append((f"💰 الصندوق النهائي {lab}: داخل − مصروف − مصفّر = الرصيد (دولار + عملات)", near(bal, exp, 1e-6) and not cb and not neg,
+                    f"الصناديق {bal:.6f}$ · المتوقّع {exp:.6f}$" + (f" · عملات مختلفة {cb}" if cb else "") + (f" · رصيد سالب {neg}" if neg else "")))
     return out
 
 
@@ -11128,6 +11461,7 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                         return self._json({"ok": False, "need_move_ok": True,
                                            "msg": "المُراكِم بيه عملة/دولار على محفظته الحالية — تغيير المحفظة يصح بس لو هي نفس الحساب بمفتاح جديد. أكّد إذا متأكد."})
                 _wn = (_aw.get(wid) or {}).get("label") or wid
+                _moved = bool(prev) and acc_wid(prev) != wid
                 others = sum(float(x.get("pct") or 0) for x in lst if x.get("id") != aid and x.get("enabled", True) and acc_wid(x) == wid)
                 if a.get("enabled", True) and others + pct > 100.0001:
                     return self._json({"ok": False, "msg": f"مجموع نسب مُراكِمات {_wn} يتجاوز 100% (المتبقي {100-others:.0f}%)"})
@@ -11139,13 +11473,25 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                 if a.get("enabled", True) and oc + cpct > 100.0001:
                     return self._json({"ok": False,
                                        "msg": f"مجموع نسب عملة {_cb} على {_wn} يتجاوز 100% (المتبقي {100-oc:.0f}%)"})
+                # 📥 v3.23.0: تاريخ البدء — مُراكِم جديد (أو منقول) على محفظة ربحها اليوم ماشي **مباشر** للصندوق النهائي
+                #    (ماكو مُراكِم يشمل اليوم) ⇒ يبدي من باچر: ربح اليوم انحسب للنهائي فما ينحسب مرة ثانية
+                _today = datetime.now().strftime("%Y-%m-%d")
+                if prev and not _moved:
+                    _start = prev.get("start") or _today
+                else:
+                    _cov = any(x.get("id") != aid and acc_wid(x) == wid and (x.get("start") or "") <= _today for x in lst)
+                    _start = _today if _cov else (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+                    if prev and str(prev.get("start") or "") > _start:
+                        _start = str(prev["start"])
+                if _moved:
+                    _safe(profit_move_acc, prev, default=None)   # 👻 أنصبته القديمة تبقى على محفظته القديمة
                 item = {"id": aid, "name": str(a.get("name") or "").strip() or sym,
                         "symbol": sym, "pct": pct, "coin_pct": cpct,
                         "min_buy": minb, "max_buy": maxb,
                         "low_price": lo, "high_price": hi, "enabled": bool(a.get("enabled", True)),
                         "wid": wid,
-                        # 🛡️ تاريخ البدء: لا يُوزَّع ربح يوم سابق لإنشائه
-                        "start": (prev or {}).get("start") or datetime.now().strftime("%Y-%m-%d")}
+                        # 🛡️ تاريخ البدء: لا يُوزَّع ربح يوم سابق لإنشائه (v3.23.0: أو ليوم ربحه راح للنهائي مباشرة)
+                        "start": _start}
                 lst = [x for x in lst if x.get("id") != aid] + [item]
                 c["accumulators"] = lst
                 try:
@@ -11153,13 +11499,14 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                     if wh is not None: c["acc_window_h"] = max(1, min(23, int(wh)))
                 except Exception: pass
                 save_app_cfg(c)
-                return self._json({"ok": True, "msg": "💾 حُفظ المُراكِم", "id": aid})
-            if act == "delete":
-                aid = data.get("id")
-                c["accumulators"] = [x for x in lst if x.get("id") != aid]
-                save_app_cfg(c)
-                stt = acc_state(); stt.pop(aid, None); _acc_save(stt)
-                return self._json({"ok": True, "msg": "🗑️ حُذف (العملة المشتراة تبقى بمحفظتك)"})
+                _m = "💾 حُفظ المُراكِم"
+                if (not prev or _moved) and _start > _today:
+                    _m += f" · يبدي ياخذ من ربح باچر ({_start}) — ربح اليوم راح للصندوق النهائي مباشرة"
+                return self._json({"ok": True, "msg": _m, "id": aid, "start": _start})
+            if act in ("delete", "end"):
+                # 🛑 v3.23.0: إنهاء المُراكِم — مخزونه (عملة) والمتراكم وقيد الشراء (دولار) ⇒ 💰 الصندوق النهائي بمحفظته
+                ok, msg = profit_close_acc(str(data.get("id") or ""))
+                return self._json({"ok": ok, "msg": msg})
             if act == "toggle":
                 _tg_a = None
                 _t0 = next((x for x in lst if x.get("id") == data.get("id")), None)
@@ -11253,7 +11600,8 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                                 "yday_profit": day_profit_w(y, _wid, _led, _live),
                                 "used_pct": round(sum(float(x.get("pct") or 0) for x in _mine), 4),
                                 "coin_used": {k2: round(v2, 4) for k2, v2 in _cp.items()},
-                                "n_acc": len([x for x in lst if acc_wid(x) == _wid])})
+                                "n_acc": len([x for x in lst if acc_wid(x) == _wid]),
+                                "live": not any(acc_wid(x) == _wid and (x.get("start") or "") <= datetime.now().strftime("%Y-%m-%d") for x in lst)})
                 _ws.sort(key=lambda x: (-len(x["bots"]), x["label"]))
                 return self._json({"ok": True, "yday": y, "yday_profit": day_profit(y),
                                    "window_h": int(c.get("acc_window_h") or ACC_WINDOW_H),
@@ -11261,6 +11609,7 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                                    "today_profit": day_profit(datetime.now().strftime("%Y-%m-%d")),
                                    "used_pct": sum(float(x.get("pct") or 0) for x in lst if x.get("enabled", True)),
                                    "wallets": _ws, "acc_w": {x.get("id"): acc_wid(x) for x in lst},
+                                   "today": datetime.now().strftime("%Y-%m-%d"),
                                    "items": lst})
             return self._json({"ok": True, "items": lst})
         if path == "/api/okx_check":
@@ -11773,12 +12122,18 @@ body.boot .card{animation:rise .6s var(--ease) both;animation-delay:calc(var(--i
 .fl-p .env{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--mut);border-top:1px dashed rgb(var(--ov-rgb)/.08);padding-top:2px}
 .fl-p .env b{color:var(--tx);font-variant-numeric:tabular-nums}
 .fl-hint{font-size:10px;color:var(--mut2);text-align:center;margin-top:4px}
+.fl-r{min-width:220px;max-width:280px;border:1.5px dashed var(--wc);background:linear-gradient(180deg,rgb(var(--green2-rgb)/.07),transparent 70%),var(--card2,#12161f)}
+.fl-r .fl-big{font-size:17px;font-weight:800;color:var(--green);font-variant-numeric:tabular-nums;line-height:1.3}
+.fl-r .fl-big small{font-size:10.5px;color:var(--mut2);font-weight:400}
+.fl-r .mode{font-size:10.5px;line-height:1.6;margin:0 0 3px}.fl-r .mode.live{color:var(--cyan)}.fl-r .mode.eod{color:var(--amber)}
+.fl-r .sp{display:flex;justify-content:space-between;gap:8px;font-size:10.5px;color:var(--mut);border-top:1px dashed rgb(var(--ov-rgb)/.08);padding-top:2px}
+.fl-r .sp b{color:var(--tx);font-variant-numeric:tabular-nums}
 .fl-l{fill:none;stroke-width:2;opacity:.75;transition:opacity .25s,stroke-width .25s}
 .fl-l.k-usd{stroke:var(--green)}.fl-l.k-coin{stroke:var(--amber)}.fl-l.k-wd{stroke:var(--cyan);stroke-dasharray:2 5;stroke-linecap:round}
 .fl-l.dash{stroke-dasharray:6 6}
 .fl-l.fade{opacity:.08}.fl-l.hl{opacity:1;stroke-width:3}
 .fl-lb{font-size:10px;font-weight:700;paint-order:stroke;stroke:rgb(var(--surf3-rgb));stroke-width:4px;fill:var(--amber)}
-.fl-lb.fade{opacity:.1}
+.fl-lb.fade{opacity:.1}.fl-lb.k-usd{fill:var(--green)}
 .fl-dot{stroke:#fff;stroke-width:1.5}.fl-dot.k-usd,.fl-dot.k-wd{fill:var(--green)}.fl-dot.k-coin{fill:var(--amber)}
 .fl-ptx{font-size:10.5px;font-weight:800;text-anchor:middle;paint-order:stroke;stroke:rgb(var(--surf3-rgb));stroke-width:4px;fill:var(--tx)}
 .fl-bub{position:absolute;transform:translate(-50%,0);font-size:11.5px;font-weight:800;white-space:nowrap;animation:flBub 1.9s ease-out forwards;text-shadow:0 1px 4px rgb(var(--sh-rgb)/.8)}
@@ -11789,7 +12144,7 @@ body.boot .card{animation:rise .6s var(--ease) both;animation-delay:calc(var(--i
 .pf-tab td.n{text-align:end;font-variant-numeric:tabular-nums;white-space:nowrap}
 .pf-tab button{padding:4px 8px;font-size:11px}
 .pf-log{max-height:190px;overflow:auto;font-size:11px;color:var(--mut);line-height:1.9;margin-top:8px}
-@media (max-width:760px){.fl-map{padding:22px 6px 16px}.fl-n{min-width:0;flex:1 1 calc(50% - 8px);max-width:calc(50% - 4px);font-size:10.5px;padding:8px 8px}.fl-n .r{gap:4px}.fl-n h4{font-size:11.5px}.fl-tier>.fl-wal{flex:1 1 100%}.fl-p{min-width:0;max-width:94vw;width:100%}.fl-gap{height:62px}.fl-wal{padding:18px 6px 8px;gap:8px}}
+@media (max-width:760px){.fl-map{padding:22px 6px 16px}.fl-n{min-width:0;flex:1 1 calc(50% - 8px);max-width:calc(50% - 4px);font-size:10.5px;padding:8px 8px}.fl-n .r{gap:4px}.fl-n h4{font-size:11.5px}.fl-tier>.fl-wal{flex:1 1 100%}.fl-p,.fl-r{min-width:0;max-width:94vw;width:100%}.fl-gap{height:62px}.fl-wal{padding:18px 6px 8px;gap:8px}}
 @media (prefers-reduced-motion:reduce){.fl-top .fl-live i,.fl-tl.blink i.on{animation:none}.fl-n{transition:none}}
 .panel h3{font-size:14px;margin-bottom:12px;color:var(--cyan)}
 /* 📊 ربح التداول اليومي — ألوان مفحوصة لعمى الألوان على خلفية اللوحة */
@@ -12275,7 +12630,7 @@ html.lite .card:hover,html.lite button:hover{transform:none}
 <section class="page" id="page_flow"><div class="pwrap fl-pw">
   <div class="phead"><h2>🗺️ خريطة الأرباح</h2><span class="lg-keep">مراقبة بس — نفس التوزيعات بالضبط</span><button class="x" onclick="closeFlow()">✕</button></div>
   <div class="panel fl-top" id="flTop"><span class="fl-empty">⏳ …</span></div>
-  <div class="fl-leg"><span><i style="border-color:var(--green)"></i>💵 دولار</span><span><i style="border-color:var(--amber)"></i>🪙 عملة</span><span><i style="border-color:var(--cyan);border-top-style:dotted"></i>💸 طرح من المتراكم</span><span><i style="border-color:var(--green);border-top-style:dashed"></i>مُراكِم موقوف (نصيبه يتراكم)</span><span>🚦 🔴 ينتظر النافذة · 🟡 يتجمّع/ينتظر · 🟢 يشتري/اشترى</span><span>مرّر/اضغط على أي مربع: خطوطه وأرقامه</span></div>
+  <div class="fl-leg"><span><i style="border-color:var(--green)"></i>💵 دولار</span><span><i style="border-color:var(--amber)"></i>🪙 عملة</span><span><i style="border-color:var(--cyan);border-top-style:dotted"></i>💸 طرح · 💰 بيع ⇒ الصندوق النهائي</span><span><i style="border-color:var(--green);border-top-style:dashed"></i>مُراكِم موقوف (نصيبه يتراكم) · أو 🕐 يبدي باچر</span><span>🚦 🔴 ينتظر النافذة · 🟡 يتجمّع/ينتظر · 🟢 يشتري/اشترى</span><span>مرّر/اضغط على أي مربع: خطوطه وأرقامه</span></div>
   <div class="panel fl-map" id="flMap"><svg class="fl-svg" id="flSvg"></svg><svg class="fl-svg" id="flSvgP"></svg><div id="flFx"></div><div id="flBody"></div></div>
 </div></section>
 
@@ -14429,30 +14784,43 @@ function flAcc(a,r){
     <div class="r"><span>📦 المخزون</span><b class="c">${flC(a.coin)} ${flE(a.base)}${a.value&&a.coin?` ≈ ${fl$(a.value)}`:''}</b></div></div>`}
 function flProfit(w){
   const p=w.profit,c=FL_WC[w.ci%FL_WC.length];
-  const coins=Object.entries(p.coins||{}).map(([k,v])=>`${fmtQ(v)} ${flE(k)}`).join(' · ');
-  const env=(p.env||[]).map(e=>`<div class="env"><span>📁 ${flE(e.name)} ${e.pct}%</span><b>${fl$(e.usd)}</b></div>`).join('');
+  const coins=Object.entries(p.coins_all||p.coins||{}).map(([k,v])=>`${fmtQ(v)} ${flE(k)}`).join(' · ');
+  const env=(p.env||[]).map(e=>{const ec=Object.entries(e.coins||{}).map(([k,v])=>`${fmtQ(v)} ${flE(k)}`).join(' · ');
+    return `<div class="env"><span>📁 ${flE(e.name)} ${e.pct}%</span><b>${fl$(e.usd)}${ec?` <span style="color:var(--amber)">+ ${ec}</span>`:''}</b></div>`}).join('');
   return `<div class="fl-n fl-p" data-id="${flE(p.id)}" data-u="1" data-c="1" style="--wc:${c}" onclick="pfOpen('${flE(w.wid)}')">
-    <h4>💰 الربح <small>${flE(w.label)}</small></h4>
+    <h4>💰 الصندوق النهائي <small>${flE(w.label)}</small></h4>
     <div class="fl-big">${fl$(p.usd)}</div>${coins?`<div class="r"><span>🪙</span><b class="c">${coins}</b></div>`:''}
     ${env}${(p.env||[]).length?`<div class="env"><span>📥 غير مقسّم ${Math.max(0,100-p.env_pct).toFixed(0)}%</span><b>${fl$(p.free)}</b></div>`:''}
-    <div class="fl-hint">اضغط: الصناديق · الصرف · التصفير</div></div>`}
+    <div class="fl-hint">اضغط: الصناديق · تخصيص العملات · الصرف · التصفير</div></div>`}
+function flRel(w){
+  const R=w.rel;if(!R)return '';const c=FL_WC[w.ci%FL_WC.length],live=R.mode==='live';
+  const sp=(R.split||[]).map(s=>`<div class="sp"><span>🪙 ${flE(s.name)}${s.future?' 🕐':''}${s.enabled?'':' ⏸'}</span><b>${+(+s.pct).toFixed(2)}%</b></div>`).join('');
+  return `<div class="fl-n fl-r" data-id="${flE(R.id)}" data-u="1" data-c="0" style="--wc:${c}" onclick="flInfo('${flE(R.id)}')">
+    <h4>📥 الربح المحرر <small>${flE(w.label)}</small></h4>
+    <div class="fl-big">+${fl$(R.today)} <small>اليوم</small></div>
+    ${live?`<div class="mode live">⚡ ماكو مُراكِم شغّال — كل ربح ينزل للصندوق النهائي مباشرة</div>`
+          :`<div class="mode eod">⏳ يتوزّع نهاية اليوم بعد ⏱ <b data-cd>${flHMS(FL.data?FL.data.to_midnight:0)}</b>${R.wait>R.today+1e-9?` · ينتظر ${fl$(R.wait)}`:''}</div>`}
+    ${sp}<div class="sp"><span>💰 للصندوق النهائي${live&&(R.split||[]).length?' (اليوم)':''}</span><b>${(+R.rest).toFixed(R.rest%1?2:0)}%</b></div></div>`}
 function flRender(r){
-  const tot=r.wallets.reduce((s,w)=>s+w.u_today,0),held=r.wallets.reduce((s,w)=>s+w.held,0),pf=r.wallets.reduce((s,w)=>s+w.profit.usd,0);
+  const tot=r.wallets.reduce((s,w)=>s+(w.rel?w.rel.today:0),0),held=r.wallets.reduce((s,w)=>s+w.held,0),pf=r.wallets.reduce((s,w)=>s+w.profit.usd,0);
   $('#flTop').innerHTML=`<span class="fl-live"><i></i>مباشر</span>
     <span>📅 الخطوط من <b>${flE(r.since)}</b></span>
-    <span>💵 ربح اليوم <b>${fl$(tot)}</b> · يتوزّع بعد ⏱ <b data-cd>${flHMS(r.to_midnight)}</b></span>
-    <span>💠 داخل الأوامر <b>${fl$(held)}</b></span><span>💰 بالربح <b>${fl$(pf)}</b></span>
-    ${r.wallets.filter(w=>w.bots.length||w.acc).map(w=>`<span>👛 ${flE(w.label)}: المُراكِمات <b>${+(+w.sum_pct||0).toFixed(2)}%</b> · للربح <b>${Math.max(0,100-(+w.sum_pct||0)).toFixed(0)}%</b></span>`).join('')}
-    <div class="fl-note">👛 كل محفظة حسابها مستقل · 💵 الدولار يتجمّع عند البوت وينزل <b>نهاية اليوم</b> بنفس نسب مُراكِمات محفظته والباقي لربحها · 🪙 العملة تنزل خلال ثواني (للمُراكِم بنسبة العملة — نفس العملة ونفس المحفظة — والباقي/بلا مُراكِم للربح) · 💠 إعادة الاستثمار تبقى بمكانها لحد ما تتحرّر · الحقن مو ربح فما يظهر · الأرقام على الخطوط من يوم التفعيل.</div>`;
+    <span>📥 ربح اليوم المحرر <b>${fl$(tot)}</b> · التوزيع بعد ⏱ <b data-cd>${flHMS(r.to_midnight)}</b></span>
+    <span>💠 داخل الأوامر <b>${fl$(held)}</b></span><span>💰 بالصندوق النهائي <b>${fl$(pf)}</b></span>
+    ${r.wallets.filter(w=>w.bots.length||w.acc).map(w=>w.mode==='live'?`<span>👛 ${flE(w.label)}: <b style="color:var(--cyan)">⚡ مباشر للنهائي</b> (ماكو مُراكِم)</span>`
+      :`<span>👛 ${flE(w.label)}: المُراكِمات <b>${+(+w.act_pct||0).toFixed(2)}%</b> · للنهائي <b>${Math.max(0,100-(+w.act_pct||0)).toFixed(0)}%</b></span>`).join('')}
+    <div class="fl-note">👛 كل محفظة (مفتاح API) حسابها مستقل · 📥 ربح البوتات بالدولار يتجمّع بـ«الربح المحرر» وينزل <b>نهاية اليوم</b> لمُراكِمات محفظته بنسبها والباقي لـ<b>💰 الصندوق النهائي</b> · محفظة بلا مُراكِم ⇒ للنهائي <b>مباشرة</b> · 🪙 العملة تنزل خلال ثواني (للمُراكِم بنسبة العملة — نفس العملة ونفس المحفظة — والباقي للنهائي) · المُراكِم ⇒ النهائي: 💸 طرح · 💰 بيع (ربح أو خسارة — المبلغ كله) · 🛑 إنهاء (عملته ودولاره) · 💠 إعادة الاستثمار تبقى بمكانها لحد ما تتحرّر · الحقن مو ربح فما يظهر · الأرقام على الخطوط من يوم التفعيل.</div>`;
   const wb=r.wallets.filter(w=>w.bots.length);
   let h='';
   if(!wb.length&&!r.accs.length)h='<div class="fl-empty">ماكو بوتات حقيقية بعد</div>';
   else{
     h+=`<div class="fl-tier">${wb.map(w=>`<div class="fl-wal" style="--wc:${FL_WC[w.ci%FL_WC.length]}"><span class="fl-wlab">👛 ${flE(w.label)}</span>${w.bots.map(flBot).join('')}</div>`).join('')}</div>`;
+    const rw=r.wallets.filter(w=>w.rel);
+    if(rw.length)h+=`<div class="fl-gap"></div><div class="fl-cap"><span>📥 الربح المحرر — قبل التوزيع · كل محفظة لحالها</span></div><div class="fl-tier">${rw.map(flRel).join('')}</div>`;
     if(r.accs.length){
       const grp=r.wallets.filter(w=>r.accs.some(a=>a.wid===w.wid));
       h+=`<div class="fl-gap"></div><div class="fl-cap"><span>🪙 المُراكِمات — كل محفظة لحالها</span></div><div class="fl-tier">${grp.map(w=>`<div class="fl-wal" style="--wc:${FL_WC[w.ci%FL_WC.length]}"><span class="fl-wlab">🪙 ${flE(w.label)}</span>${r.accs.filter(a=>a.wid===w.wid).map(a=>flAcc(a,r)).join('')}</div>`).join('')}${r.accs.filter(a=>!grp.some(w=>w.wid===a.wid)).map(a=>flAcc(a,r)).join('')}</div>`}
-    h+=`<div class="fl-gap"></div><div class="fl-cap"><span>💰 الربح — كل محفظة لحالها</span></div><div class="fl-tier">${r.wallets.map(flProfit).join('')}</div>`;
+    h+=`<div class="fl-gap"></div><div class="fl-cap"><span>💰 الصندوق النهائي — كل محفظة لحالها</span></div><div class="fl-tier">${r.wallets.map(flProfit).join('')}</div>`;
   }
   $('#flBody').innerHTML=h;
   document.querySelectorAll('#flBody .fl-n').forEach(n=>{n.onmouseenter=()=>flHL(n.dataset.id);n.onmouseleave=()=>flHL(null)});
@@ -14472,7 +14840,7 @@ function flDraw(){
     const dy=Math.max(28,Math.abs(b.y-a.y)*.5),d=`M${a.x.toFixed(1)},${a.y.toFixed(1)} C${a.x.toFixed(1)},${(a.y+dy).toFixed(1)} ${b.x.toFixed(1)},${(b.y-dy).toFixed(1)} ${b.x.toFixed(1)},${b.y.toFixed(1)}`;
     FL.paths[l.id]={d,to:l.to,from:l.from,k:l.k};
     ls+=`<path class="fl-l k-${l.k}${l.dash?' dash':''}" data-id="${flE(l.id)}" data-f="${flE(l.from)}" data-t="${flE(l.to)}" d="${d}"></path>`;
-    if(l.k==='coin'&&l.pct!=null)lb+=`<text class="fl-lb" data-l="${flE(l.id)}" data-f="${flE(l.from)}" data-t="${flE(l.to)}" text-anchor="middle">🪙${+(+l.pct).toFixed(1)}%</text>`}
+    if(l.pct!=null&&(l.k==='coin'||/^r[ap]\|/.test(l.id)))lb+=`<text class="fl-lb${l.k==='coin'?'':' k-usd'}" data-l="${flE(l.id)}" data-f="${flE(l.from)}" data-t="${flE(l.to)}" text-anchor="middle">${l.k==='coin'?'🪙':'💵'}${+(+l.pct).toFixed(1)}%</text>`}
   $('#flSvg').innerHTML=ls;
   let g=$('#flLbl');if(!g){g=document.createElementNS(FL_NS,'g');g.id='flLbl';$('#flSvgP').prepend(g)}
   g.innerHTML=lb;const nth={};
@@ -14500,6 +14868,14 @@ function flAnimate(p,r){
   const pa={};p.accs.forEach(a=>pa[a.id]=a);
   r.accs.forEach(a=>{const o=pa[a.id];if(!o)return;const cin=r.lines.filter(l=>l.to===a.id&&l.k==='coin').reduce((s,l)=>s+(+l.t||0),0)-p.lines.filter(l=>l.to===a.id&&l.k==='coin').reduce((s,l)=>s+(+l.t||0),0);
     const dc=a.coin-o.coin-Math.max(0,cin);if(dc>1e-10)flBub(a.id,'🛒 +'+fmtQ(dc)+' '+a.base,'var(--amber)')});
+  // 💰 دخل للصندوق النهائي بلا خط يتحرك (🛑 إنهاء مُراكِم — المُراكِم يختفي) ⇒ فقاعة على الصندوق نفسه
+  const pw={};p.wallets.forEach(w=>pw[w.wid]=w);
+  r.wallets.forEach(w=>{const o=pw[w.wid];if(!o)return;const pid=w.profit.id;
+    const seen=c=>r.lines.filter(l=>l.to===pid&&(l.c||'USDT')===c&&pl[l.id]).reduce((s,l)=>s+Math.max(0,(+l.t||0)-(+pl[l.id].t||0)),0);
+    const du=(+w.profit.in_usd||0)-(+o.profit.in_usd||0)-seen('USDT');
+    if(du>1e-6)flBub(pid,'💰 +'+fl$(du),'var(--green)');
+    const ic=w.profit.in_coin||{},oc=o.profit.in_coin||{};
+    Object.keys(ic).forEach(k=>{const dq=(+ic[k]||0)-(+oc[k]||0)-seen(k);if(dq>1e-12)flBub(pid,'🪙 +'+fmtQ(dq)+' '+k,'var(--amber)')})});
 }
 function flSpawn(lid,label,k,i){
   const P=FL.paths[lid];if(!P||FL.parts.length>60)return;const svg=$('#flSvgP');
@@ -14521,18 +14897,29 @@ function flBub(id,txt,col){const el=document.querySelector(`#flBody .fl-n[data-i
   $('#flFx').appendChild(d);setTimeout(()=>d.remove(),2000);flPulse(id)}
 function flInfo(id){
   const r=FL.data;if(!r)return;const ins=r.lines.filter(l=>l.to===id),outs=r.lines.filter(l=>l.from===id);
-  const nm=x=>{if(x.startsWith('a:')){const a=r.accs.find(z=>z.id===x);return '🪙 '+(a?a.name:x)}if(x.startsWith('p:')){const w=r.wallets.find(z=>z.profit.id===x);return '💰 الربح · '+(w?w.label:'')}
+  const nm=x=>{if(x.startsWith('a:')){const a=r.accs.find(z=>z.id===x);return '🪙 '+(a?a.name:x)}
+    if(x.startsWith('p:')){const w=r.wallets.find(z=>z.profit.id===x);return '💰 الصندوق النهائي · '+(w?w.label:'')}
+    if(x.startsWith('r:')){const w=r.wallets.find(z=>z.rel&&z.rel.id===x);return '📥 الربح المحرر · '+(w?w.label:'')}
     for(const w of r.wallets)for(const b of w.bots)if(b.id===x)return flIco(b.type)+' '+b.name;return x};
-  const row=l=>`<tr><td>${l.k==='coin'?'🪙':l.k==='wd'?'💸':'💵'} ${flE(nm(l.from===id?l.to:l.from))}</td><td class="n">${l.pct!=null?(+l.pct).toFixed(1)+'%':'طرح'}</td><td class="n">${flQ(l.t,l.c)}</td></tr>`;
+  const row=l=>`<tr><td>${l.k==='coin'?'🪙':l.k==='wd'?'💸':'💵'} ${flE(nm(l.from===id?l.to:l.from))}</td><td class="n">${l.k==='wd'?'طرح · بيع':l.pct!=null?(+l.pct).toFixed(1)+'%':'كله'}</td><td class="n">${flQ(l.t,l.c)}</td></tr>`;
   let h='',title='';
   const a=r.accs.find(z=>z.id===id);
+  const rw=r.wallets.find(z=>z.rel&&z.rel.id===id);
   if(a){title=`🪙 ${flE(a.name)} · ${flE(a.sym)}`;
     h=`<p style="font-size:12.5px;color:var(--mut);line-height:1.9">${flE(a.why)}</p>
     <table class="pf-tab"><tr><td>⏳ قيد الشراء (ينشترى بالنافذة)</td><td class="n">${fl$(a.pool)} / ${a.min_buy}$</td></tr><tr><td>🏧 المتراكم (تحت تصرّفك)</td><td class="n">${fl$(a.pending)}</td></tr>
     <tr><td>📦 المخزون</td><td class="n">${fmtQ(a.coin)} ${flE(a.base)}</td></tr><tr><td>💵 كلّف · المتوسط</td><td class="n">${fl$(a.spent)} · ${a.avg!=null?fmtQ(a.avg)+'$':'—'}</td></tr>
-    <tr><td>💸 طرح للربح (منذ البداية)</td><td class="n">${fl$(a.wd)}</td></tr></table>`}
+    <tr><td>💸 طرح للصندوق النهائي (منذ البداية)</td><td class="n">${fl$(a.wd)}</td></tr><tr><td>💰 بيع للصندوق النهائي</td><td class="n">${fl$(a.sold)}</td></tr></table>
+    <p style="font-size:11px;color:var(--mut2);margin-top:6px">🛑 «إنهاء» من البطاقة ينقل المخزون (عملة) والمتراكم وقيد الشراء (دولار) للصندوق النهائي · ⏸ الإيقاف يبقيهم عنده.</p>`}
+  else if(rw){const R=rw.rel;title=`📥 الربح المحرر · ${flE(rw.label)}`;
+    h=`<p style="font-size:12.5px;color:var(--mut);line-height:1.9">${R.mode==='live'
+      ?'⚡ ماكو مُراكِم شغّال على هالمحفظة اليوم ⇒ كل دولار ربح من بوتاتها ينزل للصندوق النهائي <b>مباشرة</b> (لحظياً).'
+      :'⏳ ربح بوتات هالمحفظة بالدولار يتجمّع هنا طول اليوم، وبعد نص الليل يتوزّع على مُراكِماتها بنسبها — والنسبة اللي ما راحت لمُراكِم تنزل للصندوق النهائي.'}</p>
+    <table class="pf-tab"><tr><td>📥 ربح اليوم</td><td class="n">${fl$(R.today)}</td></tr>${R.mode==='live'?'':`<tr><td>⏳ ينتظر التوزيع</td><td class="n">${fl$(R.wait)}</td></tr>`}
+    <tr><td>🪙 راح للمُراكِمات (منذ ${flE(r.since)})</td><td class="n">${fl$(R.to_acc)}</td></tr><tr><td>💰 راح للصندوق النهائي</td><td class="n">${fl$(R.to_final)}</td></tr></table>
+    ${(R.split||[]).length?`<h3 style="font-size:13px;margin:12px 0 4px">📊 التوزيع</h3><table class="pf-tab">${R.split.map(s=>`<tr><td>🪙 ${flE(s.name)}${s.enabled?'':' ⏸'}${s.future?` <span style="color:var(--amber);font-size:11px">🕐 يبدي من ${flE(s.start)}</span>`:''}</td><td class="n">${+(+s.pct).toFixed(2)}%</td></tr>`).join('')}<tr><td>💰 للصندوق النهائي</td><td class="n">${(+R.rest).toFixed(R.rest%1?2:0)}%</td></tr></table>`:''}`}
   else{for(const w of r.wallets)for(const b of w.bots)if(b.id===id){title=`${flIco(b.type)} ${flE(b.name)} · ${flE(b.sym)} · ${flE(w.label)}`;
-    h=`<table class="pf-tab"><tr><td>💵 ربح اليوم</td><td class="n">${fl$(b.u_today)}</td></tr><tr><td>⏳ ينتظر توزيع نهاية اليوم</td><td class="n">${fl$(b.u_wait)}</td></tr>
+    h=`<table class="pf-tab"><tr><td>💵 ربح اليوم</td><td class="n">${fl$(b.u_today)}</td></tr><tr><td>⏳ ما انقيّد بعد (يتوزّع نهاية اليوم)</td><td class="n">${fl$(b.u_wait)}</td></tr>
     <tr><td>💵 منذ ${flE(r.since)}</td><td class="n">${fl$(b.u_tot)}</td></tr>${b.ri?`<tr><td>💠 داخل الأوامر (${b.ri.on?'إعادة استثمار '+b.ri.pct+'%':'موقوفة'})</td><td class="n">${fl$(b.ri.held)}</td></tr>`:''}
     ${b.coin?`<tr><td>🪙 عملة اليوم</td><td class="n">${fmtQ(b.c_today)} ${flE(b.base)}</td></tr>`:''}</table>`}}
   if(outs.length)h+=`<h3 style="font-size:13px;margin:12px 0 4px">⬇️ ينزل إلى (المجموع منذ ${flE(r.since)})</h3><table class="pf-tab">${outs.map(row).join('')}</table>`;
@@ -14540,24 +14927,34 @@ function flInfo(id){
   const why=outs.find(l=>l.why);if(why)h+=`<p style="font-size:11.5px;color:var(--amber);margin-top:8px">🪙 ${flE(why.why)}</p>`;
   h+=`<div class="mbtns" style="margin-top:12px">${a?`<button onclick="hideModal();const x=((DATA&&DATA.accum)||[]).find(z=>z.id==='${flE(a.aid)}');if(x)accEdit(x)">⚙️ الإعدادات</button>`:''}<button onclick="hideModal()">إغلاق</button></div>`;
   showModal(`<h2>${title||'—'}</h2>`+h)}
-/* ── 💰 صناديق الربح (دفتر للعرض — ما يحرّك شي بالمنصة) ── */
+/* ── 💰 الصندوق النهائي (دفتر للعرض — ما يحرّك شي بالمنصة) ── */
 function pfW(wid){return ((FL.data||{}).wallets||[]).find(w=>w.wid===wid)}
 function pfOpen(wid){
-  const w=pfW(wid);if(!w)return;const p=w.profit,rest=Math.max(0,100-p.env_pct);
+  const w=pfW(wid);if(!w)return;const p=w.profit,rest=Math.max(0,100-p.env_pct),S=p.src||{},W_=flE(wid);
+  const hasEnv=(p.env||[]).length>0;
   const env=(p.env||[]).map(e=>`<tr><td>📁 <b>${flE(e.name)}</b></td><td class="n">${e.pct}%</td><td class="n"><b>${fl$(e.usd)}</b></td>
-    <td class="n"><button onclick="pfSpend('${flE(wid)}','${flE(e.id)}',${e.usd},'${flE(e.name)}')">💸 صرف</button> <button onclick="pfEnv('${flE(wid)}','${flE(e.id)}')">✏️</button> <button style="color:var(--red)" onclick="pfDel('${flE(wid)}','${flE(e.id)}','${flE(e.name)}')">🗑️</button></td></tr>`).join('');
-  const coins=Object.entries(p.coins||{}).map(([k,v])=>`<tr><td>🪙 ${flE(k)}</td><td></td><td class="n"><b>${fmtQ(v)}</b></td><td class="n"><button onclick="pfSpend('${flE(wid)}','coin:${flE(k)}',${v},'${flE(k)}',1)">💸 صرف</button></td></tr>`).join('');
-  const ic={in_usd:'⬇️',in_coin:'🪙⬇️',spend:'💸',reset:'🧹',resplit:'🔄',env_add:'➕',env_edit:'✏️',env_del:'🗑️'};
-  const lg=(p.log||[]).slice(0,25).map(x=>`<div>${new Date(x.ts*1000).toLocaleString('ar',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})} · ${ic[x.k]||'•'} ${x.c==='%'?(+x.a)+'%':flQ(x.a,x.c)} ${flE(x.s||'')} ${flE(x.n||'')}</div>`).join('')||'<div>لسه ماكو حركة</div>';
-  showModal(`<h2>💰 الربح — ${flE(w.label)}</h2>
-  <p style="font-size:11.5px;color:var(--mut);line-height:1.8">خلاصة الربح اللي نزل لهالمحفظة (الباقي بعد المُراكِمات + العملة بلا مُراكِم + الطرح من المتراكم) · تقسّمه على صناديق بنسب تختارها.<br>
+    <td class="n"><button onclick="pfSpend('${W_}','${flE(e.id)}',${e.usd},'${flE(e.name)}')">💸 صرف</button> <button onclick="pfEnv('${W_}','${flE(e.id)}')">✏️</button> <button style="color:var(--red)" onclick="pfDel('${W_}','${flE(e.id)}','${flE(e.name)}')">🗑️</button></td></tr>`
+    +Object.entries(e.coins||{}).map(([k,v])=>`<tr><td style="padding-inline-start:18px">🪙 ${flE(k)} <small style="color:var(--mut2)">بـ«${flE(e.name)}»</small></td><td></td><td class="n"><b style="color:var(--amber)">${fmtQ(v)}</b></td>
+    <td class="n"><button onclick="pfSpend('${W_}','${flE(e.id)}',${v},'${flE(e.name)} · ${flE(k)}',1,'${flE(k)}')">💸 صرف</button> <button onclick="pfAssign('${W_}','${flE(k)}',${v},'${flE(e.id)}')">↩ رجوع</button></td></tr>`).join('')).join('');
+  const coins=Object.entries(p.coins||{}).map(([k,v])=>`<tr><td>🪙 ${flE(k)} <small style="color:var(--mut2)">غير مخصّصة</small></td><td></td><td class="n"><b style="color:var(--amber)">${fmtQ(v)}</b></td>
+    <td class="n"><button onclick="pfSpend('${W_}','coin:${flE(k)}',${v},'${flE(k)}',1)">💸 صرف</button>${hasEnv?` <button onclick="pfAssign('${W_}','${flE(k)}',${v})">📁 تخصيص</button>`:''}</td></tr>`).join('');
+  const ic={in_usd:'⬇️',in_coin:'🪙⬇️',spend:'💸',reset:'🧹',resplit:'🔄',env_add:'➕',env_edit:'✏️',env_del:'🗑️',assign:'📁'};
+  const lg=(p.log||[]).slice(0,25).map(x=>`<div>${new Date(x.ts*1000).toLocaleString('ar',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})} · ${ic[x.k]||'•'} ${x.c==='%'?(+x.a)+'%':flQ(x.a,x.c)}${x.x>1?` <small>(${x.x} دفعات)</small>`:''} ${flE(x.s||'')} ${flE(x.n||'')}</div>`).join('')||'<div>لسه ماكو حركة</div>';
+  const src=[['📥 الباقي/المباشر من البوتات',S.rest],['💰 بيع المُراكِمات',S.sold],['💸 طرح من المتراكم',S.wd],['🛑 إنهاء مُراكِمات',S.end]].filter(x=>(+x[1]||0)>1e-9).map(x=>`${x[0]} <b>${fl$(x[1])}</b>`).join(' · ');
+  const cl=(p.closed||[]).map(x=>`<div>🛑 ${flE(x.name)} (${flE(x.sym)}) — ${x.coin>0?fmtQ(x.coin)+' '+flE(String(x.sym||'').split('-')[0]):''}${x.coin>0&&x.usd>0?' + ':''}${x.usd>0?fl$(x.usd):''} · ${new Date(x.ts*1000).toLocaleDateString('ar')}</div>`).join('');
+  showModal(`<h2>💰 الصندوق النهائي — ${flE(w.label)}</h2>
+  <p style="font-size:11.5px;color:var(--mut);line-height:1.8">الربح النهائي لهالمحفظة: الباقي بعد المُراكِمات (أو كله <b>مباشرة</b> لو ماكو مُراكِم) + العملة بلا مُراكِم + طرح وبيع وإنهاء المُراكِمات.
+  💵 الدولار يتقسّم على صناديقك بنسبها · 🪙 العملات <b>ما تتقسّم لحالها</b> — خصّصها لصندوق بزر «📁 تخصيص».<br>
   <b>دفتر للعرض:</b> «💸 صرف» و«🧹 تصفير» ما يحرّكون شي بالمنصة — بس يسجّلون إنك صرفته.</p>
-  <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin:6px 0 10px"><span>الرصيد <b style="color:var(--green);font-size:16px">${fl$(p.usd)}</b></span><span>دخل <b>${fl$(p.in_usd)}</b></span><span>انصرف <b>${fl$(p.out_usd)}</b></span></div>
-  <table class="pf-tab">${env}<tr><td>📥 غير مقسّم</td><td class="n">${rest.toFixed(rest%1?2:0)}%</td><td class="n"><b>${fl$(p.free)}</b></td><td class="n"><button onclick="pfSpend('${flE(wid)}','free',${p.free},'غير مقسّم')">💸 صرف</button></td></tr>${coins}</table>
-  <div class="mbtns" style="margin-top:12px"><button class="primary" onclick="pfEnv('${flE(wid)}')">➕ صندوق</button>
-    <button onclick="pfAct('${flE(wid)}','resplit','🔄 إعادة تقسيم؟','كل الرصيد (${fl$(p.usd)}) ينقسم من جديد على الصناديق بنسبها الحالية.')">🔄 إعادة تقسيم</button>
-    <button style="color:var(--red)" onclick="pfAct('${flE(wid)}','reset','🧹 تصفير الربح؟','كل الصناديق والعملات تصير صفر ويبدي يتجمّع من جديد — الصناديق ونسبها تبقى. (دفتر بس — ما يمس فلوسك بالمنصة)')">🧹 تصفير</button>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin:6px 0 4px"><span>الرصيد <b style="color:var(--green);font-size:16px">${fl$(p.usd)}</b></span><span>دخل <b>${fl$(p.in_usd)}</b></span><span>انصرف <b>${fl$(p.out_usd)}</b></span></div>
+  ${src?`<div style="font-size:11px;color:var(--mut);margin-bottom:8px">دخل من: ${src}</div>`:''}
+  <table class="pf-tab">${env}<tr><td>📥 غير مقسّم</td><td class="n">${rest.toFixed(rest%1?2:0)}%</td><td class="n"><b>${fl$(p.free)}</b></td><td class="n"><button onclick="pfSpend('${W_}','free',${p.free},'غير مقسّم')">💸 صرف</button></td></tr>${coins}</table>
+  ${Object.keys(p.coins||{}).length&&!hasEnv?`<p style="font-size:11px;color:var(--mut2);margin-top:6px">📁 حتى تخصّص العملات سوّي صندوق أول (➕ صندوق).</p>`:''}
+  <div class="mbtns" style="margin-top:12px"><button class="primary" onclick="pfEnv('${W_}')">➕ صندوق</button>
+    <button onclick="pfAct('${W_}','resplit','🔄 إعادة تقسيم؟','كل رصيد الدولار (${fl$(p.usd)}) ينقسم من جديد على الصناديق بنسبها الحالية. (العملات المخصّصة تبقى بمكانها)')">🔄 إعادة تقسيم</button>
+    <button style="color:var(--red)" onclick="pfAct('${W_}','reset','🧹 تصفير الصندوق النهائي؟','كل الصناديق والعملات (حتى المخصّصة) تصير صفر ويبدي يتجمّع من جديد — الصناديق ونسبها تبقى. (دفتر بس — ما يمس فلوسك بالمنصة)')">🧹 تصفير</button>
     <button onclick="hideModal()">إغلاق</button></div>
+  ${cl?`<div class="pf-log" style="max-height:110px">${cl}</div>`:''}
   <div class="pf-log">${lg}</div>`)}
 function pfEnv(wid,id){
   const w=pfW(wid);if(!w)return;const e=id?(w.profit.env||[]).find(x=>x.id===id):null;
@@ -14568,15 +14965,28 @@ function pfEnv(wid,id){
   <div class="mbtns" style="margin-top:12px"><button class="primary" id="pf_go">💾 حفظ</button><button onclick="pfOpen('${flE(wid)}')">↩ رجوع</button></div>`);
   $('#pf_go').onclick=async()=>{const r=await api('/api/pfbox',{act:e?'env_edit':'env_add',wid,id:e?e.id:undefined,name:$('#pf_n').value,pct:$('#pf_p').value});
     toast(r.msg||'تم',r.ok!==false);if(r.ok){await loadFlow();pfOpen(wid)}}}
-function pfSpend(wid,id,bal,name,coin){
+function pfSpend(wid,id,bal,name,coin,ccy){
   showModal(`<h2>💸 صرف من «${flE(name)}»</h2><p style="font-size:12px;color:var(--mut)">الرصيد ${coin?fmtQ(bal):fl$(bal)} · الصرف يعني طلع للمحفظة/انصرف — دفتر بس، ما يحرّك شي بالمنصة.</p>
   <div style="display:flex;gap:6px;flex-wrap:wrap"><input id="pf_a" class="num" placeholder="0" style="flex:1 1 90px;min-width:0" oninput="this.dataset.all=''">
   <button onclick="const i=$('#pf_a');i.value=${coin?`'${bal}'`:`(+${bal}).toFixed(2)`};i.dataset.all='1'">الكل</button>
   <button class="primary" id="pf_go">💸 صرف</button></div><div class="mbtns" style="margin-top:12px"><button onclick="pfOpen('${flE(wid)}')">↩ رجوع</button></div>`);
   $('#pf_go').onclick=async()=>{const i=$('#pf_a'),all=i.dataset.all==='1',v=parseFloat(String(i.value).replace(/,/g,'.'))||0;
     if(!(v>0))return toast('اكتب مبلغ أو اضغط «الكل»',false);
-    const r=await api('/api/pfbox',{act:'spend',wid,id,amount:all?'all':v});toast(r.msg||'تم',r.ok!==false);if(r.ok){await loadFlow();pfOpen(wid)}}}
-function pfDel(wid,id,name){askConfirm('🗑️ حذف «'+flE(name)+'»؟','رصيده يرجع لـ«غير مقسّم» — ولا سنت يضيع.',async()=>{const r=await api('/api/pfbox',{act:'env_del',wid,id});toast(r.msg||'تم',r.ok!==false);await loadFlow();pfOpen(wid)})}
+    const r=await api('/api/pfbox',{act:'spend',wid,id,amount:all?'all':v,ccy:ccy||undefined});toast(r.msg||'تم',r.ok!==false);if(r.ok){await loadFlow();pfOpen(wid)}}}
+function pfAssign(wid,base,bal,fromEnv){
+  // 📁 v3.23.0: عملة بالصندوق النهائي ⇒ تخصّصها لصندوق بيدك (أو ترجعها لغير المخصّصة) — ما تتقسّم بالنسب
+  const w=pfW(wid);if(!w)return;const envs=w.profit.env||[];const e0=fromEnv?envs.find(e=>e.id===fromEnv):null;
+  showModal(`<h2>${e0?`↩ رجّع ${flE(base)} من «${flE(e0.name)}»`:`📁 تخصيص ${flE(base)} لصندوق`}</h2>
+  <p style="font-size:12px;color:var(--mut)">المتاح ${fmtQ(bal)} ${flE(base)} · ${e0?'ترجع «غير مخصّصة» بالصندوق النهائي.':'العملات ما تتقسّم لحالها مثل الدولار — تحددها إنت.'} (دفتر بس)</p>
+  ${e0?'':`<div class="frm"><div class="fld" style="grid-column:1/-1"><label>الصندوق</label><select id="pf_e">${envs.map(e=>`<option value="${flE(e.id)}">📁 ${flE(e.name)}</option>`).join('')}</select></div></div>`}
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><input id="pf_a" class="num" placeholder="0" style="flex:1 1 90px;min-width:0" oninput="this.dataset.all=''">
+  <button onclick="const i=$('#pf_a');i.value='${bal}';i.dataset.all='1'">الكل</button>
+  <button class="primary" id="pf_go">${e0?'↩ رجّع':'📁 خصّص'}</button></div><div class="mbtns" style="margin-top:12px"><button onclick="pfOpen('${flE(wid)}')">↩ رجوع</button></div>`);
+  $('#pf_go').onclick=async()=>{const i=$('#pf_a'),all=i.dataset.all==='1',v=parseFloat(String(i.value).replace(/,/g,'.'))||0;
+    if(!(v>0))return toast('اكتب كمية أو اضغط «الكل»',false);
+    const id=e0?e0.id:($('#pf_e')||{}).value;
+    const r=await api('/api/pfbox',{act:'assign',wid,id,base,amount:all?'all':v,back:!!e0});toast(r.msg||'تم',r.ok!==false);if(r.ok){await loadFlow();pfOpen(wid)}}}
+function pfDel(wid,id,name){askConfirm('🗑️ حذف «'+flE(name)+'»؟','رصيده يرجع لـ«غير مقسّم» وعملاته ترجع «غير مخصّصة» — ولا سنت يضيع.',async()=>{const r=await api('/api/pfbox',{act:'env_del',wid,id});toast(r.msg||'تم',r.ok!==false);await loadFlow();pfOpen(wid)})}
 function pfAct(wid,act,t,d){askConfirm(t,d,async()=>{const r=await api('/api/pfbox',{act,wid});toast(r.msg||'تم',r.ok!==false);await loadFlow();pfOpen(wid)})}
 window.addEventListener('resize',()=>{clearTimeout(FL.rz);FL.rz=setTimeout(()=>{if($('#page_flow')&&$('#page_flow').classList.contains('on'))flDraw()},150)});
 async function openWallets(){openPage('wallets');
@@ -14693,7 +15103,7 @@ function renderAccum(list){
       <div class="mbtns" style="margin-top:6px;gap:6px">
         <button data-k="apause" style="flex:2;font-size:11px">⏸ إيقاف الشراء</button>
         <button data-k="aedit" style="flex:1;font-size:11px" title="الإعدادات">⚙️</button>
-        <button data-k="adel" style="flex:1;font-size:11px;color:var(--red)" title="حذف البطاقة">🗑️</button></div>`;
+        <button data-k="adel" style="flex:1;font-size:11px;color:var(--red)" title="🛑 إنهاء المُراكِم — عملته ودولاره للصندوق النهائي">🛑</button></div>`;
       el._r={}; el.querySelectorAll('[data-k]').forEach(n=>el._r[n.dataset.k]=n);
       ACARDS.set(a.id,el); grid.appendChild(el);
     }
@@ -14812,6 +15222,8 @@ function accWalInfo(){
     المتبقي: 💵 من ربحها <b>${Math.max(0,100-used).toFixed(0)}%</b> · 🪙 من عملة ${gEsc(cb||'—')} <b>${Math.max(0,100-cu).toFixed(0)}%</b>
     · <a href="#" onclick="event.preventDefault();accAlloc()" style="color:var(--vio)" title="كم وُزّع من ربح أمس · لكل محفظة · وكم بقي غير مخصّص">📊 التوزيع</a>
     ${W.bots&&W.bots.length?`<br><span style="color:var(--mut2);font-size:10.5px">بوتاتها: ${gEsc(W.bots.join('، '))}</span>`:'<br><span style="color:var(--amber);font-size:10.5px">ماكو بوتات على هالمحفظة — ربحها صفر (يستلم بس من الشراء اليدوي/الطرح)</span>'}`;
+  const isNew=!a.id||((pv.acc_w||{})[a.id]&&(pv.acc_w||{})[a.id]!==W.wid);
+  if(W.live&&isNew)info.innerHTML+=`<br><span style="color:var(--cyan);font-size:10.5px">🕐 ماكو مُراكِم شغّال على هالمحفظة — ربحها اليوم ينزل للصندوق النهائي مباشرة، فالمُراكِم يبدي ياخذ من ربح <b>باچر</b></span>`;
   const nt=$('#ac_wmove');if(nt)nt.style.display=(a.id&&(pv.acc_w||{})[a.id]&&(pv.acc_w||{})[a.id]!==W.wid&&((a.coin||0)>0||(a.pool||0)>0||(a.pending||0)>0))?'':'none';
 }
 async function accEdit(a){
@@ -14860,7 +15272,7 @@ async function accEdit(a){
   <div class="mbtns" style="margin-top:12px">
     <button class="primary" onclick="accSave('${a.id||''}')">💾 حفظ</button>
     ${a.id?`<button onclick="accToggle('${a.id}')">${a.enabled?'⏸ إيقاف':'▶ تشغيل'}</button>
-            <button style="color:var(--red)" onclick="accDel('${a.id}')">🗑️ حذف</button>`:''}
+            <button style="color:var(--red)" onclick="accDel('${a.id}')">🛑 إنهاء</button>`:''}
     <button onclick="hideModal()">إلغاء</button></div>`);
   accWalInfo();
 }
@@ -14877,7 +15289,7 @@ function accAlloc(){
     <table style="width:100%;font-size:12.5px;line-height:2">
       <tr><td style="color:var(--mut)">ربح بوتاتها</td><td style="text-align:end"><b style="color:var(--green)">${W.profit}$</b></td></tr>
       <tr><td style="color:var(--mut)">وُزّع على مُراكِماتها</td><td style="text-align:end"><b>${W.allocated}$</b></td></tr>
-      <tr style="border-top:1px solid var(--bd,#232a36)"><td style="color:var(--mut)">غير مخصّص (يبقى دولارات بالمحفظة)</td>
+      <tr style="border-top:1px solid var(--bd,#232a36)"><td style="color:var(--mut)">💰 للصندوق النهائي (يبقى دولارات بالمحفظة)</td>
         <td style="text-align:end"><b style="color:${Math.abs(W.unallocated)<0.01?'var(--mut)':'var(--cyan)'}">${W.unallocated}$</b></td></tr></table>`;
     if((W.rows||[]).length){
       h+=`<div style="font-size:10px;color:var(--mut2);margin:6px 0 2px">⏳ قيد الشراء (تلقائي) · 🏧 المتراكم (تحت تصرّفك) · نصيب أمس</div><table style="width:100%;font-size:12px;line-height:2">`;
@@ -14887,7 +15299,7 @@ function accAlloc(){
           <td style="text-align:center;color:var(--amber)">🏧${r.reserve}$</td>
           <td style="text-align:end"><b>${r.share}$</b></td></tr>`;
       h+=`</table>`}
-    else h+=`<div style="font-size:11px;color:var(--mut2);margin-top:4px">ماكو مُراكِم على هالمحفظة — ربحها كله يبقى بيها</div>`;
+    else h+=`<div style="font-size:11px;color:var(--mut2);margin-top:4px">ماكو مُراكِم على هالمحفظة — ربحها كله ينزل للصندوق النهائي مباشرة</div>`;
     h+=`<div style="margin-top:8px;padding:7px 9px;border-radius:9px;background:${over?'rgb(var(--red2-rgb)/.12)':'rgb(var(--green2-rgb)/.08)'};font-size:11.5px;color:${over?'var(--red)':'var(--green)'}">
       ${over?'⚠️ مجموع نسب هالمحفظة يتجاوز 100%!':'✅ مجموع النسب '+(W.used_pct||0)+'% · متاح '+(W.free_pct??100)+'% — كل دولار يُوزَّع مرة وحدة بس'}</div></div>`;
   }
@@ -14917,7 +15329,8 @@ async function accSell(a){
   </div>
   <div class="frm"><div class="fld"><label>الكمية (فارغة = الكل)</label>
     <input id="sl_q" class="num" placeholder="${p.sellable}">
-    <small style="color:var(--mut2);font-size:10px">بيع الكل <b>يصفّر المعدل</b> ويبدأ تجميع جديد · البيع الجزئي يبقي المعدل</small></div></div>
+    <small style="color:var(--mut2);font-size:10px">بيع الكل <b>يصفّر المعدل</b> ويبدأ تجميع جديد · البيع الجزئي يبقي المعدل</small>
+    <small style="color:var(--green);font-size:10.5px;display:block;margin-top:4px">💰 مبلغ البيع كله (ربح أو خسارة) يروح لـ«الصندوق النهائي» بمحفظة المُراكِم</small></div></div>
   <div class="mbtns" style="margin-top:12px">
     <button class="primary" style="background:${up?'linear-gradient(94deg,#22c55e,#16a34a)':''}" onclick="doSell('${a.id}',${p.sellable})">
       💰 ${up?'بِع واربح':'بِع'} ${p.profit>=0?'+':''}${p.profit}$</button>
@@ -14928,7 +15341,7 @@ function doSell(id,maxq){
   const q=(v>0&&v<maxq)?v:null;
   askConfirm('💰 تأكيد البيع؟',
     q?`بيع <b>${q}</b> فقط — المعدل يبقى كما هو.`
-     :'بيع <b>الكمية كاملة</b> بسعر السوق.<br>بعدها <b>يصفّر المعدل</b> ويبدأ تجميع جديد من الصفر.',
+     :'بيع <b>الكمية كاملة</b> بسعر السوق.<br>بعدها <b>يصفّر المعدل</b> ويبدأ تجميع جديد من الصفر.<br>💰 المبلغ يروح للصندوق النهائي.',
     async()=>{const r=await api('/api/accum',{act:'sell',id:id,qty:q});
       toast(r.msg||'تم',r.ok!==false);hideModal();tick&&tick()});
 }
@@ -14971,15 +15384,22 @@ async function accSave(id,moveOk){
 async function accToggleCard(a){
   if(a.enabled){
     askConfirm('⏸ إيقاف الشراء التلقائي؟',
-      'يوقف <b>الشراء الآلي فقط</b>.<br><br>• ربح كل يوم <b>يستمر بالتراكم</b> بالزر<br>• الزر يبقى جاهزاً للشراء اليدوي متى شئت<br>• عملتك المشتراة لا تُمس',
+      'يوقف <b>الشراء الآلي فقط</b>.<br><br>• ربح كل يوم <b>يستمر بالتراكم</b> بالزر<br>• الزر يبقى جاهزاً للشراء اليدوي متى شئت<br>• عملتك المشتراة لا تُمس — تبقى عنده<br><span style="font-size:12px;color:var(--mut)">تريد العملة والدولار يروحون للصندوق النهائي؟ استعمل «🛑 إنهاء».</span>',
       async()=>{const r=await api('/api/accum',{act:'toggle',id:a.id});toast(r.msg||'تم',true);tick&&tick()});
   }else{
     const r=await api('/api/accum',{act:'toggle',id:a.id});toast('▶ استُؤنف الشراء التلقائي',true);tick&&tick();
   }
 }
 async function accToggle(id){const r=await api('/api/accum',{act:'toggle',id});toast(r.msg||'تم',true);hideModal();tick&&tick()}
-function accDel(id){askConfirm('🗑️ حذف المُراكِم؟','العملة اللي اشتراها تبقى بمحفظتك — يُحذف الإعداد وسجل الشراء فقط.',
-  async()=>{const r=await api('/api/accum',{act:'delete',id});toast(r.msg||'تم',true);hideModal();tick&&tick()})}
+function accDel(id){
+  // 🛑 v3.23.0: إنهاء المُراكِم — اللي جمّعه كله ربح ⇒ 💰 الصندوق النهائي بمحفظته (عملة كعملة · المتراكم وقيد الشراء دولار)
+  const a=((DATA&&DATA.accum)||[]).find(z=>z.id===id)||{};
+  const usd=(+a.pending||0)+(+a.pool||0),coin=+a.coin||0,b=gEsc(String(a.base||'').toUpperCase());
+  askConfirm('🛑 إنهاء المُراكِم؟',`كل اللي جمّعه ربح ⇒ يروح لـ<b>💰 الصندوق النهائي</b> بمحفظته:<br>
+    • 🪙 المخزون: <b>${fmtQ(coin)} ${b}</b> (يبقى عملة — ما ينباع)<br>• 💵 المتراكم + قيد الشراء: <b>${usd.toFixed(2)}$</b><br><br>
+    ولا شي يتحرك بالمنصة — العملة باقية بحسابك والرقابة تبقى تتوقعها. بعدها يختفي المُراكِم.<br>
+    <span style="font-size:12px;color:var(--mut)">تريد توقف الشراء بس وتبقي العملة عنده؟ استعمل «⏸ إيقاف الشراء». · تريدها دولار؟ «💰 بِع» أول (المبلغ كله يروح للصندوق النهائي).</span>`,
+    async()=>{const r=await api('/api/accum',{act:'end',id});toast(r.msg||'تم',r.ok!==false);if(r.ok!==false)hideModal();tick&&tick()})}
 async function okxCheck(){
   showModal('<h2>🔍 تشخيص OKX</h2><p style="color:var(--mut);font-size:12px">⏳ يفحص الاتصال والمفاتيح…</p>');
   let r={};
@@ -18686,7 +19106,7 @@ def books_audit():
             d = (datetime.now() - timedelta(days=n)).strftime("%Y-%m-%d")
             if (a.get("start") or "") > d or (since and d < since):
                 continue
-            prof = day_profit(d)
+            prof = day_profit_w(d, acc_wid(a)) if acc_wid(a) else day_profit(d)     # 👛 ربح بوتات محفظته بس (مثل التوزيع)
             if prof <= 0:
                 continue
             pc = float(dp.get(d, a.get("pct", 0)) or 0)
