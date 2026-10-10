@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.22.8"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.22.9"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -1694,6 +1694,119 @@ def _acc_keys():
             return c["api_key"], c["secret_key"], c["passphrase"], b["symbol"]
     return None, None, None, None
 
+# ───── 👛 v3.22.9: المُراكِم لكل محفظة — حساب مستقل: ياخذ من ربح بوتات محفظته بس · يشتري ويبيع بمفاتيحها · تختارها قبل النشر ─────
+def _live_wmap():
+    """{مفتاح الدفتر (مجلد البوت): wid} للبوتات الحقيقية الحية (wid = بصمة المفتاح — ولا حرف منه)"""
+    out = {}
+    for b in bot_dirs().values():
+        c = b.get("cfg") or {}
+        k = str(c.get("api_key") or "").strip()
+        if c.get("is_demo") or not k:
+            continue
+        out[os.path.relpath(b["dir"], ROOT)] = _gd_wid(k)
+    return out
+
+
+def _led_wid(k, e, live=None):
+    """👛 محفظة سطر بالدفتر: الوسم المحفوظ `w` (يبقى بعد حذف البوت) وإلا محفظة البوت الحي"""
+    w = (e or {}).get("w") if isinstance(e, dict) else None
+    if w:
+        return w
+    return (live if live is not None else _live_wmap()).get(k, "")
+
+
+def day_profit_w(day, wid, led=None, live=None):
+    """💰 ربح بوتات محفظة وحدة ليوم — نفس `day_profit` بس مقصور على المحفظة (المُراكِم ياخذ نسبته من هذا)"""
+    led = (load_json(LEDGER) or {}) if led is None else led
+    live = _live_wmap() if live is None else live
+    tot = 0.0
+    for k, e in led.items():
+        if str(k).startswith("_") or not isinstance(e, dict):
+            continue
+        if _led_wid(k, e, live) != wid:
+            continue
+        tot += float((e.get("daily") or {}).get(day) or 0)
+    return round(tot, 6)
+
+
+def acc_wallets():
+    """👛 المحافظ اللي ينفتح عليها مُراكِم: كل مفتاح OKX حقيقي (المحافظ المحفوظة + مفاتيح البوتات) —
+    {wid: {wid · name · label · keys · bots}} · `keys` للاستعمال الداخلي بس (ولا يطلع للواجهة)."""
+    out = {}
+    for w in (app_cfg().get("wallets") or []):
+        k = str(w.get("api") or "").strip()
+        if k and w.get("sec") and w.get("pass"):
+            wid = _gd_wid(k)
+            out.setdefault(wid, {"wid": wid, "name": str(w.get("name") or ""), "keys": (k, w["sec"], w["pass"]), "bots": []})
+    for b in bot_dirs().values():
+        c = b.get("cfg") or {}
+        k = str(c.get("api_key") or "").strip()
+        if c.get("is_demo") or not (k and c.get("secret_key") and c.get("passphrase")):
+            continue
+        wid = _gd_wid(k)
+        out.setdefault(wid, {"wid": wid, "name": "", "keys": (k, c["secret_key"], c["passphrase"]), "bots": []})["bots"].append(b)
+    for wid, W in out.items():
+        try:
+            W["label"] = _gd_wlabel({"keys": W["keys"], "bots": W["bots"], "acc": False})
+        except Exception:
+            W["label"] = W["name"] or wid
+        if not W["bots"]:
+            W["label"] = ("محفظة · " + W["name"]) if W["name"] else W["label"]
+    return out
+
+
+def acc_wid(a):
+    """👛 محفظة المُراكِم (`wid` بإعداداته) — مُراكِم قديم بلا محفظة ⇒ محفظة الشراء القديمة (أول محفظة/أول بوت)"""
+    w = str((a or {}).get("wid") or "")
+    if w:
+        return w
+    try:
+        k = _acc_keys()[0]
+        return _gd_wid(k) if k else ""
+    except Exception:
+        return ""
+
+
+def acc_wids():
+    return {acc_wid(a) for a in acc_cfgs() if acc_wid(a)}
+
+
+def _acc_keys_for(a):
+    """🔑 مفاتيح محفظة المُراكِم نفسها — ولا مرة مفاتيح محفظة ثانية (لو محفظته انحذفت ⇒ بلا مفاتيح، ما يشتري من حساب غيره)"""
+    wid = acc_wid(a)
+    W = acc_wallets().get(wid) if wid else None
+    if not W:
+        return None, None, None, None
+    k, s_, p_ = W["keys"]
+    return k, s_, p_, (W.get("name") or W.get("label") or wid)
+
+
+def _acc_migrate():
+    """👛 مُراكِم قديم (قبل v3.22.9) بلا محفظة ⇒ نثبّته على المحفظة اللي كان يشتري بيها فعلاً — مرة وحدة، بلا ما يتغيّر شي بحسابه."""
+    try:
+        c = app_cfg()
+        lst = c.get("accumulators") or []
+        if not lst or all(a.get("wid") for a in lst):
+            return 0
+        k = _acc_keys()[0]
+        if not k:
+            return 0
+        w = _gd_wid(k)
+        n = 0
+        for a in lst:
+            if not a.get("wid"):
+                a["wid"] = w; n += 1
+        c["accumulators"] = lst
+        save_app_cfg(c)
+        try:
+            journal("accum", f"👛 {n} مُراكِم قديم انثبّت على محفظته ({w}) — من هسه ياخذ من ربح بوتات محفظته بس", "ok", wallet=w, n=n)
+        except Exception:
+            pass
+        return n
+    except Exception:
+        return 0
+
+
 def _acc_price(sym):
     """السعر: ذاكرة اللوحة ← OKX (عدة مضيفات) ← حالة بوت يتداول نفس العملة"""
     p = PX.get(sym)
@@ -1835,8 +1948,8 @@ def acc_sell_now(aid, qty=None, reason="يدوي"):
     sp = _acc_spec(sym)
     if sell_q <= 0 or (sp["minSz"] and sell_q < sp["minSz"]):
         return False, f"الكمية {want} أقل من حد OKX ({sp['minSz']})"
-    k, s, p, who = _acc_keys()
-    if not k: return False, "لا توجد مفاتيح API"
+    k, s, p, who = _acc_keys_for(a)                     # 👛 v3.22.9
+    if not k: return False, "🔑 محفظة هالمُراكِم ما إلها مفاتيح (انحذفت؟) — اختر محفظته من ⚙️ بالكرت"
     cl = "HACS" + str(int(time.time()))[-7:] + _sc.token_hex(2)
     e["sell_inflight"] = {"cl": cl, "qty": sell_q, "ts": time.time(), "sym": sym}
     _acc_save(st_all)
@@ -1901,7 +2014,7 @@ def acc_settle_sell(a, st_all):
     e = st_all.get(a["id"]) or {}
     inf = e.get("sell_inflight")
     if not inf: return False
-    k, s, p, _ = _acc_keys()
+    k, s, p, _ = _acc_keys_for(a)
     if not k: return True
     sym = inf.get("sym"); oid = inf.get("oid"); cl = inf.get("cl")
     q = (_okx_get(f"/api/v5/trade/order?instId={sym}&ordId={oid}", k, s, p) if oid
@@ -1925,9 +2038,9 @@ def acc_settle_sell(a, st_all):
 def acc_buy_now(a, st_all, amount, price, reason="آلي"):
     """🛒 ينفّذ شراءً سوقياً بمبلغ USDT — يرجع (نجح، رسالة)"""
     sym = a.get("symbol", "")
-    k, s, p, who = _acc_keys()
+    k, s, p, who = _acc_keys_for(a)                     # 👛 v3.22.9: مفاتيح محفظة المُراكِم نفسها
     if not k:
-        return False, "لا توجد مفاتيح API (أضف محفظة بالإعدادات)"
+        return False, "🔑 محفظة هالمُراكِم ما إلها مفاتيح (انحذفت؟) — اختر محفظته من ⚙️ بالكرت"
     amt = round(float(amount), 2)
     # 🛡️ حارس أخير: لا يُصرف أبداً أكثر من الرصيد المتراكم — مهما كان المُستدعي
     _fld = "pool" if reason == "آلي" else "pending"     # التلقائي من قيد الشراء · اليدوي من المتراكم
@@ -2016,7 +2129,7 @@ def _acc_settle(a, st_all):
     inf = e.get("inflight")
     if not inf:
         return False
-    k, s, p, _ = _acc_keys()
+    k, s, p, _ = _acc_keys_for(a)
     if not k:
         return True                      # ما نقدر نتحقق → لا تشترِ
     cl = inf.get("cl"); sym = inf.get("sym") or a.get("symbol", "")
@@ -2092,10 +2205,13 @@ def accum_tick(force_day=None, allow_buy=None, only=None):
         accum_coin_handoff()   # 🪙 العملة المحرَّرة أولاً — مباشرة بلا شراء
     except Exception:
         pass
+    _acc_migrate()                                         # 👛 v3.22.9: مُراكِم قديم ⇒ محفظته اللي كان يشتري بيها
     all_cfgs = acc_cfgs()                                  # 📥 التوزيع للجميع (حتى الموقوف)
     cfgs = [a for a in all_cfgs if a.get("enabled", True)]  # 🛒 الشراء للمُفعَّل فقط
     if not all_cfgs: return
     st = acc_state()
+    _led = load_json(LEDGER) or {}                         # 👛 v3.22.9: ربح كل محفظة لحالها
+    _live = _live_wmap()
     today = datetime.now().strftime("%Y-%m-%d")
     yday = force_day or (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
 
@@ -2116,7 +2232,8 @@ def accum_tick(force_day=None, allow_buy=None, only=None):
             _rec = (e.get("days") or {}).get(dkey)
             if _rec is not None and dkey < _stale:
                 continue                                  # قديم ومحسوم
-            prof = day_profit(dkey)
+            _aw = acc_wid(a)
+            prof = day_profit_w(dkey, _aw, _led, _live) if _aw else day_profit(dkey)   # 👛 ربح بوتات محفظته بس
             if prof <= 0:
                 if _rec is None:
                     e.setdefault("days", {})[dkey] = 0.0
@@ -2136,8 +2253,8 @@ def accum_tick(force_day=None, allow_buy=None, only=None):
             dp[dkey] = pc
             e["pool"] = round(float(e.get("pool", 0)) + add, 6)
             e["last_alloc"] = dkey
-            journal("accum", f"📥 {a.get('name') or aid}: نصيب {dkey} {add:+.6f}$ ({pc:g}% من {prof:.4f}$){' — فرق ربح انقيّد متأخر' if prev > 0 else ''}",
-                    "ok", bot=aid, sym=a.get("symbol", ""), day=dkey, share=target, added=add, pct=pc, day_profit=prof, pool=e["pool"])
+            journal("accum", f"📥 {a.get('name') or aid}: نصيب {dkey} {add:+.6f}$ ({pc:g}% من ربح محفظته {prof:.4f}$){' — فرق ربح انقيّد متأخر' if prev > 0 else ''}",
+                    "ok", bot=aid, sym=a.get("symbol", ""), day=dkey, share=target, added=add, pct=pc, day_profit=prof, pool=e["pool"], wallet=_aw)
     _acc_save(st)
 
     # ═══ 2) التقييم — فلتران متتاليان ═══
@@ -2280,20 +2397,19 @@ def _ri_eligible(b, cfgs=None):
     فعلياً مو عنده — فما نسجّلها له؛ تنتظر وتطلع بالرقابة."""
     cfgs = acc_cfgs() if cfgs is None else cfgs
     base = b["symbol"].split("-")[0].upper()
+    bk = str((b.get("cfg") or {}).get("api_key") or "").strip()
+    bw = _gd_wid(bk) if bk else ""
     same = [a for a in cfgs if str(a.get("symbol", "")).split("-")[0].upper() == base]
-    mine = [a for a in same if a.get("enabled", True) and float(a.get("coin_pct") or 0) > 0]
+    if not same:
+        return [], f"ماكو مُراكِم لعملة {base}"
+    samew = [a for a in same if acc_wid(a) == bw]          # 👛 v3.22.9: كل مُراكِم على محفظته — العملة لمُراكِم نفس محفظة البوت بس
+    if not samew:
+        return [], f"مُراكِم {base} على محفظة ثانية — العملة تبقى بمحفظة البوت (كل محفظة حسابها مستقل)"
+    mine = [a for a in samew if a.get("enabled", True) and float(a.get("coin_pct") or 0) > 0]
     if not mine:
-        if not same:
-            return [], f"ماكو مُراكِم لعملة {base}"
-        if not any(a.get("enabled", True) for a in same):
-            return [], f"مُراكِم {base} موقوف"
+        if not any(a.get("enabled", True) for a in samew):
+            return [], f"مُراكِم {base} (بنفس المحفظة) موقوف"
         return [], f"«نسبة العملة» بمُراكِم {base} صفر — خلّيها 100%"
-    try:
-        ak = str(_acc_keys()[0] or "").strip()
-    except Exception:
-        ak = ""
-    if ak and str((b.get("cfg") or {}).get("api_key") or "").strip() != ak:
-        return [], "البوت على محفظة غير محفظة المُراكِم — العملة فعلياً بمحفظة البوت"
     return mine, ""
 
 
@@ -2323,6 +2439,8 @@ def accum_coin_handoff():
             if not his:
                 continue
             mine, _why = _ri_eligible(b, cfgs)
+            _bk = str((b.get("cfg") or {}).get("api_key") or "").strip()
+            _bw = _gd_wid(_bk) if _bk else "?"                 # 👛 v3.22.9: الباقي محفوظ لكل محفظة (للرقابة)
             if not mine:
                 # 👛 ماكو مُراكِم مفعّل يستلمها ⇒ تتحرر **للمحفظة مباشرة** (طلب المالك) — مسجّلة بمعرّفها
                 for ho in his:
@@ -2331,6 +2449,7 @@ def accum_coin_handoff():
                     if coin > 0:
                         _bs = str(ho.get("symbol") or b["symbol"]).split("-")[0]
                         lf = st.setdefault("_ri_left", {}); lf[_bs] = round(float(lf.get(_bs) or 0) + coin, 10)
+                        lw = st.setdefault("_ri_left_w", {}).setdefault(_bw, {}); lw[_bs] = round(float(lw.get(_bs) or 0) + coin, 10)
                         st.setdefault("_ri_left_log", {})[hid] = coin
                         done.append((str(ho.get("symbol") or b["symbol"]), _bs, coin, float(ho.get("avg_px") or 0), [], coin,
                                      str(ho.get("why") or "") + " · " + _why))
@@ -2362,6 +2481,7 @@ def accum_coin_handoff():
                 if left > 1e-12:                           # 👛 الباقي بقصد (نسبة أقل من 100%) — للرقابة
                     lf = st.setdefault("_ri_left", {})
                     lf[base] = round(float(lf.get(base) or 0) + left, 10)
+                    lw = st.setdefault("_ri_left_w", {}).setdefault(_bw, {}); lw[base] = round(float(lw.get(base) or 0) + left, 10)
                     ll = st.setdefault("_ri_left_log", {})          # 🧾 باقي كل تسليم بمعرّفه — للتدقيق
                     ll[hid] = left
                     if len(ll) > 3000:
@@ -2509,30 +2629,57 @@ accum_tick = _acc_locked(accum_tick)
 
 
 def acc_alloc_summary():
-    """📊 محاسبة الأرباح: كم وُزّع · لمن · وكم بقي غير مخصّص (يمنع أي تكرار أو ضياع)"""
+    """📊 محاسبة أرباح أمس — 👛 لكل محفظة لحالها (v3.22.9): ربح بوتاتها · وُزّع لمُراكِماتها · غير مخصّص (يمنع أي تكرار أو ضياع)"""
     y = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
     prof = day_profit(y)
     st = acc_state()
-    rows = []; total_alloc = 0.0
+    led = load_json(LEDGER) or {}
+    live = _live_wmap()
+    try:
+        aw = acc_wallets()
+    except Exception:
+        aw = {}
+    groups = []
+    for k, e in led.items():
+        if str(k).startswith("_") or not isinstance(e, dict):
+            continue
+        w = _led_wid(k, e, live)
+        if w and float((e.get("daily") or {}).get(y) or 0) > 0 and w not in groups:
+            groups.append(w)
     for a in acc_cfgs():
-        e = st.get(a["id"]) or {}
-        share = float((e.get("days") or {}).get(y) or 0)
-        total_alloc += share
-        rows.append({"id": a["id"], "name": a.get("name") or a.get("symbol"),
-                     "pct": a.get("pct"), "coin_pct": a.get("coin_pct") or 0,
-                     "share": round(share, 4),
-                     "pool": round(float(e.get("pool", 0)), 4),
-                     "reserve": round(float(e.get("pending", 0)), 4),
-                     "enabled": a.get("enabled", True)})
-    used = sum(float(x.get("pct") or 0) for x in acc_cfgs())
+        if acc_wid(a) not in groups:
+            groups.append(acc_wid(a))
+    rows = []; total_alloc = 0.0; wallets = []
+    for w in groups:
+        wp = day_profit_w(y, w, led, live)
+        wr, wa, wu = [], 0.0, 0.0
+        for a in acc_cfgs():
+            if acc_wid(a) != w:
+                continue
+            e = st.get(a["id"]) or {}
+            share = float((e.get("days") or {}).get(y) or 0)
+            wa += share
+            wu += float(a.get("pct") or 0)
+            wr.append({"id": a["id"], "name": a.get("name") or a.get("symbol"),
+                       "pct": a.get("pct"), "coin_pct": a.get("coin_pct") or 0,
+                       "share": round(share, 4),
+                       "pool": round(float(e.get("pool", 0)), 4),
+                       "reserve": round(float(e.get("pending", 0)), 4),
+                       "enabled": a.get("enabled", True), "wid": w, "wlabel": (aw.get(w) or {}).get("label") or w})
+        rows += wr
+        total_alloc += wa
+        wallets.append({"wid": w, "label": (aw.get(w) or {}).get("label") or w, "profit": round(wp, 4), "allocated": round(wa, 4),
+                        "unallocated": round(wp - wa, 4), "used_pct": round(wu, 2), "free_pct": round(100 - wu, 2), "rows": wr})
+    used = max([x["used_pct"] for x in wallets] or [0.0])
     return {"day": y, "profit": round(prof, 4), "allocated": round(total_alloc, 4),
             "unallocated": round(prof - total_alloc, 4),
-            "used_pct": round(used, 2), "free_pct": round(100 - used, 2), "rows": rows}
+            "used_pct": round(used, 2), "free_pct": round(100 - used, 2), "rows": rows, "wallets": wallets}
 
 
 def acc_snapshot():
     """📇 بيانات بطاقات المُراكِم للوحة"""
     st = acc_state(); out = []
+    _AWL = _safe(acc_wallets, default={}) or {}             # 👛 v3.22.9: اسم محفظة كل مُراكِم
     wk = (datetime.now() - timedelta(days=7)).timestamp()
     mo = (datetime.now() - timedelta(days=30)).timestamp()
     for a in acc_cfgs():
@@ -2544,6 +2691,7 @@ def acc_snapshot():
         m = [b for b in buys if b.get("ts", 0) >= mo]
         out.append({
             "id": a["id"], "name": a.get("name") or sym, "start": a.get("start"), "symbol": sym,
+            "wid": acc_wid(a), "wlabel": (_AWL.get(acc_wid(a)) or {}).get("label") or acc_wid(a),
             "base": sym.split("-")[0], "pct": a.get("pct"),
             "coin_pct": a.get("coin_pct") or 0,
             "avg_px": (round(float(e.get("spent") or 0) / float(e.get("coin") or 1), 8)
@@ -3165,6 +3313,9 @@ def ledger_tick():
             ent = led.get(key) if isinstance(led.get(key), dict) else None
             if ent is None:
                 ent = {"symbol": b["symbol"], "dca": True, "type": "dca_buy", "daily": {}, "monthly": {}, "trades_daily": {}, "hourly": {}, "dca_seen": []}
+            _w = _gd_wid(b["cfg"].get("api_key")) if str(b["cfg"].get("api_key") or "").strip() else ""
+            if _w and ent.get("w") != _w:            # 👛 v3.22.9: محفظة البوت محفوظة بسطره (المُراكِم ياخذ من محفظته بس — حتى بعد حذف البوت)
+                ent["w"] = _w; changed = True
             seen = list(ent.get("dca_seen") or [])
             sset = set(seen)
             for c in (st.get("cycles_log") or []):
@@ -3205,6 +3356,9 @@ def ledger_tick():
             else:
                 ent = {"last_seen_total": 0.0, "daily": {}, "monthly": {}, "trades_daily": {}, "hourly": {}}
         ent.setdefault("symbol", b["symbol"])
+        _w = _gd_wid(b["cfg"].get("api_key")) if str(b["cfg"].get("api_key") or "").strip() else ""
+        if _w and ent.get("w") != _w:                # 👛 v3.22.9: محفظة البوت محفوظة بسطره
+            ent["w"] = _w; changed = True
         led[key] = ent
         last = float(ent.get("last_seen_total", 0))
         diff = tot - last
@@ -3715,14 +3869,17 @@ def _gd_wallets():
         w = W.setdefault(wid, {"wid": wid, "keys": (k, s, p), "bots": [], "acc": False})
         w["bots"].append(b)
     try:
-        ak, asec, apas, _ = _acc_keys()
-        if ak and asec and apas:
-            wid = _gd_wid(ak)
-            # نعلّمها حتى لو انحذف آخر مُراكِم (وعليها بوتات) — حتى ينكشف «🗑️ انحذف» ويتفسّر فرقه
-            if acc_cfgs() or wid in W:
-                w = W.setdefault(wid, {"wid": wid, "keys": (str(ak).strip(), asec, apas),
-                                       "bots": [], "acc": False})
-                w["acc"] = True
+        # 👛 v3.22.9: كل محفظة عليها مُراكِم تنعلّم (كل مُراكِم على محفظته) · والمحفظة القديمة تنعلّم حتى لو انحذف آخر مُراكِم (وعليها بوتات)
+        aw = acc_wallets()
+        marks = set(acc_wids())
+        ak = _acc_keys()[0]
+        if ak and _gd_wid(ak) in W:
+            marks.add(_gd_wid(ak))
+        for wid in marks:
+            if wid not in aw and wid not in W:
+                continue
+            w = W.setdefault(wid, {"wid": wid, "keys": tuple(aw[wid]["keys"]), "bots": [], "acc": False})
+            w["acc"] = True
     except Exception:
         pass
     return W
@@ -3921,6 +4078,8 @@ def _gd_gather(W, prev, now):
         try:
             ast_ = acc_state()
             for a in acc_cfgs():
+                if acc_wid(a) != wid:
+                    continue                                 # 👛 v3.22.9: مُراكِمات هالمحفظة بس
                 aid = a.get("id")
                 sym = str(a.get("symbol") or "")
                 base = sym.split("-")[0]
@@ -3938,9 +4097,20 @@ def _gd_gather(W, prev, now):
                 if not c["px"]:
                     c["px"] = float(PX.get(sym) or 0)
                 modes.setdefault(base, set()).add("acc")
-            for _b, _q in ((ast_.get("_ri_left") or {}).items()):   # 👛 باقي تسليمات بنسبة أقل من 100%
+            # 👛 باقي تسليمات بنسبة أقل من 100% — لكل محفظة (v3.22.9) · والقديم (قبل الفصل) على محفظة الشراء القديمة
+            _lw = (ast_.get("_ri_left_w") or {})
+            for _b, _q in ((_lw.get(wid) or {}).items()):
                 if _b in snap["coins"]:
                     snap["coins"][_b]["acc"] += float(_q or 0)
+            try:
+                _old = _gd_wid(_acc_keys()[0] or "")
+            except Exception:
+                _old = ""
+            if wid == _old:
+                for _b, _q in ((ast_.get("_ri_left") or {}).items()):
+                    _rest = float(_q or 0) - sum(float((x or {}).get(_b) or 0) for x in _lw.values())
+                    if _b in snap["coins"] and _rest > 1e-12:
+                        snap["coins"][_b]["acc"] += _rest
             snap["acc_ok"] = True
         except Exception as e:
             snap["err"].append(f"المُراكِم: {type(e).__name__}")
@@ -6724,12 +6894,13 @@ def profit_tick():
         for w, l in lab.items():
             if wl.get(w) != l:
                 wl[w] = l; ch = True
-        accw = _pf_acc_wid() or "?"
+        _acc_migrate()
         cfgs = acc_cfgs()
         ast = acc_state()
         led = load_json(LEDGER) or {}
         if not isinstance(led, dict):
             led = {}
+        live = _live_wmap()
         # ── 💵 الدولار: الأيام المنتهية اللي وزّعها المُراكِم ──
         since = pb.get("since") or today
         lo = max(since, (datetime.now() - timedelta(days=_PF_LATE_DAYS)).strftime("%Y-%m-%d"))
@@ -6737,7 +6908,7 @@ def profit_tick():
         days = sorted({d for k in keys for d in (led[k].get("daily") or {}) if lo <= d < today})
         ub = pb.setdefault("ub", {})
         for d in days:
-            shares, ready = {}, True
+            shares, ready, saw = {}, True, {}
             for a in cfgs:
                 if a.get("start") and d < a["start"]:
                     continue
@@ -6746,16 +6917,20 @@ def profit_tick():
                     ready = False            # المُراكِم ما وزّع هذا اليوم بعد (نهاية اليوم) ⇒ ننتظر — حتى ما تنحسب حصته ربح
                     break
                 shares[a["id"]] = float(rec or 0)
+                saw[a["id"]] = acc_wid(a)
             if not ready:
                 continue
-            P = day_profit(d)                # نفس رقم المُراكِم بالضبط
-            if P <= 0:
-                continue
+            Pw = {}                          # 👛 v3.22.9: ربح كل محفظة لليوم — نفس رقم مُراكِماتها بالضبط
             for k in keys:
                 v = float((led[k].get("daily") or {}).get(d) or 0)
                 if v <= 0:
                     continue
-                to = {aid: round(v * s / P, 8) for aid, s in shares.items() if s > 0}
+                kw = _led_wid(k, led[k], live)
+                if kw and kw not in Pw:
+                    Pw[kw] = day_profit_w(d, kw, led, live)
+                P = Pw.get(kw) or 0.0
+                to = ({aid: round(v * s2 / P, 8) for aid, s2 in shares.items() if s2 > 0 and saw.get(aid) == kw}
+                      if kw and P > 0 else {})
                 pf = round(v - sum(to.values()), 8)
                 prev = (ub.get(k) or {}).get(d) or [0.0, {}, 0.0]
                 if abs(v - float(prev[0] or 0)) < 1e-10 and abs(pf - float(prev[2] or 0)) < 1e-10 and all(
@@ -6766,7 +6941,7 @@ def profit_tick():
                     if dx > 1e-10:
                         _pf_edge(pb, f"u|{k}|{aid}", dx, "USDT")
                 dpf = round(pf - float(prev[2] or 0), 10)
-                wid = wmap.get(k) or "?"
+                wid = _led_wid(k, led[k], live) or wmap.get(k) or "?"
                 if dpf > 1e-10:
                     _pf_edge(pb, f"up|{k}", dpf, "USDT")
                     _pf_add_usd(pb, wid, dpf, k, f"يوم {d}")
@@ -6837,6 +7012,7 @@ def profit_tick():
                 usd = float(w.get("usd") or 0)
                 if fresh or usd <= 0:
                     continue
+                accw = acc_wid(a) or "?"                    # 👛 v3.22.9: ربح محفظة المُراكِم نفسه
                 _pf_edge(pb, f"w|{aid}", usd, "USDT")
                 _pf_add_usd(pb, accw, usd, aid, f"💸 طرح من المتراكم ({a.get('name') or aid})")
                 _safe(journal, "profit", f"💰 للربح ({wl.get(accw) or accw}): {usd:+.4f}$ طرح من متراكم {a.get('name') or aid}", "ok", bot=aid, amount=usd, wallet=accw, default=None)
@@ -6856,7 +7032,7 @@ def profit_op(data):
         if not pb.get("since"):
             profit_tick()
             pb = _pf_load()
-        known = set((pb.get("W") or {})) | set((pb.get("wlab") or {})) | {_pf_acc_wid() or "?"}
+        known = set((pb.get("W") or {})) | set((pb.get("wlab") or {})) | set(acc_wids())
         if wid not in known:
             return {"ok": False, "msg": "المحفظة مو معروفة"}
         W = _pf_W(pb, wid)
@@ -6999,21 +7175,29 @@ def flow_view():
         led = {}
     cfgs = acc_cfgs()
     ast = acc_state()
-    accw = _pf_acc_wid() or "?"
+    aws = {acc_wid(a) for a in cfgs if acc_wid(a)}          # 👛 v3.22.9: كل مُراكِم على محفظته
     wm, lab, wbots = _pf_wallets()
     wlab = dict(pb.get("wlab") or {})
     wlab.update(lab)
+    try:
+        for _w, _W in acc_wallets().items():
+            wlab.setdefault(_w, _W.get("label") or _w)
+    except Exception:
+        pass
     ub = pb.get("ub") or {}
     edges = pb.get("edges") or {}
     since = pb.get("since") or today
-    sum_pct = round(sum(float(a.get("pct") or 0) for a in cfgs), 6)
+    sumw = {}
+    for a in cfgs:
+        sumw[acc_wid(a)] = round(sumw.get(acc_wid(a), 0.0) + float(a.get("pct") or 0), 6)
+    sum_pct = max(sumw.values()) if sumw else 0.0
     try:
         wh = int(app_cfg().get("acc_window_h") or ACC_WINDOW_H)
     except Exception:
         wh = ACC_WINDOW_H
     midnight = datetime(dnow.year, dnow.month, dnow.day) + timedelta(days=1)
-    order = sorted(set(wbots) | set((pb.get("W") or {})) | ({accw} if cfgs else set()),
-                   key=lambda w: (w != accw, wlab.get(w) or w))
+    order = sorted(set(wbots) | set((pb.get("W") or {})) | aws,
+                   key=lambda w: (w not in aws, wlab.get(w) or w))
     wallets, lines = [], []
     pnode = lambda w: "p:" + w
     for wi, wid in enumerate(order):
@@ -7056,13 +7240,13 @@ def flow_view():
             if usd_flow:
                 for a in cfgs:
                     p = float(a.get("pct") or 0)
-                    if p > 0:
+                    if p > 0 and acc_wid(a) == wid:              # 👛 مُراكِمات محفظة البوت بس
                         eid = f"u|{key}|{a['id']}"
                         lines.append({"id": eid, "from": nid, "to": "a:" + a["id"], "k": "usd", "pct": p,
                                       "dash": not a.get("enabled", True), "t": float((edges.get(eid) or {}).get("t") or 0), "c": "USDT"})
-                if sum_pct < 100 - 1e-9:
+                if sumw.get(wid, 0.0) < 100 - 1e-9:
                     eid = f"up|{key}"
-                    lines.append({"id": eid, "from": nid, "to": pnode(wid), "k": "usd", "pct": round(100 - sum_pct, 6),
+                    lines.append({"id": eid, "from": nid, "to": pnode(wid), "k": "usd", "pct": round(100 - sumw.get(wid, 0.0), 6),
                                   "t": float((edges.get(eid) or {}).get("t") or 0), "c": "USDT"})
             if coin_bot:
                 mine, why = (_safe(_ri_eligible, b, cfgs, default=([], "")) or ([], ""))
@@ -7083,7 +7267,8 @@ def flow_view():
         envs = [{"id": e.get("id"), "name": e.get("name"), "pct": float(e.get("pct") or 0), "usd": round(float(e.get("usd") or 0), 8),
                  "in": round(float(e.get("in") or 0), 8), "out": round(float(e.get("out") or 0), 8)} for e in (W.get("env") or [])]
         free = round(float(W.get("free") or 0), 8)
-        wallets.append({"wid": wid, "label": wlab.get(wid) or ("محفظة غير معروفة" if wid == "?" else wid), "ci": wi, "acc": wid == accw,
+        wallets.append({"wid": wid, "label": wlab.get(wid) or ("محفظة غير معروفة" if wid == "?" else wid), "ci": wi, "acc": wid in aws,
+                        "sum_pct": sumw.get(wid, 0.0),
                         "bots": bl, "u_today": round(sum(x["u_today"] for x in bl), 6), "u_wait": round(sum(x["u_wait"] for x in bl), 6),
                         "held": round(sum((x["ri"] or {}).get("held", 0) for x in bl), 6),
                         "profit": {"id": pnode(wid), "free": free, "env": envs, "env_pct": round(sum(e["pct"] for e in envs), 4),
@@ -7129,12 +7314,12 @@ def flow_view():
                      "pct": float(a.get("pct") or 0), "coin_pct": float(a.get("coin_pct") or 0), "enabled": a.get("enabled", True),
                      "pool": round(pool, 6), "pending": round(pend, 6), "coin": round(coin, 10), "spent": round(spent, 4),
                      "avg": round(spent / coin, 8) if coin > 0 else None, "px": px, "value": round(coin * px, 4) if px else None,
-                     "min_buy": minb, "light": light, "why": why, "wid": accw,
+                     "min_buy": minb, "light": light, "why": why, "wid": acc_wid(a),
                      "wd": float((edges.get(f"w|{aid}") or {}).get("t") or 0)})
-        lines.append({"id": f"w|{aid}", "from": "a:" + aid, "to": pnode(accw), "k": "wd", "pct": None,
+        lines.append({"id": f"w|{aid}", "from": "a:" + aid, "to": pnode(acc_wid(a) or "?"), "k": "wd", "pct": None,
                       "t": float((edges.get(f"w|{aid}") or {}).get("t") or 0), "c": "USDT"})
     return {"ok": True, "since": since, "today": today, "now": now, "to_midnight": round((midnight - dnow).total_seconds()),
-            "window_h": wh, "in_window": in_win, "sum_pct": sum_pct, "acc_wid": accw,
+            "window_h": wh, "in_window": in_win, "sum_pct": sum_pct, "sum_w": sumw,
             "wallets": wallets, "accs": accs, "lines": lines}
 
 
@@ -7158,6 +7343,7 @@ def profit_audit():
                 ta[aid] = ta.get(aid, 0.0) + float(x or 0)
         P = day_profit(d)
         sh = {a["id"]: float(((st_all.get(a["id"]) or {}).get("days") or {}).get(d) or 0) for a in acc_cfgs()}
+        # 👛 v3.22.9: كل مُراكِم ياخذ من محفظته بس ⇒ نصيبه = مجموع اللي انقيّد له من بوتات محفظته (أي محفظة ما إلها بوتات بهاليوم ⇒ صفر)
         if not near(v, P, 1e-6) or not near(v, pf + sum(ta.values()), 1e-6) or any(
                 not near(ta.get(aid, 0), s2, 1e-5) for aid, s2 in sh.items() if s2 > 0 or aid in ta):
             bad.append(f"{d}: بوتات {v:.6f} / اليوم {P:.6f} · ربح {pf:.6f} + مُراكِمات {sum(ta.values()):.6f} {ta} مقابل {sh}")
@@ -7578,10 +7764,14 @@ def released_log(day=None):
     led = _safe(load_json, LEDGER, default={}) or {}
     TL = trade_log(day)
     rows, tot = [], 0.0
+    _live = _safe(_live_wmap, default={}) or {}
+    wtot = {}                                     # 👛 v3.22.9: ربح اليوم لكل محفظة (المُراكِم ياخذ نسبته من محفظته)
     for key, e in led.items():
         if str(key).startswith("_") or not isinstance(e, dict):
             continue
         rel = float((e.get("daily") or {}).get(day) or 0)
+        _w = _led_wid(key, e, _live)
+        wtot[_w] = wtot.get(_w, 0.0) + rel
         tb = TL["by_bot"].get(key) or {}
         if abs(rel) < 5e-5 and not tb:
             continue
@@ -7598,12 +7788,12 @@ def released_log(day=None):
         pct = float(a.get("pct") or 0)
         used += pct
         accs.append({"name": a.get("name") or a.get("symbol"), "sym": a.get("symbol"), "pct": pct,
-                     "expect": round(tot * pct / 100.0, 4), "pool": round(float(e.get("pool") or 0), 4),
+                     "expect": round(wtot.get(acc_wid(a), 0.0) * pct / 100.0, 4), "pool": round(float(e.get("pool") or 0), 4),
                      "reserve": round(float(e.get("pending") or 0), 4), "coin": float(e.get("coin") or 0),
                      "enabled": bool(a.get("enabled", True)), "min_buy": float(a.get("min_buy") or 0),
                      "skip": str(e.get("skip") or "")})
     return {"day": day, "rows": rows, "total": round(tot, 6), "accs": accs,
-            "used_pct": round(used, 2), "keep": round(tot * max(0.0, 100 - used) / 100.0, 4),
+            "used_pct": round(used, 2), "keep": round(tot - sum(x["expect"] for x in accs), 4),
             "trade_norm": TL["tot"]["n"], "flow": flow_days(7)}
 
 
@@ -8089,6 +8279,11 @@ def _gd_acc_scan(g, now):
     else:
         _gd_resolve(g, key_run)
     days7 = [(datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(1, 8)]
+    usedw = {}                                    # 👛 v3.22.9: مجموع النسب لكل محفظة (كل محفظة حسابها مستقل)
+    try:
+        _aw = acc_wallets()
+    except Exception:
+        _aw = {}
     for a in cfgs:
         aid = str(a.get("id") or "")
         e = st.get(aid) or {}
@@ -8096,6 +8291,8 @@ def _gd_acc_scan(g, now):
         base = sym.split("-")[0]
         pct = float(a.get("pct") or 0)
         used += pct
+        _w = acc_wid(a)
+        usedw[_w] = usedw.get(_w, 0.0) + pct
         en = bool(a.get("enabled", True))
         pool = float(e.get("pool") or 0)
         minb = max(1.0, float(a.get("min_buy") or 0))
@@ -8111,10 +8308,11 @@ def _gd_acc_scan(g, now):
             if (a.get("start") or "") and d < str(a.get("start")):
                 continue
             share = (e.get("days") or {}).get(d)
-            prof = float(_safe(day_profit, d, default=0.0) or 0)
+            prof = float(_safe(day_profit_w, d, _w, default=0.0) or 0)       # 👛 ربح بوتات محفظته بس
             if prof > 0.0005 and pct > 0 and last_day > d and (share is None or float(share) <= 0):
                 miss.append(d)
         rows.append({"id": aid, "name": a.get("name") or sym, "sym": sym, "base": base, "pct": pct,
+                     "wid": _w, "wlabel": (_aw.get(_w) or {}).get("label") or _w,
                      "enabled": en, "pool": round(pool, 4), "reserve": round(float(e.get("pending") or 0), 4),
                      "coin": round(coin, 8), "spent": round(spent, 4),
                      "avg": round(spent / coin, 8) if coin > 0 else 0,
@@ -8154,15 +8352,20 @@ def _gd_acc_scan(g, now):
                       sym=sym, kind="acc_pool")
         else:
             _gd_resolve(g, k)
-    # 🟠 مجموع النسب فوق 100%
+    # 🟠 مجموع النسب فوق 100% — لكل محفظة لحالها (v3.22.9)
     k = "acc:pct"
-    if used > 100.0001:
+    over = {w: u for w, u in usedw.items() if u > 100.0001}
+    if over:
         _gd_event(g, k, "🟠", "🪙 مجموع نسب المُراكِم فوق 100%",
-                  f"المجموع {used:.0f}% — التوزيع ياخذ أكثر من ربح اليوم. صحّح النسب.", kind="acc_pct")
+                  " · ".join(f"{(_aw.get(w) or {}).get('label') or w}: {u:.0f}%" for w, u in over.items()) +
+                  " — التوزيع ياخذ أكثر من ربح المحفظة. صحّح النسب.", kind="acc_pct")
     else:
         _gd_resolve(g, k)
-    g["acc"] = {"ts": now, "rows": rows, "used_pct": round(used, 2),
-                "keep_pct": round(max(0.0, 100.0 - used), 2), "last_run": last_day,
+    _mx = max(usedw.values()) if usedw else 0.0
+    g["acc"] = {"ts": now, "rows": rows, "used_pct": round(_mx, 2),
+                "keep_pct": round(max(0.0, 100.0 - _mx), 2),
+                "by_wallet": [{"wid": w, "label": (_aw.get(w) or {}).get("label") or w, "used": round(u, 2), "keep": round(max(0.0, 100 - u), 2)}
+                              for w, u in usedw.items()], "last_run": last_day,
                 "last_run_ts": last_ts, "flow": _safe(flow_days, 7, default=[]) or []}
 
 
@@ -9239,15 +9442,18 @@ def control(d_rel, action, value):
 # ───────────── الإعدادات (تيليغرام + المحافظ) ─────────────
 def settings_payload():
     c = app_cfg()
-    try:                                            # 🪙 v3.22.7: أي مفاتيح يستعمل المُراكِم (أول محفظة كاملة، وإلا بوت)
-        _ak = _acc_keys()
-        _accw = _ak[3] if _ak[0] and any(w.get("name") == _ak[3] and w.get("api") == _ak[0] for w in c.get("wallets", [])) else ""
-        _accb = _ak[3] if _ak[0] and not _accw else ""
+    try:                                            # 👛 v3.22.9: كل مُراكِم على محفظته — العدد لكل محفظة محفوظة · واللي على مفاتيح بوت
+        _cnt = {}
+        for _a in acc_cfgs():
+            _cnt[acc_wid(_a)] = _cnt.get(acc_wid(_a), 0) + 1
+        _saved = {_gd_wid(str(w.get("api") or "").strip()) for w in c.get("wallets", []) if w.get("api")}
+        _awl = acc_wallets()
+        _accb = " · ".join(f"{(_awl.get(w_) or {}).get('label') or w_} ({n_})" for w_, n_ in _cnt.items() if w_ not in _saved)
     except Exception:
-        _accw = _accb = ""
+        _cnt, _accb = {}, ""
     return {"tg_token": c.get("tg_token", ""), "tg_chat_id": c.get("tg_chat_id", ""),
             "wallets": [{"name": w.get("name", ""), "eq": WBAL.get(w.get("name", "")), "err": BAL_ERR.get("محفظة " + w.get("name", "")), "coins": WDET.get(w.get("name", ""), []), "api": (w.get("api", "")[:6] + "…") if w.get("api") else "",
-                         "fx": WFX.get(w.get("name", "")), "acc": bool(_accw) and w.get("name", "") == _accw}
+                         "fx": WFX.get(w.get("name", "")), "acc": _cnt.get(_gd_wid(str(w.get("api") or "").strip()), 0) if w.get("api") else 0}
                         for w in c.get("wallets", [])],
             "acc_bot": _accb, "n_acc": len(acc_cfgs()),
             "bot_fx": list(BFX), "fx_day": _WREF.get("day") or "",
@@ -9297,10 +9503,25 @@ def wallet_op(data):
         t = key_test(a, s_, p_)
         if not t["ok"] and t["code"] in _OKX_AUTH_HINT:
             return {"ok": False, "msg": "ما انحفظت — OKX رفض المفاتيح الجديدة: " + t["msg"]}
+        _old_w, _new_w = _gd_wid(str(w.get("api") or "").strip()), _gd_wid(a)
         w["api"], w["sec"], w["pass"] = a, s_, p_
+        _moved = 0
+        if _old_w != _new_w:                      # 👛 v3.22.9: مُراكِمات هالمحفظة تنتقل ويّا مفتاحها الجديد (نفس الحساب)
+            for _a in (c.get("accumulators") or []):
+                if _a.get("wid") == _old_w:
+                    _a["wid"] = _new_w; _moved += 1
         save_json_atomic(APP_CFG, c)
+        if _old_w != _new_w:
+            try:
+                with _PF_LOCK:
+                    _pb = _pf_load()
+                    if _pb.get("W") and _old_w in _pb["W"] and _new_w not in _pb["W"]:
+                        _pb["W"][_new_w] = _pb["W"].pop(_old_w)
+                        _pf_save(_pb)
+            except Exception:
+                pass
         BAL_ERR.pop("محفظة " + n, None)
-        _m = f"🔑 تحدّثت مفاتيح محفظة {n} (بمكانها)"
+        _m = f"🔑 تحدّثت مفاتيح محفظة {n} (بمكانها)" + (f" · {_moved} مُراكِم انتقل ويّاها" if _moved else "")
         if t["ok"]:
             _m += " — ✅ OKX قبلها"
         elif t["msg"]:
@@ -10865,6 +11086,7 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
             return self._json(compute_dca_table(data, bp))
         if path == "/api/accum":
             act = str(data.get("act") or "list")
+            _acc_migrate()                                   # 👛 v3.22.9: مُراكِم قديم ⇒ محفظته
             c = app_cfg(); lst = c.get("accumulators") or []
             if act == "save":
                 a = data.get("item") or {}
@@ -10890,22 +11112,38 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                     return self._json({"ok": False, "msg": "الحد الأدنى للشراء 1$ فأكثر"})
                 # 🔑 معرّف فريد: الوقت + عشوائي (كان الوقت وحده → تصادم لو أُنشئا بنفس الثانية)
                 aid = a.get("id") or ("acc" + str(int(time.time()))[-6:] + _sc.token_hex(3))
-                others = sum(float(x.get("pct") or 0) for x in lst if x.get("id") != aid and x.get("enabled", True))
+                prev = next((x for x in lst if x.get("id") == aid), None)
+                # 👛 v3.22.9: المحفظة — إلزامية للمُراكِم الجديد · كل محفظة حسابها مستقل (نسبها · ربحها · مفاتيحها)
+                _aw = acc_wallets()
+                wid = str(a.get("wid") or (prev or {}).get("wid") or "")
+                if not wid:
+                    return self._json({"ok": False, "msg": "👛 اختر المحفظة اللي يشتغل عليها المُراكِم"})
+                if wid not in _aw:
+                    return self._json({"ok": False, "msg": "👛 المحفظة مو موجودة — أضفها من 👛 المحافظ أو اختر غيرها"})
+                if prev and acc_wid(prev) != wid:
+                    _pe = acc_state().get(aid) or {}
+                    if _pe.get("inflight") or _pe.get("sell_inflight"):
+                        return self._json({"ok": False, "msg": "⏳ في أمر ينتظر التأكيد — غيّر المحفظة بعد ما يتسوّى"})
+                    if (float(_pe.get("coin") or 0) > 0 or float(_pe.get("pool") or 0) > 0 or float(_pe.get("pending") or 0) > 0) and not data.get("move_ok"):
+                        return self._json({"ok": False, "need_move_ok": True,
+                                           "msg": "المُراكِم بيه عملة/دولار على محفظته الحالية — تغيير المحفظة يصح بس لو هي نفس الحساب بمفتاح جديد. أكّد إذا متأكد."})
+                _wn = (_aw.get(wid) or {}).get("label") or wid
+                others = sum(float(x.get("pct") or 0) for x in lst if x.get("id") != aid and x.get("enabled", True) and acc_wid(x) == wid)
                 if a.get("enabled", True) and others + pct > 100.0001:
-                    return self._json({"ok": False, "msg": f"مجموع النسب يتجاوز 100% (المتبقي {100-others:.0f}%)"})
-                # 🪙 نسب العملة محسوبة لكل عملة على حدة
+                    return self._json({"ok": False, "msg": f"مجموع نسب مُراكِمات {_wn} يتجاوز 100% (المتبقي {100-others:.0f}%)"})
+                # 🪙 نسب العملة محسوبة لكل عملة ولكل محفظة على حدة
                 _cb = sym.split("-")[0].upper()
                 oc = sum(float(x.get("coin_pct") or 0) for x in lst
-                         if x.get("id") != aid and x.get("enabled", True)
+                         if x.get("id") != aid and x.get("enabled", True) and acc_wid(x) == wid
                          and str(x.get("symbol", "")).split("-")[0].upper() == _cb)
                 if a.get("enabled", True) and oc + cpct > 100.0001:
                     return self._json({"ok": False,
-                                       "msg": f"مجموع نسب عملة {_cb} يتجاوز 100% (المتبقي {100-oc:.0f}%)"})
-                prev = next((x for x in lst if x.get("id") == aid), None)
+                                       "msg": f"مجموع نسب عملة {_cb} على {_wn} يتجاوز 100% (المتبقي {100-oc:.0f}%)"})
                 item = {"id": aid, "name": str(a.get("name") or "").strip() or sym,
                         "symbol": sym, "pct": pct, "coin_pct": cpct,
                         "min_buy": minb, "max_buy": maxb,
                         "low_price": lo, "high_price": hi, "enabled": bool(a.get("enabled", True)),
+                        "wid": wid,
                         # 🛡️ تاريخ البدء: لا يُوزَّع ربح يوم سابق لإنشائه
                         "start": (prev or {}).get("start") or datetime.now().strftime("%Y-%m-%d")}
                 lst = [x for x in lst if x.get("id") != aid] + [item]
@@ -10924,6 +11162,16 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                 return self._json({"ok": True, "msg": "🗑️ حُذف (العملة المشتراة تبقى بمحفظتك)"})
             if act == "toggle":
                 _tg_a = None
+                _t0 = next((x for x in lst if x.get("id") == data.get("id")), None)
+                if _t0 is not None and not _t0.get("enabled", True):
+                    # 👛 v3.22.9: التشغيل ما يتجاوز 100% بمحفظته (الربح والعملة)
+                    _w = acc_wid(_t0)
+                    _o = sum(float(x.get("pct") or 0) for x in lst if x is not _t0 and x.get("enabled", True) and acc_wid(x) == _w)
+                    _cb = str(_t0.get("symbol", "")).split("-")[0].upper()
+                    _oc = sum(float(x.get("coin_pct") or 0) for x in lst if x is not _t0 and x.get("enabled", True) and acc_wid(x) == _w
+                              and str(x.get("symbol", "")).split("-")[0].upper() == _cb)
+                    if _o + float(_t0.get("pct") or 0) > 100.0001 or _oc + float(_t0.get("coin_pct") or 0) > 100.0001:
+                        return self._json({"ok": False, "msg": f"ما يشتغل: مجموع نسب محفظته يصير فوق 100% (الربح {_o:.0f}% · عملة {_cb} {_oc:.0f}%) — نزّل نسبته أول"})
                 for x in lst:
                     if x.get("id") == data.get("id"):
                         x["enabled"] = not x.get("enabled", True); _tg_a = x
@@ -10990,11 +11238,29 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                 return self._json({"ok": False, "msg": e.get("skip") or "ما صار شراء"})
             if act == "preview":
                 y = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+                # 👛 v3.22.9: المحافظ المتاحة (بلا أي مفتاح) + لكل محفظة: ربح أمس · النسب المستعملة · نسب كل عملة
+                _led = load_json(LEDGER) or {}
+                _live = _live_wmap()
+                _ws = []
+                for _wid, _W in acc_wallets().items():
+                    _mine = [x for x in lst if acc_wid(x) == _wid and x.get("enabled", True)]
+                    _cp = {}
+                    for x in _mine:
+                        _b = str(x.get("symbol", "")).split("-")[0].upper()
+                        _cp[_b] = _cp.get(_b, 0.0) + float(x.get("coin_pct") or 0)
+                    _ws.append({"wid": _wid, "label": _W.get("label") or _wid, "name": _W.get("name") or "",
+                                "bots": sorted({b["symbol"] for b in _W.get("bots") or []}),
+                                "yday_profit": day_profit_w(y, _wid, _led, _live),
+                                "used_pct": round(sum(float(x.get("pct") or 0) for x in _mine), 4),
+                                "coin_used": {k2: round(v2, 4) for k2, v2 in _cp.items()},
+                                "n_acc": len([x for x in lst if acc_wid(x) == _wid])})
+                _ws.sort(key=lambda x: (-len(x["bots"]), x["label"]))
                 return self._json({"ok": True, "yday": y, "yday_profit": day_profit(y),
                                    "window_h": int(c.get("acc_window_h") or ACC_WINDOW_H),
                                    "in_window": acc_in_window(),
                                    "today_profit": day_profit(datetime.now().strftime("%Y-%m-%d")),
                                    "used_pct": sum(float(x.get("pct") or 0) for x in lst if x.get("enabled", True)),
+                                   "wallets": _ws, "acc_w": {x.get("id"): acc_wid(x) for x in lst},
                                    "items": lst})
             return self._json({"ok": True, "items": lst})
         if path == "/api/okx_check":
@@ -11034,11 +11300,11 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                 out["bots"].append(e)
             out["wallets"] = []                      # 🔑 v3.22.7: مفاتيح المحافظ كمان (محفظة المُراكِم أولها)
             try:
-                _ak = _acc_keys()
+                _aws = acc_wids()
             except Exception:
-                _ak = (None, None, None, None)
+                _aws = set()
             for w in (app_cfg().get("wallets") or []):
-                _isacc = bool(_ak[0]) and _ak[0] == w.get("api") and bool(acc_cfgs())
+                _isacc = _gd_wid(str(w.get("api") or "").strip()) in _aws        # 👛 v3.22.9
                 t = key_test(w.get("api"), w.get("sec"), w.get("pass"), need_trade=_isacc)
                 out["wallets"].append({"name": w.get("name", ""), "key": (str(w.get("api") or "")[:6] + "…") if w.get("api") else "—",
                                        "acc": _isacc, **{k2: t.get(k2) for k2 in ("ok", "msg", "code", "perm", "ip", "usdt", "warn", "hosts")}})
@@ -11131,8 +11397,7 @@ WantedBy=multi-user.target
             if w is None:
                 return self._json({"ok": False, "msg": "المحفظة مو موجودة"})
             try:
-                _ak = _acc_keys()
-                _isacc = bool(_ak[0]) and _ak[0] == w.get("api") and bool(acc_cfgs())
+                _isacc = _gd_wid(str(w.get("api") or "").strip()) in acc_wids()      # 👛 v3.22.9: عليها مُراكِم؟
             except Exception:
                 _isacc = False
             t = key_test(w.get("api"), w.get("sec"), w.get("pass"), need_trade=_isacc)
@@ -13148,7 +13413,7 @@ function dlRender(){
         <td class="num">${n2(a.pool)}</td><td class="num">${n2(a.reserve)}</td>
         <td style="white-space:normal;color:var(--mut2)">${a.enabled?'✅ شغّال':'⏸️ موقوف'}${a.skip?' · '+gEsc(a.skip):''}</td></tr>`).join('')
         ||'<tr><td colspan="6" style="color:var(--mut2)">ماكو مُراكِم — كل المحرر يبقى بحسابك</td></tr>'}</table>
-      <div style="font-size:11px;color:var(--mut2);margin-top:5px">مجموع النسب ${gN(Rl.used_pct,0)}% · الباقي لك ${gN(100-(Rl.used_pct||0),0)}%</div></div>`;
+      <div style="font-size:11px;color:var(--mut2);margin-top:5px">👛 كل مُراكِم ياخذ نسبته من ربح بوتات محفظته · يبقى بمحافظك <b>${n4(Rl.keep)}$</b></div></div>`;
     h+=`<div style="${box};overflow-x:auto"><div style="font-size:12px;color:var(--cyan);margin-bottom:5px">🗓️ حركة الأموال المحررة — آخر 7 أيام</div>
       <table style="${tb}"><tr style="color:var(--mut2)"><td>اليوم</td><td>المحرر</td><td>للمُراكِم</td><td>بقى لك</td><td>التفصيل</td></tr>
       ${(Rl.flow||[]).map(f=>`<tr><td>${gEsc(f.day.slice(5))}</td><td class="num">${n4(f.rel)}</td>
@@ -13455,10 +13720,10 @@ function guardRender(){
     const st7=(AC.flow||[]);
     h+=`<div style="${box}">
       <div style="font-size:11.5px;color:var(--mut)">آخر جولة: <b style="color:var(--tx)">${gEsc(AC.last_run||'—')}</b>
-        ${AC.last_run_ts?' · '+gAgo(AC.last_run_ts):''} · موزّع <b>${gN(AC.used_pct,0)}%</b> من الربح المحرر · يبقى لك <b>${gN(AC.keep_pct,0)}%</b></div>
+        ${AC.last_run_ts?' · '+gAgo(AC.last_run_ts):''} ${(AC.by_wallet||[]).length>1?' · '+(AC.by_wallet||[]).map(w=>`👛 ${gEsc(w.label)}: موزّع <b>${gN(w.used,0)}%</b> · يبقى <b>${gN(w.keep,0)}%</b>`).join(' · '):` · موزّع <b>${gN(AC.used_pct,0)}%</b> من الربح المحرر · يبقى لك <b>${gN(AC.keep_pct,0)}%</b>`}</div>
       <div style="overflow-x:auto;margin-top:6px"><table style="width:100%;font-size:11.5px;border-collapse:collapse;white-space:nowrap">
         <tr style="color:var(--mut2)"><td>المُراكِم</td><td>النسبة</td><td>قيد الشراء</td><td>المتراكم</td><td>العملة</td><td>كلفتها</td><td>قيمتها</td><td>ربح/خسارة</td><td>آخر شراء</td><td>الحالة</td></tr>
-        ${(AC.rows||[]).map(a=>`<tr><td><b>${gEsc(a.name)}</b> <small style="color:var(--mut2)">${gEsc(a.base)}</small></td>
+        ${(AC.rows||[]).map(a=>`<tr><td><b>${gEsc(a.name)}</b> <small style="color:var(--mut2)">${gEsc(a.base)}${a.wlabel?' · 👛 '+gEsc(a.wlabel):''}</small></td>
           <td>${gN(a.pct,0)}%</td><td class="num">${gN(a.pool,2)}</td><td class="num">${gN(a.reserve,2)}</td>
           <td class="num">${gN(a.coin,6)}</td><td class="num">${gN(a.spent,2)}</td>
           <td class="num">${a.value==null?'—':gN(a.value,2)}</td>
@@ -14157,7 +14422,7 @@ function flAcc(a,r){
   return `<div class="fl-n fl-a" data-id="${flE(a.id)}" data-u="1" data-c="1" onclick="flInfo('${flE(a.id)}')">
     <h4>🪙 ${flE(a.name)} <small>${flE(a.sym)}</small> ${tl}</h4>
     <div class="fl-why">${flE(a.why)}${waitWin?` · ⏱ <b data-cd>${flHMS(r.to_midnight)}</b>`:''}</div>
-    <div class="r"><span>💵 نسبته</span><b class="u">${a.pct}% من كل بوت</b></div>
+    <div class="r"><span>💵 نسبته</span><b class="u">${a.pct}% من بوتات محفظته</b></div>
     ${a.coin_pct>0?`<div class="r"><span>🪙 نسبة العملة</span><b class="c">${a.coin_pct}%</b></div>`:''}
     <div class="r"><span>⏳ قيد الشراء</span><b>${fl$(a.pool)} / ${a.min_buy}$</b></div><div class="fl-bar"><i style="width:${pr.toFixed(1)}%"></i></div>
     <div class="r"><span>🏧 المتراكم</span><b>${fl$(a.pending)}</b></div>
@@ -14177,15 +14442,16 @@ function flRender(r){
     <span>📅 الخطوط من <b>${flE(r.since)}</b></span>
     <span>💵 ربح اليوم <b>${fl$(tot)}</b> · يتوزّع بعد ⏱ <b data-cd>${flHMS(r.to_midnight)}</b></span>
     <span>💠 داخل الأوامر <b>${fl$(held)}</b></span><span>💰 بالربح <b>${fl$(pf)}</b></span>
-    <span>🪙 المُراكِمات تاخذ <b>${r.sum_pct}%</b> من دولار كل بوت · الباقي <b>${Math.max(0,100-r.sum_pct).toFixed(0)}%</b> للربح</span>
-    <div class="fl-note">💵 الدولار يتجمّع عند البوت وينزل <b>نهاية اليوم</b> بنفس نسب المُراكِمات والباقي للربح · 🪙 العملة تنزل خلال ثواني (للمُراكِم بنسبة العملة — نفس العملة ونفس المحفظة — والباقي/بلا مُراكِم للربح) · 💠 إعادة الاستثمار تبقى بمكانها لحد ما تتحرّر · الحقن مو ربح فما يظهر · الأرقام على الخطوط من يوم التفعيل.</div>`;
+    ${r.wallets.filter(w=>w.bots.length||w.acc).map(w=>`<span>👛 ${flE(w.label)}: المُراكِمات <b>${+(+w.sum_pct||0).toFixed(2)}%</b> · للربح <b>${Math.max(0,100-(+w.sum_pct||0)).toFixed(0)}%</b></span>`).join('')}
+    <div class="fl-note">👛 كل محفظة حسابها مستقل · 💵 الدولار يتجمّع عند البوت وينزل <b>نهاية اليوم</b> بنفس نسب مُراكِمات محفظته والباقي لربحها · 🪙 العملة تنزل خلال ثواني (للمُراكِم بنسبة العملة — نفس العملة ونفس المحفظة — والباقي/بلا مُراكِم للربح) · 💠 إعادة الاستثمار تبقى بمكانها لحد ما تتحرّر · الحقن مو ربح فما يظهر · الأرقام على الخطوط من يوم التفعيل.</div>`;
   const wb=r.wallets.filter(w=>w.bots.length);
   let h='';
   if(!wb.length&&!r.accs.length)h='<div class="fl-empty">ماكو بوتات حقيقية بعد</div>';
   else{
     h+=`<div class="fl-tier">${wb.map(w=>`<div class="fl-wal" style="--wc:${FL_WC[w.ci%FL_WC.length]}"><span class="fl-wlab">👛 ${flE(w.label)}</span>${w.bots.map(flBot).join('')}</div>`).join('')}</div>`;
-    if(r.accs.length){const aw=r.wallets.find(w=>w.wid===r.acc_wid);
-      h+=`<div class="fl-gap"></div><div class="fl-cap"><span>🪙 المُراكِمات${aw?' — على '+flE(aw.label):''}</span></div><div class="fl-tier">${r.accs.map(a=>flAcc(a,r)).join('')}</div>`}
+    if(r.accs.length){
+      const grp=r.wallets.filter(w=>r.accs.some(a=>a.wid===w.wid));
+      h+=`<div class="fl-gap"></div><div class="fl-cap"><span>🪙 المُراكِمات — كل محفظة لحالها</span></div><div class="fl-tier">${grp.map(w=>`<div class="fl-wal" style="--wc:${FL_WC[w.ci%FL_WC.length]}"><span class="fl-wlab">🪙 ${flE(w.label)}</span>${r.accs.filter(a=>a.wid===w.wid).map(a=>flAcc(a,r)).join('')}</div>`).join('')}${r.accs.filter(a=>!grp.some(w=>w.wid===a.wid)).map(a=>flAcc(a,r)).join('')}</div>`}
     h+=`<div class="fl-gap"></div><div class="fl-cap"><span>💰 الربح — كل محفظة لحالها</span></div><div class="fl-tier">${r.wallets.map(flProfit).join('')}</div>`;
   }
   $('#flBody').innerHTML=h;
@@ -14316,12 +14582,12 @@ window.addEventListener('resize',()=>{clearTimeout(FL.rz);FL.rz=setTimeout(()=>{
 async function openWallets(){openPage('wallets');
   try{const s=await api('/api/settings');$('#w_tok').value=s.tg_token||'';$('#w_chat').value=s.tg_chat_id||'';
     const q=n=>gEsc(JSON.stringify(String(n)));
-    $('#wlist').innerHTML=((s.wallets||[]).map(w=>`<div class="wline" style="flex-wrap:wrap">👛 <b>${gEsc(w.name)}</b>${w.acc?'<span class="chip" style="background:rgb(var(--amber2-rgb)/.15);color:var(--amber)" title="المُراكِم يشتري ويبيع بمفاتيح هالمحفظة (أول محفظة كاملة)">🪙 محفظة المُراكِم</span>':''}<span class="num" style="color:var(--mut)">${gEsc(w.api)}</span><span class="num" style="color:var(--green)">${w.eq!=null?'≈ $'+w.eq:''}</span>${w.err?('<span style="color:var(--red);font-size:10.5px;flex-basis:100%;word-break:break-word">'+gEsc(w.err)+'</span>'):''}
+    $('#wlist').innerHTML=((s.wallets||[]).map(w=>`<div class="wline" style="flex-wrap:wrap">👛 <b>${gEsc(w.name)}</b>${w.acc?`<span class="chip" style="background:rgb(var(--amber2-rgb)/.15);color:var(--amber)" title="مُراكِمات على هالمحفظة — ياخذون من ربح بوتاتها بس ويشترون ويبيعون بمفاتيحها">🪙 ${w.acc} مُراكِم</span>`:''}<span class="num" style="color:var(--mut)">${gEsc(w.api)}</span><span class="num" style="color:var(--green)">${w.eq!=null?'≈ $'+w.eq:''}</span>${w.err?('<span style="color:var(--red);font-size:10.5px;flex-basis:100%;word-break:break-word">'+gEsc(w.err)+'</span>'):''}
       <span style="margin-inline-start:auto;display:flex;gap:5px"><button style="padding:5px 9px" title="فحص المفتاح بـOKX (قراءة بس)" onclick="testWallet(${q(w.name)})">🔑 فحص</button>
       <button style="padding:5px 9px" title="حدّث مفاتيح هالمحفظة بمكانها (نفس الاسم والترتيب)" onclick="updWallet(${q(w.name)})">✏️</button>
       <button class="danger" style="padding:5px 10px" onclick="delWallet(${q(w.name)})">❌</button></span></div>`).join('')||'<p style="color:var(--mut)">ماكو محافظ بعد</p>')
-      +(s.acc_bot&&s.n_acc?`<p style="font-size:11px;color:var(--amber);margin-top:6px">🪙 ماكو محفظة كاملة — المُراكِم يستعمل مفاتيح بوت ${gEsc(s.acc_bot)}</p>`:'')
-      +((s.wallets||[]).length>1&&s.n_acc?'<p style="font-size:10.5px;color:var(--mut2);margin-top:6px">🪙 المُراكِم يستعمل <b>أول</b> محفظة — لتغيير مفاتيحها استعمل ✏️ (الحذف والإضافة ينقلها لآخر القائمة ويتحوّل المُراكِم لمحفظة ثانية)</p>':'')}catch(e){}}
+      +(s.acc_bot?`<p style="font-size:11px;color:var(--amber);margin-top:6px">🪙 مُراكِمات على مفاتيح بوتات (مو محفوظة كمحفظة): ${gEsc(s.acc_bot)}</p>`:'')
+      +(s.n_acc?'<p style="font-size:10.5px;color:var(--mut2);margin-top:6px">👛 كل مُراكِم على محفظته (تختارها بالنشر) — حسابه مستقل · ✏️ تحديث المفاتيح ينقل مُراكِماتها ويّاها · الحذف يخلّيهم بلا مفاتيح</p>':'')}catch(e){}}
 async function testWallet(n){
   showModal('<h2>🔑 فحص مفتاح '+gEsc(n)+'</h2><p style="color:var(--mut);font-size:12px">⏳ يسأل OKX (قراءة بس — ولا أمر)…</p>');
   let r={};try{r=await api('/api/wallet_test',{name:n})}catch(e){}
@@ -14415,6 +14681,7 @@ function renderAccum(list){
         <div class="row"><span class="ic">🏧</span><span class="nm">المتراكم (تحت تصرّفك)</span><b class="num" data-k="apend">—</b></div>
         <div class="row"><span class="ic">🗓️</span><span class="nm">أسبوعي / شهري</span><b class="num" data-k="awm" style="font-size:10.5px">—</b></div>
         <div class="row"><span class="ic">🎚️</span><span class="nm">النطاق · النسبة</span><b class="num" data-k="arng" style="font-size:10.5px">—</b></div>
+        <div class="row"><span class="ic">👛</span><span class="nm">المحفظة</span><b data-k="awal" style="font-size:10.5px;max-width:62%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">—</b></div>
         <div class="row"><span class="ic">🔢</span><span class="nm">عدد الشراء / البيع</span><b class="num" data-k="acnt" style="font-size:11px">—</b></div>
         <div class="row"><span class="ic">🏦</span><span class="nm">ربح محقق (مباع)</span><b class="num" data-k="areal">—</b></div>
         <div class="row"><span class="ic">🕒</span><span class="nm">آخر شراء</span><b class="num" data-k="alast" style="font-size:10.5px">—</b></div>
@@ -14453,6 +14720,7 @@ function renderAccum(list){
     R.awm.textContent=`${fmtQ(a.week_coin)} (${(a.week_usd||0).toFixed(1)}$) · ${fmtQ(a.month_coin)} (${(a.month_usd||0).toFixed(1)}$)`;
     const rng=(a.low||a.high)?`${a.low||'∞'}–${a.high||'∞'}`:'بلا حد';
     R.arng.textContent=`${rng} · ${a.pct}%`;
+    if(R.awal){R.awal.textContent=a.wlabel||'—';R.awal.title='👛 حساب مستقل: ياخذ من ربح بوتات هالمحفظة بس ويشتري بمفاتيحها'}
     R.arng.style.color=a.in_range===false?'var(--amber)':'';
     R.acnt.textContent=`${a.n_buys||0} شراء · ${a.n_sells||0} بيع`;
     if(a.realized){R.areal.textContent=(a.realized>=0?'+':'')+a.realized.toFixed(2)+'$';
@@ -14530,27 +14798,39 @@ function doBuyNow(id,fixed){
     async()=>{const r=await api('/api/accum',{act:'buy_now',id:id,amount:(v>0?v:0)});
       toast(r.msg||'تم',r.ok!==false);hideModal();tick&&tick()});
 }
+let ACC_PV=null;
+function accWalInfo(){
+  // 👛 v3.22.9: كل محفظة حسابها مستقل — ربح أمس والمتبقي من النسب للمحفظة المختارة
+  const P=ACC_PV;if(!P)return;const a=P.a,pv=P.pv,sel=$('#ac_wal'),info=$('#ac_rem');if(!sel||!info)return;
+  const W=(pv.wallets||[]).find(w=>w.wid===sel.value);
+  if(!W){info.innerHTML='<span style="color:var(--amber)">👛 اختر محفظة — المُراكِم ياخذ من ربح بوتاتها بس ويشتري بمفاتيحها</span>';return}
+  const mine=a.id&&(pv.acc_w||{})[a.id]===W.wid&&a.enabled!==false;
+  const cb=(($('#ac_s')||{}).value||a.symbol||'').split('-')[0].toUpperCase();
+  const used=(+W.used_pct||0)-(mine?(+a.pct||0):0);
+  const cu=(+((W.coin_used||{})[cb])||0)-(mine&&String(a.symbol||'').split('-')[0].toUpperCase()===cb?(+a.coin_pct||0):0);
+  info.innerHTML=`ربح أمس (بوتات هالمحفظة): <b style="color:var(--green)">${(+W.yday_profit||0).toFixed(4)}$</b> ·
+    المتبقي: 💵 من ربحها <b>${Math.max(0,100-used).toFixed(0)}%</b> · 🪙 من عملة ${gEsc(cb||'—')} <b>${Math.max(0,100-cu).toFixed(0)}%</b>
+    · <a href="#" onclick="event.preventDefault();accAlloc()" style="color:var(--vio)" title="كم وُزّع من ربح أمس · لكل محفظة · وكم بقي غير مخصّص">📊 التوزيع</a>
+    ${W.bots&&W.bots.length?`<br><span style="color:var(--mut2);font-size:10.5px">بوتاتها: ${gEsc(W.bots.join('، '))}</span>`:'<br><span style="color:var(--amber);font-size:10.5px">ماكو بوتات على هالمحفظة — ربحها صفر (يستلم بس من الشراء اليدوي/الطرح)</span>'}`;
+  const nt=$('#ac_wmove');if(nt)nt.style.display=(a.id&&(pv.acc_w||{})[a.id]&&(pv.acc_w||{})[a.id]!==W.wid&&((a.coin||0)>0||(a.pool||0)>0||(a.pending||0)>0))?'':'none';
+}
 async function accEdit(a){
   a=a||{};
   let pv={};try{pv=await api('/api/accum',{act:'preview'})}catch(e){}
-  const used=(pv.used_pct||0)-(a.id?(a.pct||0):0);
-  const _cb=(a.symbol||$('#ac_s')?.value||'').split('-')[0].toUpperCase();
-  const _cu=((DATA&&DATA.accum)||[]).filter(x=>x.id!==a.id&&x.enabled!==false
-      &&String(x.symbol||'').split('-')[0].toUpperCase()===_cb)
-      .reduce((s,x)=>s+(+x.coin_pct||0),0);
+  const WS=pv.wallets||[];
+  const curW=a.id?((pv.acc_w||{})[a.id]||a.wid||''):(WS[0]?WS[0].wid:'');
+  ACC_PV={pv,a};
   showModal(`<h2>🪙 ${a.id?'تعديل':'مُراكِم جديد'}</h2>
-  <p style="color:var(--mut);font-size:12px;margin-bottom:10px">
-    يأخذ نسبة من <b>ربح كل بوتاتك اليومي</b> ويشتري بها عملة تختارها.
-    ربح أمس: <b style="color:var(--green)">${(pv.yday_profit||0).toFixed(4)}$</b> ·
-    المتبقي: 💵 من الربح <b>${Math.max(0,100-used).toFixed(0)}%</b>
- · 🪙 من عملة ${_cb||'—'} <b>${Math.max(0,100-_cu).toFixed(0)}%</b>
- · <a href="#" onclick="event.preventDefault();accAlloc()" style="color:var(--vio)" title="كم وُزّع من ربح أمس · لمن · وكم بقي غير مخصّص">📊 التوزيع</a></p>
+  <div class="frm" style="margin-bottom:6px"><div class="fld" style="grid-column:1/-1"><label>👛 المحفظة — حساب مستقل: ياخذ من ربح بوتاتها بس · يشتري ويبيع بمفاتيحها</label>
+    <select id="ac_wal" onchange="accWalInfo()">${WS.length?WS.map(w=>`<option value="${gEsc(w.wid)}"${w.wid===curW?' selected':''}>${gEsc(w.label)}${w.n_acc?' · '+w.n_acc+' مُراكِم':''}</option>`).join(''):'<option value="">ماكو محفظة — أضف محفظة من 👛 المحافظ أو انشر بوت حقيقي</option>'}</select>
+    <small id="ac_wmove" style="display:none;color:var(--amber);font-size:10.5px">⚠️ هالمُراكِم بيه رصيد على محفظته الحالية — تغيير المحفظة يصح بس لو هي نفس الحساب بمفتاح جديد (راح تنسأل للتأكيد)</small></div></div>
+  <p id="ac_rem" style="color:var(--mut);font-size:12px;margin-bottom:10px"></p>
  <p style="color:var(--mut2);font-size:11px;margin-top:-4px">
- نسبة الربح تُقسَّم على <b>كل</b> المُراكِمات · أما نسبة العملة فمحصورة
- بمُراكِمات <b>نفس العملة</b> فقط، والباقي يروح للمحفظة.</p>
+ نسبة الربح تُقسَّم على مُراكِمات <b>نفس المحفظة</b> · ونسبة العملة محصورة
+ بمُراكِمات <b>نفس العملة ونفس المحفظة</b>، والباقي يبقى بالمحفظة.</p>
   <div class="frm">
     <div class="fld"><label>الاسم</label><input id="ac_n" value="${a.name||''}" placeholder="ادخار بيتكوين"></div>
-    <div class="fld"><label>الرمز</label><input id="ac_s" value="${a.symbol||''}" placeholder="BTC-USDT" style="text-transform:uppercase"></div>
+    <div class="fld"><label>الرمز</label><input id="ac_s" value="${a.symbol||''}" placeholder="BTC-USDT" style="text-transform:uppercase" oninput="accWalInfo()"></div>
     <div class="fld"><label>نسبة الربح %</label><input id="ac_p" class="num" value="${a.pct??70}">
       <small style="color:var(--mut2);font-size:10px">كم % من ربح اليوم يذهب لهذه العملة</small></div>
     <div class="fld"><label>🪙 نسبة العملة المعاد استثمارها % (0=مطفية)</label>
@@ -14582,29 +14862,35 @@ async function accEdit(a){
     ${a.id?`<button onclick="accToggle('${a.id}')">${a.enabled?'⏸ إيقاف':'▶ تشغيل'}</button>
             <button style="color:var(--red)" onclick="accDel('${a.id}')">🗑️ حذف</button>`:''}
     <button onclick="hideModal()">إلغاء</button></div>`);
+  accWalInfo();
 }
 function accAlloc(){
+  // 📊 v3.22.9: محاسبة أمس — لكل محفظة لحالها (ربح بوتاتها · وُزّع لمُراكِماتها · غير مخصّص)
   const A=(DATA&&DATA.accum_alloc)||{};
+  const WS=(A.wallets&&A.wallets.length)?A.wallets:[{label:'',profit:A.profit,allocated:A.allocated,unallocated:A.unallocated,used_pct:A.used_pct,free_pct:A.free_pct,rows:A.rows||[]}];
   let h=`<h2>📊 محاسبة أرباح ${A.day||''}</h2>
-  <div style="background:var(--card2,#12161f);border:1px solid var(--bd,#232a36);border-radius:12px;padding:13px;margin-bottom:12px">
-    <table style="width:100%;font-size:12.5px;line-height:2.1">
-      <tr><td style="color:var(--mut)">ربح كل بوتات الجرد</td><td style="text-align:end"><b style="color:var(--green)">${A.profit}$</b></td></tr>
-      <tr><td style="color:var(--mut)">وُزّع على المُراكِمات</td><td style="text-align:end"><b>${A.allocated}$</b></td></tr>
-      <tr style="border-top:1px solid var(--bd,#232a36)"><td style="color:var(--mut)">غير مخصّص (يبقى دولارات)</td>
-        <td style="text-align:end"><b style="color:${Math.abs(A.unallocated)<0.01?'var(--mut)':'var(--cyan)'}">${A.unallocated}$</b></td></tr>
-    </table></div>`;
-  h+=`<div style="font-size:12px;font-weight:700;margin-bottom:6px">التوزيع لكل مُراكِم</div>
-  <div style="font-size:10px;color:var(--mut2);margin-bottom:4px">⏳ قيد الشراء (تلقائي) · 🏧 المتراكم (تحت تصرّفك) · نصيب أمس</div>`;
-  h+=`<table style="width:100%;font-size:12px;line-height:2">`;
-  for(const r of (A.rows||[]))
-    h+=`<tr><td>${r.enabled?'':'⏸ '}${r.name}</td><td style="text-align:center;color:var(--mut)">${r.pct}%</td>
-        <td style="text-align:center;color:var(--cyan)">⏳${r.pool}$</td>
-        <td style="text-align:center;color:var(--amber)">🏧${r.reserve}$</td>
-        <td style="text-align:end"><b>${r.share}$</b></td></tr>`;
-  h+=`</table>`;
-  const over=(A.used_pct||0)>100;
-  h+=`<div style="margin-top:10px;padding:9px;border-radius:9px;background:${over?'rgb(var(--red2-rgb)/.12)':'rgb(var(--green2-rgb)/.08)'};font-size:11.5px;color:${over?'var(--red)':'var(--green)'}">
-    ${over?'⚠️ مجموع النسب يتجاوز 100%!':'✅ مجموع النسب '+A.used_pct+'% · متاح '+A.free_pct+'% — كل دولار يُوزَّع مرة واحدة فقط'}</div>`;
+  <p style="font-size:11.5px;color:var(--mut);margin:-4px 0 10px">👛 كل محفظة حسابها مستقل: مُراكِماتها ياخذون نسبهم من ربح بوتاتها بس.</p>`;
+  for(const W of WS){
+    const over=(W.used_pct||0)>100;
+    h+=`<div style="background:var(--card2,#12161f);border:1px solid var(--bd,#232a36);border-radius:12px;padding:12px;margin-bottom:12px">
+    ${W.label?`<div style="font-size:12.5px;font-weight:700;margin-bottom:6px">👛 ${gEsc(W.label)}</div>`:''}
+    <table style="width:100%;font-size:12.5px;line-height:2">
+      <tr><td style="color:var(--mut)">ربح بوتاتها</td><td style="text-align:end"><b style="color:var(--green)">${W.profit}$</b></td></tr>
+      <tr><td style="color:var(--mut)">وُزّع على مُراكِماتها</td><td style="text-align:end"><b>${W.allocated}$</b></td></tr>
+      <tr style="border-top:1px solid var(--bd,#232a36)"><td style="color:var(--mut)">غير مخصّص (يبقى دولارات بالمحفظة)</td>
+        <td style="text-align:end"><b style="color:${Math.abs(W.unallocated)<0.01?'var(--mut)':'var(--cyan)'}">${W.unallocated}$</b></td></tr></table>`;
+    if((W.rows||[]).length){
+      h+=`<div style="font-size:10px;color:var(--mut2);margin:6px 0 2px">⏳ قيد الشراء (تلقائي) · 🏧 المتراكم (تحت تصرّفك) · نصيب أمس</div><table style="width:100%;font-size:12px;line-height:2">`;
+      for(const r of W.rows)
+        h+=`<tr><td>${r.enabled?'':'⏸ '}${gEsc(r.name)}</td><td style="text-align:center;color:var(--mut)">${r.pct}%</td>
+          <td style="text-align:center;color:var(--cyan)">⏳${r.pool}$</td>
+          <td style="text-align:center;color:var(--amber)">🏧${r.reserve}$</td>
+          <td style="text-align:end"><b>${r.share}$</b></td></tr>`;
+      h+=`</table>`}
+    else h+=`<div style="font-size:11px;color:var(--mut2);margin-top:4px">ماكو مُراكِم على هالمحفظة — ربحها كله يبقى بيها</div>`;
+    h+=`<div style="margin-top:8px;padding:7px 9px;border-radius:9px;background:${over?'rgb(var(--red2-rgb)/.12)':'rgb(var(--green2-rgb)/.08)'};font-size:11.5px;color:${over?'var(--red)':'var(--green)'}">
+      ${over?'⚠️ مجموع نسب هالمحفظة يتجاوز 100%!':'✅ مجموع النسب '+(W.used_pct||0)+'% · متاح '+(W.free_pct??100)+'% — كل دولار يُوزَّع مرة وحدة بس'}</div></div>`;
+  }
   h+=`<div class="mbtns" style="margin-top:12px"><button onclick="hideModal()">إغلاق</button></div>`;
   showModal(h);
 }
@@ -14669,11 +14955,17 @@ function accRetry(a){
     async()=>{toast('⏳ يشتري…',true);const r=await api('/api/accum',{act:'retry',id:a.id});
       toast(r.msg||'تم',r.ok!==false);tick&&tick()});
 }
-async function accSave(id){
+async function accSave(id,moveOk){
   const it={id:id||undefined,name:$('#ac_n').value,symbol:$('#ac_s').value,pct:$('#ac_p').value,coin_pct:$('#ac_cp').value,
-    min_buy:$('#ac_mn').value,max_buy:$('#ac_mx').value,low_price:$('#ac_lo').value,high_price:$('#ac_hi').value,enabled:true};
+    min_buy:$('#ac_mn').value,max_buy:$('#ac_mx').value,low_price:$('#ac_lo').value,high_price:$('#ac_hi').value,enabled:true,
+    wid:($('#ac_wal')||{}).value||''};                          // 👛 v3.22.9: المحفظة إلزامية
+  if(!it.wid)return toast('👛 اختر المحفظة أول',false);
   const w=parseInt(($('#ac_win')||{}).value);
-  const r=await api('/api/accum',{act:'save',item:it,window_h:(w>=1&&w<=23)?w:undefined});
+  const body={act:'save',item:it,window_h:(w>=1&&w<=23)?w:undefined,move_ok:!!moveOk};
+  const r=await api('/api/accum',body);
+  if(r&&r.need_move_ok){const keep=JSON.parse(JSON.stringify(body));
+    askConfirm('👛 نقل المُراكِم لمحفظة ثانية؟',gEsc(r.msg)+'<br><br>العملة والدولار المسجّلين بالمُراكِم ما يتحركون بالمنصة — يصح بس لو المحفظة الجديدة هي نفس الحساب بمفتاح جديد.',
+      async()=>{keep.move_ok=true;const r2=await api('/api/accum',keep);toast(r2.msg||'تم',r2.ok!==false);if(r2.ok)tick&&tick()});return}
   toast(r.msg||'تم',r.ok!==false); if(r.ok){hideModal();tick&&tick()}
 }
 async function accToggleCard(a){
@@ -17820,6 +18112,7 @@ def main():
         threading.Thread(target=watchdog_loop, daemon=True).start()
         threading.Thread(target=ledger_loop, daemon=True).start()
         _safe(journal_scrub_once, default=0)          # 🔒 v3.22.7: يحجب مفاتيح محافظ بسجلات قديمة (مرة وحدة)
+        _safe(_acc_migrate, default=0)                # 👛 v3.22.9: مُراكِم قديم بلا محفظة ⇒ المحفظة اللي كان يشتري بيها
         journal("system", f"▶️ اللوحة اشتغلت — v{APP_VERSION} · {len(bot_dirs())} بوت", "ok", python=sys.version.split()[0], os=platform.system())
         threading.Thread(target=reports_loop, daemon=True).start()
         threading.Thread(target=health_loop, daemon=True).start()
