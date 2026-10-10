@@ -41,12 +41,13 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.22.5"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.22.6"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
 GONE = os.path.join(ROOT, "Holy_Gone.json")              # 🗃️ v3.22.2: أرقام البوتات المحذوفة (حتى الإجماليات ما تنقص بالحذف)
 COIN_LEDGER = os.path.join(ROOT, "Holy_CoinLedger.json") # 🪙 v3.22.2: الربح المحرّر بالعملات (DCA بيعي + عملة إعادة الاستثمار)
+BOOKS_SINCE = os.path.join(ROOT, "Holy_BooksSince.json") # 📒 v3.22.6: «بداية جديدة للحسابات» — الدفاتر تبدي من هذا اليوم
 ALIVE_WINDOW = 12.0
 PROCS, TG_LAST, WD_HIST = {}, {}, {}
 TG_MUTED = {"v": False}
@@ -233,6 +234,205 @@ def log_event(msg):
                 fh.write(line + "\n")
     except Exception:
         pass
+    _m = str(msg)
+    journal("system", _m, "err" if ("❌" in _m or "خطأ" in _m or "فشل" in _m) else ("warn" if "⚠️" in _m else "info"))
+
+
+# ───────────── 📜 v3.22.6: السجلات المفصّلة (كل العمليات · 7 أيام وتنمسح) ─────────────
+JOURNAL_DIR = os.path.join(ROOT, "Holy_Journal")
+JOURNAL_KEEP_DAYS = 7
+_JR_LOCK = threading.Lock()
+_JR = {"pruned": "", "rl": {}}
+JR_CATS = {"trade": "🔁 الصفقات", "bot": "🤖 سجل البوت", "profit": "💵 الأرباح", "accum": "🪙 المُراكِم",
+           "user": "👤 أوامرك", "guard": "🛡️ الرقابة", "notify": "🔔 الإشعارات", "system": "⚙️ النظام"}
+_JR_SECRET = ("key", "secret", "pass", "token", "pw", "pin", "chat_id")
+
+
+def _jr_clean(v, depth=0):
+    """🔒 ولا مفتاح/كلمة سر/توكن يدخل السجل."""
+    if depth > 4:
+        return "…"
+    if isinstance(v, dict):
+        return {str(k): ("***" if any(x in str(k).lower() for x in _JR_SECRET) else _jr_clean(x, depth + 1)) for k, x in list(v.items())[:60]}
+    if isinstance(v, (list, tuple)):
+        return [_jr_clean(x, depth + 1) for x in list(v)[:60]]
+    if isinstance(v, str):
+        return v[:1500]
+    if isinstance(v, (int, float, bool)) or v is None:
+        return v
+    return str(v)[:300]
+
+
+def _jr_prune(today):
+    if _JR["pruned"] == today:
+        return
+    _JR["pruned"] = today
+    cut = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=JOURNAL_KEEP_DAYS - 1)).strftime("%Y-%m-%d")
+    try:
+        for fn in os.listdir(JOURNAL_DIR):
+            if fn.endswith(".jsonl") and fn[:10] < cut:
+                try:
+                    os.remove(os.path.join(JOURNAL_DIR, fn))
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
+def journal(cat, msg, lv="info", bot="", sym="", t=None, rl=None, **data):
+    """📜 سطر بالسجلات المفصّلة: {t · c (الفئة) · lv (info/ok/warn/err) · bot · sym · m (الرسالة) · d (التفاصيل)}.
+    ملف لكل يوم بـHoly_Journal/ — يبقى 7 أيام وينمسح لحاله. `rl` = مفتاح يمنع تكرار نفس السطر خلال 10 دقائق."""
+    try:
+        now = float(t if t is not None else time.time())
+        if rl:
+            last = _JR["rl"].get(rl, 0)
+            if now - last < 600:
+                return
+            _JR["rl"][rl] = now
+            if len(_JR["rl"]) > 2000:
+                _JR["rl"].clear()
+        day = datetime.fromtimestamp(now).strftime("%Y-%m-%d")
+        e = {"t": round(now, 3), "c": cat if cat in JR_CATS else "system", "lv": lv if lv in ("info", "ok", "warn", "err") else "info",
+             "bot": str(bot or ""), "sym": str(sym or ""), "m": str(msg)[:2000]}
+        if data:
+            e["d"] = _jr_clean(data)
+        line = json.dumps(e, ensure_ascii=False, separators=(",", ":"))
+        with _JR_LOCK:
+            os.makedirs(JOURNAL_DIR, exist_ok=True)
+            _jr_prune(datetime.now().strftime("%Y-%m-%d"))
+            with open(os.path.join(JOURNAL_DIR, day + ".jsonl"), "a", encoding="utf-8") as fh:
+                fh.write(line + "\n")
+    except Exception:
+        pass
+
+
+def _jr_kind(msg):
+    """سطر سجل بوت ⇒ (الفئة، المستوى)."""
+    m = str(msg or "")
+    if "[بيع فوري]" in m or "[ربح تعويضي]" in m or "[ربح داخلي]" in m or "🟢" in m[:3] or "[شراء]" in m or "تنفيذ شراء" in m or "إغلاق الدورة" in m:
+        return "trade", "ok"
+    if "رفض" in m or "فشل" in m or "خطأ" in m or "❌" in m[:3] or "تالف" in m:
+        return "bot", "err"
+    if "⚠️" in m[:3] or "🔌" in m[:3] or "🪫" in m[:3] or "🩹" in m[:3] or "معلّق" in m:
+        return "bot", "warn"
+    return "bot", "info"
+
+
+def journal_ingest_bots():
+    """🤖 سطور سجلات البوتات الجديدة ⇒ السجلات (كل سطر مرة وحدة — المؤشر بملف حتى بعد إعادة التشغيل).
+    أول مرة: آخر 7 أيام من سجل كل بوت."""
+    cur_p = os.path.join(JOURNAL_DIR, "_cursor.json")
+    cur = load_json(cur_p) or {}
+    if not isinstance(cur, dict):
+        cur = {}
+    first_cut = (datetime.now() - timedelta(days=JOURNAL_KEEP_DAYS - 1)).strftime("%Y-%m-%d 00:00:00")
+    changed = False
+    for b in bot_dirs().values():
+        try:
+            key = os.path.relpath(b["dir"], ROOT)
+            _, hp, _ = paths_of(b)
+            if not os.path.exists(hp):
+                continue
+            mt = os.path.getmtime(hp)
+            c = cur.get(key) or {}
+            if c.get("mt") == mt:
+                continue
+            hist = load_json(hp) or []
+            if not isinstance(hist, list):
+                continue
+            last_t, seen = str(c.get("t") or first_cut), set(c.get("s") or [])
+            new = []
+            for row in hist:                                     # الأحدث أولاً
+                if not isinstance(row, dict):
+                    continue
+                ts = str(row.get("time") or "")[:19]
+                msg = str(row.get("msg") or "")
+                if ts < last_t:
+                    break                                        # وصلنا للي انقرا قبل
+                if ts == last_t and msg in seen:
+                    continue
+                new.append((ts, msg))
+            if new:
+                for ts, msg in reversed(new):
+                    try:
+                        tt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").timestamp()
+                    except Exception:
+                        tt = time.time()
+                    cat, lv = _jr_kind(msg)
+                    journal(cat, msg, lv, bot=key, sym=b.get("symbol", ""), t=tt)
+                top = new[0][0]
+                c = {"t": top, "s": [m for t2, m in new if t2 == top][:50] + ([x for x in seen] if top == last_t else [])[:50]}
+            c["mt"] = mt
+            cur[key] = c
+            changed = True
+        except Exception:
+            continue
+    if changed:
+        try:
+            os.makedirs(JOURNAL_DIR, exist_ok=True)
+            save_json_atomic(cur_p, cur)
+        except Exception:
+            pass
+
+
+def journal_query(cats=None, lv=None, bot=None, q=None, d_from=None, d_to=None, before=None, limit=400, after=None):
+    """🔎 فلترة السجلات (الأحدث أولاً): الفئات · تنبيهات وأخطاء بس · بوت · نص · من/إلى يوم · أقدم من لحظة (للتحميل أكثر)."""
+    limit = max(1, min(3000, int(limit or 400)))
+    cats = set(c for c in (cats or []) if c)
+    qq = str(q or "").strip().lower()
+    out, counts, more, scanned = [], {k: 0 for k in JR_CATS}, False, 0
+    try:
+        files = sorted([f for f in os.listdir(JOURNAL_DIR) if f.endswith(".jsonl")], reverse=True)
+    except Exception:
+        files = []
+    for fn in files:
+        day = fn[:10]
+        if d_from and day < d_from:
+            continue
+        if d_to and day > d_to:
+            continue
+        try:
+            with open(os.path.join(JOURNAL_DIR, fn), "r", encoding="utf-8", errors="ignore") as fh:
+                lines = fh.readlines()
+        except Exception:
+            continue
+        ents = []
+        for ln in lines:
+            try:
+                ents.append(json.loads(ln))
+            except Exception:
+                continue
+        ents.sort(key=lambda e: e.get("t", 0), reverse=True)      # سطور سجل البوت تنكتب بوقتها الحقيقي (ممكن متأخرة) ⇒ ترتيب بالوقت
+        for e in ents:
+            scanned += 1
+            if scanned > 400_000:
+                break
+            if before is not None and e.get("t", 0) >= before:
+                continue
+            if after is not None and e.get("t", 0) < after:
+                continue
+            if lv == "warn" and e.get("lv") not in ("warn", "err"):
+                continue
+            if lv == "err" and e.get("lv") != "err":
+                continue
+            if bot == "__dash":
+                if e.get("bot"):
+                    continue
+            elif bot and e.get("bot") != bot:
+                continue
+            if qq and qq not in (str(e.get("m") or "") + " " + json.dumps(e.get("d") or {}, ensure_ascii=False) + " " + str(e.get("sym") or "") + " " + str(e.get("bot") or "")).lower():
+                continue
+            c = e.get("c") or "system"
+            counts[c] = counts.get(c, 0) + 1
+            if cats and c not in cats:
+                continue
+            if len(out) < limit:
+                out.append(e)
+            else:
+                more = True
+    days = [f[:10] for f in files]
+    return {"ok": True, "items": out, "more": more, "counts": counts, "cats": JR_CATS, "days": days,
+            "keep": JOURNAL_KEEP_DAYS, "bots": sorted({os.path.relpath(b["dir"], ROOT) for b in bot_dirs().values()})}
 
 
 # ───────────── اكتشاف البوتات ─────────────
@@ -1861,16 +2061,30 @@ def accum_tick(force_day=None, allow_buy=None):
             if _start and dkey < _start:
                 continue
             _rec = (e.get("days") or {}).get(dkey)
-            if _rec is not None and (float(_rec) > 0 or dkey < _stale):
-                continue                                  # وُزّع فعلاً · أو قديم ومحسوم
+            if _rec is not None and dkey < _stale:
+                continue                                  # قديم ومحسوم
             prof = day_profit(dkey)
             if prof <= 0:
-                e.setdefault("days", {})[dkey] = 0.0
+                if _rec is None:
+                    e.setdefault("days", {})[dkey] = 0.0
                 continue
-            share = round(prof * float(a.get("pct", 0)) / 100.0, 6)
-            e.setdefault("days", {})[dkey] = share
-            e["pool"] = round(float(e.get("pool", 0)) + share, 6)
+            # 📒 v3.22.6: لو ربح يوم منتهي زاد بعدين (ربح فترة انطفاء انقيّد على يومه) ⇒ يوصل الفرق بس — بنفس النسبة اللي انحسب بيها
+            #    (تغيير النسبة اليوم ما يرجع يوزّع الأيام الفايتة)
+            dp = e.setdefault("dpct", {})
+            if dkey not in dp and _rec is not None and float(_rec) > 0:
+                dp[dkey] = round(float(_rec) / prof * 100.0, 6)   # يوم انوزّع قبل v3.22.6 ⇒ نسبته وقتها (ولا مفاجأة)
+            pc = float(dp.get(dkey, a.get("pct", 0)) or 0)
+            target = round(prof * pc / 100.0, 6)
+            prev = float(_rec or 0)
+            if _rec is not None and target <= prev + 1e-6:
+                continue
+            add = round(target - prev, 6)
+            e.setdefault("days", {})[dkey] = target
+            dp[dkey] = pc
+            e["pool"] = round(float(e.get("pool", 0)) + add, 6)
             e["last_alloc"] = dkey
+            journal("accum", f"📥 {a.get('name') or aid}: نصيب {dkey} {add:+.6f}$ ({pc:g}% من {prof:.4f}$){' — فرق ربح انقيّد متأخر' if prev > 0 else ''}",
+                    "ok", bot=aid, sym=a.get("symbol", ""), day=dkey, share=target, added=add, pct=pc, day_profit=prof, pool=e["pool"])
     _acc_save(st)
 
     # ═══ 2) التقييم — فلتران متتاليان ═══
@@ -1940,6 +2154,7 @@ def accum_tick(force_day=None, allow_buy=None):
         cap = float(a.get("max_buy", 0) or 0)
         amt = min(pend, cap) if cap > 0 else pend
         ok, msg = acc_buy_now(a, st, amt, px)
+        journal("accum", f"🛒 {a.get('name') or aid}: شراء آلي {amt:.2f}$ بسعر {px} — {msg}", "ok" if ok else "err", bot=aid, sym=sym, amount=amt, price=px)
         if ok:
             _e = st.get(aid) or {}
             _e["last_buy_day"] = _tday
@@ -2794,10 +3009,62 @@ def boot_toggle():
     return {"ok": True, "msg": "🪟 الإقلاع مع ويندوز: مفعّل — اللوحة والحارس راح يقلعون بروحهم"}
 
 # ───────────── سجل الأرباح Holy_Ledger + التقارير ─────────────
+_LT_LAST = {"t": None}          # 📒 v3.22.6: آخر مرة شاف بيها الدفتر الأرباح (لتوزيع ربح فترة الانطفاء على أيامه)
+_RI_RE_REL = re.compile(r"\[تحرير ربح داخلي\].*?الربح:\s*\+?([\d.]+)")
+
+
+def _hist_window(b, t0, t1):
+    """📒 v3.22.6: أوزان الربح لكل يوم من سجل صفقات البوت بين لحظتين (t0, t1] — بيع عادي · لحاق · تحرير إعادة الاستثمار.
+    تُستعمل بس لتوزيع ربح تراكم واللوحة طافية (أو عبر منتصف الليل) على أيامه الحقيقية — المبلغ نفسه من البوت (بالضبط)."""
+    _, hp, _ = paths_of(b)
+    hist = load_json(hp) or []
+    out = {}
+    for row in hist if isinstance(hist, list) else []:
+        if not isinstance(row, dict):
+            continue
+        ts_s = str(row.get("time") or "")
+        try:
+            ts = datetime.strptime(ts_s[:19], "%Y-%m-%d %H:%M:%S").timestamp()
+        except Exception:
+            continue
+        if ts <= t0 - 1 or ts > t1 + 1:
+            continue
+        msg = str(row.get("msg") or "")
+        mm = _RI_RE_SELL.search(msg) or _RI_RE_CU.search(msg) or _RI_RE_REL.search(msg)
+        if mm:
+            try:
+                out[ts_s[:10]] = out.get(ts_s[:10], 0.0) + float(mm.group(1))
+            except Exception:
+                pass
+    return {k: v for k, v in out.items() if v > 1e-12}
+
+
+def _book_split(daily, amount, parts, today):
+    """يقيّد المبلغ بالدفتر اليومي: على أيامه حسب الأوزان (المجموع بالضبط = المبلغ) — أو كله اليوم لو ماكو أوزان."""
+    tw = sum((parts or {}).values())
+    if tw <= 1e-12:
+        daily[today] = round(float(daily.get(today, 0.0)) + amount, 6)
+        return
+    ks = sorted(parts)
+    acc = 0.0
+    for i, dk in enumerate(ks):
+        v = round(amount * parts[dk] / tw, 6) if i < len(ks) - 1 else round(amount - acc, 6)
+        acc += v
+        daily[dk] = round(float(daily.get(dk, 0.0)) + v, 6)
+
+
 def ledger_tick():
     led = load_json(LEDGER) or {}
     today = datetime.now().strftime("%Y-%m-%d")
     changed = False
+    now_t = time.time()
+    if _LT_LAST["t"] is None:                       # أول نبضة بعد تشغيل اللوحة: آخر كتابة للدفتر = آخر ربح انحسب
+        try:
+            _LT_LAST["t"] = os.path.getmtime(LEDGER)
+        except Exception:
+            _LT_LAST["t"] = now_t
+    gap_t = float(_LT_LAST["t"] or now_t)
+    gap_cross = datetime.fromtimestamp(gap_t).strftime("%Y-%m-%d") < today   # الفترة اللي ما انشافت عبرت منتصف الليل
     for b in bot_dirs().values():
         # 🛡️ إصلاح: الديمو وبوتات DCA خارج سجل الدولار
         #   • الديمو معزول تماماً (لا يلوّث الأرقام الحقيقية)
@@ -2824,8 +3091,14 @@ def ledger_tick():
                     pv = float(c.get("profit") or 0)
                 except Exception:
                     continue
-                ent.setdefault("daily", {})[today] = round(float(ent["daily"].get(today, 0.0)) + pv, 6)
-                ent.setdefault("trades_daily", {})[today] = int(ent["trades_daily"].get(today, 0)) + 1
+                try:                                        # 📒 v3.22.6: الدورة بيومها (حتى لو اللوحة كانت طافية وقتها)
+                    cday = datetime.fromtimestamp(float(c.get("ts") or now_t)).strftime("%Y-%m-%d")
+                except Exception:
+                    cday = today
+                ent.setdefault("daily", {})[cday] = round(float(ent["daily"].get(cday, 0.0)) + pv, 6)
+                ent.setdefault("trades_daily", {})[cday] = int(ent["trades_daily"].get(cday, 0)) + 1
+                journal("profit", f"💵 دورة DCA شرائي #{c.get('n', '?')}: {pv:+.4f}$ ربح محرر (صافي) — يوم {cday}", "ok", bot=key, sym=b["symbol"],
+                        cycle=cid, day=cday, profit=pv, manual=bool(c.get("manual")))
                 seen.append(cid); sset.add(cid)
                 changed = True
             ent["dca_seen"] = seen[-600:]
@@ -2853,15 +3126,21 @@ def ledger_tick():
         diff = tot - last
         if diff > 1e-9:
             diff = diff * _safe(net_factor, b, default=1.0)   # 📉 صافي بعد العمولة
-            ent.setdefault("daily", {})[today] = round(ent.get("daily", {}).get(today, 0.0) + diff, 6)
+            # 📒 v3.22.6: ربح تراكم بفترة ما انشافت وعبرت منتصف الليل (اللوحة/الحاسبة طافية) ⇒ على أيامه الحقيقية من سجل الصفقات
+            parts = _safe(_hist_window, b, gap_t, now_t, default=None) if gap_cross else None
+            _book_split(ent.setdefault("daily", {}), diff, parts, today)
+            journal("profit", f"💵 ربح محرر {diff:+.4f}$ (صافي بعد العمولة)" + (f" — موزّع على أيامه: {', '.join(sorted(parts))}" if parts else ""),
+                    "ok", bot=key, sym=b["symbol"], net=round(diff, 6), card_total=tot, days=(parts or {today: 1}))
             ent["last_seen_total"] = tot
             changed = True
         elif diff < -1e-9:           # البوت انبنى من جديد/تصفّر — نزّل خط الأساس بلا خصم
             ent["last_seen_total"] = tot
             changed = True
+            journal("profit", f"↩️ ربح الكرت نزل ({last:.4f} ⇐ {tot:.4f}) — انبنى من جديد؟ خط الأساس نزل بلا خصم من الدفتر", "warn", bot=key, sym=b["symbol"])
     if changed:
         try: save_json_atomic(LEDGER, led)
         except Exception: pass
+    _LT_LAST["t"] = now_t
     return led
 
 # ───────────── 💠 مسجّل إعادة الاستثمار وتقاريره ─────────────
@@ -4789,6 +5068,7 @@ def guard_scan(force=False):
             alerts = _gd_alerts(g, now)
         sent_c, sent_e = [], []
         for item in outbox:
+            journal("guard", "🛡️ " + str(item[-1])[:1500], "warn", kind=item[0])   # 📜 كل تنبيه رقابة بالسجلات (حتى لو تيليغرام مكتوم)
             if tg_send(item[-1]):
                 (sent_c if item[0] == "coin" else sent_e).append(item)
         if sent_c or sent_e:
@@ -5238,7 +5518,24 @@ def _pv_num(x):
 _RI_LEGACY_K = "_ri_legacy"      # 💠 أيام قبل v3.11: الأرشيف كان يخزّن مجموع المعاد استثماره بس (مو لكل بوت)
 
 
-def _pv_per_rows(led, arcb, keys, d0, today, legacy=None):
+def _ri_keyset(arcb):
+    """📒 v3.22.6: البوتات اللي بيها إعادة استثمار (أرشيفها بيه 💠 · أو حالتها مستعملة · أو المحذوف كان عنده 💠) —
+    الباقي ربح تداوله = ربحه المحرر **بالضبط** (نفس الدفتر) بدل أرقام السجل المقرّبة لأربع مراتب."""
+    out = set()
+    for k, e in (arcb or {}).items():
+        if isinstance(e, dict) and any(float((v or {}).get("r") or 0) > 0 for v in (e.get("daily") or {}).values() if isinstance(v, dict)):
+            out.add(k)
+    for k, b in _tp_bots().items():
+        rs = _safe(_ri_state_of, _safe(load_json, paths_of(b)[0], default={}) or {}, default=None)
+        if rs and rs.get("used"):
+            out.add(k)
+    for e in (((load_json(GONE) or {}).get("bots") or {}).values()):
+        if isinstance(e, dict) and e.get("key") and (float(e.get("held") or 0) > 0 or float(e.get("handoff") or 0) > 0):
+            out.add(e["key"])
+    return out
+
+
+def _pv_per_rows(led, arcb, keys, d0, today, legacy=None, ri=None):
     """📚 v3.22.3: محرّك الأيام الوحيد — لكل بوت ولكل يوم (مباشر n · معاد r · بيعات c · الدفتر lv · المصدر).
     التقرير والشريط والإجماليات والتقرير اليومي بتيليغرام كلها منه ⇒ ما يختلفون.
     `legacy` (مجموع 💠 القديم لكل يوم): الزايد عن 💠 الموزّع على البوتات ⇒ صف «غير موزّع» (`_RI_LEGACY_K`) — ما يضيع."""
@@ -5259,10 +5556,13 @@ def _pv_per_rows(led, arcb, keys, d0, today, legacy=None):
             except Exception:
                 lv = 0.0
             a = ad.get(ds)
-            if isinstance(a, dict):
-                n, r, c, s = float(a.get("n") or 0), float(a.get("r") or 0), int(a.get("c") or 0), "a"
-            elif ltd is not None:
+            if ltd is not None:
                 n, r, c, s = lv, 0.0, int(ltd.get(ds) or 0), "a"   # 💵 DCA شرائي: الدفتر هو المصدر (صافي لكل دورة) · العدد = الدورات
+            elif ri is not None and k not in ri:                    # 📒 v3.22.6: بلا إعادة استثمار ⇒ التداول = المحرر بالضبط (الدفتر)
+                n, r = max(0.0, lv), 0.0
+                c, s = (int(a.get("c") or 0), "a") if isinstance(a, dict) else (int((le.get("trades_daily") or {}).get(ds) or 0) if isinstance(le, dict) else 0, "a")
+            elif isinstance(a, dict):
+                n, r, c, s = float(a.get("n") or 0), float(a.get("r") or 0), int(a.get("c") or 0), "a"
             elif a0 is None or ds < a0:
                 n, r, c, s = max(0.0, lv), 0.0, None, "l"       # قبل ما يبدي الأرشيف: الدفتر
             else:
@@ -5354,7 +5654,7 @@ def profit_view(days=30, tick=True):
     today = datetime.now().date()
     today_s = today.strftime("%Y-%m-%d")
     d0 = today - timedelta(days=days - 1)
-    per, first = _pv_per_rows(led, arcb, keys, d0, today, legacy)
+    per, first = _pv_per_rows(led, arcb, keys, d0, today, legacy, _ri_keyset(arcb))
     if _RI_LEGACY_K in per:
         keys.add(_RI_LEGACY_K)
     start = datetime.strptime(first, "%Y-%m-%d").date() if first else today
@@ -5949,12 +6249,13 @@ def _hist_day_parts(b, days=20):
         _, hp, _ = paths_of(b)
         mt = os.path.getmtime(hp) if os.path.exists(hp) else 0
         nfv = _safe(net_factor, b, default=1.0)
-        ck = (hp, mt, int(days), round(float(nfv), 12), datetime.now().strftime("%Y-%m-%d"))
+        since = _books_since()
+        ck = (hp, mt, int(days), round(float(nfv), 12), datetime.now().strftime("%Y-%m-%d"), since)
         hit = _HDP_CACHE.get(hp)
         if hit and hit[0] == ck:
             return {k: dict(v) for k, v in hit[1].items()}
         hist = load_json(hp) or []
-        cut = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+        cut = max((datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d"), since)   # 📒 قبل «بداية جديدة» ما ينحسب
     except Exception:
         return {}
     out = {}
@@ -6055,7 +6356,7 @@ def trade_period(start, end):
     keys = ({k for k, v in led.items() if not str(k).startswith("_") and isinstance(v, dict)}
             | {k for k in arcl if not str(k).startswith("_")} | set(cur))
     per, _ = _pv_per_rows(led, arcl, keys, datetime.strptime(start, "%Y-%m-%d").date(),
-                          datetime.strptime(end, "%Y-%m-%d").date(), arc.get("daily") or {})
+                          datetime.strptime(end, "%Y-%m-%d").date(), arc.get("daily") or {}, _ri_keyset(arcl))
     per_day = {d: {"n": 0.0, "r": 0.0, "rel": 0.0, "c": 0} for d in days}
     coins, bots_out = {}, {}
     for key in sorted(keys):
@@ -6158,6 +6459,8 @@ def coin_ledger_tick():
             tot[src][base] = round(float(tot[src].get(base) or 0) + q, 10)
             be = bots.setdefault(key, {"sym": b["symbol"], "type": c0.get("bot_type") or "grid"})
             be[src] = round(float(be.get(src) or 0) + q, 10)
+            journal("profit", f"🪙 {q:+.8g} {base} ربح محرّر بالعملة — {'DCA بيعي' if src == 'dca' else 'تحرير إعادة الاستثمار'} · يوم {day}", "ok",
+                    bot=key, sym=b["symbol"], event=eid, coin=q, base=base, day=day)
     if changed:
         cl["seen"] = seen_l[-30000:]
         try:
@@ -6196,9 +6499,7 @@ def alltime_view():
         st = _safe(load_json, paths_of(b)[0], default={}) or {}
         bt = c0.get("bot_type") or "grid"
         if bt == "dca":
-            base = str(b["symbol"]).split("-")[0].upper()
-            coins[base] = coins.get(base, 0.0) + float(st.get("total_coin_profit") or 0)
-            continue
+            continue                                   # 📒 v3.22.6: ربح عملة DCA البيعي من دفتر العملات (مصدر واحد — يشمل المحذوف وما يتكرر)
         if bt == "dca_buy":
             card += float(st.get("total_coin_profit") or 0)
             continue
@@ -6212,13 +6513,12 @@ def alltime_view():
         try:
             held += float(e.get("held") or 0)
             ho += float(e.get("handoff") or 0)
-            for base, q in (e.get("coin") or {}).items():
-                coins[base] = coins.get(base, 0.0) + float(q or 0)
         except Exception:
             continue
     cl = load_json(COIN_LEDGER) or {}
-    for base, q in ((cl.get("total_ri") or {}) if isinstance(cl, dict) else {}).items():
-        coins[base] = coins.get(base, 0.0) + float(q or 0)
+    for src in ("total_dca", "total_ri"):
+        for base, q in ((cl.get(src) or {}) if isinstance(cl, dict) else {}).items():
+            coins[base] = coins.get(base, 0.0) + float(q or 0)
     tb = _safe(trade_book, default=None) or {}
     # 📚 v3.22.3: المحرر الإجمالي = مجموع الدفتر اليومي · التداول الإجمالي = مجموع كل الأيام (n+r) — نفس محرّك التقرير
     #    (كان من كروت البوتات الحية ⇒ أصغر من ربح 30 يوم لما ينحذف/ينعاد بناء بوت)
@@ -6270,8 +6570,10 @@ def trade_book(force=False):
             dmin = ds
     today = datetime.now().date()
 
+    ri = _ri_keyset(arcb)
+
     def _agg(d0):
-        per, first = _pv_per_rows(led, arcb, keys, d0, today, legacy)
+        per, first = _pv_per_rows(led, arcb, keys, d0, today, legacy, ri)
         dt, dl = {}, {}
         for rows in per.values():
             for ds, x in rows.items():
@@ -7819,6 +8121,83 @@ def shutdown_all(noexit=False):
         threading.Timer(1.5, lambda: os._exit(0)).start()
     return {"ok": True, "msg": f"⏻ أوقفت {n} بوت" + ("" if noexit else " — اللوحة تنطفي الآن")}
 
+_BS_CACHE = {"mt": None, "v": ""}
+
+
+def _books_since():
+    """📒 v3.22.6: أول يوم بالدفاتر بعد «بداية جديدة للحسابات» ("" = من البداية)."""
+    try:
+        mt = os.path.getmtime(BOOKS_SINCE)
+    except Exception:
+        _BS_CACHE.update(mt=None, v="")
+        return ""
+    if _BS_CACHE["mt"] != mt:
+        _BS_CACHE.update(mt=mt, v=str((load_json(BOOKS_SINCE) or {}).get("since") or ""))
+    return _BS_CACHE["v"]
+
+
+_BOOKS_LOCK = threading.RLock()     # 📒 v3.22.6: الدفاتر الثلاثة ما تنكتب سوا ويّا «بداية جديدة»
+
+
+def _books_locked(fn):
+    def _w(*a, **k):
+        with _BOOKS_LOCK:
+            return fn(*a, **k)
+    _w.__name__ = fn.__name__
+    _w.__doc__ = fn.__doc__
+    return _w
+
+
+ledger_tick = _books_locked(ledger_tick)
+coin_ledger_tick = _books_locked(coin_ledger_tick)
+reinvest_tick = _books_locked(reinvest_tick)
+
+
+def books_fresh_start():
+    """📒 v3.22.6: «بداية جديدة للحسابات» — كأنها لوحة جديدة **من اليوم**: كل الدفاتر (المحرر · التداول · العملات · المحذوف)
+    تنمسح أيامها قبل اليوم، واليوم يبقى كامل. فلوس حقيقية ما تنلمس: المُراكِم (قيد الشراء والمتراكم) · البوتات · أوامرها · أرباح كروتها.
+    ⇒ ما ينعاد حساب أي دورة/بيعة قديمة (الدورات المحسوبة تبقى معلّمة · وسجل الصفقات قبل اليوم ما ينقرا)."""
+    with _BOOKS_LOCK:
+        ledger_tick()                                        # آخر ربح ينقيّد قبل المسح
+        _safe(coin_ledger_tick, default=None)
+        _safe(reinvest_tick, default=None)
+        today = datetime.now().strftime("%Y-%m-%d")
+        led = load_json(LEDGER) or {}
+        for k, e in list(led.items()):
+            if str(k).startswith("_") or not isinstance(e, dict):
+                continue
+            for f in ("daily", "trades_daily", "hourly"):
+                if isinstance(e.get(f), dict):
+                    e[f] = {d: v for d, v in e[f].items() if str(d)[:10] >= today}
+            if isinstance(e.get("monthly"), dict):
+                e["monthly"] = {}
+        save_json_atomic(LEDGER, led)
+        arc = load_json(RI_LEDGER) or {}
+        for e in ((arc.get("bots") or {}).values() if isinstance(arc, dict) else []):
+            if isinstance(e, dict) and isinstance(e.get("daily"), dict):
+                e["daily"] = {d: v for d, v in e["daily"].items() if d >= today}
+        if isinstance(arc, dict):
+            arc["daily"] = {d: v for d, v in (arc.get("daily") or {}).items() if d >= today}
+            save_json_atomic(RI_LEDGER, arc)
+        cl = load_json(COIN_LEDGER) or {}
+        if isinstance(cl, dict):
+            cl["daily"] = {d: v for d, v in (cl.get("daily") or {}).items() if d >= today}
+            tot = {"dca": {}, "ri": {}}
+            for row in cl["daily"].values():
+                for base, e in (row or {}).items():
+                    for src in ("dca", "ri"):
+                        q = float((e or {}).get(src) or 0)
+                        if abs(q) > 1e-12:
+                            tot[src][base] = round(tot[src].get(base, 0.0) + q, 10)
+            cl["total_dca"], cl["total_ri"], cl["bots"] = tot["dca"], tot["ri"], {}
+            save_json_atomic(COIN_LEDGER, cl)                # «seen» يبقى ⇒ الأحداث القديمة ما تنعاد
+        save_json_atomic(GONE, {"bots": {}})
+        save_json_atomic(BOOKS_SINCE, {"since": today, "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+        _HDP_CACHE.clear()
+        _TB_CACHE["v"] = None
+    return {"ok": True, "msg": f"📒 بداية جديدة للحسابات من اليوم {today} — الأيام قبله انمسحت من الدفاتر · اليوم بقى كامل · المُراكِم والبوتات وأوامرها ما انلمست"}
+
+
 def reset_ledger_only():
     """يصفّر سجل الأرباح (الرسم والتقارير) بلا لمس أرباح البوتات — لتنظيف أرقام وهمية قديمة"""
     led = load_json(LEDGER) or {}
@@ -8562,8 +8941,10 @@ def tg_send(text, force=False, plain=False):
             j = json.loads(r.read().decode("utf-8"))
         if j.get("ok"):
             TG_DIAG["last"] = "✅ آخر إرسال نجح"
+            journal("notify", "✈️ " + str(text)[:1800], "ok")
             return True
         TG_DIAG["last"] = f"❌ تيليغرام رفض: {j.get('description', 'خطأ مجهول')}"
+        journal("notify", "✈️ ما انرسل: " + TG_DIAG["last"] + " — " + str(text)[:300], "err", rl="tgfail:" + str(j.get('description', ''))[:60])
         return False
     except urllib.error.HTTPError as e:
         body = ""
@@ -8965,6 +9346,7 @@ def _accx_tick(b, st, cp):
 
 
 def _dash_event(sym, text):
+    journal("notify", "🔔 " + str(text)[:1500], "info", sym=sym)
     DASH_EVENTS.insert(0, {"sym": sym, "base": sym.split("-")[0],
                            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "msg": text})
     del DASH_EVENTS[40:]
@@ -9127,8 +9509,12 @@ def ledger_loop():
             if n % 10 == 0:              # كل ~5 دقائق — لقطة إعادة الاستثمار
                 _safe(reinvest_tick, default=None)
             n += 1
-        except Exception:
-            pass
+        except Exception as _e:
+            journal("system", f"⚠️ خطأ بحلقة الدفاتر: {type(_e).__name__}: {_e}", "err", rl="ledger_loop:" + type(_e).__name__)
+        try:
+            journal_ingest_bots()                     # 📜 v3.22.6: سطور سجلات البوتات ⇒ السجلات المفصّلة
+        except Exception as _e:
+            journal("system", f"⚠️ خطأ بقراءة سجلات البوتات: {_e}", "err", rl="ingest")
         time.sleep(30)
 
 # ───────────── خادم HTTP ─────────────
@@ -9279,6 +9665,19 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
         return "gzip" in (self.headers.get("Accept-Encoding") or "").lower()
 
     def _json(self, obj, code=200):
+        jp = getattr(self, "_jpost", None)
+        if jp:
+            self._jpost = None
+            try:
+                _pp, _dd = jp
+                _ok = (obj.get("ok") is not False and code < 400) if isinstance(obj, dict) else code < 400
+                _lbl = str(_dd.get("action") or _dd.get("act") or _pp.rsplit("/", 1)[-1])
+                _who = str(_dd.get("dir") or _dd.get("d") or _dd.get("bot") or _dd.get("symbol") or "")
+                journal("user", f"👤 {_lbl}" + (f" · {_who}" if _who else "") + (f" — {str(obj.get('msg'))[:300]}" if isinstance(obj, dict) and obj.get("msg") else ""),
+                        "ok" if _ok else "err", bot=_who if _who in {os.path.relpath(b['dir'], ROOT) for b in bot_dirs().values()} else "",
+                        path=_pp, request=_dd, ok=_ok, code=code)
+            except Exception:
+                pass
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         gz = len(body) > 1400 and self._gz_ok()           # 🗜️ الملخص ~50 كيلو ⇒ ~10 كيلو (أخف على نت الموبايل 5 مرات)
         if gz:
@@ -9377,6 +9776,16 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
             return self._json(series_of(q.get("dir", [""])[0]))
         if u.path == "/api/settings":
             return self._json(settings_payload())
+        if u.path == "/api/journal":                      # 📜 v3.22.6: السجلات المفصّلة بالفلاتر
+            try:
+                _bf = q.get("before", [""])[0]
+                return self._json(journal_query(cats=(q.get("cats", [""])[0] or "").split(","), lv=q.get("lv", [""])[0] or None,
+                                                bot=q.get("bot", [""])[0] or None, q=q.get("q", [""])[0] or None,
+                                                d_from=q.get("from", [""])[0] or None, d_to=q.get("to", [""])[0] or None,
+                                                before=float(_bf) if _bf else None, limit=int(q.get("limit", ["400"])[0] or 400),
+                                                after=float(q.get("after", [""])[0]) if q.get("after", [""])[0] else None))
+            except Exception as ex:
+                return self._json({"ok": False, "msg": str(ex), "items": []})
         if u.path == "/api/profit":                       # 📊 ربح التداول يوم بيوم + حصة كل بوت
             try:
                 pdays = int((q.get("days") or ["30"])[0])
@@ -9462,6 +9871,8 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
         except Exception:
             return self._json({"ok": False, "msg": "طلب غير صالح"}, 400)
         path = urlparse(self.path).path
+        if not ("preview" in path or str(data.get("act") or "") == "preview" or path in ("/api/journal",)):
+            self._jpost = (path, data)                     # 📜 v3.22.6: كل أمر منك ينكتب بالسجلات ويّا نتيجته (بلا أسرار)
         if path == "/api/control":
             act = data.get("action", "")
             if act == "tg_test":
@@ -9542,7 +9953,7 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
             if act == "shutdown_all":
                 return self._json(shutdown_all(noexit=(data.get("value") == "noexit")))
             if act == "reset_ledger":
-                return self._json(reset_ledger())
+                return self._json(books_fresh_start())    # 📒 v3.22.6: نفس «بداية جديدة» الآمنة (كانت تمسح السجل وتكتب صفر بملفات البوتات الشغّالة)
             if act == "send_report":
                 kind = data.get("value") or "daily"
                 _ok = _tg_report(build_report(kind))      # 💠 إعادة الاستثمار صارت داخل التقرير نفسه
@@ -9824,7 +10235,7 @@ WantedBy=multi-user.target
             save_app_cfg(c)
             return self._json({"ok": True, "msg": "🔐 حُفظت — سجّل الدخول من جديد" if new_pw else "✅ حُفظت مدة القفل"})
         if path == "/api/ledger_reset":
-            return self._json(reset_ledger_only())
+            return self._json(books_fresh_start())      # 📒 v3.22.6: كل الدفاتر سوا (كان سجل المحرر بس ⇒ DCA الشرائي يرجع يحسب دوراته القديمة)
         if path == "/api/grid_range_preview":
             try:
                 cp = float(data.get("cp", 0) or data.get("base_price", 0) or 0)
@@ -10105,6 +10516,34 @@ body.boot .card{animation:rise .6s var(--ease) both;animation-delay:calc(var(--i
   opacity:0;transform:translateX(-26px);pointer-events:none;transition:opacity .32s var(--ease),transform .32s var(--ease);overflow-y:auto}
 .page.on{opacity:1;transform:none;pointer-events:auto}
 .pwrap{max-width:1060px;margin:0 auto;padding:26px 22px 60px}
+/* 📜 v3.22.6: السجلات المفصّلة */
+.lg-keep{font-size:11.5px;color:var(--mut);margin-inline-start:auto}
+.lg-cats{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.lg-cats button{padding:5px 10px;border-radius:99px;font-size:12px}
+.lg-cats button b{font-weight:600;color:var(--mut);margin-inline-start:4px;font-size:11px}
+.lg-cats button.on b{color:inherit}
+.lg-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.lg-row select,.lg-row input[type=search]{background:var(--glass);border:1px solid var(--line);border-radius:10px;color:var(--tx);padding:7px 9px;font:inherit;font-size:12.5px}
+.lg-row input[type=search]{flex:1;min-width:180px}
+.lg-row button{padding:7px 11px;font-size:12.5px}
+.lg-live{font-size:12px;color:var(--mut);display:flex;align-items:center;gap:4px;cursor:pointer}
+.lg-sum{font-size:11.5px;color:var(--mut);margin-top:8px}
+.lg-list{padding:6px 0;overflow:hidden}
+.lg-day{position:sticky;top:0;z-index:1;background:var(--surf,var(--glass));backdrop-filter:blur(8px);padding:6px 14px;font-size:11.5px;font-weight:600;color:var(--mut);border-bottom:1px solid var(--line)}
+.lg-it{display:grid;grid-template-columns:66px 12px 108px minmax(0,1fr);gap:8px;align-items:start;padding:6px 14px;border-bottom:1px solid rgb(var(--ov-rgb)/.05);cursor:pointer;font-size:12.5px}
+.lg-it:hover{background:rgb(var(--ov-rgb)/.04)}
+.lg-it .tm{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--mut);direction:ltr;text-align:start}
+.lg-it .dot{width:9px;height:9px;border-radius:50%;margin-top:4px;background:var(--mut2)}
+.lg-it.ok .dot{background:var(--green)}.lg-it.warn .dot{background:var(--amber)}.lg-it.err .dot{background:var(--red)}
+.lg-it.err .msg{color:var(--red)}
+.lg-it .who{font-size:11px;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lg-it .msg{white-space:pre-wrap;word-break:break-word;line-height:1.55}
+.lg-it .det{grid-column:1/-1;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;direction:ltr;text-align:left;white-space:pre-wrap;word-break:break-all;
+  background:rgb(var(--ov-rgb)/.05);border:1px solid var(--line);border-radius:9px;padding:8px 10px;margin-top:4px;max-height:320px;overflow:auto}
+.lg-empty{color:var(--mut);font-size:12.5px;padding:18px;text-align:center}
+.lg-more{text-align:center;margin:-4px 0 18px}
+@media (max-width:760px){.lg-it{grid-template-columns:54px 10px minmax(0,1fr)}.lg-it .who{grid-column:3;grid-row:2;margin-top:-4px}.lg-it .msg{grid-column:3}
+  .lg-keep{display:none}}
 .phead{display:flex;align-items:center;gap:12px;margin-bottom:20px}
 .phead h2{font-size:20px;font-weight:700}
 .x{margin-inline-start:auto;width:38px;height:38px;border-radius:12px;display:grid;place-items:center;font-size:15px}
@@ -10492,6 +10931,7 @@ html.lite .card:hover,html.lite button:hover{transform:none}
     <span class="gsep"></span>
     <div class="grp" aria-label="الصفحات">
       <button onclick="openReports()">📊 التقارير</button>
+      <button onclick="openLogs()" title="السجلات المفصّلة: كل عملية — صفقات · أرباح · المُراكِم · أوامرك · الرقابة · الإشعارات · النظام (7 أيام)">📜 السجلات</button>
       <button onclick="openWallets()">👛 المحافظ</button>
       <button onclick="openWalletView()">💰 محفظتي</button>
       <button id="bGuard" onclick="openGuard()" title="الرقابة: مطابقة الأرصدة والأوامر مع المنصة وكشف البوت الميت">🛡️ الرقابة</button>
@@ -10563,10 +11003,28 @@ html.lite .card:hover,html.lite button:hover{transform:none}
       <button id="rs_ri" onclick="setRepSrc('ri')" title="نمو إعادة الاستثمار لنفس المدة">💠 إعادة الاستثمار</button>
       <span style="flex-basis:100%;height:0"></span>
       <button class="primary" onclick="sendReport()">📨 إرسال لتيليغرام</button>
-      <button class="danger" onclick="confirmResetLedger()">🧹 تصفير السجل</button>
+      <button class="danger" onclick="confirmLedgerReset()">📒 بداية جديدة للحسابات</button>
     </div>
     <pre class="rep" id="repText">اختر نوع التقرير…</pre>
   </div>
+</div></section>
+<section class="page" id="page_logs"><div class="pwrap">
+  <div class="phead"><h2>📜 السجلات المفصّلة</h2><span class="lg-keep">كل عملية · تنحفظ 7 أيام وتنمسح لحالها</span><button class="x" onclick="closeLogs()">✕</button></div>
+  <div class="panel lg-filt">
+    <div class="lg-cats" id="lgCats"></div>
+    <div class="lg-row">
+      <select id="lgBot" onchange="loadLogs()" aria-label="البوت"><option value="">كل البوتات واللوحة</option></select>
+      <select id="lgLv" onchange="loadLogs()" aria-label="المستوى"><option value="">كل المستويات</option><option value="warn">⚠️ تنبيهات وأخطاء</option><option value="err">❌ أخطاء بس</option></select>
+      <select id="lgRange" onchange="loadLogs()" aria-label="الفترة"><option value="1h">آخر ساعة</option><option value="today" selected>اليوم</option><option value="yday">أمس</option><option value="3d">آخر 3 أيام</option><option value="7d">آخر 7 أيام</option></select>
+      <input id="lgQ" type="search" placeholder="🔎 ابحث بالنص (عملة · سعر · أمر…)" oninput="clearTimeout(LG.qt);LG.qt=setTimeout(loadLogs,350)">
+      <label class="lg-live"><input type="checkbox" id="lgLive" checked> مباشر</label>
+      <button onclick="lgCsv()" title="تنزيل اللي معروض (بالفلاتر) كجدول">⬇️ CSV</button>
+      <button onclick="openExport()" title="ملف مضغوط فيه كل شي للتشخيص (السجلات + الدفاتر + البوتات + تدقيق الحسابات)">📦 تقرير تشخيصي</button>
+    </div>
+    <div class="lg-sum" id="lgSum"></div>
+  </div>
+  <div class="panel lg-list" id="lgList"><p class="lg-empty">…</p></div>
+  <div class="lg-more"><button id="lgMore" onclick="loadLogs(true)" hidden>⬇️ تحميل أقدم</button></div>
 </div></section>
 
 <!-- صفحة المحافظ -->
@@ -11593,7 +12051,7 @@ function openSettings(){
    ${S('🖥️ النظام', ((lin||!os)?B('🐧','إقلاع لينكس','openBoot()'):'')
       +((win||!os)?B('🪟','إقلاع ويندوز',"g('boot');setTimeout(openSettings,700)",'bBoot',{on:!!d.boot,a:'مفعّل',b:'معطّل'}):'')
       +B('📈','شريط الأسعار','openTicker()')+B('🧬','تحديث المحركات','confirmUpgrade()'))}
-   ${S('⚠️ منطقة الخطر', B('🧹','تصفير سجل الأرباح','confirmLedgerReset()'), true)}
+   ${S('⚠️ منطقة الخطر', B('📒','بداية جديدة للحسابات','confirmLedgerReset()'), true)}
    <p style="color:var(--mut2);font-size:11px;margin-top:12px;line-height:1.7">
      ولا زر هنا يلمس أوامر البوتات بالمنصة — أدوات لوحة وتشخيص وتشغيل.</p>
    <div class="mbtns"><button onclick="hideModal()">إغلاق</button></div>`);
@@ -12463,6 +12921,62 @@ async function cloneBot(){const r=await api('/api/control',{dir:CUR,action:'clon
 function openPage(p){$('#page_'+p).classList.add('on')}
 function closePage(p){$('#page_'+p).classList.remove('on')}
 async function openReports(){openPage('reports');loadReport(REPKIND);loadProfit()}
+/* ── 📜 v3.22.6: السجلات المفصّلة — كل عملية بفلاتر (الفئة · البوت · المستوى · الفترة · النص) · مباشر كل 5 ثواني ── */
+const LG={cats:new Set(),items:[],more:false,timer:null,qt:null,busy:false,meta:{}};
+const LG_IC={trade:'🔁',bot:'🤖',profit:'💵',accum:'🪙',user:'👤',guard:'🛡️',notify:'🔔',system:'⚙️'};
+const lgEsc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function lgDay(n){const t=new Date(Date.now()-n*864e5);return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0')}
+function lgRangeQ(){const r=($('#lgRange')||{}).value||'today';
+  if(r==='1h')return `&from=${lgDay(1)}&after=${Math.floor(Date.now()/1000-3600)}`;
+  if(r==='yday')return `&from=${lgDay(1)}&to=${lgDay(1)}`;
+  if(r==='3d')return `&from=${lgDay(2)}`;
+  if(r==='7d')return `&from=${lgDay(6)}`;
+  return `&from=${lgDay(0)}`}
+function openLogs(){openPage('logs');loadLogs();clearInterval(LG.timer);
+  LG.timer=setInterval(()=>{const pg=$('#page_logs');if(!pg||!pg.classList.contains('on')){clearInterval(LG.timer);return}
+    if($('#lgLive').checked&&!LG.busy&&!document.querySelector('#lgList .det')&&(pg.scrollTop||0)<120)loadLogs(false,true)},5000)}
+function closeLogs(){closePage('logs');clearInterval(LG.timer)}
+function lgCat(c){if(c==='*')LG.cats.clear();else if(LG.cats.has(c))LG.cats.delete(c);else LG.cats.add(c);loadLogs()}
+async function loadLogs(more,silent){
+  if(LG.busy)return;LG.busy=true;
+  try{
+    let u='/api/journal?limit=400'+lgRangeQ();
+    const cats=[...LG.cats];if(cats.length)u+='&cats='+encodeURIComponent(cats.join(','));
+    const b=$('#lgBot').value,lv=$('#lgLv').value,q=$('#lgQ').value.trim();
+    if(b)u+='&bot='+encodeURIComponent(b);if(lv)u+='&lv='+lv;if(q)u+='&q='+encodeURIComponent(q);
+    if(more&&LG.items.length)u+='&before='+LG.items[LG.items.length-1].t;
+    const r=await api(u);if(!r||r.ok===false)throw 0;
+    LG.items=more?LG.items.concat(r.items||[]):(r.items||[]);LG.more=!!r.more;LG.meta=r;
+    lgRender(r)}
+  catch(e){if(!silent)$('#lgList').innerHTML='<p class="lg-empty">تعذّر جلب السجلات</p>'}
+  finally{LG.busy=false}}
+function lgRender(r){
+  const C=r.cats||{},N=r.counts||{},tot=Object.values(N).reduce((a,b)=>a+b,0);
+  $('#lgCats').innerHTML=`<button class="${LG.cats.size?'':'on'}" onclick="lgCat('*')">الكل<b>${tot}</b></button>`+
+    Object.keys(C).map(k=>`<button class="${LG.cats.has(k)?'on':''}" onclick="lgCat('${k}')">${lgEsc(C[k])}<b>${N[k]||0}</b></button>`).join('');
+  const sel=$('#lgBot'),cur=sel.value,bots=r.bots||[];
+  if(sel.options.length!==bots.length+2){sel.innerHTML='<option value="">كل البوتات واللوحة</option>'+bots.map(k=>{const bb=((DATA&&DATA.bots)||[]).find(x=>x.dir===k||String(x.dir||'').endsWith(k));return `<option value="${lgEsc(k)}">${lgEsc((bb&&bb.symbol?bb.symbol+' · ':'')+k)}</option>`}).join('')+'<option value="__dash">— (اللوحة نفسها)</option>';sel.value=cur}
+  const it=LG.items;
+  $('#lgSum').textContent=`معروض ${it.length}${LG.more?'+':''} · مطابق ${tot} · ملفات الأيام: ${(r.days||[]).length} · تنحفظ ${r.keep||7} أيام وتنمسح لحالها`;
+  if(!it.length){$('#lgList').innerHTML='<p class="lg-empty">ماكو سجلات بهالفلاتر</p>';$('#lgMore').hidden=true;return}
+  let h='',lastD='';
+  it.forEach((e,i)=>{const d=new Date(e.t*1000),ds=d.toLocaleDateString('ar-IQ-u-nu-latn',{weekday:'long',year:'numeric',month:'numeric',day:'numeric'});
+    if(ds!==lastD){h+=`<div class="lg-day">${ds}</div>`;lastD=ds}
+    const tm=d.toTimeString().slice(0,8),who=e.bot||(e.c==='user'||e.c==='system'?'اللوحة':'')||'';
+    h+=`<div class="lg-it ${e.lv||'info'}" data-i="${i}" onclick="lgToggle(this)"><span class="tm">${tm}</span><span class="dot" title="${e.lv}"></span>`+
+      `<span class="who" title="${lgEsc(who)} ${lgEsc(e.sym||'')}">${LG_IC[e.c]||'•'} ${lgEsc(who||e.sym||'')}</span><span class="msg" dir="auto">${lgEsc(e.m)}</span></div>`});
+  $('#lgList').innerHTML=h;$('#lgMore').hidden=!LG.more}
+function lgToggle(el){const x=el.querySelector('.det');if(x){x.remove();return}
+  const e=LG.items[+el.dataset.i];if(!e)return;
+  const d=document.createElement('div');d.className='det';
+  d.textContent=JSON.stringify({time:new Date(e.t*1000).toLocaleString('en-GB'),category:(LG.meta.cats||{})[e.c]||e.c,level:e.lv,bot:e.bot||'',symbol:e.sym||'',message:e.m,details:e.d||{}},null,2);
+  el.appendChild(d)}
+function lgCsv(){const it=LG.items;if(!it.length){toast('ماكو سجلات معروضة',false);return}
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"',C=LG.meta.cats||{};
+  const rows=[['الوقت','الفئة','المستوى','البوت','العملة','الرسالة','التفاصيل'].map(q).join(',')].concat(it.map(e=>[new Date(e.t*1000).toLocaleString('en-GB'),C[e.c]||e.c,e.lv,e.bot||'',e.sym||'',e.m,JSON.stringify(e.d||{})].map(q).join(',')));
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'}));
+  a.download='holy_logs_'+lgDay(0)+'.csv';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500)}
+
 /* ── 📊 ربح التداول يوم بيوم + حصة كل بوت — SVG مرسوم هنا (بلا مكتبات من الإنترنت) ── */
 let PC=pcPal();
 function pcPal(){return document.documentElement.dataset.theme==='light'
@@ -13054,14 +13568,14 @@ function disablePw(){
 }
 async function doLogout(){try{await api('/api/logout',{})}catch(e){}location.reload()}
 function confirmLedgerReset(){
-  askConfirm('🧹 تنظيف سجل الأرباح؟',
-    'يصفّر الرسم البياني وتقارير تليجرام فقط، ويعيد ضبط خطوط الأساس من الأرباح الحالية. أرباح البوتات وحالتها وسلالمها لا تُمس إطلاقاً. استعملها لو ظهرت أرقام وهمية متضخمة بالرسم.',
+  askConfirm('📒 بداية جديدة للحسابات؟',
+    'كأنها لوحة جديدة <b>من اليوم</b>: كل أيام الدفاتر قبل اليوم تنمسح (الربح المحرر · ربح التداول · العملات · البوتات المحذوفة) — واليوم يبقى كامل، والإجماليات والتقارير تبدي من اليوم.<br>ما ينلمس: البوتات وأوامرها وأرباح كروتها · المُراكِم وفلوسه · السجلات. وما ينعاد حساب أي دورة أو بيعة قديمة.',
     async()=>{const r=await api('/api/ledger_reset',{});toast(r.msg||'تم',r.ok!==false);tick&&tick();});
 }
 function confirmUpgrade(){askConfirm('🧬 تحديث محرك البوتات؟','يكتب المحرك المدمج (إصدار '+((DATA&&DATA.engine_v)||'—')+') داخل كل مجلدات البوتات مع نسخة احتياطية main_backup.py، ويعيد تشغيل الشغالين منهم. الإعدادات والذاكرة والسلم ما تنلمس أبداً.',()=>g('upgrade_engines'))}
 function confirmStartAll(){askConfirm('▶️ تشغيل كل البوتات؟','يشغّل كل بوت واگف ويحطه تحت جناح الحارس. الشغال أصلاً ما ينلمس.',()=>g('start_all'))}
 function confirmShutdown(){askConfirm('⏻ إطفاء كل البوتات؟','توقف كل البوتات وتوصلك خلاصة تيليغرام. اللوحة والحارس يظلون شغالين.',()=>g('shutdown_all','noexit'))}
-function confirmResetLedger(){askConfirm('🧹 تصفير سجل الأرباح؟','يصفر Holy_Ledger وعدادات الأرباح الكلية — ما يلمس البوتات ولا أوامرها.',()=>g('reset_ledger'))}
+function confirmResetLedger(){confirmLedgerReset()}      // 📒 v3.22.6: زر واحد آمن
 function confirmRebuild(){askConfirm('♻️ إعادة بناء '+CUR+'؟','يمسح الذاكرة ويلغي الأوامر ويرسم شبكة جديدة من سعر اليوم. مو ترقية!',()=>{ctl(CUR,'rebuild');closeDrawer()})}
 function confirmPurge(d){d=d||CUR;askConfirm('💣 حذف نهائي لـ '+d+'؟','يأمر البوت يلغي كل أوامره هو من المنصة (بصمته فقط — أوامرك اليدوية ما تنلمس)، ثم يؤرشف مجلده.',()=>{ctl(d,'delete_purge');closeDrawer()})}
 function confirmDelete(){askConfirm('🗑 حذف '+CUR+'؟','يوقف البوت وينقله للأرشيف _archive.',()=>{ctl(CUR,'delete');closeDrawer()})}
@@ -16059,6 +16573,7 @@ def main():
         threading.Thread(target=notifier_loop, daemon=True).start()
         threading.Thread(target=watchdog_loop, daemon=True).start()
         threading.Thread(target=ledger_loop, daemon=True).start()
+        journal("system", f"▶️ اللوحة اشتغلت — v{APP_VERSION} · {len(bot_dirs())} بوت", "ok", python=sys.version.split()[0], os=platform.system())
         threading.Thread(target=reports_loop, daemon=True).start()
         threading.Thread(target=health_loop, daemon=True).start()
         threading.Thread(target=heartbeat_loop, daemon=True).start()
@@ -16552,6 +17067,137 @@ def _diag_exchange():
         res[wid] = rec
     return res
 
+
+def books_audit():
+    """🧮 v3.22.6: تدقيق الحسابات (قراءة فقط) — كل رقم مقابل مصدره، للتقرير التشخيصي.
+    ❌ = تناقض داخلي لازم ما يصير أبداً · ⚠️ = يستاهل نظرة · ℹ️ = مقارنة للمعلومة."""
+    C = []
+    def add(name, ok, detail, lv=None):
+        C.append({"check": name, "ok": bool(ok), "level": lv or ("ok" if ok else "err"), "detail": detail})
+    near = lambda a, b, e=1e-4: abs(float(a or 0) - float(b or 0)) <= e
+    today = datetime.now().strftime("%Y-%m-%d")
+    since = _books_since()
+    add("بداية الدفاتر", True, f"من {since}" if since else "من أول تشغيل (ما انضغطت «بداية جديدة»)", "info")
+    led = load_json(LEDGER) or {}
+    tb = _safe(trade_book, True, default={}) or {}
+    pv = _safe(profit_view, 400, False, default={}) or {}
+    T = pv.get("tot") or {}
+    add("الإجمالي بالشريط = تقرير كل التاريخ", near(tb.get("trade_all"), T.get("t")) and near(tb.get("rel_all"), T.get("led")),
+        f"تداول {tb.get('trade_all')} / {T.get('t')} · محرر {tb.get('rel_all')} / {T.get('led')}")
+    rows_t = sum(float(b.get("t") or 0) for b in pv.get("bots") or [])
+    days_t = sum(float(d.get("t") or 0) for d in pv.get("days") or [])
+    add("مجموع صفوف البوتات = مجموع الأيام = الإجمالي", near(rows_t, T.get("t"), 1e-3) and near(days_t, T.get("t"), 1e-3),
+        f"صفوف {rows_t:.6f} · أيام {days_t:.6f} · إجمالي {T.get('t')}")
+    pvd = {d["d"]: d for d in pv.get("days") or []}
+    bad = []
+    for n in range(0, 7):
+        d = (datetime.now() - timedelta(days=n)).strftime("%Y-%m-%d")
+        P = _safe(trade_period, d, d, default=None)
+        if not P:
+            continue
+        x = P["per_day"].get(d) or {}
+        y = pvd.get(d) or {}
+        if not near(x.get("n", 0) + x.get("r", 0), y.get("t", 0), 1e-4) or not near(x.get("rel", 0), y.get("led", 0), 1e-4):
+            bad.append(d)
+    add("تقرير تيليغرام = لوحة التقارير (آخر 7 أيام)", not bad, "كلها متطابقة" if not bad else f"تختلف: {bad}")
+    ri = _ri_keyset(((load_json(RI_LEDGER) or {}).get("bots") or {}))
+    nori_bad = [b["k"] for b in pv.get("bots") or [] if b["k"] not in ri and b.get("type") not in ("dca_buy",) and b["k"] != _RI_LEGACY_K
+                and not near(b.get("t"), b.get("led"), 1e-6)]
+    add("بوت بلا إعادة استثمار: التداول = المحرر بالضبط", not nori_bad, "كلها" if not nori_bad else f"تختلف: {nori_bad}")
+    for b in pv.get("bots") or []:
+        if b["k"] in ri:
+            st = None
+            for bd in bot_dirs().values():
+                if os.path.relpath(bd["dir"], ROOT) == b["k"]:
+                    st = _safe(load_json, paths_of(bd)[0], default={})
+            rs = _safe(_ri_state_of, st or {}, default=None) or {"held": 0.0, "handoff": 0.0}
+            gap = float(b.get("t") or 0) - (float(b.get("led") or 0) + rs["held"] + rs["handoff"])
+            add(f"هوية إعادة الاستثمار — {b.get('name')}", abs(gap) < 0.05 + 0.01 * abs(float(b.get('t') or 0)),
+                f"تداول {b.get('t'):.4f} ≈ محرر {b.get('led'):.4f} + داخل الأوامر {rs['held']:.4f} + للمُراكِم {rs['handoff']:.4f} (فرق {gap:+.4f} — يكبر لو الدفاتر أقصر من عمر البوت)", "ok" if abs(gap) < 0.05 + 0.01 * abs(float(b.get('t') or 0)) else "warn")
+    for bd in bot_dirs().values():
+        c0 = bd.get("cfg") or {}
+        if c0.get("is_demo") or c0.get("bot_type") in ("dca", "dca_buy"):
+            continue
+        k = os.path.relpath(bd["dir"], ROOT)
+        st = _safe(load_json, paths_of(bd)[0], default={}) or {}
+        card = float(st.get("total_profit") or 0) * float(_safe(net_factor, bd, default=1.0))
+        lsum = sum(float(v or 0) for v in ((led.get(k) or {}).get("daily") or {}).values())
+        add(f"كرت البوت مقابل الدفتر — {bd.get('symbol')} ({k})", True,
+            f"الكرت (صافي) {card:.4f} · الدفتر {lsum:.4f} — يتساوون لو الدفتر يغطي عمر البوت كله (بلا «بداية جديدة» وبلا إعادة بناء)", "info")
+        neg = [d for d, v in ((led.get(k) or {}).get("daily") or {}).items() if float(v or 0) < -1e-9]
+        if neg:
+            add(f"يوم سالب بدفتر جرد — {k}", False, f"{neg}", "warn")
+    cl = load_json(COIN_LEDGER) or {}
+    for src in ("dca", "ri"):
+        tot = {}
+        for row in (cl.get("daily") or {}).values():
+            for base, e in (row or {}).items():
+                tot[base] = tot.get(base, 0.0) + float((e or {}).get(src) or 0)
+        T2 = cl.get("total_" + src) or {}
+        okc = all(near(tot.get(k2, 0), T2.get(k2, 0), 1e-8) for k2 in set(tot) | set(T2))
+        add(f"دفتر العملات ({'DCA بيعي' if src == 'dca' else 'إعادة استثمار'}): الإجمالي = مجموع الأيام", okc, f"أيام {tot} · إجمالي {T2}")
+    st_all = _safe(acc_state, default={}) or {}
+    for a in _safe(acc_cfgs, default=[]) or []:
+        e = st_all.get(a.get("id")) or {}
+        days = e.get("days") or {}
+        dp = e.get("dpct") or {}
+        miss = []
+        for n in range(1, 8):
+            d = (datetime.now() - timedelta(days=n)).strftime("%Y-%m-%d")
+            if (a.get("start") or "") > d or (since and d < since):
+                continue
+            prof = day_profit(d)
+            if prof <= 0:
+                continue
+            pc = float(dp.get(d, a.get("pct", 0)) or 0)
+            if float(days.get(d) or 0) + 1e-6 < round(prof * pc / 100.0, 6):
+                miss.append(f"{d}: {float(days.get(d) or 0):.4f} < {prof * pc / 100:.4f}")
+        add(f"المُراكِم {a.get('name') or a.get('id')}: نصيبه من كل يوم منتهي", not miss, "كامل (آخر 7 أيام)" if not miss else " · ".join(miss), "ok" if not miss else "warn")
+    errs = sum(1 for c in C if c["level"] == "err")
+    warns = sum(1 for c in C if c["level"] == "warn")
+    return {"ok": errs == 0, "errors": errs, "warnings": warns, "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "version": APP_VERSION, "books_since": since, "checks": C}
+
+
+def books_audit_md(A):
+    L = [f"# 🧮 تدقيق الحسابات — v{A.get('version')} · {A.get('at')}",
+         f"**النتيجة:** {'✅ ولا تناقض' if A.get('ok') else '❌ بيه تناقض'} · أخطاء {A.get('errors')} · تنبيهات {A.get('warnings')}", ""]
+    ic = {"ok": "✅", "err": "❌", "warn": "⚠️", "info": "ℹ️"}
+    for c in A.get("checks") or []:
+        L.append(f"- {ic.get(c['level'], '•')} **{c['check']}** — {c['detail']}")
+    return "\n".join(L)
+
+DIAG_README = """# 📦 التقرير التشخيصي — The Holy Dashboard v__V__
+قراءة فقط · ولا مفتاح API ولا كلمة سر ولا توكن داخله.
+
+## ابدأ من هنا
+1. `ACCOUNTING_AUDIT.md` — تدقيق الحسابات (❌ تناقض · ⚠️ يستاهل نظرة · ℹ️ معلومة).
+2. `holy_report_*.md` — التقرير الكامل · `health.json` — الصحة · `environment.txt` — البيئة والمكتبات.
+3. `journal/YYYY-MM-DD.jsonl` — **السجلات المفصّلة** (آخر 7 أيام): سطر لكل عملية
+   `{t: وقت يونكس · c: الفئة (trade صفقات · bot سجل البوت · profit أرباح · accum المُراكِم · user أوامرك · guard الرقابة · notify إشعارات · system النظام) · lv: info/ok/warn/err · bot · sym · m: الرسالة · d: التفاصيل}`.
+
+## الدفاتر (مصدر كل رقم)
+- `ledger.json` — الربح المحرر لكل بوت لكل يوم (صافي بعد العمولة) · DCA الشرائي بدوراته (`dca_seen`).
+- `reinvest_archive.json` — أرشيف التداول لكل بوت لكل يوم: n مباشر · r معاد استثماره · c بيعات.
+- `coin_ledger.json` — الربح المحرّر بالعملات (DCA بيعي + تحرير إعادة الاستثمار) بيوم كل حدث.
+- `gone_bots.json` — أرقام البوتات المحذوفة · `books_since.json` — «بداية جديدة للحسابات» (أول يوم بالدفاتر).
+- `accumulator_state.json` + `accumulators_config.json` — المُراكِم: أنصبة الأيام (`days` · `dpct`) · قيد الشراء · المتراكم · المشتريات.
+- `money_audit.json` — تدقيق الفلوس (كل سنت) · `qty_audit.json` — تدقيق الكميات.
+
+## الأرقام اللي تشوفها باللوحة (لقطة)
+`numbers/overview.json` (الشريط) · `numbers/trade_book.json` (الإجماليات · الشهري · أفضل يوم) · `numbers/alltime.json` ·
+`numbers/profit_view_30.json` و`_all.json` (لوحة التقارير) · `numbers/report_daily.md` (تقرير تيليغرام).
+
+## كل بوت: `bots/<المجلد>/`
+`state.json` (حالة المحرك) · `history.json` (سجل صفقاته) · `config.json` (بلا مفاتيح) · `snapshot.json` (الكرت) · `checks.json`.
+
+## القواعد (v3.22.6)
+- يوم بيه بيعات ⇒ ربح التداول بيوم البيعة · بوت بلا إعادة استثمار ⇒ التداول = المحرر بالضبط (الدفتر).
+- ربح تراكم واللوحة طافية ⇒ ينقيّد على أيامه الحقيقية من سجل الصفقات · دورة DCA الشرائي ⇒ بيومها.
+- المُراكِم ياخذ نسبته من كل يوم منتهي، ولو زاد ربح يوم بعدين ياخذ الفرق (بنفس النسبة).
+"""
+
+
 def diag_bundle(days=30):
     """📦 حزمة تشخيص: تقرير md + json + بيانات كل بوت — **قراءة فقط**."""
     import zipfile, io as _io
@@ -16576,6 +17222,35 @@ def diag_bundle(days=30):
         except Exception:
             pass
         put("ledger.json", _safe(load_json, LEDGER, default={}))
+        # 📒 v3.22.6: كل الدفاتر + تدقيق الحسابات + لقطات الأرقام اللي تشوفها باللوحة
+        _A = _safe(books_audit, default={"ok": False, "checks": [], "error": "تعذّر"}) or {}
+        put("ACCOUNTING_AUDIT.md", _safe(books_audit_md, _A, default="# تعذّر"))
+        put("accounting_audit.json", _A)
+        put("coin_ledger.json", _safe(load_json, COIN_LEDGER, default={}))
+        put("gone_bots.json", _safe(load_json, GONE, default={}))
+        put("books_since.json", _safe(load_json, BOOKS_SINCE, default={}) or {"since": ""})
+        put("numbers/overview.json", _safe(overview, default={}))
+        put("numbers/trade_book.json", _safe(trade_book, True, default={}))
+        put("numbers/alltime.json", _safe(alltime_view, default={}))
+        put("numbers/profit_view_30.json", _safe(profit_view, 30, False, default={}))
+        put("numbers/profit_view_all.json", _safe(profit_view, 400, False, default={}))
+        put("numbers/report_daily.md", _safe(build_report, "daily", default="—"))
+        put("notifications.json", list(DASH_EVENTS))
+        try:                                                  # 🔒 الإعدادات بلا أسرار
+            put("app_config_clean.json", _jr_clean(app_cfg()))
+            put("dashboard_config_clean.json", _jr_clean(load_json(DASH_CFG) or {}))
+        except Exception:
+            pass
+        try:                                                  # 📜 السجلات المفصّلة (7 أيام) — آخر 4 ميغا من كل يوم
+            for fn in sorted(os.listdir(JOURNAL_DIR)):
+                if fn.endswith(".jsonl"):
+                    fp = os.path.join(JOURNAL_DIR, fn)
+                    with open(fp, "r", encoding="utf-8", errors="ignore") as _jf:
+                        _jf.seek(max(0, os.path.getsize(fp) - 4_000_000))
+                        z.writestr("journal/" + fn, _jf.read())
+        except Exception:
+            pass
+        put("README_DIAG.md", DIAG_README.replace("__V__", APP_VERSION))
         put("money_audit.json", _safe(money_audit, default={"error": "تعذّر"}))      # 💰 كل سنت
         put("accumulator_state.json", _safe(load_json, ACCUM_FILE, default={}))      # 🪙 المُراكِم: كميات · كلف · تسليمات
         put("accumulators_config.json", _safe(acc_cfgs, default=[]))
