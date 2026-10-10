@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.22.7"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.22.8"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -2438,6 +2438,7 @@ def accum_loop():
                 _acc_mark_run(today)
                 _ACC_RUN["retry"] = time.time()
                 accum_tick()
+                _safe(profit_tick, default=None)      # 💰 v3.22.8: الباقي بعد المُراكِمات ⇒ الربح (نفس اللحظة)
             elif (acc_in_window() and time.time() - _ACC_RUN["retry"] >= 1800
                   and _acc_has_pending()):
                 # ⏳ داخل النافذة ورصيد ينتظر (سعر خارج النطاق) — نعيد المحاولة
@@ -6588,6 +6589,591 @@ def coins_period(start, end):
     return {k: {kk: round(vv, 10) for kk, vv in v.items()} for k, v in out.items() if abs(v["t"]) > 1e-12}
 
 
+# ───────────── 🗺️ v3.22.8: خريطة الأرباح + 💰 صناديق الربح — مراقبة بس (التوزيعات نفسها ما تنلمس ولا سطر) ─────────────
+#   الربح ينزل باتجاه واحد من البوتات: 💵 دولار (يتوزّع نهاية اليوم على المُراكِمات بنسبها والباقي ⇒ الربح) ·
+#   🪙 عملة (للمُراكِم بنسبة العملة — نفس العملة ونفس المحفظة — والباقي/بلا مُراكِم ⇒ الربح) · 💸 الطرح من المتراكم ⇒ الربح.
+#   «الربح» لكل محفظة لحالها · بيه صناديق بنسب تحددها (مصروفي …) — دفتر للعرض: الصرف والتصفير ما يحرّكون شي بالمنصة.
+PROFIT_FILE = os.path.join(ROOT, "Holy_Profit.json")
+_PF_LOCK = threading.RLock()
+_PF_RUN = {"t": 0.0}
+_PF_LATE_DAYS = 9           # المُراكِم يلحق فرق يوم منتهي 8 أيام ⇒ نلحقه نفس المدة (+1)
+
+
+def _pf_load():
+    pb = load_json(PROFIT_FILE)
+    return pb if isinstance(pb, dict) else {}
+
+
+def _pf_save(pb):
+    try:
+        save_json_atomic(PROFIT_FILE, pb)
+    except Exception:
+        pass
+
+
+def _pf_acc_wid():
+    """👛 محفظة المُراكِم (نفس مفاتيح شرائه — `_acc_keys`)"""
+    try:
+        k = _acc_keys()[0]
+        return _gd_wid(k) if k else ""
+    except Exception:
+        return ""
+
+
+def _pf_wallets():
+    """{مفتاح الدفتر (مجلد البوت): wid} للبوتات الحقيقية الحية · {wid: التسمية} · {wid: [البوتات]}"""
+    m, lab, bots = {}, {}, {}
+    try:
+        for wid, W in (_gd_wallets() or {}).items():
+            lab[wid] = _gd_wlabel(W)
+            bots[wid] = list(W.get("bots") or [])
+            for b in bots[wid]:
+                m[os.path.relpath(b["dir"], ROOT)] = wid
+    except Exception:
+        pass
+    return m, lab, bots
+
+
+def _pf_hid_map():
+    """🪙 معرّف تسليم العملة ⇐ (مفتاح البوت، الرمز): من حالات البوتات الحية + دفتر العملات (يبقى بعد حذف البوت)."""
+    m = {}
+    cl = load_json(COIN_LEDGER) or {}
+    if isinstance(cl, dict):
+        bcl = cl.get("bots") or {}
+        for gid in (cl.get("seen") or []):
+            try:
+                key, eid = str(gid).split("|", 1)
+            except ValueError:
+                continue
+            hid = eid if eid.startswith("dca:") else (eid[3:] if eid.startswith("ri:") else eid)
+            m[hid] = (key, str((bcl.get(key) or {}).get("sym") or ""))
+    for b in bot_dirs().values():
+        if (b.get("cfg") or {}).get("is_demo"):
+            continue
+        st = _safe(load_json, paths_of(b)[0], default={}) or {}
+        key = os.path.relpath(b["dir"], ROOT)
+        for h in (_safe(_ri_handoffs_of, st, default=[]) or []) + (_safe(_dca_handoffs_of, b, st, default=[]) or []):
+            if h.get("id"):
+                m[str(h["id"])] = (key, str(h.get("symbol") or b["symbol"]))
+    return m
+
+
+def _pf_W(pb, wid):
+    W = pb.setdefault("W", {}).setdefault(wid or "?", {})
+    for k, v in (("free", 0.0), ("env", []), ("coins", {}), ("in_usd", 0.0), ("in_coin", {}), ("out_usd", 0.0), ("out_coin", {}),
+                 ("reset_usd", 0.0), ("reset_coin", {})):
+        W.setdefault(k, v)
+    return W
+
+
+def _pf_log(pb, wid, kind, amt, ccy, src="", note=""):
+    pb.setdefault("log", []).insert(0, {"ts": round(time.time(), 3), "w": wid, "k": kind, "a": round(float(amt), 10),
+                                        "c": ccy, "s": str(src)[:80], "n": str(note)[:160]})
+    del pb["log"][1500:]
+
+
+def _pf_edge(pb, eid, amt, ccy):
+    e = pb.setdefault("edges", {}).setdefault(eid, {"t": 0.0, "c": ccy})
+    e["t"] = round(float(e.get("t") or 0) + float(amt), 10)
+    e["c"] = ccy
+
+
+def _pf_add_usd(pb, wid, amt, src, note):
+    """💵 دولار نزل للربح ⇒ يتقسّم على الصناديق بنسبها · الباقي «غير مقسّم» (بالضبط — ولا كسر يضيع)."""
+    W = _pf_W(pb, wid)
+    given = 0.0
+    for e in W["env"]:
+        p = round(amt * float(e.get("pct") or 0) / 100.0, 8)
+        if p:
+            e["usd"] = round(float(e.get("usd") or 0) + p, 8)
+            e["in"] = round(float(e.get("in") or 0) + p, 8)
+            given += p
+    W["free"] = round(float(W.get("free") or 0) + amt - given, 8)
+    W["in_usd"] = round(float(W.get("in_usd") or 0) + amt, 8)
+    _pf_log(pb, wid, "in_usd", amt, "USDT", src, note)
+
+
+def _pf_add_coin(pb, wid, base, q, src, note):
+    W = _pf_W(pb, wid)
+    W["coins"][base] = round(float(W["coins"].get(base) or 0) + q, 10)
+    W["in_coin"][base] = round(float(W["in_coin"].get(base) or 0) + q, 10)
+    _pf_log(pb, wid, "in_coin", q, base, src, note)
+
+
+def profit_tick():
+    """💰 يقيّد اللي نزل للربح (مو للمُراكِم) — من نفس الدفاتر وبنفس التوزيع بالضبط، بلا ما يغيّر أي شي:
+      💵 كل يوم منتهي وزّعه المُراكِم: ربح كل بوت − نصيب كل مُراكِم منه (نصيب المُراكِم من اليوم × حصة البوت من ربح اليوم) ⇒ ربح محفظة البوت
+      🪙 باقي كل تسليم عملة (`_ri_left_log`) ⇒ عملات ربح محفظة البوت · وتسليمات المُراكِم (`buys[].hid`) ⇒ خط البوت ⇐ المُراكِم
+      💸 الطرح من المتراكم (`wlog`) ⇒ ربح محفظة المُراكِم
+    كل حدث مرة وحدة (علامات) · يوم ما وزّعه المُراكِم بعد ⇒ ينتظر · فرق يوم زاد بعدين ⇒ يلحق (9 أيام) · أول تشغيل يبدي من اليوم."""
+    with _PF_LOCK:
+        pb = _pf_load()
+        now = time.time()
+        today = datetime.now().strftime("%Y-%m-%d")
+        fresh = not pb.get("since")
+        if fresh:
+            pb = {"v": 1, "since": today, "since_ts": now, "W": {}, "edges": {}, "ub": {}, "wmap": {}, "wlab": {},
+                  "cseen": [], "aseen": [], "wseen": [], "log": []}
+        ch = fresh
+        wm, lab, _ = _pf_wallets()
+        wmap = pb.setdefault("wmap", {})
+        for k, w in wm.items():
+            if wmap.get(k) != w:
+                wmap[k] = w; ch = True
+        wl = pb.setdefault("wlab", {})
+        for w, l in lab.items():
+            if wl.get(w) != l:
+                wl[w] = l; ch = True
+        accw = _pf_acc_wid() or "?"
+        cfgs = acc_cfgs()
+        ast = acc_state()
+        led = load_json(LEDGER) or {}
+        if not isinstance(led, dict):
+            led = {}
+        # ── 💵 الدولار: الأيام المنتهية اللي وزّعها المُراكِم ──
+        since = pb.get("since") or today
+        lo = max(since, (datetime.now() - timedelta(days=_PF_LATE_DAYS)).strftime("%Y-%m-%d"))
+        keys = [k for k, e in led.items() if not str(k).startswith("_") and isinstance(e, dict)]
+        days = sorted({d for k in keys for d in (led[k].get("daily") or {}) if lo <= d < today})
+        ub = pb.setdefault("ub", {})
+        for d in days:
+            shares, ready = {}, True
+            for a in cfgs:
+                if a.get("start") and d < a["start"]:
+                    continue
+                rec = ((ast.get(a.get("id")) or {}).get("days") or {}).get(d)
+                if rec is None:
+                    ready = False            # المُراكِم ما وزّع هذا اليوم بعد (نهاية اليوم) ⇒ ننتظر — حتى ما تنحسب حصته ربح
+                    break
+                shares[a["id"]] = float(rec or 0)
+            if not ready:
+                continue
+            P = day_profit(d)                # نفس رقم المُراكِم بالضبط
+            if P <= 0:
+                continue
+            for k in keys:
+                v = float((led[k].get("daily") or {}).get(d) or 0)
+                if v <= 0:
+                    continue
+                to = {aid: round(v * s / P, 8) for aid, s in shares.items() if s > 0}
+                pf = round(v - sum(to.values()), 8)
+                prev = (ub.get(k) or {}).get(d) or [0.0, {}, 0.0]
+                if abs(v - float(prev[0] or 0)) < 1e-10 and abs(pf - float(prev[2] or 0)) < 1e-10 and all(
+                        abs(x - float((prev[1] or {}).get(aid) or 0)) < 1e-10 for aid, x in to.items()):
+                    continue
+                for aid, x in to.items():
+                    dx = round(x - float((prev[1] or {}).get(aid) or 0), 10)
+                    if dx > 1e-10:
+                        _pf_edge(pb, f"u|{k}|{aid}", dx, "USDT")
+                dpf = round(pf - float(prev[2] or 0), 10)
+                wid = wmap.get(k) or "?"
+                if dpf > 1e-10:
+                    _pf_edge(pb, f"up|{k}", dpf, "USDT")
+                    _pf_add_usd(pb, wid, dpf, k, f"يوم {d}")
+                    _safe(journal, "profit", f"💰 للربح ({wl.get(wid) or wid}): {dpf:+.6f}$ من {k} — يوم {d} (الباقي بعد المُراكِمات)", "ok",
+                          bot=k, day=d, amount=dpf, wallet=wid, default=None)
+                ub.setdefault(k, {})[d] = [v, to, pf]
+                ch = True
+        for k in list(ub):                  # الأقدم من نافذة اللحاق انحسم — ما نحتاجه
+            for d in [d for d in ub[k] if d < lo]:
+                ub[k].pop(d, None); ch = True
+            if not ub[k]:
+                ub.pop(k, None)
+        # ── 🪙 العملة: باقي التسليمات ⇒ الربح · تسليمات المُراكِم ⇒ خطوطها ──
+        hm = None
+        cseen_l = list(pb.get("cseen") or []); cseen = set(cseen_l)
+        cwait = pb.setdefault("cwait", {})
+        for hid, q in list((ast.get("_ri_left_log") or {}).items()):
+            hid = str(hid)
+            if hid in cseen:
+                continue
+            if fresh:
+                cseen.add(hid); cseen_l.append(hid); continue
+            if hm is None:
+                hm = _pf_hid_map()
+            kk = hm.get(hid)
+            if not kk or not kk[1]:
+                t0 = float(cwait.setdefault(hid, now))
+                if now - t0 > 3600:          # ساعة وما انعرف بوته (انحذف قبل ما ينقرا؟) ⇒ نسجّل ونمشي
+                    cseen.add(hid); cseen_l.append(hid); cwait.pop(hid, None); ch = True
+                    _safe(journal, "profit", f"⚠️ تسليم عملة {hid} ({q}) ما انعرف بوته — ما انقيّد بالربح", "warn", default=None)
+                continue
+            key, sym = kk
+            base = sym.split("-")[0].upper()
+            q = float(q or 0)
+            wid = wmap.get(key) or "?"
+            if q > 0:
+                _pf_edge(pb, f"cp|{key}|{base}", q, base)
+                _pf_add_coin(pb, wid, base, q, key, "باقي تسليم " + hid)
+                _safe(journal, "profit", f"💰🪙 للربح ({wl.get(wid) or wid}): {q:+.8g} {base} من {key}", "ok", bot=key, coin=q, base=base, wallet=wid, default=None)
+            cseen.add(hid); cseen_l.append(hid); cwait.pop(hid, None); ch = True
+        aseen_l = list(pb.get("aseen") or []); aseen = set(aseen_l)
+        wseen_l = list(pb.get("wseen") or []); wseen = set(wseen_l)
+        for a in cfgs:
+            aid = a.get("id")
+            e = ast.get(aid) or {}
+            base = str(a.get("symbol") or "").split("-")[0].upper()
+            for bu in (e.get("buys") or []):
+                hid = bu.get("hid") if isinstance(bu, dict) else None
+                if not hid:
+                    continue
+                sk = f"{aid}|{hid}"
+                if sk in aseen:
+                    continue
+                if fresh:
+                    aseen.add(sk); aseen_l.append(sk); continue
+                if hm is None:
+                    hm = _pf_hid_map()
+                kk = hm.get(str(hid))
+                if not kk:
+                    continue                 # يلحق بالدورة الجاية (دفتر العملات يقراه خلال 30 ثانية)
+                _pf_edge(pb, f"c|{kk[0]}|{aid}", float(bu.get("qty") or 0), base)
+                aseen.add(sk); aseen_l.append(sk); ch = True
+            for w in (e.get("wlog") or []):
+                sk = f"{aid}|{w.get('ts')}"
+                if sk in wseen:
+                    continue
+                wseen.add(sk); wseen_l.append(sk); ch = True
+                usd = float(w.get("usd") or 0)
+                if fresh or usd <= 0:
+                    continue
+                _pf_edge(pb, f"w|{aid}", usd, "USDT")
+                _pf_add_usd(pb, accw, usd, aid, f"💸 طرح من المتراكم ({a.get('name') or aid})")
+                _safe(journal, "profit", f"💰 للربح ({wl.get(accw) or accw}): {usd:+.4f}$ طرح من متراكم {a.get('name') or aid}", "ok", bot=aid, amount=usd, wallet=accw, default=None)
+        pb["cseen"], pb["aseen"], pb["wseen"] = cseen_l[-20000:], aseen_l[-20000:], wseen_l[-20000:]
+        if ch:
+            _pf_save(pb)
+        return pb
+
+
+def profit_op(data):
+    """💰 أوامر صناديق الربح (دفتر للعرض — ولا شي يتحرك بالمنصة):
+    env_add · env_edit · env_del · spend (صرف للمحفظة) · resplit (إعادة تقسيم بالنسب) · reset (تصفير)."""
+    act = str(data.get("act") or "")
+    wid = str(data.get("wid") or "")
+    with _PF_LOCK:
+        pb = _pf_load()
+        if not pb.get("since"):
+            profit_tick()
+            pb = _pf_load()
+        known = set((pb.get("W") or {})) | set((pb.get("wlab") or {})) | {_pf_acc_wid() or "?"}
+        if wid not in known:
+            return {"ok": False, "msg": "المحفظة مو معروفة"}
+        W = _pf_W(pb, wid)
+        envs = W["env"]
+        lab = (pb.get("wlab") or {}).get(wid) or wid
+        def _pct(x):
+            try:
+                p = round(float(x), 4)
+            except Exception:
+                return None
+            return p if 0 <= p <= 100 else None
+        if act == "env_add":
+            name = str(data.get("name") or "").strip()[:40]
+            p = _pct(data.get("pct"))
+            if not name:
+                return {"ok": False, "msg": "اكتب اسم الصندوق"}
+            if p is None:
+                return {"ok": False, "msg": "النسبة بين 0 و100"}
+            used = sum(float(e.get("pct") or 0) for e in envs)
+            if used + p > 100.0001:
+                return {"ok": False, "msg": f"مجموع النسب يتجاوز 100% (المتبقي {100 - used:g}%)"}
+            envs.append({"id": "e" + str(int(time.time()))[-6:] + _sc.token_hex(2), "name": name, "pct": p, "usd": 0.0, "in": 0.0, "out": 0.0})
+            _pf_log(pb, wid, "env_add", p, "%", name)
+            msg = f"➕ صندوق «{name}» · {p:g}% من الربح الجاي"
+        elif act in ("env_edit", "env_del") and not data.get("id"):
+            return {"ok": False, "msg": "الصندوق مو موجود"}
+        elif act in ("env_edit", "env_del", "spend") and data.get("id") not in (None, "", "free") and not str(data.get("id")).startswith("coin:"):
+            e = next((x for x in envs if x.get("id") == data.get("id")), None)
+            if e is None:
+                return {"ok": False, "msg": "الصندوق مو موجود"}
+            if act == "env_edit":
+                name = str(data.get("name") if data.get("name") is not None else e["name"]).strip()[:40] or e["name"]
+                p = _pct(data.get("pct") if data.get("pct") is not None else e["pct"])
+                if p is None:
+                    return {"ok": False, "msg": "النسبة بين 0 و100"}
+                used = sum(float(x.get("pct") or 0) for x in envs if x is not e)
+                if used + p > 100.0001:
+                    return {"ok": False, "msg": f"مجموع النسب يتجاوز 100% (المتبقي {100 - used:g}%)"}
+                e["name"], e["pct"] = name, p
+                _pf_log(pb, wid, "env_edit", p, "%", name)
+                msg = f"✏️ «{name}» صار {p:g}% (للربح الجاي — «🔄 إعادة تقسيم» يطبّقها على الموجود)"
+            elif act == "env_del":
+                bal = float(e.get("usd") or 0)
+                W["free"] = round(float(W["free"]) + bal, 8)
+                envs.remove(e)
+                _pf_log(pb, wid, "env_del", bal, "USDT", e["name"])
+                msg = f"🗑️ انحذف «{e['name']}» — رصيده {bal:.2f}$ رجع لغير المقسّم"
+            else:
+                bal = round(float(e.get("usd") or 0), 8)
+                amt = _pf_amt(data.get("amount"), bal)
+                if isinstance(amt, str):
+                    return {"ok": False, "msg": amt}
+                e["usd"] = round(bal - amt, 8)
+                e["out"] = round(float(e.get("out") or 0) + amt, 8)
+                W["out_usd"] = round(float(W["out_usd"]) + amt, 8)
+                _pf_log(pb, wid, "spend", amt, "USDT", e["name"])
+                msg = f"💸 انصرف {amt:.2f}$ من «{e['name']}» للمحفظة — الباقي {e['usd']:.2f}$"
+        elif act == "spend":
+            src = str(data.get("id") or "free")
+            if src.startswith("coin:"):
+                base = src[5:]
+                bal = round(float(W["coins"].get(base) or 0), 10)
+                amt = _pf_amt(data.get("amount"), bal, coin=True)
+                if isinstance(amt, str):
+                    return {"ok": False, "msg": amt}
+                W["coins"][base] = round(bal - amt, 10)
+                W["out_coin"][base] = round(float(W["out_coin"].get(base) or 0) + amt, 10)
+                _pf_log(pb, wid, "spend", amt, base, "عملات الربح")
+                msg = f"💸 انصرف {amt:.8g} {base} للمحفظة — الباقي {W['coins'][base]:.8g}"
+            else:
+                bal = round(float(W["free"]), 8)
+                amt = _pf_amt(data.get("amount"), bal)
+                if isinstance(amt, str):
+                    return {"ok": False, "msg": amt}
+                W["free"] = round(bal - amt, 8)
+                W["out_usd"] = round(float(W["out_usd"]) + amt, 8)
+                _pf_log(pb, wid, "spend", amt, "USDT", "غير مقسّم")
+                msg = f"💸 انصرف {amt:.2f}$ من غير المقسّم للمحفظة — الباقي {W['free']:.2f}$"
+        elif act == "resplit":
+            tot = round(float(W["free"]) + sum(float(e.get("usd") or 0) for e in envs), 8)
+            W["free"] = 0.0
+            for e in envs:
+                e["usd"] = 0.0
+            given = 0.0
+            for e in envs:
+                p = round(tot * float(e.get("pct") or 0) / 100.0, 8)
+                e["usd"] = p
+                given += p
+            W["free"] = round(tot - given, 8)
+            _pf_log(pb, wid, "resplit", tot, "USDT")
+            msg = f"🔄 انقسم {tot:.2f}$ من جديد على الصناديق بنسبها"
+        elif act == "reset":
+            tot = round(float(W["free"]) + sum(float(e.get("usd") or 0) for e in envs), 8)
+            coins = {k: v for k, v in W["coins"].items() if abs(float(v or 0)) > 1e-12}
+            W["free"] = 0.0
+            for e in envs:
+                e["usd"] = 0.0
+            W["coins"] = {}
+            W["reset_usd"] = round(float(W.get("reset_usd") or 0) + tot, 8)
+            for k2, v2 in coins.items():
+                W["reset_coin"][k2] = round(float(W["reset_coin"].get(k2) or 0) + float(v2), 10)
+            _pf_log(pb, wid, "reset", tot, "USDT", json.dumps(coins, ensure_ascii=False)[:150])
+            msg = f"🧹 تصفّر ربح {lab}: {tot:.2f}$" + (" + " + " · ".join(f"{v:.8g} {k}" for k, v in coins.items()) if coins else "") + " — يبدي من جديد (الصناديق ونسبها باقية)"
+        else:
+            return {"ok": False, "msg": "?"}
+        _pf_save(pb)
+    return {"ok": True, "msg": msg}
+
+
+def _pf_amt(x, bal, coin=False):
+    """مبلغ الصرف: «all» = الكل بالضبط · فرق تقريب ≤ نص سنت = الكل · أكثر من الرصيد ⇒ رسالة"""
+    if str(x).strip().lower() == "all":
+        amt = bal
+    else:
+        try:
+            amt = float(x)
+        except Exception:
+            return "رقم غير صحيح"
+        if not coin and bal < amt <= bal + 0.005:
+            amt = bal
+    if amt <= 0:
+        return "ماكو رصيد" if bal <= 0 else "المبلغ لازم أكبر من صفر"
+    if amt > bal + 1e-12:
+        return (f"الرصيد {bal:.8g} بس" if coin else f"الرصيد {bal:.2f}$ بس")
+    return round(amt, 10 if coin else 8)
+
+
+def flow_view():
+    """🗺️ لقطة الخريطة: البوتات (لكل محفظة) ⇐ المُراكِمات ⇐ الربح — الخطوط من الإعدادات الحالية بالضبط (نسبة صفر = ماكو خط)،
+    والأرقام على الخطوط مجاميع من يوم التفعيل (`Holy_Profit.json`) · مراقبة بس."""
+    if time.time() - _PF_RUN["t"] > 5:
+        _PF_RUN["t"] = time.time()
+        _safe(profit_tick, default=None)
+    pb = _pf_load()
+    now = time.time()
+    dnow = datetime.now()
+    today = dnow.strftime("%Y-%m-%d")
+    led = load_json(LEDGER) or {}
+    if not isinstance(led, dict):
+        led = {}
+    cfgs = acc_cfgs()
+    ast = acc_state()
+    accw = _pf_acc_wid() or "?"
+    wm, lab, wbots = _pf_wallets()
+    wlab = dict(pb.get("wlab") or {})
+    wlab.update(lab)
+    ub = pb.get("ub") or {}
+    edges = pb.get("edges") or {}
+    since = pb.get("since") or today
+    sum_pct = round(sum(float(a.get("pct") or 0) for a in cfgs), 6)
+    try:
+        wh = int(app_cfg().get("acc_window_h") or ACC_WINDOW_H)
+    except Exception:
+        wh = ACC_WINDOW_H
+    midnight = datetime(dnow.year, dnow.month, dnow.day) + timedelta(days=1)
+    order = sorted(set(wbots) | set((pb.get("W") or {})) | ({accw} if cfgs else set()),
+                   key=lambda w: (w != accw, wlab.get(w) or w))
+    wallets, lines = [], []
+    pnode = lambda w: "p:" + w
+    for wi, wid in enumerate(order):
+        bl = []
+        for b in wbots.get(wid) or []:
+            cfg = b.get("cfg") or {}
+            bt = cfg.get("bot_type") or "grid"
+            key = os.path.relpath(b["dir"], ROOT)
+            sp, _, _ = paths_of(b)
+            st = _safe(load_json, sp, default={}) or {}
+            ri = _safe(_ri_state_of, st, default=None) if bt not in ("dca", "dca_buy") else None
+            ri_on = bool(ri and ri.get("on"))
+            ri_pct = float(ri.get("pct") or 0) if ri_on else 0.0
+            usd_bot = bt != "dca"
+            usd_flow = usd_bot and ri_pct < 100 - 1e-9
+            coin_bot = bt == "dca" or isinstance(st.get("reinvest"), dict)   # 🪙 DCA بيعي · أو بوت بيه إعادة استثمار (يحرّر عملة بالسحب/الإطفاء)
+            daily = (led.get(key) or {}).get("daily") or {}
+            u_today = float(daily.get(today) or 0)
+            u_wait = u_today + sum(max(0.0, float(v or 0) - float(((ub.get(key) or {}).get(d) or [0])[0] or 0))
+                                   for d, v in daily.items() if since <= d < today)
+            c_today = 0.0
+            for h in (_safe(_ri_handoffs_of, st, default=[]) or []) + (_safe(_dca_handoffs_of, b, st, default=[]) or []):
+                try:
+                    if datetime.fromtimestamp(float(h.get("ts") or 0)).strftime("%Y-%m-%d") == today:
+                        c_today += float(h.get("coin") or 0)
+                except Exception:
+                    continue
+            try:
+                alive = bool(is_alive(b["dir"], sp)[0])
+            except Exception:
+                alive = False
+            base = str(b["symbol"]).split("-")[0].upper()
+            nid = "b:" + key
+            bl.append({"id": nid, "key": key, "name": os.path.basename(str(b["dir"]).rstrip("/\\")) or key, "sym": b["symbol"],
+                       "base": base, "type": bt, "alive": alive, "usd": usd_flow, "coin": coin_bot,
+                       "ri": ({"on": ri_on, "pct": ri_pct, "held": round(float(ri.get("held") or 0), 6)} if ri and ri.get("used") else None),
+                       "u_today": round(u_today, 6), "u_wait": round(u_wait, 6), "c_today": round(c_today, 10),
+                       "u_tot": round(sum(float(v or 0) for d, v in daily.items() if d >= since), 6),
+                       "dca_paused": bool(st.get("paused"))})
+            if usd_flow:
+                for a in cfgs:
+                    p = float(a.get("pct") or 0)
+                    if p > 0:
+                        eid = f"u|{key}|{a['id']}"
+                        lines.append({"id": eid, "from": nid, "to": "a:" + a["id"], "k": "usd", "pct": p,
+                                      "dash": not a.get("enabled", True), "t": float((edges.get(eid) or {}).get("t") or 0), "c": "USDT"})
+                if sum_pct < 100 - 1e-9:
+                    eid = f"up|{key}"
+                    lines.append({"id": eid, "from": nid, "to": pnode(wid), "k": "usd", "pct": round(100 - sum_pct, 6),
+                                  "t": float((edges.get(eid) or {}).get("t") or 0), "c": "USDT"})
+            if coin_bot:
+                mine, why = (_safe(_ri_eligible, b, cfgs, default=([], "")) or ([], ""))
+                tot = sum(float(a.get("coin_pct") or 0) for a in mine)
+                sc = 100.0 / tot if tot > 100.0 else 1.0
+                given = 0.0
+                for a in mine:
+                    p = round(float(a.get("coin_pct") or 0) * sc, 6)
+                    given += p
+                    eid = f"c|{key}|{a['id']}"
+                    lines.append({"id": eid, "from": nid, "to": "a:" + a["id"], "k": "coin", "pct": p,
+                                  "t": float((edges.get(eid) or {}).get("t") or 0), "c": base})
+                if given < 100 - 1e-9:
+                    eid = f"cp|{key}|{base}"
+                    lines.append({"id": eid, "from": nid, "to": pnode(wid), "k": "coin", "pct": round(100 - given, 6),
+                                  "why": why or "", "t": float((edges.get(eid) or {}).get("t") or 0), "c": base})
+        W = (pb.get("W") or {}).get(wid) or {}
+        envs = [{"id": e.get("id"), "name": e.get("name"), "pct": float(e.get("pct") or 0), "usd": round(float(e.get("usd") or 0), 8),
+                 "in": round(float(e.get("in") or 0), 8), "out": round(float(e.get("out") or 0), 8)} for e in (W.get("env") or [])]
+        free = round(float(W.get("free") or 0), 8)
+        wallets.append({"wid": wid, "label": wlab.get(wid) or ("محفظة غير معروفة" if wid == "?" else wid), "ci": wi, "acc": wid == accw,
+                        "bots": bl, "u_today": round(sum(x["u_today"] for x in bl), 6), "u_wait": round(sum(x["u_wait"] for x in bl), 6),
+                        "held": round(sum((x["ri"] or {}).get("held", 0) for x in bl), 6),
+                        "profit": {"id": pnode(wid), "free": free, "env": envs, "env_pct": round(sum(e["pct"] for e in envs), 4),
+                                   "usd": round(free + sum(e["usd"] for e in envs), 8),
+                                   "coins": {k: round(float(v), 10) for k, v in (W.get("coins") or {}).items() if abs(float(v or 0)) > 1e-12},
+                                   "in_usd": round(float(W.get("in_usd") or 0), 8), "out_usd": round(float(W.get("out_usd") or 0), 8),
+                                   "in_coin": W.get("in_coin") or {}, "out_coin": W.get("out_coin") or {},
+                                   "log": [x for x in (pb.get("log") or []) if x.get("w") == wid][:40]}})
+    accs = []
+    in_win = acc_in_window()
+    for a in cfgs:
+        aid = a["id"]
+        e = ast.get(aid) or {}
+        sym = str(a.get("symbol") or "")
+        base = sym.split("-")[0].upper()
+        pool, pend, coin = float(e.get("pool") or 0), float(e.get("pending") or 0), float(e.get("coin") or 0)
+        spent = float(e.get("spent") or 0)
+        minb = max(1.0, float(a.get("min_buy") or 0))
+        lo_, hi_ = float(a.get("low_price") or 0), float(a.get("high_price") or 0)
+        px = float(PX.get(sym) or 0)
+        out_rng = bool(px) and ((lo_ > 0 and px < lo_) or (hi_ > 0 and px > hi_))
+        bought = e.get("last_buy_day") == today
+        err = (e.get("buy_err") or {}).get("msg") if isinstance(e.get("buy_err"), dict) else ""
+        if e.get("inflight") or e.get("sell_inflight"):
+            light, why = "y", "⏳ أمر ينتظر تأكيد المنصة"
+        elif not a.get("enabled", True):
+            light, why = "o", "⏸ الشراء الآلي موقوف — نصيبه يروح للمتراكم"
+        elif err and pool >= 1:
+            light, why = "r", "⚠️ فشل الشراء: " + str(err)[:140]
+        elif bought:
+            light, why = "g", "✅ اشترى اليوم — الجاي بعد نص الليل"
+        elif pool <= 0:
+            light, why = "o", "⏳ ينتظر ربح اليوم — يتوزّع نهاية اليوم"
+        elif pool < minb:
+            light, why = "y", f"⏳ يتجمّع: {pool:.2f} من {minb:g}$ (الحد الأدنى)"
+        elif out_rng:
+            light, why = "y", f"🎚️ السعر {px:g} خارج النطاق — ينتظر"
+        elif in_win:
+            light, why = "g", "🟢 وقت الشراء — يشتري خلال دقائق"
+        else:
+            light, why = "r", f"🚦 ينتظر نافذة الشراء (أول {wh} ساعات بعد نص الليل)"
+        accs.append({"id": "a:" + aid, "aid": aid, "name": a.get("name") or sym, "sym": sym, "base": base,
+                     "pct": float(a.get("pct") or 0), "coin_pct": float(a.get("coin_pct") or 0), "enabled": a.get("enabled", True),
+                     "pool": round(pool, 6), "pending": round(pend, 6), "coin": round(coin, 10), "spent": round(spent, 4),
+                     "avg": round(spent / coin, 8) if coin > 0 else None, "px": px, "value": round(coin * px, 4) if px else None,
+                     "min_buy": minb, "light": light, "why": why, "wid": accw,
+                     "wd": float((edges.get(f"w|{aid}") or {}).get("t") or 0)})
+        lines.append({"id": f"w|{aid}", "from": "a:" + aid, "to": pnode(accw), "k": "wd", "pct": None,
+                      "t": float((edges.get(f"w|{aid}") or {}).get("t") or 0), "c": "USDT"})
+    return {"ok": True, "since": since, "today": today, "now": now, "to_midnight": round((midnight - dnow).total_seconds()),
+            "window_h": wh, "in_window": in_win, "sum_pct": sum_pct, "acc_wid": accw,
+            "wallets": wallets, "accs": accs, "lines": lines}
+
+
+def profit_audit():
+    """🧮 تدقيق دفتر الربح (للتقرير التشخيصي): كل يوم مقيّد = ربح البوتات − نصيب المُراكِمات بالسنت · رصيد كل محفظة = داخل − مصروف − مصفّر."""
+    out = []
+    pb = _safe(profit_tick, default=None) or _pf_load()
+    if not pb.get("since"):
+        return out
+    st_all = acc_state()
+    near = lambda a, b, e: abs(float(a or 0) - float(b or 0)) <= e
+    ub = pb.get("ub") or {}
+    bad = []
+    for d in sorted({d for k in ub for d in (ub[k] or {})}):
+        rows = [ub[k][d] for k in ub if (ub[k] or {}).get(d)]
+        v = sum(float(r[0] or 0) for r in rows)
+        pf = sum(float(r[2] or 0) for r in rows)
+        ta = {}
+        for r in rows:
+            for aid, x in (r[1] or {}).items():
+                ta[aid] = ta.get(aid, 0.0) + float(x or 0)
+        P = day_profit(d)
+        sh = {a["id"]: float(((st_all.get(a["id"]) or {}).get("days") or {}).get(d) or 0) for a in acc_cfgs()}
+        if not near(v, P, 1e-6) or not near(v, pf + sum(ta.values()), 1e-6) or any(
+                not near(ta.get(aid, 0), s2, 1e-5) for aid, s2 in sh.items() if s2 > 0 or aid in ta):
+            bad.append(f"{d}: بوتات {v:.6f} / اليوم {P:.6f} · ربح {pf:.6f} + مُراكِمات {sum(ta.values()):.6f} {ta} مقابل {sh}")
+    out.append(("💰 دفتر الربح: كل يوم = ربح البوتات − نصيب المُراكِمات (بالسنت)", not bad,
+                "كل الأيام المقيّدة متطابقة" if not bad else " · ".join(bad)[:900]))
+    for wid, W in (pb.get("W") or {}).items():
+        bal = float(W.get("free") or 0) + sum(float(e.get("usd") or 0) for e in W.get("env") or [])
+        exp = float(W.get("in_usd") or 0) - float(W.get("out_usd") or 0) - float(W.get("reset_usd") or 0)
+        cb = [c for c in set(W.get("in_coin") or {}) | set(W.get("coins") or {})
+              if not near(float((W.get("coins") or {}).get(c) or 0), float((W.get("in_coin") or {}).get(c) or 0) - float((W.get("out_coin") or {}).get(c) or 0) - float((W.get("reset_coin") or {}).get(c) or 0), 1e-9)]
+        lab = (pb.get("wlab") or {}).get(wid) or wid
+        out.append((f"💰 رصيد ربح {lab}: داخل − مصروف − مصفّر = الصناديق", near(bal, exp, 1e-6) and not cb,
+                    f"الصناديق {bal:.6f}$ · المتوقّع {exp:.6f}$" + (f" · عملات مختلفة {cb}" if cb else "")))
+    return out
+
+
 def alltime_view():
     """📈 v3.22.2: الإجماليات حتى الآن — البوتات الحية + **المحذوفة** (تنحفظ أرقامها لحظة الحذف) ⇒ ما تنقص لما تحذف بوت.
     المحرر = الجرد (ربح الكرت × معامل العمولة) + DCA الشرائي (صافي) · التداول = المحرر + 💠 داخل الأوامر + 💠 للمُراكِم ·
@@ -9760,6 +10346,7 @@ def ledger_loop():
         try:
             ledger_tick()
             _safe(coin_ledger_tick, default=None)     # 🪙 v3.22.2: الربح المحرّر بالعملات
+            _safe(profit_tick, default=None)          # 💰 v3.22.8: دفتر الربح (اللي نزل للمحفظة — مراقبة بس)
             if n % 10 == 0:              # كل ~5 دقائق — لقطة إعادة الاستثمار
                 _safe(reinvest_tick, default=None)
             n += 1
@@ -10030,6 +10617,8 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
             return self._json(series_of(q.get("dir", [""])[0]))
         if u.path == "/api/settings":
             return self._json(settings_payload())
+        if u.path == "/api/flow":                         # 🗺️ v3.22.8: خريطة الأرباح (مراقبة بس)
+            return self._json(_safe(flow_view, default={"ok": False, "msg": "تعذّر بناء الخريطة"}))
         if u.path == "/api/journal":                      # 📜 v3.22.6: السجلات المفصّلة بالفلاتر
             try:
                 _bf = q.get("before", [""])[0]
@@ -10533,6 +11122,8 @@ WantedBy=multi-user.target
             return self._json(settings_save(data))
         if path == "/api/wallet":
             return self._json(wallet_op(data))
+        if path == "/api/pfbox":
+            return self._json(profit_op(data))                # 💰 v3.22.8: صناديق الربح (دفتر للعرض)
         if path == "/api/wallet_test":
             # 🔑 v3.22.7: فحص مفتاح محفظة محفوظة (قراءة بس) — بلا إرجاع أي سر
             n = str(data.get("name") or "")
@@ -10874,6 +11465,67 @@ body.boot .card{animation:rise .6s var(--ease) both;animation-delay:calc(var(--i
 .phead h2{font-size:20px;font-weight:700}
 .x{margin-inline-start:auto;width:38px;height:38px;border-radius:12px;display:grid;place-items:center;font-size:15px}
 .panel{background:var(--glass);border:1px solid var(--line);border-radius:18px;padding:18px;margin-bottom:16px}
+/* 🗺️ v3.22.8: خريطة الأرباح */
+.fl-pw{max-width:1500px}
+.fl-top{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;font-size:12.5px;color:var(--mut)}
+.fl-top b{color:var(--tx);font-variant-numeric:tabular-nums}
+.fl-top .fl-live{display:inline-flex;align-items:center;gap:6px;color:var(--green);font-weight:700}
+.fl-top .fl-live i{width:8px;height:8px;border-radius:50%;background:var(--green);animation:flLive 1.6s ease-in-out infinite}
+@keyframes flLive{50%{opacity:.25}}
+.fl-note{flex-basis:100%;font-size:11.5px;color:var(--mut2);line-height:1.8}
+.fl-leg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11px;color:var(--mut);margin:-6px 0 12px;padding:0 4px}
+.fl-leg span{display:inline-flex;align-items:center;gap:6px}
+.fl-leg i{display:inline-block;width:22px;height:0;border-top:3px solid}
+.fl-map{position:relative;overflow:hidden;padding:26px 14px 22px}
+.fl-svg{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
+#flSvg{z-index:0}#flSvgP{z-index:3}
+#flFx{position:absolute;inset:0;pointer-events:none;z-index:4}
+.fl-tier{position:relative;z-index:1;display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-start;gap:14px}
+.fl-gap{height:74px}
+.fl-cap{position:relative;z-index:1;text-align:center;font-size:11px;color:var(--mut);margin:-50px 0 26px}
+.fl-cap span{background:rgb(var(--surf3-rgb)/.92);border:1px solid var(--line);padding:2px 10px;border-radius:99px}
+.fl-wal{position:relative;border:1.5px dashed var(--wc);border-radius:16px;padding:20px 10px 10px;display:flex;flex-wrap:wrap;justify-content:center;gap:10px;background:rgb(var(--surf-rgb)/.25)}
+.fl-wlab{position:absolute;top:-10px;inset-inline-start:12px;background:rgb(var(--surf3-rgb));padding:0 8px;font-size:11px;color:var(--wc);font-weight:700;border-radius:8px;white-space:nowrap;max-width:calc(100% - 24px);overflow:hidden;text-overflow:ellipsis}
+.fl-n{position:relative;background:var(--card2,#12161f);border:1px solid var(--bd,#232a36);border-radius:14px;padding:9px 11px;min-width:158px;max-width:210px;font-size:11.5px;line-height:1.75;cursor:pointer;transition:box-shadow .35s,transform .35s,opacity .25s}
+.fl-n h4{margin:0 0 3px;font-size:12.5px;display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fl-n h4 small{color:var(--mut2);font-weight:400;font-size:10px}
+.fl-n .r{display:flex;justify-content:space-between;gap:10px;color:var(--mut)}
+.fl-n .r b{color:var(--tx);font-variant-numeric:tabular-nums;white-space:nowrap}
+.fl-n .r b.u{color:var(--green)}.fl-n .r b.c{color:var(--amber)}.fl-n .r b.v{color:var(--vio)}
+.fl-n .dot{width:7px;height:7px;border-radius:50%;background:var(--mut2);flex:none}.fl-n .dot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
+.fl-n.pulse{box-shadow:0 0 0 3px rgb(var(--green2-rgb)/.5),0 0 26px rgb(var(--green2-rgb)/.35);transform:translateY(-2px) scale(1.03)}
+.fl-n.fade{opacity:.3}
+.fl-a{border-color:rgb(var(--amber-rgb)/.35)}
+.fl-why{font-size:10.5px;color:var(--mut);line-height:1.6;margin:0 0 3px}
+.fl-bar{height:4px;border-radius:4px;background:rgb(var(--ov-rgb)/.08);overflow:hidden;margin:1px 0 3px}
+.fl-bar i{display:block;height:100%;background:var(--cyan)}
+.fl-tl{display:inline-flex;gap:3px;padding:2px 4px;border-radius:8px;background:#05030c;flex:none}
+.fl-tl i{width:7px;height:7px;border-radius:50%;background:#2a2638}
+.fl-tl i.r.on{background:#ef4444;box-shadow:0 0 7px #ef4444}.fl-tl i.y.on{background:#f59e0b;box-shadow:0 0 7px #f59e0b}.fl-tl i.g.on{background:#22c55e;box-shadow:0 0 7px #22c55e}
+.fl-tl.blink i.on{animation:flLive 1.3s ease-in-out infinite}
+.fl-p{min-width:230px;max-width:300px;border:1.5px solid var(--wc)}
+.fl-p .fl-big{font-size:20px;font-weight:800;color:var(--green);font-variant-numeric:tabular-nums;line-height:1.3}
+.fl-p .env{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--mut);border-top:1px dashed rgb(var(--ov-rgb)/.08);padding-top:2px}
+.fl-p .env b{color:var(--tx);font-variant-numeric:tabular-nums}
+.fl-hint{font-size:10px;color:var(--mut2);text-align:center;margin-top:4px}
+.fl-l{fill:none;stroke-width:2;opacity:.75;transition:opacity .25s,stroke-width .25s}
+.fl-l.k-usd{stroke:var(--green)}.fl-l.k-coin{stroke:var(--amber)}.fl-l.k-wd{stroke:var(--cyan);stroke-dasharray:2 5;stroke-linecap:round}
+.fl-l.dash{stroke-dasharray:6 6}
+.fl-l.fade{opacity:.08}.fl-l.hl{opacity:1;stroke-width:3}
+.fl-lb{font-size:10px;font-weight:700;paint-order:stroke;stroke:rgb(var(--surf3-rgb));stroke-width:4px;fill:var(--amber)}
+.fl-lb.fade{opacity:.1}
+.fl-dot{stroke:#fff;stroke-width:1.5}.fl-dot.k-usd,.fl-dot.k-wd{fill:var(--green)}.fl-dot.k-coin{fill:var(--amber)}
+.fl-ptx{font-size:10.5px;font-weight:800;text-anchor:middle;paint-order:stroke;stroke:rgb(var(--surf3-rgb));stroke-width:4px;fill:var(--tx)}
+.fl-bub{position:absolute;transform:translate(-50%,0);font-size:11.5px;font-weight:800;white-space:nowrap;animation:flBub 1.9s ease-out forwards;text-shadow:0 1px 4px rgb(var(--sh-rgb)/.8)}
+@keyframes flBub{0%{opacity:0;transform:translate(-50%,6px)}15%{opacity:1}100%{opacity:0;transform:translate(-50%,-30px)}}
+.fl-empty{text-align:center;color:var(--mut);padding:40px 10px}
+.pf-tab{width:100%;font-size:12.5px;border-collapse:collapse}
+.pf-tab td{padding:6px 4px;border-bottom:1px solid rgb(var(--ov-rgb)/.06);vertical-align:middle}
+.pf-tab td.n{text-align:end;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pf-tab button{padding:4px 8px;font-size:11px}
+.pf-log{max-height:190px;overflow:auto;font-size:11px;color:var(--mut);line-height:1.9;margin-top:8px}
+@media (max-width:760px){.fl-map{padding:22px 6px 16px}.fl-n{min-width:0;flex:1 1 calc(50% - 8px);max-width:calc(50% - 4px);font-size:10.5px;padding:8px 8px}.fl-n .r{gap:4px}.fl-n h4{font-size:11.5px}.fl-tier>.fl-wal{flex:1 1 100%}.fl-p{min-width:0;max-width:94vw;width:100%}.fl-gap{height:62px}.fl-wal{padding:18px 6px 8px;gap:8px}}
+@media (prefers-reduced-motion:reduce){.fl-top .fl-live i,.fl-tl.blink i.on{animation:none}.fl-n{transition:none}}
 .panel h3{font-size:14px;margin-bottom:12px;color:var(--cyan)}
 /* 📊 ربح التداول اليومي — ألوان مفحوصة لعمى الألوان على خلفية اللوحة */
 .pc-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
@@ -11258,6 +11910,7 @@ html.lite .card:hover,html.lite button:hover{transform:none}
     <div class="grp" aria-label="الصفحات">
       <button onclick="openReports()">📊 التقارير</button>
       <button onclick="openLogs()" title="السجلات المفصّلة: كل عملية — صفقات · أرباح · المُراكِم · أوامرك · الرقابة · الإشعارات · النظام (7 أيام)">📜 السجلات</button>
+      <button onclick="openFlow()" title="خريطة الأرباح: من وين يجي الربح ووين يروح — البوتات ⇐ المُراكِمات ⇐ الربح (لكل محفظة) · مباشر">🗺️ الخريطة</button>
       <button onclick="openWallets()">👛 المحافظ</button>
       <button onclick="openWalletView()">💰 محفظتي</button>
       <button id="bGuard" onclick="openGuard()" title="الرقابة: مطابقة الأرصدة والأوامر مع المنصة وكشف البوت الميت">🛡️ الرقابة</button>
@@ -11351,6 +12004,14 @@ html.lite .card:hover,html.lite button:hover{transform:none}
   </div>
   <div class="panel lg-list" id="lgList"><p class="lg-empty">…</p></div>
   <div class="lg-more"><button id="lgMore" onclick="loadLogs(true)" hidden>⬇️ تحميل أقدم</button></div>
+</div></section>
+
+<!-- 🗺️ v3.22.8: خريطة الأرباح -->
+<section class="page" id="page_flow"><div class="pwrap fl-pw">
+  <div class="phead"><h2>🗺️ خريطة الأرباح</h2><span class="lg-keep">مراقبة بس — نفس التوزيعات بالضبط</span><button class="x" onclick="closeFlow()">✕</button></div>
+  <div class="panel fl-top" id="flTop"><span class="fl-empty">⏳ …</span></div>
+  <div class="fl-leg"><span><i style="border-color:var(--green)"></i>💵 دولار</span><span><i style="border-color:var(--amber)"></i>🪙 عملة</span><span><i style="border-color:var(--cyan);border-top-style:dotted"></i>💸 طرح من المتراكم</span><span><i style="border-color:var(--green);border-top-style:dashed"></i>مُراكِم موقوف (نصيبه يتراكم)</span><span>🚦 🔴 ينتظر النافذة · 🟡 يتجمّع/ينتظر · 🟢 يشتري/اشترى</span><span>مرّر/اضغط على أي مربع: خطوطه وأرقامه</span></div>
+  <div class="panel fl-map" id="flMap"><svg class="fl-svg" id="flSvg"></svg><svg class="fl-svg" id="flSvgP"></svg><div id="flFx"></div><div id="flBody"></div></div>
 </div></section>
 
 <!-- صفحة المحافظ -->
@@ -13457,6 +14118,201 @@ async function loadReport(k){
 }
 function setRepSrc(s){REPSRC=s;loadReport()}
 function sendReport(){g(REPSRC==='ri'?'ri_report':'send_report',REPKIND)}
+/* ── 🗺️ v3.22.8: خريطة الأرباح — مراقبة بس (نفس التوزيعات) · مباشر كل 4 ثواني ── */
+const FL={timer:0,cd:0,data:null,paths:{},parts:[],raf:0,t0:0,hlId:null,sig:''};
+const FL_WC=['#22d3ee','#a78bfa','#f472b6','#a3e635','#fb923c','#60a5fa'];
+const FL_NS='http://www.w3.org/2000/svg';
+const fl$=v=>{v=+v||0;const a=Math.abs(v);return (a<5e-7?'0':a>=100?v.toFixed(2):a>=1?v.toFixed(3):v.toFixed(4))+'$'};
+const flC=v=>{v=+v||0;return Math.abs(v)<1e-12?'0':fmtQ(v)};
+const flQ=(v,c)=>c==='USDT'||!c?fl$(v):(flC(v)+' '+c);
+const flE=s=>gEsc(s);
+const flIco=t=>({grid:'♾️',grid_range:'🎚️',grid_plus:'➕',dca:'📉',dca_buy:'📈'}[t]||'🤖');
+function flHMS(s){s=Math.max(0,Math.round(s));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return `${h}:${String(m).padStart(2,'0')}:${String(x).padStart(2,'0')}`}
+function openFlow(){openPage('flow');FL.data=null;FL.sig='';loadFlow();clearInterval(FL.timer);clearInterval(FL.cd);
+  FL.timer=setInterval(()=>{const pg=$('#page_flow');if(!pg||!pg.classList.contains('on')){clearInterval(FL.timer);clearInterval(FL.cd);return}if(!document.hidden)loadFlow()},4000);
+  FL.cd=setInterval(flTickCd,1000)}
+function closeFlow(){closePage('flow');clearInterval(FL.timer);clearInterval(FL.cd)}
+async function loadFlow(){
+  if(FL.busy)return;FL.busy=true;
+  try{const r=await api('/api/flow');if(!r||r.ok===false)throw 0;
+    const prev=FL.data;FL.data=r;FL.t0=Date.now();flRender(r);
+    if(prev&&prev.since===r.since)flAnimate(prev,r);
+  }catch(e){if(!FL.data)$('#flBody').innerHTML='<div class="fl-empty">تعذّر تحميل الخريطة</div>'}
+  finally{FL.busy=false}}
+function flTickCd(){const r=FL.data;if(!r)return;const left=r.to_midnight-(Date.now()-FL.t0)/1000;
+  document.querySelectorAll('[data-cd]').forEach(el=>el.textContent=flHMS(left))}
+function flBot(b){
+  const rows=[];
+  if(b.usd){rows.push(`<div class="r"><span>💵 اليوم</span><b class="u">+${fl$(b.u_today)}</b></div>`);
+    if(b.u_wait>b.u_today+1e-9)rows.push(`<div class="r"><span>⏳ ينتظر التوزيع</span><b class="u">${fl$(b.u_wait)}</b></div>`)}
+  else if(b.type!=='dca')rows.push(`<div class="r"><span>💵 الدولار</span><b>كله داخل الأوامر</b></div>`);
+  if(b.ri)rows.push(`<div class="r" title="ربح معاد استثماره — يبقى بمكانه داخل الأوامر لحد ما يتحرّر (سحب/إطفاء)"><span>💠 داخل الأوامر${b.ri.on?' '+b.ri.pct+'%':''}</span><b class="v">${fl$(b.ri.held)}</b></div>`);
+  if(b.coin)rows.push(`<div class="r"><span>🪙 اليوم</span><b class="c">+${flC(b.c_today)} ${flE(b.base)}</b></div>`);
+  return `<div class="fl-n fl-b" data-id="${flE(b.id)}" data-u="${b.usd?1:0}" data-c="${b.coin?1:0}" onclick="flInfo('${flE(b.id)}')">
+    <h4><span class="dot${b.alive?' on':''}"></span>${flIco(b.type)} ${flE(b.name)} <small>${flE(b.sym)}</small></h4>${rows.join('')}</div>`}
+function flAcc(a,r){
+  const tl=`<span class="fl-tl${a.light==='g'||a.light==='r'?' blink':''}"><i class="r${a.light==='r'?' on':''}"></i><i class="y${a.light==='y'||a.light==='o'?' on':''}"></i><i class="g${a.light==='g'?' on':''}"></i></span>`;
+  const waitWin=a.light==='r'&&/نافذة/.test(a.why);
+  const pr=Math.min(100,a.min_buy>0?a.pool/a.min_buy*100:0);
+  return `<div class="fl-n fl-a" data-id="${flE(a.id)}" data-u="1" data-c="1" onclick="flInfo('${flE(a.id)}')">
+    <h4>🪙 ${flE(a.name)} <small>${flE(a.sym)}</small> ${tl}</h4>
+    <div class="fl-why">${flE(a.why)}${waitWin?` · ⏱ <b data-cd>${flHMS(r.to_midnight)}</b>`:''}</div>
+    <div class="r"><span>💵 نسبته</span><b class="u">${a.pct}% من كل بوت</b></div>
+    ${a.coin_pct>0?`<div class="r"><span>🪙 نسبة العملة</span><b class="c">${a.coin_pct}%</b></div>`:''}
+    <div class="r"><span>⏳ قيد الشراء</span><b>${fl$(a.pool)} / ${a.min_buy}$</b></div><div class="fl-bar"><i style="width:${pr.toFixed(1)}%"></i></div>
+    <div class="r"><span>🏧 المتراكم</span><b>${fl$(a.pending)}</b></div>
+    <div class="r"><span>📦 المخزون</span><b class="c">${flC(a.coin)} ${flE(a.base)}${a.value&&a.coin?` ≈ ${fl$(a.value)}`:''}</b></div></div>`}
+function flProfit(w){
+  const p=w.profit,c=FL_WC[w.ci%FL_WC.length];
+  const coins=Object.entries(p.coins||{}).map(([k,v])=>`${fmtQ(v)} ${flE(k)}`).join(' · ');
+  const env=(p.env||[]).map(e=>`<div class="env"><span>📁 ${flE(e.name)} ${e.pct}%</span><b>${fl$(e.usd)}</b></div>`).join('');
+  return `<div class="fl-n fl-p" data-id="${flE(p.id)}" data-u="1" data-c="1" style="--wc:${c}" onclick="pfOpen('${flE(w.wid)}')">
+    <h4>💰 الربح <small>${flE(w.label)}</small></h4>
+    <div class="fl-big">${fl$(p.usd)}</div>${coins?`<div class="r"><span>🪙</span><b class="c">${coins}</b></div>`:''}
+    ${env}${(p.env||[]).length?`<div class="env"><span>📥 غير مقسّم ${Math.max(0,100-p.env_pct).toFixed(0)}%</span><b>${fl$(p.free)}</b></div>`:''}
+    <div class="fl-hint">اضغط: الصناديق · الصرف · التصفير</div></div>`}
+function flRender(r){
+  const tot=r.wallets.reduce((s,w)=>s+w.u_today,0),held=r.wallets.reduce((s,w)=>s+w.held,0),pf=r.wallets.reduce((s,w)=>s+w.profit.usd,0);
+  $('#flTop').innerHTML=`<span class="fl-live"><i></i>مباشر</span>
+    <span>📅 الخطوط من <b>${flE(r.since)}</b></span>
+    <span>💵 ربح اليوم <b>${fl$(tot)}</b> · يتوزّع بعد ⏱ <b data-cd>${flHMS(r.to_midnight)}</b></span>
+    <span>💠 داخل الأوامر <b>${fl$(held)}</b></span><span>💰 بالربح <b>${fl$(pf)}</b></span>
+    <span>🪙 المُراكِمات تاخذ <b>${r.sum_pct}%</b> من دولار كل بوت · الباقي <b>${Math.max(0,100-r.sum_pct).toFixed(0)}%</b> للربح</span>
+    <div class="fl-note">💵 الدولار يتجمّع عند البوت وينزل <b>نهاية اليوم</b> بنفس نسب المُراكِمات والباقي للربح · 🪙 العملة تنزل خلال ثواني (للمُراكِم بنسبة العملة — نفس العملة ونفس المحفظة — والباقي/بلا مُراكِم للربح) · 💠 إعادة الاستثمار تبقى بمكانها لحد ما تتحرّر · الحقن مو ربح فما يظهر · الأرقام على الخطوط من يوم التفعيل.</div>`;
+  const wb=r.wallets.filter(w=>w.bots.length);
+  let h='';
+  if(!wb.length&&!r.accs.length)h='<div class="fl-empty">ماكو بوتات حقيقية بعد</div>';
+  else{
+    h+=`<div class="fl-tier">${wb.map(w=>`<div class="fl-wal" style="--wc:${FL_WC[w.ci%FL_WC.length]}"><span class="fl-wlab">👛 ${flE(w.label)}</span>${w.bots.map(flBot).join('')}</div>`).join('')}</div>`;
+    if(r.accs.length){const aw=r.wallets.find(w=>w.wid===r.acc_wid);
+      h+=`<div class="fl-gap"></div><div class="fl-cap"><span>🪙 المُراكِمات${aw?' — على '+flE(aw.label):''}</span></div><div class="fl-tier">${r.accs.map(a=>flAcc(a,r)).join('')}</div>`}
+    h+=`<div class="fl-gap"></div><div class="fl-cap"><span>💰 الربح — كل محفظة لحالها</span></div><div class="fl-tier">${r.wallets.map(flProfit).join('')}</div>`;
+  }
+  $('#flBody').innerHTML=h;
+  document.querySelectorAll('#flBody .fl-n').forEach(n=>{n.onmouseenter=()=>flHL(n.dataset.id);n.onmouseleave=()=>flHL(null)});
+  requestAnimationFrame(flDraw);
+}
+function flPort(id,out,k){
+  const el=document.querySelector(`#flBody .fl-n[data-id="${CSS.escape(id)}"]`);if(!el)return null;
+  const M=$('#flMap'),mr=M.getBoundingClientRect(),m={left:mr.left+M.clientLeft,top:mr.top+M.clientTop},b=el.getBoundingClientRect();
+  const two=el.dataset.u==='1'&&el.dataset.c==='1';
+  const fx=k==='wd'?.5:two?(k==='coin'?.68:.32):.5;
+  return {x:b.left-m.left+b.width*fx,y:out?b.bottom-m.top:b.top-m.top}}
+function flDraw(){
+  const r=FL.data;if(!r)return;const map=$('#flMap'),W=map.clientWidth,Hh=map.scrollHeight;
+  for(const id of ['flSvg','flSvgP']){const s=$('#'+id);s.setAttribute('width',W);s.setAttribute('height',Hh);s.setAttribute('viewBox',`0 0 ${W} ${Hh}`)}
+  let ls='',lb='';FL.paths={};
+  for(const l of r.lines){const a=flPort(l.from,true,l.k),b=flPort(l.to,false,l.k);if(!a||!b)continue;
+    const dy=Math.max(28,Math.abs(b.y-a.y)*.5),d=`M${a.x.toFixed(1)},${a.y.toFixed(1)} C${a.x.toFixed(1)},${(a.y+dy).toFixed(1)} ${b.x.toFixed(1)},${(b.y-dy).toFixed(1)} ${b.x.toFixed(1)},${b.y.toFixed(1)}`;
+    FL.paths[l.id]={d,to:l.to,from:l.from,k:l.k};
+    ls+=`<path class="fl-l k-${l.k}${l.dash?' dash':''}" data-id="${flE(l.id)}" data-f="${flE(l.from)}" data-t="${flE(l.to)}" d="${d}"></path>`;
+    if(l.k==='coin'&&l.pct!=null)lb+=`<text class="fl-lb" data-l="${flE(l.id)}" data-f="${flE(l.from)}" data-t="${flE(l.to)}" text-anchor="middle">🪙${+(+l.pct).toFixed(1)}%</text>`}
+  $('#flSvg').innerHTML=ls;
+  let g=$('#flLbl');if(!g){g=document.createElementNS(FL_NS,'g');g.id='flLbl';$('#flSvgP').prepend(g)}
+  g.innerHTML=lb;const nth={};
+  g.querySelectorAll('text').forEach(t=>{const p=document.querySelector(`#flSvg path[data-id="${CSS.escape(t.dataset.l)}"]`);if(!p)return;
+    const i=nth[t.dataset.f]=(nth[t.dataset.f]||0)+1,L=p.getTotalLength(),pt=p.getPointAtLength(Math.min(L*.45,12+15*i));
+    t.setAttribute('x',pt.x.toFixed(1));t.setAttribute('y',(pt.y+3).toFixed(1))});
+  if(FL.hlId)flHL(FL.hlId);
+}
+function flHL(id){FL.hlId=id;
+  document.querySelectorAll('#flSvg .fl-l,#flLbl .fl-lb').forEach(p=>{const on=id&&(p.dataset.f===id||p.dataset.t===id);p.classList.toggle('hl',!!on&&p.tagName==='path');p.classList.toggle('fade',!!id&&!on)});
+  if(!id){document.querySelectorAll('#flBody .fl-n.fade').forEach(n=>n.classList.remove('fade'));return}
+  const nb=new Set([id]);(FL.data.lines||[]).forEach(l=>{if(l.from===id)nb.add(l.to);if(l.to===id)nb.add(l.from)});
+  document.querySelectorAll('#flBody .fl-n').forEach(n=>n.classList.toggle('fade',!nb.has(n.dataset.id)))}
+function flAnimate(p,r){
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const pl={};(p.lines||[]).forEach(l=>pl[l.id]=l);
+  let n=0;
+  for(const l of r.lines){const o=pl[l.id];if(!o)continue;const d=(+l.t||0)-(+o.t||0);
+    if(d>1e-9){if(reduce)flPulse(l.to);else flSpawn(l.id,'+'+flQ(d,l.c),l.k,n++)}}
+  const pb={};p.wallets.forEach(w=>w.bots.forEach(b=>pb[b.id]=b));
+  r.wallets.forEach(w=>w.bots.forEach(b=>{const o=pb[b.id];if(!o)return;
+    if(p.today===r.today&&b.u_today-o.u_today>1e-9)flBub(b.id,'+'+fl$(b.u_today-o.u_today),'var(--green)');
+    if(b.ri&&o.ri&&b.ri.held-o.ri.held>1e-6)flBub(b.id,'💠 +'+fl$(b.ri.held-o.ri.held),'var(--vio)');
+    if(p.today===r.today&&b.c_today-o.c_today>1e-12)flBub(b.id,'🪙 +'+fmtQ(b.c_today-o.c_today)+' '+b.base,'var(--amber)')}));
+  const pa={};p.accs.forEach(a=>pa[a.id]=a);
+  r.accs.forEach(a=>{const o=pa[a.id];if(!o)return;const cin=r.lines.filter(l=>l.to===a.id&&l.k==='coin').reduce((s,l)=>s+(+l.t||0),0)-p.lines.filter(l=>l.to===a.id&&l.k==='coin').reduce((s,l)=>s+(+l.t||0),0);
+    const dc=a.coin-o.coin-Math.max(0,cin);if(dc>1e-10)flBub(a.id,'🛒 +'+fmtQ(dc)+' '+a.base,'var(--amber)')});
+}
+function flSpawn(lid,label,k,i){
+  const P=FL.paths[lid];if(!P||FL.parts.length>60)return;const svg=$('#flSvgP');
+  const p=document.createElementNS(FL_NS,'path');p.setAttribute('d',P.d);p.setAttribute('fill','none');svg.appendChild(p);
+  const g=document.createElementNS(FL_NS,'g');g.setAttribute('class','fl-part');g.style.opacity=0;
+  g.innerHTML=`<circle r="5" class="fl-dot k-${k}"></circle><text class="fl-ptx" y="-10">${flE(label)}</text>`;svg.appendChild(g);
+  FL.parts.push({p,g,len:p.getTotalLength(),t0:performance.now()+i*140,dur:2100,to:P.to});
+  if(!FL.raf)FL.raf=requestAnimationFrame(flStep)}
+function flStep(ts){
+  FL.parts=FL.parts.filter(o=>{const k=(ts-o.t0)/o.dur;if(k<0)return true;
+    if(k>=1){o.p.remove();o.g.remove();flPulse(o.to);return false}
+    const e=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2,pt=o.p.getPointAtLength(o.len*e);
+    o.g.setAttribute('transform',`translate(${pt.x.toFixed(1)},${pt.y.toFixed(1)})`);o.g.style.opacity=k>.88?((1-k)/.12).toFixed(2):1;return true});
+  FL.raf=FL.parts.length?requestAnimationFrame(flStep):0}
+function flPulse(id){const el=document.querySelector(`#flBody .fl-n[data-id="${CSS.escape(id)}"]`);if(!el)return;el.classList.add('pulse');setTimeout(()=>el.classList.remove('pulse'),750)}
+function flBub(id,txt,col){const el=document.querySelector(`#flBody .fl-n[data-id="${CSS.escape(id)}"]`);if(!el)return;
+  const m=$('#flMap').getBoundingClientRect(),b=el.getBoundingClientRect(),d=document.createElement('div');
+  d.className='fl-bub';d.textContent=txt;d.style.color=col;d.style.left=(b.left-m.left+b.width/2)+'px';d.style.top=(b.top-m.top-4)+'px';
+  $('#flFx').appendChild(d);setTimeout(()=>d.remove(),2000);flPulse(id)}
+function flInfo(id){
+  const r=FL.data;if(!r)return;const ins=r.lines.filter(l=>l.to===id),outs=r.lines.filter(l=>l.from===id);
+  const nm=x=>{if(x.startsWith('a:')){const a=r.accs.find(z=>z.id===x);return '🪙 '+(a?a.name:x)}if(x.startsWith('p:')){const w=r.wallets.find(z=>z.profit.id===x);return '💰 الربح · '+(w?w.label:'')}
+    for(const w of r.wallets)for(const b of w.bots)if(b.id===x)return flIco(b.type)+' '+b.name;return x};
+  const row=l=>`<tr><td>${l.k==='coin'?'🪙':l.k==='wd'?'💸':'💵'} ${flE(nm(l.from===id?l.to:l.from))}</td><td class="n">${l.pct!=null?(+l.pct).toFixed(1)+'%':'طرح'}</td><td class="n">${flQ(l.t,l.c)}</td></tr>`;
+  let h='',title='';
+  const a=r.accs.find(z=>z.id===id);
+  if(a){title=`🪙 ${flE(a.name)} · ${flE(a.sym)}`;
+    h=`<p style="font-size:12.5px;color:var(--mut);line-height:1.9">${flE(a.why)}</p>
+    <table class="pf-tab"><tr><td>⏳ قيد الشراء (ينشترى بالنافذة)</td><td class="n">${fl$(a.pool)} / ${a.min_buy}$</td></tr><tr><td>🏧 المتراكم (تحت تصرّفك)</td><td class="n">${fl$(a.pending)}</td></tr>
+    <tr><td>📦 المخزون</td><td class="n">${fmtQ(a.coin)} ${flE(a.base)}</td></tr><tr><td>💵 كلّف · المتوسط</td><td class="n">${fl$(a.spent)} · ${a.avg!=null?fmtQ(a.avg)+'$':'—'}</td></tr>
+    <tr><td>💸 طرح للربح (منذ البداية)</td><td class="n">${fl$(a.wd)}</td></tr></table>`}
+  else{for(const w of r.wallets)for(const b of w.bots)if(b.id===id){title=`${flIco(b.type)} ${flE(b.name)} · ${flE(b.sym)} · ${flE(w.label)}`;
+    h=`<table class="pf-tab"><tr><td>💵 ربح اليوم</td><td class="n">${fl$(b.u_today)}</td></tr><tr><td>⏳ ينتظر توزيع نهاية اليوم</td><td class="n">${fl$(b.u_wait)}</td></tr>
+    <tr><td>💵 منذ ${flE(r.since)}</td><td class="n">${fl$(b.u_tot)}</td></tr>${b.ri?`<tr><td>💠 داخل الأوامر (${b.ri.on?'إعادة استثمار '+b.ri.pct+'%':'موقوفة'})</td><td class="n">${fl$(b.ri.held)}</td></tr>`:''}
+    ${b.coin?`<tr><td>🪙 عملة اليوم</td><td class="n">${fmtQ(b.c_today)} ${flE(b.base)}</td></tr>`:''}</table>`}}
+  if(outs.length)h+=`<h3 style="font-size:13px;margin:12px 0 4px">⬇️ ينزل إلى (المجموع منذ ${flE(r.since)})</h3><table class="pf-tab">${outs.map(row).join('')}</table>`;
+  if(ins.length&&!id.startsWith('p:'))h+=`<h3 style="font-size:13px;margin:12px 0 4px">⬆️ يجيه من</h3><table class="pf-tab">${ins.map(row).join('')}</table>`;
+  const why=outs.find(l=>l.why);if(why)h+=`<p style="font-size:11.5px;color:var(--amber);margin-top:8px">🪙 ${flE(why.why)}</p>`;
+  h+=`<div class="mbtns" style="margin-top:12px">${a?`<button onclick="hideModal();const x=((DATA&&DATA.accum)||[]).find(z=>z.id==='${flE(a.aid)}');if(x)accEdit(x)">⚙️ الإعدادات</button>`:''}<button onclick="hideModal()">إغلاق</button></div>`;
+  showModal(`<h2>${title||'—'}</h2>`+h)}
+/* ── 💰 صناديق الربح (دفتر للعرض — ما يحرّك شي بالمنصة) ── */
+function pfW(wid){return ((FL.data||{}).wallets||[]).find(w=>w.wid===wid)}
+function pfOpen(wid){
+  const w=pfW(wid);if(!w)return;const p=w.profit,rest=Math.max(0,100-p.env_pct);
+  const env=(p.env||[]).map(e=>`<tr><td>📁 <b>${flE(e.name)}</b></td><td class="n">${e.pct}%</td><td class="n"><b>${fl$(e.usd)}</b></td>
+    <td class="n"><button onclick="pfSpend('${flE(wid)}','${flE(e.id)}',${e.usd},'${flE(e.name)}')">💸 صرف</button> <button onclick="pfEnv('${flE(wid)}','${flE(e.id)}')">✏️</button> <button style="color:var(--red)" onclick="pfDel('${flE(wid)}','${flE(e.id)}','${flE(e.name)}')">🗑️</button></td></tr>`).join('');
+  const coins=Object.entries(p.coins||{}).map(([k,v])=>`<tr><td>🪙 ${flE(k)}</td><td></td><td class="n"><b>${fmtQ(v)}</b></td><td class="n"><button onclick="pfSpend('${flE(wid)}','coin:${flE(k)}',${v},'${flE(k)}',1)">💸 صرف</button></td></tr>`).join('');
+  const ic={in_usd:'⬇️',in_coin:'🪙⬇️',spend:'💸',reset:'🧹',resplit:'🔄',env_add:'➕',env_edit:'✏️',env_del:'🗑️'};
+  const lg=(p.log||[]).slice(0,25).map(x=>`<div>${new Date(x.ts*1000).toLocaleString('ar',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})} · ${ic[x.k]||'•'} ${x.c==='%'?(+x.a)+'%':flQ(x.a,x.c)} ${flE(x.s||'')} ${flE(x.n||'')}</div>`).join('')||'<div>لسه ماكو حركة</div>';
+  showModal(`<h2>💰 الربح — ${flE(w.label)}</h2>
+  <p style="font-size:11.5px;color:var(--mut);line-height:1.8">خلاصة الربح اللي نزل لهالمحفظة (الباقي بعد المُراكِمات + العملة بلا مُراكِم + الطرح من المتراكم) · تقسّمه على صناديق بنسب تختارها.<br>
+  <b>دفتر للعرض:</b> «💸 صرف» و«🧹 تصفير» ما يحرّكون شي بالمنصة — بس يسجّلون إنك صرفته.</p>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin:6px 0 10px"><span>الرصيد <b style="color:var(--green);font-size:16px">${fl$(p.usd)}</b></span><span>دخل <b>${fl$(p.in_usd)}</b></span><span>انصرف <b>${fl$(p.out_usd)}</b></span></div>
+  <table class="pf-tab">${env}<tr><td>📥 غير مقسّم</td><td class="n">${rest.toFixed(rest%1?2:0)}%</td><td class="n"><b>${fl$(p.free)}</b></td><td class="n"><button onclick="pfSpend('${flE(wid)}','free',${p.free},'غير مقسّم')">💸 صرف</button></td></tr>${coins}</table>
+  <div class="mbtns" style="margin-top:12px"><button class="primary" onclick="pfEnv('${flE(wid)}')">➕ صندوق</button>
+    <button onclick="pfAct('${flE(wid)}','resplit','🔄 إعادة تقسيم؟','كل الرصيد (${fl$(p.usd)}) ينقسم من جديد على الصناديق بنسبها الحالية.')">🔄 إعادة تقسيم</button>
+    <button style="color:var(--red)" onclick="pfAct('${flE(wid)}','reset','🧹 تصفير الربح؟','كل الصناديق والعملات تصير صفر ويبدي يتجمّع من جديد — الصناديق ونسبها تبقى. (دفتر بس — ما يمس فلوسك بالمنصة)')">🧹 تصفير</button>
+    <button onclick="hideModal()">إغلاق</button></div>
+  <div class="pf-log">${lg}</div>`)}
+function pfEnv(wid,id){
+  const w=pfW(wid);if(!w)return;const e=id?(w.profit.env||[]).find(x=>x.id===id):null;
+  const left=100-w.profit.env_pct+(e?e.pct:0);
+  showModal(`<h2>${e?'✏️ تعديل صندوق':'➕ صندوق جديد'}</h2><p style="font-size:12px;color:var(--mut)">النسبة من كل ربح (دولار) ينزل لهالمحفظة · المتاح ${left.toFixed(2).replace(/\.00$/,'')}% · التعديل يطبّق على الجاي، و«🔄 إعادة تقسيم» يطبّقه على الموجود.</p>
+  <div class="frm"><div class="fld"><label>الاسم</label><input id="pf_n" value="${e?flE(e.name):''}" placeholder="مصروفي الخاص" maxlength="40"></div>
+  <div class="fld"><label>النسبة %</label><input id="pf_p" class="num" value="${e?e.pct:''}" placeholder="${Math.min(50,left)}"></div></div>
+  <div class="mbtns" style="margin-top:12px"><button class="primary" id="pf_go">💾 حفظ</button><button onclick="pfOpen('${flE(wid)}')">↩ رجوع</button></div>`);
+  $('#pf_go').onclick=async()=>{const r=await api('/api/pfbox',{act:e?'env_edit':'env_add',wid,id:e?e.id:undefined,name:$('#pf_n').value,pct:$('#pf_p').value});
+    toast(r.msg||'تم',r.ok!==false);if(r.ok){await loadFlow();pfOpen(wid)}}}
+function pfSpend(wid,id,bal,name,coin){
+  showModal(`<h2>💸 صرف من «${flE(name)}»</h2><p style="font-size:12px;color:var(--mut)">الرصيد ${coin?fmtQ(bal):fl$(bal)} · الصرف يعني طلع للمحفظة/انصرف — دفتر بس، ما يحرّك شي بالمنصة.</p>
+  <div style="display:flex;gap:6px;flex-wrap:wrap"><input id="pf_a" class="num" placeholder="0" style="flex:1 1 90px;min-width:0" oninput="this.dataset.all=''">
+  <button onclick="const i=$('#pf_a');i.value=${coin?`'${bal}'`:`(+${bal}).toFixed(2)`};i.dataset.all='1'">الكل</button>
+  <button class="primary" id="pf_go">💸 صرف</button></div><div class="mbtns" style="margin-top:12px"><button onclick="pfOpen('${flE(wid)}')">↩ رجوع</button></div>`);
+  $('#pf_go').onclick=async()=>{const i=$('#pf_a'),all=i.dataset.all==='1',v=parseFloat(String(i.value).replace(/,/g,'.'))||0;
+    if(!(v>0))return toast('اكتب مبلغ أو اضغط «الكل»',false);
+    const r=await api('/api/pfbox',{act:'spend',wid,id,amount:all?'all':v});toast(r.msg||'تم',r.ok!==false);if(r.ok){await loadFlow();pfOpen(wid)}}}
+function pfDel(wid,id,name){askConfirm('🗑️ حذف «'+flE(name)+'»؟','رصيده يرجع لـ«غير مقسّم» — ولا سنت يضيع.',async()=>{const r=await api('/api/pfbox',{act:'env_del',wid,id});toast(r.msg||'تم',r.ok!==false);await loadFlow();pfOpen(wid)})}
+function pfAct(wid,act,t,d){askConfirm(t,d,async()=>{const r=await api('/api/pfbox',{act,wid});toast(r.msg||'تم',r.ok!==false);await loadFlow();pfOpen(wid)})}
+window.addEventListener('resize',()=>{clearTimeout(FL.rz);FL.rz=setTimeout(()=>{if($('#page_flow')&&$('#page_flow').classList.contains('on'))flDraw()},150)});
 async function openWallets(){openPage('wallets');
   try{const s=await api('/api/settings');$('#w_tok').value=s.tg_token||'';$('#w_chat').value=s.tg_chat_id||'';
     const q=n=>gEsc(JSON.stringify(String(n)));
@@ -17544,6 +18400,8 @@ def books_audit():
             if float(days.get(d) or 0) + 1e-6 < round(prof * pc / 100.0, 6):
                 miss.append(f"{d}: {float(days.get(d) or 0):.4f} < {prof * pc / 100:.4f}")
         add(f"المُراكِم {a.get('name') or a.get('id')}: نصيبه من كل يوم منتهي", not miss, "كامل (آخر 7 أيام)" if not miss else " · ".join(miss), "ok" if not miss else "warn")
+    for _n, _ok, _d in (_safe(profit_audit, default=[]) or []):      # 💰 v3.22.8
+        add(_n, _ok, _d)
     errs = sum(1 for c in C if c["level"] == "err")
     warns = sum(1 for c in C if c["level"] == "warn")
     return {"ok": errs == 0, "errors": errs, "warnings": warns, "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -17643,6 +18501,8 @@ def diag_bundle(days=30):
             pass
         put("README_DIAG.md", DIAG_README.replace("__V__", APP_VERSION))
         put("money_audit.json", _safe(money_audit, default={"error": "تعذّر"}))      # 💰 كل سنت
+        put("profit_book.json", _safe(load_json, PROFIT_FILE, default={}) or {})    # 💰 v3.22.8: دفتر الربح والصناديق
+        put("numbers/flow.json", _safe(flow_view, default={}))                      # 🗺️ v3.22.8: لقطة الخريطة
         put("accumulator_state.json", _safe(load_json, ACCUM_FILE, default={}))      # 🪙 المُراكِم: كميات · كلف · تسليمات
         put("accumulators_config.json", _safe(acc_cfgs, default=[]))
         put("reinvest_archive.json", _safe(load_json, RI_LEDGER, default={}))        # 💠 أرشيف يومي لكل بوت
