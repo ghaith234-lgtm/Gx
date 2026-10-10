@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.22.6"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.22.7"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -246,6 +246,7 @@ _JR = {"pruned": "", "rl": {}}
 JR_CATS = {"trade": "🔁 الصفقات", "bot": "🤖 سجل البوت", "profit": "💵 الأرباح", "accum": "🪙 المُراكِم",
            "user": "👤 أوامرك", "guard": "🛡️ الرقابة", "notify": "🔔 الإشعارات", "system": "⚙️ النظام"}
 _JR_SECRET = ("key", "secret", "pass", "token", "pw", "pin", "chat_id")
+_JR_SECRET_EXACT = {"api", "sec"}      # 🔒 v3.22.7: حقول المحافظ (api · sec · pass) — «api» و«sec» ما كانت تنحجب بالسجلات ولا بالتقرير التشخيصي
 
 
 def _jr_clean(v, depth=0):
@@ -253,7 +254,7 @@ def _jr_clean(v, depth=0):
     if depth > 4:
         return "…"
     if isinstance(v, dict):
-        return {str(k): ("***" if any(x in str(k).lower() for x in _JR_SECRET) else _jr_clean(x, depth + 1)) for k, x in list(v.items())[:60]}
+        return {str(k): ("***" if (str(k).lower() in _JR_SECRET_EXACT or any(x in str(k).lower() for x in _JR_SECRET)) else _jr_clean(x, depth + 1)) for k, x in list(v.items())[:60]}
     if isinstance(v, (list, tuple)):
         return [_jr_clean(x, depth + 1) for x in list(v)[:60]]
     if isinstance(v, str):
@@ -261,6 +262,43 @@ def _jr_clean(v, depth=0):
     if isinstance(v, (int, float, bool)) or v is None:
         return v
     return str(v)[:300]
+
+
+def journal_scrub_once():
+    """🔒 v3.22.7: مرة وحدة — يحجب مفاتيح محافظ انكتبت بسجلات v3.22.6 (إضافة محفظة كانت تسجّل api/sec كما هي)."""
+    flag = os.path.join(JOURNAL_DIR, "_scrubbed_v3227")
+    try:
+        if not os.path.isdir(JOURNAL_DIR) or os.path.exists(flag):
+            return 0
+        n = 0
+        with _JR_LOCK:
+            for fn in sorted(os.listdir(JOURNAL_DIR)):
+                if not fn.endswith(".jsonl"):
+                    continue
+                fp = os.path.join(JOURNAL_DIR, fn)
+                out, ch = [], False
+                with open(fp, encoding="utf-8") as f:
+                    for ln in f:
+                        try:
+                            e = json.loads(ln)
+                        except Exception:
+                            out.append(ln if ln.endswith("\n") else ln + "\n")
+                            continue
+                        if isinstance(e, dict) and isinstance(e.get("d"), dict):
+                            d2 = _jr_clean(e["d"])
+                            if d2 != e["d"]:
+                                e["d"] = d2; ch = True; n += 1
+                        out.append(json.dumps(e, ensure_ascii=False) + "\n")
+                if ch:
+                    tmp = fp + ".tmp"
+                    with open(tmp, "w", encoding="utf-8") as f:
+                        f.writelines(out)
+                    os.replace(tmp, fp)
+        with open(flag, "w") as f:
+            f.write(str(n))
+        return n
+    except Exception:
+        return 0
 
 
 def _jr_prune(today):
@@ -1797,7 +1835,7 @@ def acc_sell_now(aid, qty=None, reason="يدوي"):
     sp = _acc_spec(sym)
     if sell_q <= 0 or (sp["minSz"] and sell_q < sp["minSz"]):
         return False, f"الكمية {want} أقل من حد OKX ({sp['minSz']})"
-    k, s, p, _ = _acc_keys()
+    k, s, p, who = _acc_keys()
     if not k: return False, "لا توجد مفاتيح API"
     cl = "HACS" + str(int(time.time()))[-7:] + _sc.token_hex(2)
     e["sell_inflight"] = {"cl": cl, "qty": sell_q, "ts": time.time(), "sym": sym}
@@ -1809,8 +1847,7 @@ def acc_sell_now(aid, qty=None, reason="يدوي"):
         return False, "تعذّر الاتصال — يُتحقق من الأمر بالدورة القادمة"
     if r.get("code") != "0":
         e.pop("sell_inflight", None); _acc_save(st_all)
-        d = (r.get("data") or [{}]); d = d[0] if d else {}
-        return False, f"OKX {r.get('code')}: {d.get('sMsg') or r.get('msg') or 'رفض'}"
+        return False, okx_errmsg(r, who)                 # 🔑 v3.22.7
     oid = (r.get("data") or [{}])[0].get("ordId", "")
     got = 0.0; avgpx = 0.0
     for _ in range(6):
@@ -1870,6 +1907,7 @@ def acc_settle_sell(a, st_all):
     q = (_okx_get(f"/api/v5/trade/order?instId={sym}&ordId={oid}", k, s, p) if oid
          else _okx_get(f"/api/v5/trade/order?instId={sym}&clOrdId={cl}", k, s, p))
     if q is None: return True
+    if not _okx_no_order(q): return True     # 🔑 v3.22.7: رفض مفتاح/خطأ منصة ≠ «الأمر مو موجود» → انتظر
     if q.get("code") != "0" or not (q.get("data") or []):
         if time.time() - float(inf.get("ts") or 0) > 90:
             e.pop("sell_inflight", None); _acc_save(st_all); return False
@@ -1912,9 +1950,7 @@ def acc_buy_now(a, st_all, amount, price, reason="آلي"):
         return False, "تعذّر الاتصال — سيُتحقق من الأمر بالدورة القادمة قبل أي شراء"
     if r.get("code") != "0":
         _e0.pop("inflight", None); _acc_save(st_all)   # رُفض صراحةً — لا أمر معلّق
-        d = (r.get("data") or [{}])
-        d = d[0] if d else {}
-        return False, f"OKX {r.get('code')}: {d.get('sMsg') or r.get('msg') or 'رفض'}"
+        return False, okx_errmsg(r, who)                 # 🔑 v3.22.7: رفض المفتاح ⇒ اسم المحفظة + الحل
     oid = (r.get("data") or [{}])[0].get("ordId", "")
     # نتحقق من التنفيذ الفعلي
     got = 0.0; paid = amt; avg = price
@@ -1959,6 +1995,20 @@ def acc_buy_now(a, st_all, amount, price, reason="آلي"):
     except Exception: pass
     return True, f"✅ اشترى {got:.6f} {base} بـ {paid:.2f}$"
 
+def _okx_no_order(q):
+    """🔑 v3.22.7: رد استعلام الأمر — True لو صالح للحكم: الأمر موجود (code 0 + بيانات) أو OKX يقول صراحةً «مو موجود» (51603).
+    أي رفض ثاني (مفتاح 50119 · ضغط 50011 · عطل 50001 …) ⇒ False: ما نعرف شي ⇒ ننتظر — ما نمسح البصمة ونشتري فوقها."""
+    try:
+        c = str(q.get("code"))
+        if c == "0":
+            return True
+        if c == "51603":
+            return True
+        d = q.get("data") or []
+        return bool(d) and isinstance(d[0], dict) and str(d[0].get("sCode")) == "51603"
+    except Exception:
+        return False
+
 def _acc_settle(a, st_all):
     """🛡️ يسوّي أمراً سابقاً ضاع رده — يرجع True لو ما زال معلّقاً (فامنع شراءً جديداً)"""
     aid = a["id"]
@@ -1975,6 +2025,8 @@ def _acc_settle(a, st_all):
          else _okx_get(f"/api/v5/trade/order?instId={sym}&clOrdId={cl}", k, s, p))
     if q is None:
         return True                      # الشبكة لسه مقطوعة → انتظر
+    if not _okx_no_order(q):
+        return True                      # 🔑 v3.22.7: رفض مفتاح/ضغط/خطأ منصة ≠ «الأمر مو موجود» → انتظر (ولا شراء فوقه)
     if q.get("code") != "0" or not (q.get("data") or []):
         # OKX ما يعرف هذا الأمر → لم يصل أصلاً، آمن نمسح البصمة
         if time.time() - float(inf.get("ts") or 0) > 90:
@@ -2032,9 +2084,10 @@ def _acc_move_to_reserve(a, st, why):
     return True
 
 
-def accum_tick(force_day=None, allow_buy=None):
+def accum_tick(force_day=None, allow_buy=None, only=None):
     """⏰ يوزّع ربح الأيام المنتهية، ويشتري فقط إذا سُمح (داخل النافذة).
-    خارج النافذة — مثلاً بعد عودة كهرباء/إنترنت متأخرة — يجمّع فقط بلا شراء."""
+    خارج النافذة — مثلاً بعد عودة كهرباء/إنترنت متأخرة — يجمّع فقط بلا شراء.
+    only (v3.22.7): شراء مُراكِم واحد بس (زر «🔁 أعد محاولة الشراء») — التوزيع يبقى للكل."""
     try:
         accum_coin_handoff()   # 🪙 العملة المحرَّرة أولاً — مباشرة بلا شراء
     except Exception:
@@ -2098,6 +2151,7 @@ def accum_tick(force_day=None, allow_buy=None):
         aid = a["id"]; e = st.get(aid) or {}
         pool = round(float(e.get("pool", 0)), 6)
         if pool <= 0:
+            e.pop("buy_err", None)        # 🔑 v3.22.7: ماكو شي ينتظر ⇒ ماكو «فشل» يتعلّق بالبطاقة
             continue
         minb = max(1.0, float(a.get("min_buy", 5) or 0))
         # ── 🚪 الفلتر الأول: الحد الأدنى ──
@@ -2133,6 +2187,8 @@ def accum_tick(force_day=None, allow_buy=None):
     # ✅ التنفيذ
     for a in _passed:
         aid = a["id"]; e = st.get(aid) or {}
+        if only and aid != only:
+            continue
         # 🛡️ سوِّ أي أمر سابق ضاع رده قبل التفكير بشراء جديد
         _safe(acc_settle_sell, a, st, default=None)
         if _safe(_acc_settle, a, st, default=True):
@@ -2162,6 +2218,20 @@ def accum_tick(force_day=None, allow_buy=None):
         e = st.get(aid) or {}
         e["skip"] = "" if ok else msg
         e["last_try"] = time.time()
+        # 🔑 v3.22.7: فشل الشراء (رفض/مفتاح/اتصال) ⇒ علامة بالبطاقة (زر 🔁) + تيليغرام مرة باليوم لكل مُراكِم
+        #    «⏳ أُرسل الأمر» مو فشل — التسوية تكمله
+        if ok:
+            e.pop("buy_err", None)
+        elif not str(msg).startswith("⏳"):
+            e["buy_err"] = {"ts": time.time(), "msg": str(msg)[:500], "amt": round(float(amt), 2)}
+            if e.get("err_tg_day") != _tday:
+                e["err_tg_day"] = _tday
+                _wh = int(app_cfg().get("acc_window_h") or ACC_WINDOW_H)
+                tg_send(f"⚠️ *[المُراكِم ما اشترى]* `{_tp_md(a.get('name') or sym)}`\n"
+                        f"المبلغ: `{float(amt):.2f}$` — باقي «قيد الشراء» ما انصرف ولا سنت\n"
+                        f"السبب: {_tp_md(msg)}\n"
+                        f"🔁 يعيد المحاولة كل نص ساعة داخل نافذة الشراء (أول {_wh} ساعات بعد نص الليل) · "
+                        f"بعد ما تصلّح السبب اضغط «🔁 أعد محاولة الشراء» بالبطاقة")
         _acc_save(st)
 
 _ACC_RUN = {"retry": 0.0}
@@ -2378,27 +2448,38 @@ def accum_loop():
         time.sleep(120)
 
 def acc_withdraw(aid, amount):
-    """💸 يطرح مبلغاً من الرصيد المتراكم — يبقى دولارات بحسابك، لا يُشترى به"""
+    """💸 يطرح مبلغاً من الرصيد المتراكم للمحفظة — يصير دولار حر بحسابك، لا يُشترى به.
+    v3.22.7: amount="all" ⇒ المتراكم كله بالضبط (زر «الكل» يعرض المبلغ مقرّب لسنتين) · فرق التقريب ≤ نص سنت ⇒ الكل."""
     st = acc_state()
     e = st.get(aid)
     if e is None:
         return False, "المُراكِم غير موجود"
     if e.get("inflight"):
         return False, "⏳ في أمر شراء ينتظر التأكيد — انتظر تسويته أولاً"
-    try:
-        amt = round(float(amount), 6)
-    except Exception:
-        return False, "رقم غير صحيح"
     pend = round(float(e.get("pending", 0)), 6)
+    if str(amount).strip().lower() == "all":
+        amt = pend
+    else:
+        try:
+            amt = round(float(amount), 6)
+        except Exception:
+            return False, "رقم غير صحيح"
+        if pend < amt <= pend + 0.005:
+            amt = pend                  # 2 خانات بالواجهة ⇒ فرق تقريب، مو طلب أكبر من المتراكم
     if amt <= 0:
-        return False, "المبلغ لازم أكبر من صفر"
+        return False, ("ماكو رصيد بالمتراكم" if pend <= 0 else "المبلغ لازم أكبر من صفر")
     if amt > pend + 1e-9:
         return False, f"المتراكم {pend:.2f}$ فقط — لا يمكن طرح {amt:.2f}$"
     e["pending"] = round(pend - amt, 6)
     e["withdrawn"] = round(float(e.get("withdrawn", 0)) + amt, 4)
     e["wlog"] = ([{"ts": time.time(), "usd": amt}] + list(e.get("wlog") or []))[:100]
     _acc_save(st)
-    return True, f"💸 طُرح {amt:.2f}$ — المتبقي بالزر {e['pending']:.2f}$"
+    try:
+        journal("accum", f"💸 {aid}: طرح {amt:.2f}$ من المتراكم للمحفظة — المتبقي {e['pending']:.2f}$", "ok",
+                bot=aid, amount=amt, left=e["pending"], withdrawn=e["withdrawn"])
+    except Exception:
+        pass
+    return True, f"💸 انتقل {amt:.2f}$ للمحفظة (دولار حر بحسابك) — المتبقي بالمتراكم {e['pending']:.2f}$"
 
 
 # 🔒 ملف المُراكِم يكتب عليه أكثر من خيط (جولة نص الليل · الاستلام الفوري · أزرارك) ⇒ قفل واحد.
@@ -2493,6 +2574,8 @@ def acc_snapshot():
             "month_usd": round(sum(b.get("usd", 0) for b in m), 2),
             "last": buys[0] if buys else None,
             "skip": e.get("skip") or "", "in_window": acc_in_window(),
+            "buy_err": e.get("buy_err") or None,        # 🔑 v3.22.7: آخر شراء آلي فشل (زر 🔁 بالبطاقة)
+            "inflight": bool(e.get("inflight")),
             "bought_today": (e.get("last_buy_day") == datetime.now().strftime("%Y-%m-%d")),
             "in_range": (not a.get("low_price") or px >= float(a.get("low_price") or 0)) and
                         (not a.get("high_price") or px <= float(a.get("high_price") or 1e12)) if px else None,
@@ -3675,6 +3758,8 @@ def _gd_errtxt(r):
     if r is None:
         return "تعذّر الاتصال بالمنصة"
     try:
+        if okx_code(r) in _OKX_AUTH_HINT:
+            return okx_errmsg(r)[:400]          # 🔑 v3.22.7: رفض المفتاح — بالشرح والحل
         d = (r.get("data") or [{}])[0] if isinstance(r.get("data"), list) and r.get("data") else {}
         return f"OKX {r.get('code')}: {d.get('sMsg') or r.get('msg') or 'رفض الطلب'}"[:160]
     except Exception:
@@ -5086,6 +5171,20 @@ def guard_scan(force=False):
                             e["sig_sent"] = e["sig"]
                 _gd_save(g)
         nw, nf = len(snaps), sum(1 for s in snaps if s.get("fatal") or not s.get("ok_bal"))
+        for s in snaps:          # 🔑 v3.22.7: محفظة مفتاحها مرفوض ⇒ الرقابة عمية عليها ⇒ سجل + تيليغرام (مرة كل 6 ساعات لكل محفظة)
+            try:
+                _ke = next((x for x in (s.get("err") or []) if "🔑" in str(x)), "")
+                if not _ke:
+                    _GD_KEY_TG.pop(s.get("wid"), None)
+                    continue
+                if now - float(_GD_KEY_TG.get(s.get("wid")) or 0) >= 6 * 3600:
+                    _GD_KEY_TG[s.get("wid")] = now
+                    _txt = f"{s.get('label') or s.get('wid')}: {_ke}"
+                    journal("guard", "🛡️🔑 الرقابة ما تكدر تقرا محفظة — " + _txt[:1200], "err", kind="key", wid=s.get("wid"))
+                    tg_send("🛡️🔑 *[الرقابة ما تكدر تقرا محفظة]*\n" + _tp_md(_txt[:1200]) +
+                            "\nلحد ما ينحل: ما تنكشف الحركات (سحب · تحويل · فرق رصيد) على هالمحفظة")
+            except Exception:
+                pass
         if not nw:
             msg = "🛡️ ماكو محفظة حقيقية للفحص (بوتات تجريبية أو بلا مفاتيح)"
         elif nf == nw:
@@ -5096,6 +5195,9 @@ def guard_scan(force=False):
         return {"ok": nf < nw or not nw, "alerts": alerts, "wallets": nw, "fail": nf, "msg": msg}
     finally:
         _GUARD_SCAN.release()
+
+
+_GD_KEY_TG = {}      # 🔑 v3.22.7: آخر تنبيه «مفتاح مرفوض» لكل محفظة (بالذاكرة)
 
 
 def guard_alerts():
@@ -8551,10 +8653,17 @@ def control(d_rel, action, value):
 # ───────────── الإعدادات (تيليغرام + المحافظ) ─────────────
 def settings_payload():
     c = app_cfg()
+    try:                                            # 🪙 v3.22.7: أي مفاتيح يستعمل المُراكِم (أول محفظة كاملة، وإلا بوت)
+        _ak = _acc_keys()
+        _accw = _ak[3] if _ak[0] and any(w.get("name") == _ak[3] and w.get("api") == _ak[0] for w in c.get("wallets", [])) else ""
+        _accb = _ak[3] if _ak[0] and not _accw else ""
+    except Exception:
+        _accw = _accb = ""
     return {"tg_token": c.get("tg_token", ""), "tg_chat_id": c.get("tg_chat_id", ""),
             "wallets": [{"name": w.get("name", ""), "eq": WBAL.get(w.get("name", "")), "err": BAL_ERR.get("محفظة " + w.get("name", "")), "coins": WDET.get(w.get("name", ""), []), "api": (w.get("api", "")[:6] + "…") if w.get("api") else "",
-                         "fx": WFX.get(w.get("name", ""))}
+                         "fx": WFX.get(w.get("name", "")), "acc": bool(_accw) and w.get("name", "") == _accw}
                         for w in c.get("wallets", [])],
+            "acc_bot": _accb, "n_acc": len(acc_cfgs()),
             "bot_fx": list(BFX), "fx_day": _WREF.get("day") or "",
             "watchdog": WATCHDOG["on"], "boot": boot_enabled()}
 
@@ -8573,14 +8682,44 @@ def wallet_op(data):
             return {"ok": False, "msg": "اكتب الاسم والمفاتيح الثلاثة كاملة"}
         if any(w.get("name") == n for w in ws):
             return {"ok": False, "msg": "اسم المحفظة موجود — اختر اسماً ثانياً"}
+        t = key_test(a, s, p)                     # 🔑 v3.22.7: OKX يرفض المفتاح صراحةً ⇒ ما ينحفظ (مع السبب والحل)
+        if not t["ok"] and t["code"] in _OKX_AUTH_HINT:
+            return {"ok": False, "msg": "ما انضافت — OKX رفض المفاتيح: " + t["msg"]}
         ws.append({"name": n, "api": a, "sec": s, "pass": p})
         save_json_atomic(APP_CFG, c)
-        return {"ok": True, "msg": f"➕ انضافت محفظة {n}"}
+        _m = f"➕ انضافت محفظة {n}"
+        if t["ok"]:
+            _m += " — ✅ OKX قبل المفتاح"
+        elif t["msg"]:
+            _m += " — ⚠️ ما تأكّدت: " + t["msg"]
+        return {"ok": True, "msg": _m, "test": t}
     if data.get("op") == "del":
         n = data.get("name")
         c["wallets"] = [w for w in ws if w.get("name") != n]
         save_json_atomic(APP_CFG, c)
         return {"ok": True, "msg": f"❌ انحذفت محفظة {n}"}
+    if data.get("op") == "upd":
+        # 🔑 v3.22.7: تحديث مفاتيح محفظة **بمكانها** — نفس الاسم ونفس الترتيب (أول محفظة = محفظة المُراكِم:
+        #    الحذف والإضافة كان ينقلها لآخر القائمة ⇒ المُراكِم يتحوّل لمحفظة ثانية بصمت)
+        n = str(data.get("name") or "")
+        a, s_, p_ = (str(data.get(k, "")).strip() for k in ("api", "sec", "pass"))
+        if not (a and s_ and p_):
+            return {"ok": False, "msg": "اكتب المفاتيح الثلاثة كاملة (API · Secret · Passphrase)"}
+        w = next((w for w in ws if w.get("name") == n), None)
+        if w is None:
+            return {"ok": False, "msg": "المحفظة مو موجودة"}
+        t = key_test(a, s_, p_)
+        if not t["ok"] and t["code"] in _OKX_AUTH_HINT:
+            return {"ok": False, "msg": "ما انحفظت — OKX رفض المفاتيح الجديدة: " + t["msg"]}
+        w["api"], w["sec"], w["pass"] = a, s_, p_
+        save_json_atomic(APP_CFG, c)
+        BAL_ERR.pop("محفظة " + n, None)
+        _m = f"🔑 تحدّثت مفاتيح محفظة {n} (بمكانها)"
+        if t["ok"]:
+            _m += " — ✅ OKX قبلها"
+        elif t["msg"]:
+            _m += " — ⚠️ ما تأكّدت: " + t["msg"]
+        return {"ok": True, "msg": _m, "test": t}
     return {"ok": False, "msg": "?"}
 
 # ───────────── تيليغرام + المُخطر ─────────────
@@ -8597,6 +8736,12 @@ _TS_OFF = {"off": 0.0, "t": 0.0}
 
 _OKX_HOSTS = ["https://www.okx.com", "https://aws.okx.com", "https://app.okx.com"]
 _OKX_HOST_OK = {"h": None, "t": 0.0}
+# 🔑 v3.22.7: الطلبات الموقّعة (الأرصدة · أوامر المُراكِم · الرقابة · فحص المفاتيح) على مضيفات OKX **العالمية** بس — مثل البوتات (www).
+#    app.okx.com = منصة OKX الأمريكية: ما تعرف مفاتيح الحساب العالمي ⇒ «50119 API key doesn't exist».
+#    قبل: أي مضيف يرد يصير المفضّل للكل (حتى الموقّع) ويبقى لاصق ما دام يرد ⇒ تعثّر لحظي بـwww وaws
+#    يخلّي المُراكِم والرقابة يرفضون للأبد (لحد إعادة التشغيل) وبوتاتك شغّالة عادي.
+_OKX_SIGNED_HOSTS = ["https://www.okx.com", "https://aws.okx.com"]
+_OKX_SIG_OK = {"h": None, "t": 0.0}
 
 # 🛜 نفس مكتبة بوتاتك الناجحة: okx تعتمد requests — وهي تعمل من سيرفرك بينما urllib قد لا يعمل
 try:
@@ -8610,8 +8755,10 @@ except Exception:
     _RQ = None
 
 
-def _http_json(url, headers=None, payload=None, timeout=12):
-    """طلب موحّد: requests أولاً (مثل بوتاتك) ثم urllib احتياطاً"""
+def _http_json(url, headers=None, payload=None, timeout=12, once=False):
+    """طلب موحّد: requests أولاً (مثل بوتاتك) ثم urllib احتياطاً.
+    once=True (v3.22.7 · أوامر المنصة): محاولة **وحدة** بس — لو requests فشل (مهلة/رد مو JSON) يرجع None وما يعيد الإرسال
+    بـurllib (كان يرسل نفس الأمر مرتين لو OKX بطّأ بالرد). البصمة inflight تتحقق من مصيره بالدورة الجاية."""
     hdr = dict(headers or {})
     hdr.setdefault("User-Agent", "Mozilla/5.0")
     if _RQ is not None:
@@ -8623,7 +8770,8 @@ def _http_json(url, headers=None, payload=None, timeout=12):
                 r = _RQ.post(url, headers=hdr, data=json.dumps(payload), timeout=timeout, verify=False)
             return r.json()
         except Exception:
-            pass
+            if once:
+                return None
     try:
         data = json.dumps(payload).encode("utf-8") if payload is not None else None
         if data is not None:
@@ -8665,19 +8813,28 @@ def _okx_ts():
 def _okx_post(path, payload, key, sec, pas):
     """إرسال أمر موقّع — requests أولاً.
     ⚠️ مضيف واحد فقط: تكرار الإرسال على مضيف آخر قد ينشئ أمرين.
-       (البصمة inflight تتكفّل بالتحقق لو ضاع الرد.)"""
+       (البصمة inflight تتكفّل بالتحقق لو ضاع الرد.)
+       الاستثناء الوحيد (v3.22.7): رفض صريح للمفتاح 50119 ⇒ الأمر ما انوضع ⇒ يعاد مرة على المضيف العالمي الثاني."""
     body = json.dumps(payload)
-    ts = _okx_ts()
-    sig = _b64.b64encode(_hmac.new(sec.encode(), (ts + "POST" + path + body).encode(), _hl.sha256).digest()).decode()
-    hdr = {"OK-ACCESS-KEY": key, "OK-ACCESS-SIGN": sig, "OK-ACCESS-TIMESTAMP": ts,
-           "OK-ACCESS-PASSPHRASE": pas, "Content-Type": "application/json"}
-    host = _OKX_HOST_OK["h"] if (_OKX_HOST_OK["h"] and time.time() - _OKX_HOST_OK["t"] < 900) else _OKX_HOSTS[0]
-    return _http_json(host + path, headers=hdr, payload=payload, timeout=15)
+    hosts = _okx_hosts_ordered()            # 🔑 v3.22.7: مضيفات عالمية بس (مو الأمريكي)
+    r = None
+    for i, host in enumerate(hosts[:2]):
+        ts = _okx_ts()
+        sig = _b64.b64encode(_hmac.new(sec.encode(), (ts + "POST" + path + body).encode(), _hl.sha256).digest()).decode()
+        hdr = {"OK-ACCESS-KEY": key, "OK-ACCESS-SIGN": sig, "OK-ACCESS-TIMESTAMP": ts,
+               "OK-ACCESS-PASSPHRASE": pas, "Content-Type": "application/json"}
+        r = _http_json(host + path, headers=hdr, payload=payload, timeout=15, once=True)
+        # إعادة على المضيف الثاني **بس** لو المنصة رفضت المفتاح صراحةً (50119) — الأمر أكيد ما انوضع.
+        # ضياع الرد (None) ما ينعاد أبداً — البصمة inflight تتحقق منه.
+        if not (isinstance(r, dict) and str(r.get("code")) == "50119"):
+            break
+    return r
 
 def _okx_hosts_ordered():
-    hs = list(_OKX_HOSTS)
-    if _OKX_HOST_OK["h"] and time.time() - _OKX_HOST_OK["t"] < 900:
-        hs.remove(_OKX_HOST_OK["h"]); hs.insert(0, _OKX_HOST_OK["h"])
+    """🔑 v3.22.7: مضيفات الطلبات الموقّعة — العالمية بس، آخر واحد رد صح أولاً."""
+    hs = list(_OKX_SIGNED_HOSTS)
+    if _OKX_SIG_OK["h"] in hs and time.time() - _OKX_SIG_OK["t"] < 900:
+        hs.remove(_OKX_SIG_OK["h"]); hs.insert(0, _OKX_SIG_OK["h"])
     return hs
 
 
@@ -8687,14 +8844,112 @@ def _okx_get(path, key, sec, pas):
     sig = _b64.b64encode(_hmac.new(sec.encode(), (ts + "GET" + path).encode(), _hl.sha256).digest()).decode()
     hdr = {"OK-ACCESS-KEY": key, "OK-ACCESS-SIGN": sig, "OK-ACCESS-TIMESTAMP": ts,
            "OK-ACCESS-PASSPHRASE": pas, "Content-Type": "application/json"}
+    first = None
     for h in _okx_hosts_ordered():
         d = _http_json(h + path, headers=hdr)
-        if d is not None:
-            _OKX_HOST_OK["h"] = h; _OKX_HOST_OK["t"] = time.time()
-            return d
-    return None
+        if d is None:
+            continue
+        if str(d.get("code")) == "50119" and first is None:
+            first = d                  # 🔑 v3.22.7: «المفتاح مو موجود» — نجرّب المضيف العالمي الثاني قبل ما نصدّق (قراءة بس · آمن)
+            continue
+        _OKX_SIG_OK["h"] = h; _OKX_SIG_OK["t"] = time.time()
+        return d
+    return first
+
+
+def _okx_get_on(host, path, key, sec, pas):
+    """🔑 v3.22.7: استعلام موقّع على مضيف محدّد (لفحص المفتاح مضيف مضيف)"""
+    ts = _okx_ts()
+    sig = _b64.b64encode(_hmac.new(sec.encode(), (ts + "GET" + path).encode(), _hl.sha256).digest()).decode()
+    hdr = {"OK-ACCESS-KEY": key, "OK-ACCESS-SIGN": sig, "OK-ACCESS-TIMESTAMP": ts,
+           "OK-ACCESS-PASSPHRASE": pas, "Content-Type": "application/json"}
+    return _http_json(host + path, headers=hdr, timeout=10)
+
+
+def key_test(k, s, p, need_trade=False):
+    """🔑 v3.22.7: فحص مفتاح OKX على المضيفين العالميين — قراءة بس، ولا أمر:
+    يقبله؟ · رقم الحساب · الصلاحيات · ربط IP · دولار حر. ويرجع تحذيرات بالعربي (بلا أي سر)."""
+    k, s, p = str(k or "").strip(), str(s or ""), str(p or "")
+    out = {"ok": False, "hosts": {}, "uid": "", "perm": "", "ip": "", "label": "", "usdt": None,
+           "code": "", "msg": "", "warn": []}
+    if not (k and s and p):
+        out["msg"] = "مفاتيح ناقصة"
+        return out
+    cfg = None
+    for h in _OKX_SIGNED_HOSTS:
+        r = _okx_get_on(h, "/api/v5/account/config", k, s, p)
+        hn = h.replace("https://", "")
+        if r is None:
+            out["hosts"][hn] = "تعذّر الاتصال"
+        elif str(r.get("code")) == "0":
+            out["hosts"][hn] = "ok"
+            cfg = cfg or ((r.get("data") or [{}])[0] or {})
+        else:
+            out["hosts"][hn] = okx_errmsg(r)
+            out["code"] = out["code"] or okx_code(r)
+            out["msg"] = out["msg"] or okx_errmsg(r)
+    if cfg is None:
+        if not out["msg"]:
+            out["msg"] = "تعذّر الاتصال بـOKX (إنترنت/جدار حماية)"
+        return out
+    out.update(ok=True, code="0", msg="✅ المفتاح شغّال", uid=str(cfg.get("uid") or ""),
+               perm=str(cfg.get("perm") or ""), ip=str(cfg.get("ip") or ""), label=str(cfg.get("label") or ""))
+    rb = _okx_get("/api/v5/account/balance?ccy=USDT", k, s, p)
+    try:
+        if rb and str(rb.get("code")) == "0":
+            det = (rb.get("data") or [{}])[0].get("details") or []
+            out["usdt"] = round(sum(float(d.get("availBal") or 0) for d in det if d.get("ccy") == "USDT"), 4)
+    except Exception:
+        pass
+    pm = out["perm"].lower()
+    if pm and "trade" not in pm:
+        out["warn"].append("المفتاح «قراءة بس» — " + ("المُراكِم ما يكدر يشتري ولا يبيع بيه: فعّل «تداول» (Trade)" if need_trade
+                                                       else "يكفي للأرصدة والرقابة، بس ما ينفع للمُراكِم"))
+    if "withdraw" in pm:
+        out["warn"].append("المفتاح بيه صلاحية «سحب» — شيلها من OKX (اللوحة والبوتات ما تحتاجها) حماية لفلوسك")
+    if "trade" in pm and not out["ip"]:
+        out["warn"].append("المفتاح مو مربوط بـIP: OKX يمسح مفتاح التداول غير المربوط إذا ما انستعمل 14 يوم ⇒ «50119» — اربطه بـIP السيرفر")
+    return out
 
 BAL_ERR = {}
+
+# 🔑 v3.22.7: أكواد رفض المفتاح من OKX — شرح بالعربي وشنو تسوي
+_OKX_AUTH_HINT = {
+    "50119": "المفتاح مو موجود بـOKX: انمسح (OKX يمسح لحاله مفتاح التداول اللي مو مربوط بـIP إذا ما انستعمل 14 يوم) أو انسخ ناقص — سوِّ مفتاح جديد، اربطه بـIP السيرفر، وحدّثه من 👛 المحافظ ✏️",
+    "50111": "مفتاح API غلط — انسخه من جديد من OKX",
+    "50113": "التوقيع غلط — الـSecret مو مال هالمفتاح",
+    "50105": "عبارة المرور (Passphrase) غلط",
+    "50110": "IP السيرفر مو بقائمة السماح مال المفتاح — ضيفه بإعدادات المفتاح بـOKX",
+    "50102": "ساعة السيرفر منحرفة — صحّح الوقت",
+    "50101": "المفتاح مال حساب تجريبي (Demo) مو حقيقي",
+    "50100": "المفتاح مجمّد من OKX — راجع الدعم",
+    "50114": "تفويض غير صالح — سوِّ مفتاح جديد",
+    "50120": "المفتاح بلا صلاحية كافية — فعّل «تداول» (Trade) بإعدادات المفتاح",
+}
+
+
+def okx_code(r):
+    try:
+        return str(r.get("code")) if isinstance(r, dict) else ""
+    except Exception:
+        return ""
+
+
+def okx_errmsg(r, who=""):
+    """🔑 v3.22.7: نص رفض OKX — ولو الرفض من المفتاح: اسم المحفظة/البوت + شنو تسوي."""
+    if r is None:
+        return "تعذّر الاتصال بـOKX (إنترنت/جدار حماية)"
+    c = okx_code(r)
+    try:
+        d = (r.get("data") or [{}])[0] if isinstance(r.get("data"), list) and r.get("data") else {}
+        m = f"OKX {c}: {d.get('sMsg') or r.get('msg') or 'رفض الطلب'}".strip()
+    except Exception:
+        m = f"OKX {c}: رد غير مفهوم"
+    h = _OKX_AUTH_HINT.get(c)
+    if h:
+        m = "🔑 " + (f"مفتاح «{who}» مرفوض — " if who else "المفتاح مرفوض — ") + m + " · " + h
+    return m
+
 
 def _scope_err(scope, r):
     try:
@@ -8702,8 +8957,7 @@ def _scope_err(scope, r):
             BAL_ERR[scope] = "تعذر الاتصال بـ OKX (إنترنت/جدار حماية)"
             return True
         if r.get("code") != "0":
-            d = (r.get("data") or [{}])[0] if isinstance(r.get("data"), list) and r.get("data") else {}
-            BAL_ERR[scope] = f"OKX {r.get('code')}: {d.get('sMsg') or r.get('msg') or 'رفض الطلب'}".strip()
+            BAL_ERR[scope] = okx_errmsg(r)       # 🔑 v3.22.7: مع شرح الحل لو الرفض من المفتاح
             return True
         BAL_ERR.pop(scope, None)
         return False
@@ -10097,19 +10351,28 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                 aid = data.get("id")
                 a = next((x for x in lst if x.get("id") == aid), None)
                 if not a: return self._json({"ok": False, "msg": "غير موجود"})
-                stt = acc_state(); e = stt.get(aid) or {}
-                pend = round(float(e.get("pending", 0)), 6)
-                if pend < 1: return self._json({"ok": False, "msg": f"الرصيد المتراكم ضئيل ({pend}$)"})
-                # 💵 مبلغ محدد من المستخدم (فارغ = الكل) — لا يتجاوز المتراكم أبداً
-                try:
-                    want = float(data.get("amount") or 0)
-                except Exception:
-                    want = 0.0
-                amt = pend if want <= 0 else min(want, pend)
-                if amt < 1: return self._json({"ok": False, "msg": "المبلغ لازم 1$ فأكثر"})
-                px = _acc_price(a.get("symbol", ""))
-                if px <= 0: return self._json({"ok": False, "msg": "تعذّر جلب السعر"})
-                ok, msg = acc_buy_now(a, stt, amt, px, reason="يدوي")
+                with _ACC_IO:      # 🔒 v3.22.7: القراءة والشراء تحت نفس القفل (ولا كتابة قديمة تمسح تسليماً صار بالنص)
+                    stt = acc_state()
+                    # 🛡️ v3.22.7: أمر سابق ضاع رده ⇒ يتسوّى أول — ولا شراء فوقه (كان يكتب فوق بصمته)
+                    if _safe(_acc_settle, a, stt, default=True):
+                        return self._json({"ok": False, "msg": "⏳ في أمر شراء سابق ينتظر تأكيد المنصة — يتسوّى أول، جرّب بعد دقيقة"})
+                    e = stt.get(aid) or {}
+                    if e.get("sell_inflight"):
+                        return self._json({"ok": False, "msg": "⏳ في أمر بيع ينتظر التأكيد"})
+                    pend = round(float(e.get("pending", 0)), 6)
+                    if pend < 1: return self._json({"ok": False, "msg": f"الرصيد المتراكم ضئيل ({pend}$)"})
+                    # 💵 مبلغ محدد من المستخدم (فارغ = الكل) — لا يتجاوز المتراكم أبداً
+                    try:
+                        want = float(data.get("amount") or 0)
+                    except Exception:
+                        want = 0.0
+                    amt = pend if want <= 0 else min(want, pend)
+                    if amt < 1: return self._json({"ok": False, "msg": "المبلغ لازم 1$ فأكثر"})
+                    px = _acc_price(a.get("symbol", ""))
+                    if px <= 0: return self._json({"ok": False, "msg": "تعذّر جلب السعر"})
+                    ok, msg = acc_buy_now(a, stt, amt, px, reason="يدوي")
+                journal("accum", f"🛒 {a.get('name') or aid}: شراء يدوي {amt:.2f}$ بسعر {px} — {msg}", "ok" if ok else "err",
+                        bot=aid, sym=a.get("symbol", ""), amount=amt, price=px)
                 return self._json({"ok": ok, "msg": msg})
             if act == "sell_preview":
                 pv2 = acc_sell_preview(data.get("id"))
@@ -10123,6 +10386,19 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
             if act == "run":
                 _safe(accum_tick, allow_buy=True)     # يدوي — يتجاوز النافذة
                 return self._json({"ok": True, "msg": "⏰ نُفّذت دورة التوزيع/الشراء"})
+            if act == "retry":
+                # 🔁 v3.22.7: إعادة محاولة الشراء الآلي لمُراكِم واحد (بعد ما فشل · مثلاً مفتاح مرفوض وتصلّح)
+                #    نفس طريق الجولة بالضبط: الفلاتر · التسوية قبل الشراء · شراء آلي واحد باليوم — بس يتجاوز النافذة
+                aid = data.get("id")
+                if not any(x.get("id") == aid for x in lst):
+                    return self._json({"ok": False, "msg": "غير موجود"})
+                t0 = time.time()
+                _safe(accum_tick, allow_buy=True, only=aid)
+                e = acc_state().get(aid) or {}
+                b0 = (e.get("buys") or [{}])[0] or {}
+                if float(b0.get("ts") or 0) >= t0 and b0.get("why") == "آلي":
+                    return self._json({"ok": True, "msg": f"✅ اشترى {float(b0.get('qty') or 0):.8f} بـ {float(b0.get('usd') or 0):.2f}$"})
+                return self._json({"ok": False, "msg": e.get("skip") or "ما صار شراء"})
             if act == "preview":
                 y = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
                 return self._json({"ok": True, "yday": y, "yday_profit": day_profit(y),
@@ -10167,6 +10443,17 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                         e["res"] = f"OKX {r2.get('code')}: {r2.get('msg') or dd.get('sMsg') or ''}"
                         e["code"] = str(r2.get("code"))
                 out["bots"].append(e)
+            out["wallets"] = []                      # 🔑 v3.22.7: مفاتيح المحافظ كمان (محفظة المُراكِم أولها)
+            try:
+                _ak = _acc_keys()
+            except Exception:
+                _ak = (None, None, None, None)
+            for w in (app_cfg().get("wallets") or []):
+                _isacc = bool(_ak[0]) and _ak[0] == w.get("api") and bool(acc_cfgs())
+                t = key_test(w.get("api"), w.get("sec"), w.get("pass"), need_trade=_isacc)
+                out["wallets"].append({"name": w.get("name", ""), "key": (str(w.get("api") or "")[:6] + "…") if w.get("api") else "—",
+                                       "acc": _isacc, **{k2: t.get(k2) for k2 in ("ok", "msg", "code", "perm", "ip", "usdt", "warn", "hosts")}})
+            out["signed_hosts"] = [h.replace("https://", "") for h in _OKX_SIGNED_HOSTS]
             return self._json({"ok": True, **out})
         if path == "/api/systemd":
             # 🐧 إقلاع تلقائي على لينكس عبر systemd
@@ -10246,6 +10533,45 @@ WantedBy=multi-user.target
             return self._json(settings_save(data))
         if path == "/api/wallet":
             return self._json(wallet_op(data))
+        if path == "/api/wallet_test":
+            # 🔑 v3.22.7: فحص مفتاح محفظة محفوظة (قراءة بس) — بلا إرجاع أي سر
+            n = str(data.get("name") or "")
+            w = next((w for w in (app_cfg().get("wallets") or []) if w.get("name") == n), None)
+            if w is None:
+                return self._json({"ok": False, "msg": "المحفظة مو موجودة"})
+            try:
+                _ak = _acc_keys()
+                _isacc = bool(_ak[0]) and _ak[0] == w.get("api") and bool(acc_cfgs())
+            except Exception:
+                _isacc = False
+            t = key_test(w.get("api"), w.get("sec"), w.get("pass"), need_trade=_isacc)
+            t["name"], t["acc"] = n, _isacc
+            try:                                    # 👥 نفس حساب أي بوت؟ (برقم الحساب uid — مو بنص المفتاح)
+                same, diffk = [], []
+                if t.get("uid"):
+                    seen_k = {}
+                    for b in bot_dirs().values():
+                        cfg = b["cfg"]
+                        bk = str(cfg.get("api_key") or "").strip()
+                        if cfg.get("is_demo") or not bk:
+                            continue
+                        if bk == str(w.get("api") or "").strip():
+                            same.append(b["symbol"]); continue
+                        if bk not in seen_k:
+                            rr = _okx_get("/api/v5/account/config", bk, cfg.get("secret_key", ""), cfg.get("passphrase", ""))
+                            seen_k[bk] = str(((rr or {}).get("data") or [{}])[0].get("uid") or "") if rr and str(rr.get("code")) == "0" else ""
+                        if seen_k[bk] and seen_k[bk] == t["uid"]:
+                            same.append(b["symbol"]); diffk.append(b["symbol"])
+                t["same_bots"] = sorted(set(same))
+                if diffk and _isacc:
+                    t.setdefault("warn", []).append(
+                        "بوتات " + "، ".join(sorted(set(diffk))) + " على نفس الحساب بس بمفتاح ثاني — تسليم العملة المحرَّرة للمُراكِم ينتظر "
+                        "والرقابة تحسبهم محفظتين: الأفضل محفظة المُراكِم بنفس مفتاح البوتات")
+            except Exception:
+                t["same_bots"] = []
+            journal("user", f"🔑 فحص مفتاح محفظة {n}: {t.get('msg')}", "ok" if t.get("ok") else "warn",
+                    perm=t.get("perm"), ip_bound=bool(t.get("ip")), hosts=t.get("hosts"))
+            return self._json(t)
         self._json({"ok": False, "msg": "?"}, 404)
 
 # ───────────── الواجهة (صفحة وحدة موسعة) ─────────────
@@ -13133,15 +13459,52 @@ function setRepSrc(s){REPSRC=s;loadReport()}
 function sendReport(){g(REPSRC==='ri'?'ri_report':'send_report',REPKIND)}
 async function openWallets(){openPage('wallets');
   try{const s=await api('/api/settings');$('#w_tok').value=s.tg_token||'';$('#w_chat').value=s.tg_chat_id||'';
-    $('#wlist').innerHTML=(s.wallets||[]).map(w=>`<div class="wline">👛 <b>${w.name}</b><span class="num" style="color:var(--mut)">${w.api}</span><span class="num" style="color:var(--green)">${w.eq!=null?'≈ $'+w.eq:''}</span>${w.err?('<span style="color:var(--red);font-size:10.5px">'+w.err+'</span>'):''}
-      <button class="danger" style="margin-inline-start:auto;padding:5px 10px" onclick="delWallet('${w.name}')">❌</button></div>`).join('')||'<p style="color:var(--mut)">ماكو محافظ بعد</p>'}catch(e){}}
+    const q=n=>gEsc(JSON.stringify(String(n)));
+    $('#wlist').innerHTML=((s.wallets||[]).map(w=>`<div class="wline" style="flex-wrap:wrap">👛 <b>${gEsc(w.name)}</b>${w.acc?'<span class="chip" style="background:rgb(var(--amber2-rgb)/.15);color:var(--amber)" title="المُراكِم يشتري ويبيع بمفاتيح هالمحفظة (أول محفظة كاملة)">🪙 محفظة المُراكِم</span>':''}<span class="num" style="color:var(--mut)">${gEsc(w.api)}</span><span class="num" style="color:var(--green)">${w.eq!=null?'≈ $'+w.eq:''}</span>${w.err?('<span style="color:var(--red);font-size:10.5px;flex-basis:100%;word-break:break-word">'+gEsc(w.err)+'</span>'):''}
+      <span style="margin-inline-start:auto;display:flex;gap:5px"><button style="padding:5px 9px" title="فحص المفتاح بـOKX (قراءة بس)" onclick="testWallet(${q(w.name)})">🔑 فحص</button>
+      <button style="padding:5px 9px" title="حدّث مفاتيح هالمحفظة بمكانها (نفس الاسم والترتيب)" onclick="updWallet(${q(w.name)})">✏️</button>
+      <button class="danger" style="padding:5px 10px" onclick="delWallet(${q(w.name)})">❌</button></span></div>`).join('')||'<p style="color:var(--mut)">ماكو محافظ بعد</p>')
+      +(s.acc_bot&&s.n_acc?`<p style="font-size:11px;color:var(--amber);margin-top:6px">🪙 ماكو محفظة كاملة — المُراكِم يستعمل مفاتيح بوت ${gEsc(s.acc_bot)}</p>`:'')
+      +((s.wallets||[]).length>1&&s.n_acc?'<p style="font-size:10.5px;color:var(--mut2);margin-top:6px">🪙 المُراكِم يستعمل <b>أول</b> محفظة — لتغيير مفاتيحها استعمل ✏️ (الحذف والإضافة ينقلها لآخر القائمة ويتحوّل المُراكِم لمحفظة ثانية)</p>':'')}catch(e){}}
+async function testWallet(n){
+  showModal('<h2>🔑 فحص مفتاح '+gEsc(n)+'</h2><p style="color:var(--mut);font-size:12px">⏳ يسأل OKX (قراءة بس — ولا أمر)…</p>');
+  let r={};try{r=await api('/api/wallet_test',{name:n})}catch(e){}
+  let h=`<h2>🔑 مفتاح ${gEsc(n)}${r.acc?' · 🪙 محفظة المُراكِم':''}</h2>`;
+  h+=`<div style="background:var(--card2,#12161f);border:1px solid ${r.ok?'rgb(var(--green2-rgb)/.35)':'rgb(var(--red2-rgb)/.35)'};border-radius:10px;padding:11px;margin-bottom:10px;font-size:12px;line-height:1.9">`;
+  h+=`<div style="font-weight:700;color:${r.ok?'var(--green)':'var(--red)'};word-break:break-word">${gEsc(r.msg||'تعذّر الفحص')}</div>`;
+  for(const[k,v] of Object.entries(r.hosts||{}))h+=`<div style="font-size:11px;color:${v==='ok'?'var(--green)':'var(--red)'};word-break:break-word">${v==='ok'?'✅':'❌'} ${gEsc(k)}${v==='ok'?'':' — '+gEsc(v)}</div>`;
+  if(r.ok){
+    h+=`<div>🆔 الحساب: <b class="num">${gEsc(r.uid||'—')}</b>${r.label?' · '+gEsc(r.label):''}</div>`;
+    h+=`<div>🔐 الصلاحيات: <b>${gEsc(r.perm||'—')}</b></div>`;
+    h+=`<div>🌐 مربوط بـIP: <b>${r.ip?gEsc(r.ip):'لا'}</b></div>`;
+    if(r.usdt!=null)h+=`<div>💵 دولار حر: <b class="num">${(+r.usdt).toFixed(2)} USDT</b></div>`;
+    if(r.same_bots&&r.same_bots.length)h+=`<div>👥 نفس حساب البوتات: ${gEsc(r.same_bots.join('، '))}</div>`;
+    else h+='<div style="color:var(--mut2)">👥 ولا بوت على نفس الحساب</div>';
+  }
+  h+='</div>';
+  for(const w of (r.warn||[]))h+=`<div style="font-size:11.5px;color:var(--amber);margin-bottom:6px;word-break:break-word">⚠️ ${gEsc(w)}</div>`;
+  h+=`<div class="mbtns"><button onclick="updWallet(${gEsc(JSON.stringify(String(n)))})">✏️ حدّث المفاتيح</button><button onclick="hideModal()">إغلاق</button></div>`;
+  showModal(h);
+}
+function updWallet(n){
+  showModal(`<h2>✏️ مفاتيح ${gEsc(n)}</h2>
+  <p style="color:var(--mut);font-size:12px;line-height:1.8">تتحدّث <b>بمكانها</b> — نفس الاسم والترتيب (المُراكِم يبقى عليها). ينفحص المفتاح بـOKX قبل الحفظ.<br>
+  💡 بـOKX: فعّل «قراءة» + «تداول» بس (بلا «سحب») · واربطه بـIP السيرفر حتى ما ينمسح بعد 14 يوم.</p>
+  <div class="frm"><div class="fld"><label>API Key</label><input id="uw_api" autocomplete="off"></div>
+  <div class="fld"><label>Secret</label><input id="uw_sec" type="password" autocomplete="off"></div>
+  <div class="fld"><label>Passphrase</label><input id="uw_pass" type="password" autocomplete="off"></div></div>
+  <div class="mbtns" style="margin-top:12px"><button class="primary" id="uw_go">💾 حدّث</button><button onclick="hideModal()">إلغاء</button></div>`);
+  $('#uw_go').onclick=async()=>{toast('⏳ يفحص ويحفظ…',true);
+    const r=await api('/api/wallet',{op:'upd',name:n,api:$('#uw_api').value,sec:$('#uw_sec').value,pass:$('#uw_pass').value});
+    toast(r.msg||'تم',r.ok!==false);if(r.ok){hideModal();openWallets()}};
+}
 async function refreshBal(){toast('🔄 أجلب الأرصدة من OKX…',true);const r=await api('/api/control',{action:'refresh_bal'});toast(r.msg,r.ok);openWallets();tick()}
 async function testTg(){toast('🧪 أرسل رسالة اختبار…',true);const r=await api('/api/control',{action:'tg_test'});
  if(r.ok)toast(r.msg,true);else showModal(`<h2>📨 الإشعار ما وصل</h2><pre class="rep">${(r.msg||'').replace(/</g,'&lt;')}</pre><div class="mbtns"><button class="primary" onclick="hideModal();openWallets()">↩ رجوع للإعدادات</button></div>`)}
 async function saveTg(){const r=await api('/api/settings',{tg_token:$('#w_tok').value,tg_chat_id:$('#w_chat').value});toast(r.msg,r.ok)}
 async function addWallet(){const r=await api('/api/wallet',{op:'add',name:$('#nw_name').value,api:$('#nw_api').value,sec:$('#nw_sec').value,pass:$('#nw_pass').value});
   toast(r.msg,r.ok);if(r.ok){['nw_name','nw_api','nw_sec','nw_pass'].forEach(i=>$('#'+i).value='');openWallets()}}
-function delWallet(n){askConfirm('حذف محفظة '+n+'؟','البوتات الشغالة بمفاتيحها ما تتأثر — بس ما تظهر بقوائم النشر.',async()=>{
+function delWallet(n){askConfirm('حذف محفظة '+gEsc(n)+'؟','البوتات الشغالة بمفاتيحها ما تتأثر — بس ما تظهر بقوائم النشر.<br>💡 لتغيير المفاتيح بس استعمل ✏️ (تبقى بمكانها).',async()=>{
   const r=await api('/api/wallet',{op:'del',name:n});toast(r.msg,r.ok);openWallets()})}
 
 /* ── النوافذ ── */
@@ -13200,7 +13563,8 @@ function renderAccum(list){
         <div class="row"><span class="ic">🏦</span><span class="nm">ربح محقق (مباع)</span><b class="num" data-k="areal">—</b></div>
         <div class="row"><span class="ic">🕒</span><span class="nm">آخر شراء</span><b class="num" data-k="alast" style="font-size:10.5px">—</b></div>
       </div>
-      <div data-k="askip" style="display:none;font-size:10.5px;padding:5px 8px;border-radius:8px;background:rgb(var(--amber2-rgb)/.12);color:var(--amber);margin:6px 0"></div>
+      <div data-k="askip" style="display:none;font-size:10.5px;padding:5px 8px;border-radius:8px;background:rgb(var(--amber2-rgb)/.12);color:var(--amber);margin:6px 0;word-break:break-word"></div>
+      <button data-k="aretry" style="width:100%;margin-top:6px;font-size:11.5px;padding:9px;display:none">🔁 أعد محاولة الشراء</button>
       <button data-k="abuy" style="width:100%;margin-top:8px;font-size:11.5px;padding:9px">🛒 اشترِ الآن</button>
       <button data-k="asell" style="width:100%;margin-top:6px;font-size:11.5px;padding:9px;display:none">💰 بِع</button>
       <div class="mbtns" style="margin-top:6px;gap:6px">
@@ -13253,6 +13617,10 @@ function renderAccum(list){
     R.alast.textContent=a.last?new Date(a.last.ts*1000).toLocaleString('ar',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+` · ${fmtQ(a.last.qty)}`:'لا شراء بعد';
     if(a.skip){R.askip.style.display='';R.askip.textContent='⚠️ '+a.skip}
     else R.askip.style.display='none';
+    // 🔁 v3.22.7: الشراء الآلي فشل (مفتاح/رفض/اتصال) والمبلغ باقي قيد الشراء ⇒ زر إعادة المحاولة
+    const canRetry=!!(a.buy_err&&(a.pool||0)>=1&&!a.bought_today&&a.enabled&&!a.inflight);
+    R.aretry.style.display=canRetry?'':'none';
+    if(canRetry){R.aretry.textContent=`🔁 أعد محاولة الشراء (${(a.pool||0).toFixed(2)}$ قيد الشراء)`;R.aretry.onclick=()=>accRetry(a)}
     // 🛒 زر الشراء اليدوي — يعمل على المتراكم فقط (التلقائي له قيد الشراء)
     const pend=a.pending||0, pool=a.pool||0, minb=a.min_buy||0, out=(a.in_range===false);
     R.abuy.onclick=()=>accBuyNow(a);
@@ -13311,7 +13679,7 @@ async function accEdit(a){
   let pv={};try{pv=await api('/api/accum',{act:'preview'})}catch(e){}
   const used=(pv.used_pct||0)-(a.id?(a.pct||0):0);
   const _cb=(a.symbol||$('#ac_s')?.value||'').split('-')[0].toUpperCase();
-  const _cu=((DATA&&DATA.accums)||[]).filter(x=>x.id!==a.id&&x.enabled!==false
+  const _cu=((DATA&&DATA.accum)||[]).filter(x=>x.id!==a.id&&x.enabled!==false
       &&String(x.symbol||'').split('-')[0].toUpperCase()===_cb)
       .reduce((s,x)=>s+(+x.coin_pct||0),0);
   showModal(`<h2>🪙 ${a.id?'تعديل':'مُراكِم جديد'}</h2>
@@ -13343,14 +13711,15 @@ async function accEdit(a){
       <small style="color:var(--mut2);font-size:10px">الشراء التلقائي داخلها فقط · لو فاتت (كهرباء/إنترنت) يتجمّع للغد · إعداد عام لكل المُراكِمات</small></div>
   </div>
   ${a.id?`<div style="background:var(--card2,#12161f);border:1px solid var(--bd,#232a36);border-radius:10px;padding:11px;margin-top:12px">
-    <div style="font-size:12px;font-weight:700;margin-bottom:4px">💸 سحب من المتراكم</div>
+    <div style="font-size:12px;font-weight:700;margin-bottom:4px">💸 اطرح من المتراكم للمحفظة</div>
     <div style="font-size:10.5px;color:var(--mut2);margin-bottom:8px">
-      المتراكم الآن <b style="color:var(--green)">${(a.pending||0).toFixed(2)}$</b>${a.withdrawn?` · سُحب سابقاً ${a.withdrawn}$`:''}<br>
-      المبلغ المسحوب يبقى دولارات بحسابك — لا يُشترى به، والباقي يظل بالزر.</div>
-    <div style="display:flex;gap:6px">
-      <input id="ac_w" class="num" placeholder="20" style="flex:1">
-      <button onclick="accWithdraw('${a.id}')" style="white-space:nowrap">💸 اطرح</button>
-      <button onclick="accWithdrawAll('${a.id}',${a.pending||0})" style="white-space:nowrap" title="اطرح الكل">الكل</button>
+      المتراكم الآن <b style="color:var(--green)">${(a.pending||0).toFixed(2)}$</b>${a.withdrawn?` · انطرح سابقاً ${a.withdrawn}$`:''}<br>
+      المبلغ ينتقل من المُراكِم لمحفظتك — يصير دولار حر بحسابك (ما ينشترى بيه) · الباقي يظل بالمتراكم.<br>
+      «الكل» يحط كل المتراكم بالخانة · «اطرح» ينقل اللي بالخانة.</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <input id="ac_w" class="num" placeholder="0.00" style="flex:1 1 80px;min-width:0" oninput="this.dataset.all=''">
+      <button onclick="accWithdrawAll('${a.id}',${a.pending||0})" style="white-space:nowrap" title="يحط كل المتراكم بالخانة">الكل</button>
+      <button class="primary" onclick="accWithdraw('${a.id}')" style="white-space:nowrap">💸 اطرح للمحفظة</button>
     </div></div>`:''}
   <div class="mbtns" style="margin-top:12px">
     <button class="primary" onclick="accSave('${a.id||''}')">💾 حفظ</button>
@@ -13422,17 +13791,27 @@ function doSell(id,maxq){
       toast(r.msg||'تم',r.ok!==false);hideModal();tick&&tick()});
 }
 async function accWithdraw(id){
-  const v=parseFloat(($('#ac_w')||{}).value||0);
-  if(!(v>0))return toast('اكتب مبلغاً أكبر من صفر',false);
-  const r=await api('/api/accum',{act:'withdraw',id:id,amount:v});
-  toast(r.msg||'تم',r.ok!==false);
-  if(r.ok){hideModal();tick&&tick()}
+  // 💸 v3.22.7: ينقل المبلغ اللي بالخانة من المتراكم للمحفظة (بعد تأكيد) — «الكل» بس يعبّي الخانة
+  const el=$('#ac_w'), all=!!(el&&el.dataset.all==='1');
+  const v=parseFloat(String((el||{}).value||'').replace(/,/g,'.'))||0;
+  if(!(v>0))return toast('اكتب مبلغ بالخانة — أو اضغط «الكل»',false);
+  askConfirm('💸 اطرح للمحفظة؟',`ينتقل <b>${v.toFixed(2)}$</b>${all?' (كل المتراكم)':''} من المُراكِم لمحفظتك —<br>يصير دولار حر بحسابك وما ينشترى بيه.`,
+    async()=>{const r=await api('/api/accum',{act:'withdraw',id:id,amount:all?'all':v});
+      toast(r.msg||'تم',r.ok!==false);tick&&tick()});
 }
 function accWithdrawAll(id,pend){
-  if(!(pend>0))return toast('لا رصيد متراكم',false);
-  askConfirm('💸 طرح كل المتراكم؟',`يطرح <b>${pend.toFixed(2)}$</b> كاملاً — يبقى بحسابك دولارات ولا يُشترى به.<br>الزر يصير فارغاً حتى يتجمع ربح جديد.`,
-    async()=>{const r=await api('/api/accum',{act:'withdraw',id:id,amount:pend});
-      toast(r.msg||'تم',r.ok!==false);if(r.ok){hideModal();tick&&tick()}});
+  // 🧮 v3.22.7: «الكل» يحط كل المتراكم بالخانة (ما ينفّذ) — والطرح يصير بزر «اطرح»
+  const el=$('#ac_w'); if(!el)return;
+  if(!(pend>0)){el.value='';el.dataset.all='';return toast('ماكو رصيد بالمتراكم',false)}
+  el.value=(+pend).toFixed(2); el.dataset.all='1'; try{el.focus()}catch(e){}
+}
+function accRetry(a){
+  // 🔁 v3.22.7: إعادة محاولة الشراء الآلي (بعد ما فشل) — نفس الشراء الآلي بالضبط، بس هسه
+  const pool=a.pool||0, cap=a.max_buy||0, amt=(cap>0&&cap<pool)?cap:pool;
+  askConfirm('🔁 أعد محاولة الشراء؟',`يشتري بـ <b>${amt.toFixed(2)}$</b> من «قيد الشراء» بسعر السوق هسه (نفس الشراء الآلي — مرة وحدة باليوم).<br>
+    <span style="font-size:12px;color:var(--amber)">آخر محاولة فشلت: ${gEsc((a.buy_err||{}).msg||'')}</span>`,
+    async()=>{toast('⏳ يشتري…',true);const r=await api('/api/accum',{act:'retry',id:a.id});
+      toast(r.msg||'تم',r.ok!==false);tick&&tick()});
 }
 async function accSave(id){
   const it={id:id||undefined,name:$('#ac_n').value,symbol:$('#ac_s').value,pct:$('#ac_p').value,coin_pct:$('#ac_cp').value,
@@ -13459,7 +13838,8 @@ async function okxCheck(){
   try{r=await api('/api/okx_check',{})}catch(e){}
   const HINT={"50111":"مفتاح API غير صحيح","50113":"التوقيع غير صحيح (secret_key)",
     "50105":"عبارة المرور غير صحيحة","50110":"IP السيرفر غير مُدرج بقائمة سماح المفتاح",
-    "50102":"انحراف بالوقت","50114":"المفتاح بلا صلاحية قراءة","50101":"المفتاح لا يطابق البيئة"};
+    "50102":"انحراف بالوقت","50114":"المفتاح بلا صلاحية قراءة","50101":"المفتاح لا يطابق البيئة",
+    "50119":"المفتاح مو موجود بـOKX (انمسح أو انسخ ناقص) — سوِّ مفتاح جديد واربطه بـIP السيرفر","50120":"المفتاح بلا صلاحية كافية"};
   let h='<h2>🔍 تشخيص OKX</h2>';
   h+='<div style="background:var(--card2,#12161f);border:1px solid var(--bd,#232a36);border-radius:10px;padding:11px;margin-bottom:10px">';
   h+='<div style="font-size:12px;font-weight:700;margin-bottom:6px">الاتصال بالخوادم</div>';
@@ -13481,6 +13861,16 @@ async function okxCheck(){
     }
     h+='</div>';
   }
+  // 👛 v3.22.7: مفاتيح المحافظ (محفظة المُراكِم أولها) — على المضيفات العالمية بس
+  if((r.wallets||[]).length)h+='<div style="font-size:12px;font-weight:700;margin:10px 0 6px">👛 المحافظ</div>';
+  for(const w of (r.wallets||[])){
+    h+=`<div style="background:var(--card2,#12161f);border:1px solid ${w.ok?'rgb(var(--green2-rgb)/.3)':'rgb(var(--red2-rgb)/.3)'};border-radius:10px;padding:11px;margin-bottom:8px">`;
+    h+=`<div style="font-size:12px;font-weight:700">${w.ok?'✅':'❌'} ${gEsc(w.name)}${w.acc?' · 🪙 المُراكِم':''} <span style="color:var(--mut2);font-weight:400;font-size:10px">مفتاح ${gEsc(w.key)}</span></div>`;
+    h+=`<div style="font-size:11px;color:${w.ok?'var(--mut)':'var(--red)'};word-break:break-word">${gEsc(w.msg||'')}${w.ok?` · ${gEsc(w.perm||'')} · IP: ${w.ip?gEsc(w.ip):'غير مربوط'}${w.usdt!=null?' · '+(+w.usdt).toFixed(2)+' USDT':''}`:''}</div>`;
+    for(const x of (w.warn||[]))h+=`<div style="font-size:11px;color:var(--amber);margin-top:4px">⚠️ ${gEsc(x)}</div>`;
+    h+='</div>';
+  }
+  if(r.signed_hosts)h+=`<div style="font-size:10px;color:var(--mut2);margin-bottom:8px">🔑 الطلبات الموقّعة على: ${gEsc(r.signed_hosts.join(' · '))} (العالمية — مثل البوتات)</div>`;
   h+='<div class="mbtns"><button onclick="hideModal()">إغلاق</button></div>';
   showModal(h);
 }
@@ -16573,6 +16963,7 @@ def main():
         threading.Thread(target=notifier_loop, daemon=True).start()
         threading.Thread(target=watchdog_loop, daemon=True).start()
         threading.Thread(target=ledger_loop, daemon=True).start()
+        _safe(journal_scrub_once, default=0)          # 🔒 v3.22.7: يحجب مفاتيح محافظ بسجلات قديمة (مرة وحدة)
         journal("system", f"▶️ اللوحة اشتغلت — v{APP_VERSION} · {len(bot_dirs())} بوت", "ok", python=sys.version.split()[0], os=platform.system())
         threading.Thread(target=reports_loop, daemon=True).start()
         threading.Thread(target=health_loop, daemon=True).start()
