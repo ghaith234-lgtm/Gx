@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.23.1"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.23.2"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -12403,13 +12403,22 @@ nav.actions .gsep{width:1px;height:24px;background:var(--line);margin:0 4px;flex
 .st.pos .sv>span{background:linear-gradient(92deg,var(--green),var(--cyan));-webkit-background-clip:text;background-clip:text}
 .pc-kpi.stats{grid-template-columns:repeat(5,minmax(0,1fr));margin:4px 0 14px}
 @media (max-width:760px){
-  /* 📱 v3.22.3: صفّين بالعرض (اليوم فوق · الإجمالي تحت) وتنسحب يمين/يسار — خمس خانات بعرض الهاتف تصير 70 بكسل وما تنقرا */
-  .stats,.pc-kpi.stats{grid-template-columns:repeat(5,minmax(136px,1fr));grid-auto-flow:row;gap:6px;overflow-x:auto;overscroll-behavior-x:contain;
-    scroll-snap-type:x proximity;scrollbar-width:none;-webkit-mask-image:linear-gradient(to left,transparent 0,#000 22px);mask-image:linear-gradient(to left,transparent 0,#000 22px);padding-inline-end:16px}
-  .stats::-webkit-scrollbar{display:none}
-  .st{scroll-snap-align:start}
-  .st{min-height:56px;padding:7px 10px;gap:3px;border-radius:10px}
-  .st .sl{font-size:10.5px;white-space:normal;line-height:1.22;min-height:2.44em;display:flex;align-items:flex-end}.st .sv{font-size:17px}}   /* 📱 الاسم الطويل ينزل سطرين بدل ما ينقص — وكل الخانات بنفس الارتفاع */
+  /* 📱 v3.23.2: كلها تبين بلا سحب — عمودين · كل خانة يمّ إجماليها (اليوم ⇐ الكلي) · شريط بسطر واحد: الاسم المختصر ⇐ الرقم · بلا خط الحركة
+     (نفس الترتيب بالشريط العلوي ولوحة التقارير — الحاسوب ما تغيّر) */
+  .stats,.pc-kpi.stats{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-flow:row;gap:5px;overflow:visible}
+  .stats>.st:nth-child(1){order:1}.stats>.st:nth-child(6){order:2}.stats>.st:nth-child(2){order:3}.stats>.st:nth-child(7){order:4}
+  .stats>.st:nth-child(3){order:5}.stats>.st:nth-child(8){order:6}.stats>.st:nth-child(4){order:7}.stats>.st:nth-child(5){order:8}
+  .stats>.st:nth-child(9){order:9}.stats>.st:nth-child(10){order:10}
+  .st{flex-direction:row;align-items:center;justify-content:space-between;gap:6px;min-height:32px;padding:4px 9px;border-radius:9px}
+  .st .sl{flex:1 1 auto;min-width:0;font-size:10.5px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .st .sl[data-s]{font-size:0}.st .sl[data-s]::before{content:attr(data-s);font-size:10.5px}
+  .st .sv{flex:0 0 auto;max-width:72%;justify-content:flex-end;font-size:14.5px;gap:3px}   /* الرقم ما ينقص أبداً — الاسم هو اللي ينضغط */
+  .st .sv small,.st .sv .cu{font-size:10.5px}
+  .st .sv .cu+.cu{display:none}
+  .st.rot .sv{font-size:12.5px}.st.rot .sv .cu{font-size:10px}         /* 🪙 كمية العملة طويلة (+0.0005 BTC) ⇒ خط أصغر حتى الاسم ما ينقص */
+  .pc-kpi.stats{gap:4px}.pc-kpi.stats .st{padding:4px 7px;gap:4px}
+  .st .spk{display:none}}
+@media (max-width:380px){.st .sl[data-s]::before{font-size:10px}.st .sl[data-x]::before{content:attr(data-x)}.st .sv{font-size:13.5px}.st.rot .sv{font-size:12px}.pc-kpi.stats .st{padding:4px 6px}.pc-kpi.stats .st .sl[data-s]::before{font-size:9.5px}.pc-kpi.stats .st .sv{font-size:12.5px}.pc-kpi.stats .st.rot .sv{font-size:11.5px}}
 @media (max-width:760px){.hrow{column-gap:8px}}
 @media (max-width:380px){.hrow{column-gap:5px}.brand{gap:5px}}
 @media (prefers-reduced-motion:reduce){.navhint{animation:none!important}}
@@ -12579,16 +12588,16 @@ html.lite .card:hover,html.lite button:hover{transform:none}
     </div>
     <div class="brand">⚡ <span class="bt">The Holy <b>Dashboard</b></span> <span class="v">v__APPVER__</span> <span id="pulse" class="pulse off"></span></div>
     <div class="stats" id="stats" aria-label="الأرباح">
-      <div class="st click" id="totTrade" onclick="openDayLog('trade')" title="ربح التداول اليوم: بدون إعادة استثمار + 💠 المعاد استثماره — يصفّر بنهاية اليوم · اضغط للتفاصيل"><span class="sl">🔄 ربح التداول</span><b class="sv"><span id="tTrade" class="num">0.00</span><small>$</small></b></div>
-      <div class="st click" id="totToday" onclick="openDayLog('rel')" title="الربح المحرر اليوم: الدولار اللي طلع من البوتات ربحاً (الجرد + DCA الشرائي) — يدخل الربح اليومي والمُراكِم ياخذ نسبته · اضغط للتفاصيل"><span class="sl">📅 ربح المحرر</span><b class="sv"><span id="tToday" class="num">0.00</span><small>$</small></b></div>
-      <div class="st click rot" id="stCoinD" onclick="coinsModal()" title="الربح المحرّر بالعملات اليوم: ربح DCA البيعي + العملة المحرّرة من إعادة الاستثمار (للمُراكِم أو للمحفظة) — يتقلّب بين العملات · اضغط للتفاصيل"><span class="sl">🪙 ربح المحرر للعملات</span><b class="sv" id="tCoinD">—</b></div>
-      <div class="st" id="stMonth" title="المعدل الشهري = ربح التداول بكل التاريخ ÷ عدد أيامه × 30"><span class="sl">📆 معدل ربح التداول الشهري</span><b class="sv"><span id="tMonth" class="num">0.00</span><small>$</small></b></div>
-      <div class="st" id="stAvg" title="متوسط ربح التداول باليوم — آخر 30 يوم (من أول يوم بيه ربح)"><span class="sl">📊 متوسط اليوم</span><b class="sv"><span id="tAvg" class="num">0.00</span><small>$</small></b><svg id="spark" class="spk" viewBox="0 0 118 34" preserveAspectRatio="none" aria-hidden="true"></svg></div>
-      <div class="st" id="totTradeAll" title="ربح التداول الإجمالي = مجموع ربح التداول بكل الأيام (مباشر + 💠 معاد) — ويّا البوتات المحذوفة"><span class="sl">📈 ربح التداول الإجمالي</span><b class="sv"><span id="tTradeAll" class="num">0.00</span><small>$</small></b></div>
-      <div class="st" id="totAll" title="ربح المحرر الإجمالي = مجموع الدفتر اليومي بكل الأيام — صافي بعد العمولة · ويّا البوتات المحذوفة"><span class="sl">💵 ربح المحرر الإجمالي</span><b class="sv"><span id="tTotal" class="num">0.00</span><small>$</small></b></div>
-      <div class="st click rot" id="stCoinA" onclick="coinsModal()" title="ربح العملات الإجمالي: DCA البيعي + العملة المحرّرة من إعادة الاستثمار — يتقلّب بين العملات · اضغط للتفاصيل"><span class="sl">🪙 ربح إجمالي العملات</span><b class="sv" id="tCoinA">—</b></div>
-      <div class="st" id="stBest" title="أفضل يوم ربح تداول (كل التاريخ — نفس التقرير)"><span class="sl">🏆 أفضل يوم</span><b class="sv"><span id="tBest" class="num">—</span><small>$</small></b></div>
-      <div class="st" id="totOrd" title="أوامرك المفتوحة بالمنصة: بيع ↑ · شراء ↓"><span class="sl">📋 الأوامر المنشورة على المنصة</span><b class="sv" id="tEx">—</b></div>
+      <div class="st click" id="totTrade" onclick="openDayLog('trade')" title="ربح التداول اليوم: بدون إعادة استثمار + 💠 المعاد استثماره — يصفّر بنهاية اليوم · اضغط للتفاصيل"><span class="sl" data-s="🔄 تداول اليوم">🔄 ربح التداول</span><b class="sv"><span id="tTrade" class="num">0.00</span><small>$</small></b></div>
+      <div class="st click" id="totToday" onclick="openDayLog('rel')" title="الربح المحرر اليوم: الدولار اللي طلع من البوتات ربحاً (الجرد + DCA الشرائي) — يدخل الربح اليومي والمُراكِم ياخذ نسبته · اضغط للتفاصيل"><span class="sl" data-s="📅 محرر اليوم">📅 ربح المحرر</span><b class="sv"><span id="tToday" class="num">0.00</span><small>$</small></b></div>
+      <div class="st click rot" id="stCoinD" onclick="coinsModal()" title="الربح المحرّر بالعملات اليوم: ربح DCA البيعي + العملة المحرّرة من إعادة الاستثمار (للمُراكِم أو للمحفظة) — يتقلّب بين العملات · اضغط للتفاصيل"><span class="sl" data-s="🪙 عملات اليوم" data-x="🪙 اليوم">🪙 ربح المحرر للعملات</span><b class="sv" id="tCoinD">—</b></div>
+      <div class="st" id="stMonth" title="المعدل الشهري = ربح التداول بكل التاريخ ÷ عدد أيامه × 30"><span class="sl" data-s="📆 معدل شهري">📆 معدل ربح التداول الشهري</span><b class="sv"><span id="tMonth" class="num">0.00</span><small>$</small></b></div>
+      <div class="st" id="stAvg" title="متوسط ربح التداول باليوم — آخر 30 يوم (من أول يوم بيه ربح)"><span class="sl" data-s="📊 متوسط اليوم">📊 متوسط اليوم</span><b class="sv"><span id="tAvg" class="num">0.00</span><small>$</small></b><svg id="spark" class="spk" viewBox="0 0 118 34" preserveAspectRatio="none" aria-hidden="true"></svg></div>
+      <div class="st" id="totTradeAll" title="ربح التداول الإجمالي = مجموع ربح التداول بكل الأيام (مباشر + 💠 معاد) — ويّا البوتات المحذوفة"><span class="sl" data-s="📈 تداول كلي">📈 ربح التداول الإجمالي</span><b class="sv"><span id="tTradeAll" class="num">0.00</span><small>$</small></b></div>
+      <div class="st" id="totAll" title="ربح المحرر الإجمالي = مجموع الدفتر اليومي بكل الأيام — صافي بعد العمولة · ويّا البوتات المحذوفة"><span class="sl" data-s="💵 محرر كلي">💵 ربح المحرر الإجمالي</span><b class="sv"><span id="tTotal" class="num">0.00</span><small>$</small></b></div>
+      <div class="st click rot" id="stCoinA" onclick="coinsModal()" title="ربح العملات الإجمالي: DCA البيعي + العملة المحرّرة من إعادة الاستثمار — يتقلّب بين العملات · اضغط للتفاصيل"><span class="sl" data-s="🪙 عملات كلي" data-x="🪙 الكلي">🪙 ربح إجمالي العملات</span><b class="sv" id="tCoinA">—</b></div>
+      <div class="st" id="stBest" title="أفضل يوم ربح تداول (كل التاريخ — نفس التقرير)"><span class="sl" data-s="🏆 أفضل يوم">🏆 أفضل يوم</span><b class="sv"><span id="tBest" class="num">—</span><small>$</small></b></div>
+      <div class="st" id="totOrd" title="أوامرك المفتوحة بالمنصة: بيع ↑ · شراء ↓"><span class="sl" data-s="📋 الأوامر">📋 الأوامر المنشورة على المنصة</span><b class="sv" id="tEx">—</b></div>
     </div>
     <div class="ops" aria-label="التشغيل">
       <button class="primary" title="تشغيل كل البوتات" onclick="confirmStartAll()">▶️</button>
@@ -14687,20 +14696,20 @@ function pcKpi(v){
   // 📊 v3.22.2: نفس العشر خانات — الفترة فوق · الإجمالي تحت (بلا سطور صغيرة حتى المربعات متساوية)
   const T=v.tot||{},B=T.best,D=DATA||{},TP=D.trade||{},el=$('#pcKpi');
   $('#pcSub').textContent=`${v.span} يوم · من ${pcD(v.from)} إلى ${pcD(v.to)}`;
-  const c=(id,l,val,unit,tt)=>`<div class="st${id?' rot':''}" title="${tt||''}"><span class="sl">${l}</span><b class="sv"${id?` id="${id}"`:''}>${id?'':`<span class="num">${val}</span>${unit?`<small>${unit}</small>`:''}`}</b></div>`;
+  const c=(id,l,val,unit,tt,sh)=>`<div class="st${id?' rot':''}" title="${tt||''}"><span class="sl"${sh?` data-s="${sh}"`:''}>${l}</span><b class="sv"${id?` id="${id}"`:''}>${id?'':`<span class="num">${val}</span>${unit?`<small>${unit}</small>`:''}`}</b></div>`;
   const all=(TP.trade_all!=null)?(+TP.trade_all||0):((+D.total_profit||0)+(+TP.held||0)+(+TP.handoff||0)),ST=D.stats||{},SB=ST.best;
   const bfull=SB?(()=>{const p=String(SB.d).split('-');return `${+p[2]}/${+p[1]}/${p[0]}`})():'';
   el.className='pc-kpi stats';
-  el.innerHTML=c('','🔄 ربح التداول',pcN(T.t),'$',`مباشر ${pcN(T.n,4)} · معاد ${pcN(T.r,4)}`)
-    +c('','📅 ربح المحرر',pcN(T.led),'$','الربح المحرر بالفترة (الدفتر)')
-    +c('pcCoinP','🪙 ربح المحرر للعملات','','','ربح DCA البيعي + عملة إعادة الاستثمار بالفترة')
-    +c('','📆 معدل ربح التداول الشهري',pcN(ST.month),'$',`ربح التداول بكل التاريخ ÷ ${ST.span_all||0} يوم × 30 (نفس الشريط)`)
-    +c('','📊 متوسط اليوم',pcN(T.avg),'$',`${T.active||0} يوم بيه ربح من ${v.span}`)
-    +c('','📈 ربح التداول الإجمالي',pcN(all),'$','مجموع كل الأيام (مباشر + معاد) — ويّا المحذوفة')
-    +c('','💵 ربح المحرر الإجمالي',pcN(D.total_profit),'$','مجموع الدفتر اليومي بكل الأيام — ويّا المحذوفة')
-    +c('pcCoinA','🪙 ربح إجمالي العملات','','','حتى الآن')
-    +c('','🏆 أفضل يوم',SB?pcN(SB.v):'—','$',SB?'كل التاريخ (نفس الشريط) · '+bfull:'')
-    +`<div class="st" title="أوامرك المفتوحة بالمنصة"><span class="sl">📋 الأوامر المنشورة على المنصة</span><b class="sv">${typeof D.ex_b==='number'?`<span>${D.ex_s}↑ · ${D.ex_b}↓</span><small>${D.ex_b+D.ex_s}</small>`:'<span>—</span>'}</b></div>`;
+  el.innerHTML=c('','🔄 ربح التداول',pcN(T.t),'$',`مباشر ${pcN(T.n,4)} · معاد ${pcN(T.r,4)}`,'🔄 تداول')
+    +c('','📅 ربح المحرر',pcN(T.led),'$','الربح المحرر بالفترة (الدفتر)','📅 محرر')
+    +c('pcCoinP','🪙 ربح المحرر للعملات','','','ربح DCA البيعي + عملة إعادة الاستثمار بالفترة','🪙 عملات')
+    +c('','📆 معدل ربح التداول الشهري',pcN(ST.month),'$',`ربح التداول بكل التاريخ ÷ ${ST.span_all||0} يوم × 30 (نفس الشريط)`,'📆 معدل شهري')
+    +c('','📊 متوسط اليوم',pcN(T.avg),'$',`${T.active||0} يوم بيه ربح من ${v.span}`,'📊 المتوسط')
+    +c('','📈 ربح التداول الإجمالي',pcN(all),'$','مجموع كل الأيام (مباشر + معاد) — ويّا المحذوفة','📈 تداول كلي')
+    +c('','💵 ربح المحرر الإجمالي',pcN(D.total_profit),'$','مجموع الدفتر اليومي بكل الأيام — ويّا المحذوفة','💵 محرر كلي')
+    +c('pcCoinA','🪙 ربح إجمالي العملات','','','حتى الآن','🪙 الكلي')
+    +c('','🏆 أفضل يوم',SB?pcN(SB.v):'—','$',SB?'كل التاريخ (نفس الشريط) · '+bfull:'','🏆 أفضل يوم')
+    +`<div class="st" title="أوامرك المفتوحة بالمنصة"><span class="sl" data-s="📋 الأوامر">📋 الأوامر المنشورة على المنصة</span><b class="sv">${typeof D.ex_b==='number'?`<span>${D.ex_s}↑ · ${D.ex_b}↓</span><small>${D.ex_b+D.ex_s}</small>`:'<span>—</span>'}</b></div>`;
   rotSet($('#pcCoinP'),T.coins||{});rotSet($('#pcCoinA'),D.coins_all||{})}
 function pcBars(v){
   const box=$('#pcBars'),days=v.days||[];
