@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.23.2"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.23.3"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -10419,6 +10419,41 @@ def tg_send(text, force=False, plain=False):
         return False
 
 
+def tg_photo(png, caption=""):
+    """🖼️ v3.23.3: صورة لتيليغرام (بطاقة الأرباح — بس لما تطلبها، فتنرسل حتى لو الإشعارات مكتومة). يرجع (نجح، رسالة)."""
+    c = dash_cfg()
+    token = (c.get("tg_token") or "").strip()
+    chat = (c.get("tg_chat_id") or "").strip()
+    if not token or not chat:
+        return False, "❌ ما كو توكن أو Chat ID محفوظ — افتح 👛 المحافظ واحفظهما"
+    bnd = "----holycard" + _sc.token_hex(8)
+    parts = []
+    for name, val in (("chat_id", chat), ("caption", str(caption or "")[:1000])):
+        if val:
+            parts.append(f'--{bnd}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{val}\r\n'.encode("utf-8"))
+    parts.append(f'--{bnd}\r\nContent-Disposition: form-data; name="photo"; filename="holy_card.png"\r\nContent-Type: image/png\r\n\r\n'.encode("utf-8")
+                 + png + b"\r\n")
+    parts.append(f"--{bnd}--\r\n".encode("utf-8"))
+    try:
+        req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendPhoto", data=b"".join(parts),
+                                     headers={"Content-Type": f"multipart/form-data; boundary={bnd}"})
+        with urllib.request.urlopen(req, timeout=25, context=_TG_CTX) as r:
+            j = json.loads(r.read().decode("utf-8"))
+        if j.get("ok"):
+            journal("notify", "🖼️ بطاقة الأرباح انرسلت لتيليغرام — " + str(caption or "")[:200], "ok")
+            return True, "✅ انرسلت البطاقة — شوف تيليغرام"
+        return False, f"❌ تيليغرام رفض: {j.get('description', 'خطأ مجهول')}"
+    except urllib.error.HTTPError as e:
+        body = ""
+        try:
+            body = e.read().decode("utf-8")[:200]
+        except Exception:
+            pass
+        return False, f"❌ HTTP {e.code}: {body or 'تحقق من صحة التوكن'}"
+    except Exception as ex:
+        return False, f"❌ تعذّر الاتصال بتيليغرام: {type(ex).__name__}"
+
+
 # ═══════════════ 🔓 إشعارات الأوامر المعلّقة بعد إيقاف إعادة الاستثمار ═══════════════
 NOTIFY_FILE = os.path.join(ROOT, "Holy_Notify.json")
 _FATE_USD = {}      # دولار تفكيك انبلغ بهالدورة لكل بوت — حتى «💰 ربح» القديمة ما تعيده
@@ -11334,7 +11369,7 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
         except Exception:
             return self._json({"ok": False, "msg": "طلب غير صالح"}, 400)
         path = urlparse(self.path).path
-        if not ("preview" in path or str(data.get("act") or "") == "preview" or path in ("/api/journal",)):
+        if not ("preview" in path or str(data.get("act") or "") == "preview" or path in ("/api/journal", "/api/card_tg")):
             self._jpost = (path, data)                     # 📜 v3.22.6: كل أمر منك ينكتب بالسجلات ويّا نتيجته (بلا أسرار)
         if path == "/api/control":
             act = data.get("action", "")
@@ -11806,6 +11841,21 @@ WantedBy=multi-user.target
             return self._json(settings_save(data))
         if path == "/api/wallet":
             return self._json(wallet_op(data))
+        if path == "/api/card_tg":
+            # 🖼️ v3.23.3: بطاقة الأرباح (صورة PNG ترسمها الصفحة) ⇒ تيليغرام — بس لما تضغط الزر
+            raw = str(data.get("png") or "")
+            if raw.startswith("data:image/png;base64,"):
+                raw = raw[len("data:image/png;base64,"):]
+            try:
+                png = _b64s.b64decode(raw, validate=True)
+            except Exception:
+                png = b""
+            if not png.startswith(b"\x89PNG\r\n\x1a\n"):
+                return self._json({"ok": False, "msg": "الصورة مو PNG صالحة"})
+            if len(png) > 8 * 1024 * 1024:
+                return self._json({"ok": False, "msg": "الصورة كبيرة (أكثر من 8MB)"})
+            ok, msg = tg_photo(png, str(data.get("caption") or "")[:1000])
+            return self._json({"ok": ok, "msg": msg})
         if path == "/api/pfbox":
             return self._json(profit_op(data))                # 💰 v3.22.8: صناديق الربح (دفتر للعرض)
         if path == "/api/wallet_test":
@@ -12217,6 +12267,12 @@ body.boot .card{animation:rise .6s var(--ease) both;animation-delay:calc(var(--i
 .pf-tab td.n{text-align:end;font-variant-numeric:tabular-nums;white-space:nowrap}
 .pf-tab button{padding:4px 8px;font-size:11px}
 .pf-log{max-height:190px;overflow:auto;font-size:11px;color:var(--mut);line-height:1.9;margin-top:8px}
+/* 🖼️ v3.23.3: بطاقة الأرباح */
+.cd-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}.cd-row button{padding:6px 11px;font-size:12px}
+.cd-opts{gap:6px 14px;font-size:12.5px;color:var(--mut)}.cd-opts label{display:inline-flex;align-items:center;gap:5px;cursor:pointer}
+.cd-prev{position:relative;border-radius:14px;overflow:hidden;background:#070b1d;min-height:160px;display:flex;justify-content:center}
+.cd-prev img{display:block;width:100%;max-width:440px;height:auto}
+.cd-prev #cd_wait{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#bdf4ff;font-size:13px;background:rgb(7 11 29/.6)}
 .af-box{background:var(--card2,#12161f);border:1px solid var(--bd,#232a36);border-radius:10px;padding:11px;margin-top:10px}
 .af-h{font-size:12px;font-weight:700;margin-bottom:8px}
 .af-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px}.af-row input{flex:1 1 80px;min-width:0}.af-row button{white-space:nowrap}
@@ -12672,7 +12728,8 @@ html.lite .card:hover,html.lite button:hover{transform:none}
       <figure class="pc-fig"><div class="pc-leg"><span>حصة كل بوت جرد</span></div><div id="pcDonut" class="pc-donut"></div></figure>
     </div>
     <div class="pc-foot"><button id="pcTblB" onclick="pcTblToggle()">📋 جدول الأيام</button>
-      <button class="primary" onclick="dlFile('/api/report.html?days='+PCDAYS,'holy_report.html')">🖨️ تنزيل التقرير المصوّر</button></div>
+      <button class="primary" onclick="dlFile('/api/report.html?days='+PCDAYS,'holy_report.html')">🖨️ تنزيل التقرير المصوّر</button>
+      <button class="primary" onclick="cardOpen()" title="صورة حديثة للأرباح — تحفظها أو تشاركها أو ترسلها تيليغرام">🖼️ بطاقة</button></div>
     <div id="pcTbl" hidden></div>
     <p class="pc-note">ربح التداول = ربح البيعات بيوم ما انكسبت (مباشر + معاد استثماره). تحرير إعادة الاستثمار والسحب تحويلات — انعدّت يوم ما انكسبت.</p>
   </div>
@@ -14795,6 +14852,153 @@ function pcTable(v){
     [d.full+(d.src==='l'?' (دفتر)':(d.src==='al'?' (دفتر جزئي)':'')),pcN(d.n,4),pcN(d.r,4),pcN(d.t,4),(d.cu&&!d.c)?'—':String(d.c),pcN(d.led,4)].forEach((x,i)=>{
       const td=document.createElement('td');td.textContent=x;if(i)td.className='n';r.appendChild(td)});t.appendChild(r)});
   el.appendChild(t)}
+/* ── 🖼️ v3.23.3: بطاقة الأرباح — صورة حديثة بس لما تطلبها (تنرسم بالمتصفح · ولا مكتبة بالسيرفر) ── */
+const CARD={days:7,opt:{coins:true,acc:true,fin:true,all:true,priv:false},v:null,flow:null,url:'',blob:null,busy:false};
+const CARD_P=[[1,'اليوم'],[7,'آخر 7 أيام'],[30,'آخر 30 يوم'],[90,'آخر 90 يوم'],[365,'آخر سنة']];
+const CARD_OPTS=[['coins','🪙 العملات المحرّرة'],['acc','🪙 المُراكِمات'],['fin','💰 الصندوق النهائي'],['all','📈 الإجمالي الكلي'],['priv','🔒 وضع المشاركة (يخفي المبالغ)']];
+function cardOpen(){
+  try{const s=JSON.parse(localStorage.getItem('holy_card')||'null');if(s){if(s.days)CARD.days=s.days;Object.assign(CARD.opt,s.opt||{})}}catch(e){}
+  showModal(`<h2>🖼️ بطاقة الأرباح</h2>
+  <p style="font-size:11.5px;color:var(--mut);margin:-4px 0 10px">صورة تحفظها أو تشاركها — تطلع بس لما تطلبها · ولا مفتاح ولا اسم محفظة ينكتب بيها.</p>
+  <div class="cd-row" id="cd_p">${CARD_P.map(([d,l])=>`<button data-d="${d}" class="${d===CARD.days?'primary':''}" onclick="cardSet('days',${d})">${l}</button>`).join('')}</div>
+  <div class="cd-row cd-opts">${CARD_OPTS.map(([k,l])=>`<label><input type="checkbox" id="cd_${k}" ${CARD.opt[k]?'checked':''} onchange="cardSet('${k}',this.checked)"> ${l}</label>`).join('')}</div>
+  <div class="cd-prev"><img id="cd_img" alt="بطاقة الأرباح"><div id="cd_wait">⏳ ترسم البطاقة…</div></div>
+  <div class="mbtns" style="margin-top:10px"><button class="primary" onclick="cardSave()">⬇️ حفظ الصورة</button>
+    <button onclick="cardTg()">📤 أرسلها تيليغرام</button><button id="cd_share" onclick="cardShare()" style="display:none">📲 مشاركة</button>
+    <button onclick="hideModal()">إغلاق</button></div>`);
+  cardRender()}
+function cardSet(k,v){if(k==='days'){CARD.days=v;CARD.v=null;document.querySelectorAll('#cd_p button').forEach(b=>b.className=(+b.dataset.d===v)?'primary':'')}
+  else CARD.opt[k]=v;
+  try{localStorage.setItem('holy_card',JSON.stringify({days:CARD.days,opt:CARD.opt}))}catch(e){}
+  cardRender()}
+async function cardRender(){
+  if(CARD.busy){CARD.again=true;return}CARD.busy=true;
+  try{
+    const w=$('#cd_wait');if(w)w.style.display='';
+    if(!CARD.v||CARD.v._d!==CARD.days){CARD.v=await api('/api/profit?days='+CARD.days);if(CARD.v)CARD.v._d=CARD.days}
+    if(CARD.opt.fin&&!CARD.opt.priv&&(!CARD.flow||Date.now()-CARD.flow.t>60000)){try{const f=await api('/api/flow');CARD.flow={t:Date.now(),f}}catch(e){CARD.flow=null}}
+    try{await Promise.all([document.fonts.load('700 120px "IBM Plex Mono"'),document.fonts.load('700 40px "IBM Plex Sans Arabic"'),document.fonts.load('500 30px "IBM Plex Sans Arabic"')])}catch(e){}
+    const M=cardModel(CARD.v,CARD.opt,DATA||{},CARD.flow&&CARD.flow.f);
+    const cv=cardDraw(M);
+    const blob=await new Promise(r=>cv.toBlob(r,'image/png'));
+    if(CARD.url)URL.revokeObjectURL(CARD.url);
+    CARD.blob=blob;CARD.url=URL.createObjectURL(blob);CARD.M=M;CARD.cv=cv;
+    const im=$('#cd_img');if(im){im.src=CARD.url;im.dataset.w=cv.width;im.dataset.h=cv.height}
+    if(w)w.style.display='none';
+    const sh=$('#cd_share');if(sh)sh.style.display=(navigator.canShare&&navigator.canShare({files:[new File([blob],'holy_card.png',{type:'image/png'})]}))?'':'none';
+  }catch(e){const w=$('#cd_wait');if(w)w.textContent='تعذّر رسم البطاقة'}
+  finally{CARD.busy=false;if(CARD.again){CARD.again=false;cardRender()}}}
+function cardModel(v,o,D,F){
+  // 🧮 كل رقم من نفس مصدر لوحة التقارير (/api/profit) والشريط (DATA) والصندوق النهائي (/api/flow) — البطاقة ما تحسب شي جديد
+  v=v||{};const T=v.tot||{},days=(v.days||[]).slice(),P=!!o.priv,TP=D.trade||{};
+  const n=days.length,win=days.filter(d=>(+d.t||0)>1e-9).length,trades=days.reduce((s,d)=>s+(+d.c||0),0);
+  const mn=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'],now=new Date();
+  const dm=s=>{const p=String(s||'').split('-');return p.length===3?`${+p[2]}/${+p[1]}`:'—'};
+  const L=t=>'\u2066'+t+'\u2069',usd=x=>L((+x||0).toFixed(2)+'$'),coin=(q,c)=>L(`${fmtCoin(+q||0)} ${c}`),fq=q=>fmtCoin(+q||0).replace(/^\+/,'');   // ⁦…⁩ = الرقم ووحدته يبقون سوا داخل النص العربي
+  const rq=v._d||v.req||v.span||n,lab=(CARD_P.find(p=>p[0]===rq)||[0,`آخر ${rq} يوم`])[1];   // الفترة اللي اخترتها (الأيام من أول ربح بيها)
+  const M={priv:P,brand:'The Holy Dashboard',date:`${now.getDate()} ${mn[now.getMonth()]} ${now.getFullYear()}`,
+    period:n>1?`📅 ${lab} · ${L(dm(v.from))} ← ${L(dm(v.to))}`:`📅 ${lab} · ${L(dm(v.to))}`,
+    heroLabel:P?'أيام رابحة':'ربح التداول',hero:P?`${win}/${n}`:`${(+T.t||0)>=0?'+':''}${(+T.t||0).toFixed(2)}$`,
+    sub:P?[`🔁 ${trades} صفقة`]:[`📅 المحرر ${usd(T.led)}`,`🔁 ${trades} صفقة`,`✅ ${L(win+'/'+n)} أيام رابحة`],
+    bars:n>1?days.map(d=>({d:dm(d.d),t:+d.t||0})):[],
+    stats:[],bots:[],extra:[],ver:'v'+(D.version||'')};
+  if(n>1){const B=T.best;
+    M.stats.push({ic:'🏆',l:'أفضل يوم',v:P?(B?dm(B.d):'—'):(B?usd(B.v):'—'),s:P?'':(B?dm(B.d):'')});
+    M.stats.push(P?{ic:'📈',l:'أيام رابحة',v:L(`${win}/${n}`),s:''}:{ic:'📊',l:'متوسط اليوم',v:usd(T.avg),s:''})}
+  const bs=(v.bots||[]).filter(b=>(+b.t||0)>1e-9).sort((a,b)=>b.t-a.t),bt=bs.reduce((s,b)=>s+b.t,0)||1;
+  M.bots=bs.slice(0,3).map((b,i)=>({m:['🥇','🥈','🥉'][i],name:b.name||b.sym,sym:b.sym||'',v:P?L(`${(b.t/bt*100).toFixed(0)}%`):usd(b.t),f:b.t/bs[0].t}));
+  if(o.coins){const C=Object.entries(T.coins||{}).filter(([k,q])=>Math.abs(+q)>1e-12);
+    if(C.length)M.extra.push({ic:'🪙',l:'العملات المحرّرة',v:P?`${C.length} عملة`:C.slice(0,3).map(([k,q])=>coin(q,k)).join(' · ')+(C.length>3?` +${C.length-3}`:'')})}
+  if(o.acc){const A=(D.accum||[]).filter(a=>(+a.coin||0)>1e-12);
+    if(A.length){const val=A.reduce((s,a)=>s+(+a.value||0),0);
+      M.extra.push({ic:'🪙',l:'المُراكِمات',v:P?`${A.length} مُراكِم`:A.slice(0,3).map(a=>L(`${fq(a.coin)} ${a.base}`)).join(' · ')+(val>0?` ≈ ${usd(val)}`:'')})}}
+  if(o.fin&&!P&&F&&F.wallets){let u=0;const cs={};F.wallets.forEach(w=>{const p=w.profit||{};u+=+p.usd||0;Object.entries(p.coins_all||p.coins||{}).forEach(([k,q])=>cs[k]=(cs[k]||0)+(+q||0))});
+    const ce=Object.entries(cs).filter(([k,q])=>Math.abs(q)>1e-12);
+    if(u>1e-9||ce.length)M.extra.push({ic:'💰',l:'الصندوق النهائي',v:usd(u)+(ce.length?' + '+ce.slice(0,2).map(([k,q])=>L(`${fq(q)} ${k}`)).join(' · '):'')})}
+  if(o.all&&!P){const all=(TP.trade_all!=null)?(+TP.trade_all||0):(+D.total_profit||0);
+    M.extra.push({ic:'📈',l:'الإجمالي الكلي',v:`${usd(all)} تداول · ${usd(D.total_profit)} محرر`})}
+  return M}
+function cardDraw(M){
+  const W=1080,PAD=64,IW=W-2*PAD,FA='"IBM Plex Sans Arabic","Segoe UI",Tahoma,sans-serif',FM='"IBM Plex Mono","Segoe UI",monospace';
+  const off=document.createElement('canvas');off.width=W;off.height=2600;const x=off.getContext('2d');x.direction='rtl';x.textBaseline='alphabetic';
+  const RR=(c,X,Y,w,h,r)=>{c.beginPath();c.moveTo(X+r,Y);c.arcTo(X+w,Y,X+w,Y+h,r);c.arcTo(X+w,Y+h,X,Y+h,r);c.arcTo(X,Y+h,X,Y,r);c.arcTo(X,Y,X+w,Y,r);c.closePath()};
+  const glass=(Y,h,r=30)=>{RR(x,PAD,Y,IW,h,r);x.fillStyle='rgba(255,255,255,0.055)';x.fill();x.strokeStyle='rgba(255,255,255,0.11)';x.lineWidth=2;x.stroke()};
+  const fit=(t,w)=>{t=String(t);if(x.measureText(t).width<=w)return t;while(t.length>1&&x.measureText(t+'…').width>w)t=t.slice(0,-1);return t+'…'};
+  const grad=(x0,x1,a,b)=>{const g=x.createLinearGradient(x0,0,x1,0);g.addColorStop(0,a);g.addColorStop(1,b);return g};
+  const T=(t,X,Y,font,col,al='right',mw)=>{x.font=font;x.fillStyle=col;x.textAlign=al;x.fillText(mw?fit(t,mw):t,X,Y)};
+  const MUT='rgba(214,220,255,0.62)',TX='#eef1ff',CY='#22d3ee',VI='#a78bfa',GO='#fbbf24';
+  let y=PAD+30;
+  // ── الرأس: الاسم · التاريخ ──
+  x.font=`700 34px ${FA}`;const bw=x.measureText('✦ '+M.brand).width;
+  T('✦ '+M.brand,W-PAD,y,`700 34px ${FA}`,grad(W-PAD-bw,W-PAD,VI,CY));
+  T(M.date,PAD,y,`500 26px ${FA}`,MUT,'left');
+  y+=44;
+  x.font=`500 26px ${FA}`;const pw=Math.min(IW,x.measureText(M.period).width+56);
+  RR(x,W-PAD-pw,y,pw,52,26);x.fillStyle='rgba(34,211,238,0.09)';x.fill();x.strokeStyle='rgba(34,211,238,0.35)';x.lineWidth=2;x.stroke();
+  T(M.period,W-PAD-28,y+35,`500 26px ${FA}`,'#bdf4ff','right',pw-56);
+  y+=52+72;
+  // ── الرقم الكبير ──
+  T(M.heroLabel,W/2,y,`500 34px ${FA}`,MUT,'center');y+=26;
+  x.font=`700 ${M.hero.length>10?118:146}px ${FM}`;x.textAlign='center';x.direction='ltr';
+  const hw=x.measureText(M.hero).width;const hg=grad(W/2-hw/2,W/2+hw/2,CY,VI);
+  x.shadowColor='rgba(124,92,255,0.55)';x.shadowBlur=46;x.fillStyle=hg;x.fillText(M.hero,W/2,y+128);x.shadowBlur=0;x.direction='rtl';
+  y+=128+60;
+  T(M.sub.join('   ·   '),W/2,y,`500 28px ${FA}`,TX,'center',IW);
+  y+=58;
+  // ── الرسم: عمود لكل يوم ──
+  if(M.bars.length){const h=330;glass(y,h);const n=M.bars.length,mx=Math.max(...M.bars.map(b=>b.t),1e-9),bi=M.bars.reduce((k,b,i)=>b.t>M.bars[k].t?i:k,0);
+    const ax=PAD+40,aw=IW-80,top=y+50,bh=h-110,slot=aw/n,w=Math.max(4,Math.min(46,slot*0.64));
+    for(let i=0;i<n;i++){const b=M.bars[i],v=Math.max(0,b.t),hh=Math.max(v>1e-9?8:3,v/mx*bh),bx=ax+i*slot+(slot-w)/2,by=top+bh-hh;   // الزمن من اليسار لليمين (مثل رسم التقارير)
+      const g=x.createLinearGradient(0,by,0,top+bh);if(i===bi&&v>1e-9){g.addColorStop(0,GO);g.addColorStop(1,'#f97316')}else{g.addColorStop(0,CY);g.addColorStop(1,'rgba(124,92,255,0.85)')}
+      RR(x,bx,by,w,hh,Math.min(w/2,10));x.fillStyle=v>1e-9?g:'rgba(255,255,255,0.12)';x.fill();
+      if(i===bi&&v>1e-9&&!M.priv)T((+b.t).toFixed(2)+'$',bx+w/2,by-14,`600 22px ${FM}`,GO,'center')}
+    const lb=[0,n-1];if(n>8)lb.push(Math.floor((n-1)/2));
+    [...new Set(lb)].forEach(i=>T(M.bars[i].d,ax+(i+0.5)*slot,y+h-24,`500 22px ${FA}`,MUT,'center'));
+    y+=h+28}
+  // ── أفضل يوم · المتوسط ──
+  if(M.stats.length){const g2=24,cw=(IW-g2)/2,h=128;
+    M.stats.forEach((s,i)=>{const X=W-PAD-(i+1)*cw-i*g2;RR(x,X,y,cw,h,26);x.fillStyle='rgba(255,255,255,0.055)';x.fill();x.strokeStyle='rgba(255,255,255,0.11)';x.lineWidth=2;x.stroke();
+      T(`${s.ic} ${s.l}`,X+cw-28,y+44,`500 26px ${FA}`,MUT);
+      T(s.v,X+cw-28,y+100,`700 40px ${FM}`,TX);
+      if(s.s)T(s.s,X+28,y+100,`500 24px ${FA}`,MUT,'left')});
+    y+=h+28}
+  // ── أحسن البوتات ──
+  if(M.bots.length){const rh=86,h=78+rh*M.bots.length;glass(y,h);
+    T('أحسن البوتات',W-PAD-34,y+54,`700 30px ${FA}`,TX);
+    M.bots.forEach((b,i)=>{const Y=y+78+i*rh;
+      T(b.m,W-PAD-34,Y+46,`400 36px ${FA}`,TX);
+      T(b.name+(b.sym&&b.sym!==b.name?'  ·  '+b.sym:''),W-PAD-90,Y+44,`600 28px ${FA}`,TX,'right',IW-330);
+      T(b.v,PAD+34,Y+44,`700 32px ${FM}`,i===0?GO:CY,'left');
+      const bx=PAD+34,bw2=IW-68-56;RR(x,bx,Y+62,bw2,8,4);x.fillStyle='rgba(255,255,255,0.08)';x.fill();
+      const fw=Math.max(8,bw2*Math.min(1,b.f));RR(x,bx+bw2-fw,Y+62,fw,8,4);x.fillStyle=grad(bx+bw2-fw,bx+bw2,VI,CY);x.fill()});
+    y+=h+28}
+  // ── الإضافات ──
+  if(M.extra.length){const rh=74,h=30+rh*M.extra.length;glass(y,h);
+    M.extra.forEach((e,i)=>{const Y=y+20+i*rh;
+      if(i)RR(x,PAD+34,Y,IW-68,2,1),x.fillStyle='rgba(255,255,255,0.07)',x.fill();
+      T(`${e.ic} ${e.l}`,W-PAD-34,Y+48,`500 26px ${FA}`,MUT);
+      x.font=`500 26px ${FA}`;const lw=x.measureText(`${e.ic} ${e.l}`).width;
+      T(e.v,PAD+34,Y+48,`600 26px ${FA}`,TX,'left',IW-68-lw-30)});
+    y+=h+28}
+  // ── التذييل ──
+  y+=10;T(M.brand+(M.ver&&M.ver!=='v'?' · '+M.ver:''),W-PAD,y+20,`500 22px ${FA}`,'rgba(214,220,255,0.40)');
+  if(M.priv)T('🔒 المبالغ مخفية',PAD,y+20,`500 22px ${FA}`,'rgba(214,220,255,0.55)','left');
+  y+=20+PAD;
+  // ── الخلفية بالطول النهائي ──
+  const H=Math.max(1080,Math.round(y)),cv=document.createElement('canvas');cv.width=W;cv.height=H;const c=cv.getContext('2d');
+  const bg=c.createLinearGradient(0,0,W,H);bg.addColorStop(0,'#070b1d');bg.addColorStop(0.55,'#0f1233');bg.addColorStop(1,'#1b0f3a');c.fillStyle=bg;c.fillRect(0,0,W,H);
+  const glow=(gx,gy,r,col)=>{const g=c.createRadialGradient(gx,gy,0,gx,gy,r);g.addColorStop(0,col);g.addColorStop(1,'rgba(0,0,0,0)');c.fillStyle=g;c.fillRect(0,0,W,H)};
+  glow(W*0.86,H*0.08,560,'rgba(34,211,238,0.20)');glow(W*0.1,H*0.78,620,'rgba(124,92,255,0.24)');glow(W*0.55,H*0.42,420,'rgba(236,72,153,0.07)');
+  c.fillStyle='rgba(255,255,255,0.035)';for(let gx=36;gx<W;gx+=44)for(let gy=36;gy<H;gy+=44)c.fillRect(gx,gy,2,2);
+  c.drawImage(off,0,0,W,H,0,0,W,H);
+  return cv}
+function cardName(){const d=new Date();return `holy_card_${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}.png`}
+function cardSave(){if(!CARD.url)return toast('⏳ البطاقة لسه ترسم',false);const a=document.createElement('a');a.href=CARD.url;a.download=cardName();document.body.appendChild(a);a.click();a.remove();toast('⬇️ انحفظت الصورة',true)}
+async function cardShare(){if(!CARD.blob)return;try{await navigator.share({files:[new File([CARD.blob],cardName(),{type:'image/png'})],title:'The Holy Dashboard'})}catch(e){}}
+async function cardTg(){if(!CARD.cv)return toast('⏳ البطاقة لسه ترسم',false);
+  toast('⏳ ترسل لتيليغرام…',true);
+  const M=CARD.M||{},cap=M.priv?`🖼️ The Holy Dashboard — ${M.period||''}`:`🖼️ The Holy Dashboard — ${M.period||''}\n${M.heroLabel||''}: ${M.hero||''}`;
+  const r=await api('/api/card_tg',{png:CARD.cv.toDataURL('image/png'),caption:cap});toast(r.msg||'تم',r.ok!==false)}
 function pcTblToggle(){const el=$('#pcTbl');el.hidden=!el.hidden;$('#pcTblB').textContent=el.hidden?'📋 جدول الأيام':'📋 إخفاء الجدول';if(!el.hidden&&PV)pcTable(PV)}
 /* ⬇️ تنزيل ملف من اللوحة — يرسل الجلسة والـPIN (الرابط المباشر ما يرسل الـPIN ⇒ كان ينرفض لمن مفعّل PIN) */
 async function dlFile(url,name){
