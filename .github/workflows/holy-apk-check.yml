@@ -1,0 +1,47 @@
+# 📱 Holy APK check on real Android emulators (old + new Android): install · open · connect · auto-link ·
+#    notifications · tap-to-place · back button · full screen · no crash. Results are printed in the job log.
+# Runs only when ci/ or this file changes (bump ci/RUN to test the APK embedded in Holy_Dashboard.pyw).
+name: Holy APK check
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/**', '.github/workflows/holy-apk-check.yml']
+permissions:
+  contents: read
+jobs:
+  emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [28, 34]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Start the dashboard (fresh folder · no password · no exchange keys)
+        run: |
+          pip install -q pillow
+          mkdir -p /tmp/holy && cp Holy_Dashboard.pyw /tmp/holy/ && echo '{"port": 8099}' > /tmp/holy/dashboard_config.json
+          cd /tmp/holy && nohup python3 Holy_Dashboard.pyw > dash.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf localhost:8099/ >/dev/null && break; sleep 1; done
+          curl -sf localhost:8099/app/holy.apk -o "$GITHUB_WORKSPACE/holy.apk" && ls -la "$GITHUB_WORKSPACE/holy.apk"
+      - name: Android ${{ matrix.api }}
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          script: bash ci/apk_check.sh
+      - name: Dashboard log
+        if: always()
+        run: tail -40 /tmp/holy/dash.log || true
