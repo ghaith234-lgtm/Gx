@@ -1,5 +1,5 @@
-# 📱 Holy APK check on real Android emulators (old + new Android): install · open · connect · auto-link ·
-#    notifications · tap-to-place · back button · full screen · no crash. Results are printed in the job log.
+# 📱 Holy APK check on real Android emulators (Android 9 · 11 · 14): install · open · connect · auto-link ·
+#    notifications · tap-to-place · back button · full screen · self-update · no crash. Results are printed in the job log.
 # Runs only when ci/ or this file changes (bump ci/RUN to test the APK embedded in Holy_Dashboard.pyw).
 name: Holy APK check
 on:
@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: [28, 34]
+        api: [28, 30, 34]
     steps:
       - uses: actions/checkout@v4
       - name: Enable KVM

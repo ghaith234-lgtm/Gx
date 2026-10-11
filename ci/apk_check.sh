@@ -20,6 +20,7 @@ adb shell am start -n $P/.MainActivity --es url http://10.0.2.2:8099 >/dev/null
 sleep 7; dump setup; shot setup
 tap "اتصال" setup
 sleep 18; dump dash1
+if grep -q "متصفح النظام قديم" $OUT/ui_dash1.xml; then say "PASS old system WebView ⇒ the app asks to update it"; tap "بعدين" dash1; sleep 2; dump dash1; fi
 if grep -q "بعدين" $OUT/ui_dash1.xml; then say "PASS battery dialog shown after linking"; tap "بعدين" dash1; sleep 2; fi
 sleep 3; dump dash; shot dash
 api /api/app/devices '{"act":"list"}' | sed 's/^/HOLYCI devices: /'
@@ -36,6 +37,25 @@ adb shell settings put system accelerometer_rotation 0; adb shell settings put s
 adb shell settings put system user_rotation 0; sleep 3
 adb shell am start -n $P/.MainActivity --es go guard >/dev/null; sleep 4; dump guard
 pid=$(adb shell pidof $P | tr -d '\r'); say "app pid: ${pid:-NONE}"
+# ── self-update: the dashboard now carries a «newer» APK (same file, higher code) ⇒ offer · download · sha256 · Android installer ──
+t0=$(adb shell dumpsys package $P | grep -m1 lastUpdateTime | tr -d '\r')
+pkill -f Holy_Dashboard.pyw; sleep 2
+sed -i 's/^APP_APK_CODE = .*/APP_APK_CODE = 99/' /tmp/holy/Holy_Dashboard.pyw
+(cd /tmp/holy && nohup python3 Holy_Dashboard.pyw >> dash.log 2>&1 &)
+for i in $(seq 1 40); do curl -sf localhost:8099/ >/dev/null && break; sleep 1; done
+curl -s localhost:8099/api/app/info -H "X-Holy-Device: x" | head -c 200; echo
+adb shell appops set $P REQUEST_INSTALL_PACKAGES allow
+adb shell am force-stop $P; sleep 1
+adb shell am start -n $P/.MainActivity >/dev/null; sleep 12; dump upd1; shot upd1
+if grep -q "تحديث للتطبيق" $OUT/ui_upd1.xml; then say "PASS update offered"; tap "تحديث" upd1; else say "FAIL no update offer"; fi
+sleep 10; dump upd2; shot upd2
+for b in "Update" "UPDATE" "Install" "INSTALL" "تحديث" "تثبيت"; do if grep -q "text=\"$b\"" $OUT/ui_upd2.xml; then tap "$b" upd2; say "PASS Android installer asked to confirm («$b»)"; break; fi; done
+sleep 15
+t1=$(adb shell dumpsys package $P | grep -m1 lastUpdateTime | tr -d '\r')
+[ "$t0" != "$t1" ] && say "PASS app updated itself ($t0 → $t1)" || say "FAIL app not updated ($t1)"
+sleep 5
+adb shell dumpsys activity services $P | grep -E "WatchService|isForeground" | head -3 | sed 's/^/HOLYCI after-update svc: /'
+pid=$(adb shell pidof $P | tr -d '\r'); say "app pid after update: ${pid:-NONE (not open — normal after an update)}"
 say "crash buffer:"; adb logcat -d -b crash | head -40 | sed 's/^/HOLYCI crash: /'
 adb logcat -d | grep -E "holy|Holy|AndroidRuntime|chromium.*CONSOLE|ActivityManager.*$P" | grep -v chatty | tail -70 | sed 's/^/HOLYCI log: /'
 say "done"
