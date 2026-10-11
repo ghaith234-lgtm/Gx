@@ -55,7 +55,16 @@ t1=$(adb shell dumpsys package $P | grep -m1 lastUpdateTime | tr -d '\r')
 [ "$t0" != "$t1" ] && say "PASS app updated itself ($t0 → $t1)" || say "FAIL app not updated ($t1)"
 sleep 5
 adb shell dumpsys activity services $P | grep -E "WatchService|isForeground" | head -3 | sed 's/^/HOLYCI after-update svc: /'
-pid=$(adb shell pidof $P | tr -d '\r'); say "app pid after update: ${pid:-NONE (not open — normal after an update)}"
+pid=$(adb shell pidof $P | tr -d '\r'); say "app pid after update: ${pid:-NONE}"
+# ── unlink from the dashboard ⇒ «انفصل» on the phone at once · no silent re-link next time ──
+id=$(curl -s -X POST localhost:8099/api/app/devices -H 'Content-Type: application/json' -d '{"act":"list"}' | python3 -c "import sys,json;d=json.load(sys.stdin)['devs'];print(d[0]['id'] if d else '')")
+say "unlinking device ${id:-NONE}"
+api /api/app/devices "{\"act\":\"del\",\"id\":\"$id\"}" | head -c 100; echo
+sleep 10
+adb shell dumpsys notification --noredact | grep -q "انفصل هذا الموبايل" && say "PASS unlinked phone shows «انفصل» at once" || say "FAIL no unlink notice"
+adb shell am force-stop $P; adb shell am start -n $P/.MainActivity >/dev/null; sleep 15
+n=$(curl -s -X POST localhost:8099/api/app/devices -H 'Content-Type: application/json' -d '{"act":"list"}' | python3 -c "import sys,json;print(len(json.load(sys.stdin)['devs']))")
+[ "$n" = "0" ] && say "PASS no silent re-link after unlink" || say "FAIL re-linked by itself ($n)"
 say "crash buffer:"; adb logcat -d -b crash | head -40 | sed 's/^/HOLYCI crash: /'
 adb logcat -d | grep -E "holy|Holy|AndroidRuntime|chromium.*CONSOLE|ActivityManager.*$P" | grep -v chatty | tail -70 | sed 's/^/HOLYCI log: /'
 say "done"
