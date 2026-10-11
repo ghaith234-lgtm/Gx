@@ -41,7 +41,7 @@ pid=$(adb shell pidof $P | tr -d '\r'); say "app pid: ${pid:-NONE}"
 t0=$(adb shell dumpsys package $P | grep -m1 lastUpdateTime | tr -d '\r')
 pkill -f Holy_Dashboard.pyw; sleep 2
 sed -i 's/^APP_APK_CODE = .*/APP_APK_CODE = 99/' /tmp/holy/Holy_Dashboard.pyw
-(cd /tmp/holy && nohup python3 Holy_Dashboard.pyw >> dash.log 2>&1 &)
+(cd /tmp/holy && setsid nohup python3 Holy_Dashboard.pyw >> dash.log 2>&1 < /dev/null &)   # fully detached (or the CI step never ends)
 for i in $(seq 1 40); do curl -sf localhost:8099/ >/dev/null && break; sleep 1; done
 curl -s localhost:8099/api/app/info -H "X-Holy-Device: x" | head -c 200; echo
 adb shell appops set $P REQUEST_INSTALL_PACKAGES allow
@@ -67,4 +67,5 @@ n=$(curl -s -X POST localhost:8099/api/app/devices -H 'Content-Type: application
 [ "$n" = "0" ] && say "PASS no silent re-link after unlink" || say "FAIL re-linked by itself ($n)"
 say "crash buffer:"; adb logcat -d -b crash | head -40 | sed 's/^/HOLYCI crash: /'
 adb logcat -d | grep -E "holy|Holy|AndroidRuntime|chromium.*CONSOLE|ActivityManager.*$P" | grep -v chatty | tail -70 | sed 's/^/HOLYCI log: /'
+pkill -f Holy_Dashboard.pyw || true      # the CI step ends only when nothing it started is still running
 say "done"
