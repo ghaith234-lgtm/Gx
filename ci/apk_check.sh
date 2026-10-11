@@ -38,6 +38,8 @@ adb shell settings put system user_rotation 0; sleep 3
 adb shell am start -n $P/.MainActivity --es go guard >/dev/null; sleep 4; dump guard
 pid=$(adb shell pidof $P | tr -d '\r'); say "app pid: ${pid:-NONE}"
 # ── 1.1: notifications with the app CLOSED — swiped away · process killed (what phone «cleaners» do) · deep sleep (Doze) ──
+linked=$(curl -s -X POST localhost:8099/api/app/devices -H 'Content-Type: application/json' -d '{"act":"list"}' | python3 -c "import sys,json;print(len(json.load(sys.stdin)['devs']))")
+if [ "$linked" = "0" ]; then say "SKIP app-closed tests — this phone never linked (its system WebView cannot run the page)"; else
 note(){ api /api/app/devices "{\"act\":\"test\",\"tag\":\"$1\"}" >/dev/null; }
 got(){ for i in $(seq 1 ${2:-25}); do adb shell dumpsys notification --noredact | grep -q "$1" && return 0; sleep 1; done; return 1; }
 svc(){ adb shell dumpsys activity services $P | grep -c "WatchService" | tr -d '\r'; }
@@ -67,6 +69,7 @@ adb shell dumpsys deviceidle force-idle | sed 's/^/HOLYCI doze: /'
 note DOZE1; got DOZE1 40 && say "PASS deep sleep (Doze) ⇒ notification arrives" || say "FAIL deep sleep (Doze) ⇒ no notification"
 adb shell dumpsys deviceidle unforce >/dev/null
 adb shell am start -n $P/.MainActivity >/dev/null; sleep 6
+fi
 # ── self-update: the dashboard now carries a «newer» APK (same file, higher code) ⇒ offer · download · sha256 · Android installer ──
 t0=$(adb shell dumpsys package $P | grep -m1 lastUpdateTime | tr -d '\r')
 pkill -f Holy_Dashboard.pyw; sleep 2
