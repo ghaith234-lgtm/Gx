@@ -81,8 +81,15 @@ adb shell appops set $P REQUEST_INSTALL_PACKAGES allow
 adb shell am force-stop $P; sleep 1
 adb shell am start -n $P/.MainActivity >/dev/null; sleep 12; dump upd1; shot upd1
 if grep -q "تحديث للتطبيق" $OUT/ui_upd1.xml; then say "PASS update offered"; tap "تحديث" upd1; else say "FAIL no update offer"; fi
-sleep 10; dump upd2; shot upd2
-for b in "Update" "UPDATE" "Install" "INSTALL" "تحديث" "تثبيت"; do if grep -q "text=\"$b\"" $OUT/ui_upd2.xml; then tap "$b" upd2; say "PASS Android installer asked to confirm («$b»)"; break; fi; done
+# the download + Android's installer screen can take a while on a slow emulator ⇒ look for the installer's button a few times
+asked=""
+for t in 1 2 3 4 5 6; do
+  sleep 8; dump upd2
+  for b in "Update" "UPDATE" "Install" "INSTALL"; do if grep -q "text=\"$b\"" $OUT/ui_upd2.xml; then tap "$b" upd2; say "PASS Android installer asked to confirm («$b»)"; asked=1; break; fi; done
+  [ -n "$asked" ] && break
+done
+shot upd2
+[ -z "$asked" ] && say "FAIL Android installer screen never showed"
 sleep 15
 t1=$(adb shell dumpsys package $P | grep -m1 lastUpdateTime | tr -d '\r')
 [ "$t0" != "$t1" ] && say "PASS app updated itself ($t0 → $t1)" || say "FAIL app not updated ($t1)"
