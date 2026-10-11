@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.25.0"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.25.1"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -2565,6 +2565,20 @@ def _rec_ledger_book(b, st, led, now_t):
     return True
 
 
+def _rec_range(cfg, st):
+    """📏 نطاق الأوامر الدورية (أدنى، أعلى): من الكرت (الحالة) وإلا من الإنشاء · صفر = بلا حد — نفس المحرك"""
+    out = []
+    for k in ("lo", "hi"):
+        v = (st or {}).get(k)
+        if v is None:
+            v = (cfg or {}).get(k)
+        try:
+            out.append(max(0.0, float(v or 0)))
+        except Exception:
+            out.append(0.0)
+    return out[0], out[1]
+
+
 def _rec_snapshot(b, st):
     """🔁 بيانات كرت الدوري: كل أمر مفتوح بحسبته (الهدف · لو طلع هسه) أو المعدل · المستثمر وحد الأمان · 💠 داخل البوت · الموعد الجاي"""
     cfg = b["cfg"]
@@ -2575,7 +2589,13 @@ def _rec_snapshot(b, st):
         tp = max(float(cfg.get("tp_pct") or 0), 0.2) / 100.0
     except Exception:
         tp = 0.002
-    F = REC_FEE
+    try:                                     # 💸 v3.25.1: عمولة حسابك المتعلّمة من التنفيذ (المحرك يكتبها) — وإلا 0.1%
+        F = float(st.get("fee_rate") or 0)
+    except Exception:
+        F = 0.0
+    if not 0 < F < 0.01:
+        F = REC_FEE
+    usd_amt = (not sell) or bool(cfg.get("amt_usd"))
 
     def tgt_of(q, c):
         if q <= 0 or c <= 0:
@@ -2633,12 +2653,19 @@ def _rec_snapshot(b, st):
         if isinstance(e, dict):
             evs.append({k: e.get(k) for k in ("k", "ts", "n", "px", "q", "c", "ri", "profit", "pct", "why", "manual", "usd", "coin", "lots")})
     lc = st.get("last_cycle") if isinstance(st.get("last_cycle"), dict) else None
-    return {"side": "sell" if sell else "buy", "mode": "avg" if cfg.get("mode") == "avg" else "lots", "base": base,
+    lo, hi = _rec_range(cfg, st)
+    fees = {str(k): round(float(v or 0), 12) for k, v in (st.get("fees") or {}).items() if float(v or 0) > 0}
+    fee_usd = sum(v if k in ("USDT", "USDC", "USD") else (v * cp if k == base else 0.0) for k, v in fees.items())
+    pdx = st.get("pending") if isinstance(st.get("pending"), dict) else None
+    return {"lo": lo, "hi": hi, "in_range": not ((lo > 0 and cp > 0 and cp < lo) or (hi > 0 and cp > hi)),
+            "fees": fees, "fee_usd": round(fee_usd, 6), "fee_other": [k for k in fees if k not in ("USDT", "USDC", "USD", base)],
+            "fee_rate": round(F * 100, 4), "amt_usd": usd_amt, "unsure": bool(pdx and not pdx.get("oid")),
+            "side": "sell" if sell else "buy", "mode": "avg" if cfg.get("mode") == "avg" else "lots", "base": base,
             "unit": base if sell else "USDT", "amount": float(cfg.get("amount") or 0), "every": int(float(cfg.get("every") or 1)),
             "per": cfg.get("unit") or "d", "at": cfg.get("at") or "", "tp": round(tp * 100, 4), "cap": float(cfg.get("cap") or 0),
             "ri_pct": _rec_ri_pct(cfg, st), "paused": bool(st.get("paused")), "next_at": float(st.get("next_at") or 0),
             "hb_age": hb_age, "lots": sorted(rows, key=lambda r: r["n"]), "avg": avg,
-            "expo": round(Q if sell else C, 8), "expo_usd": round(Q * cp if sell else C, 4),
+            "expo": round(C if usd_amt else Q, 8), "expo_usd": round(C if usd_amt else Q * cp, 4),
             "pot": round(float(st.get("pot") or 0), 10), "held": round(_rec_held(st), 10), "held_lots": round(RI, 10),
             "profit": round(float(st.get("profit_total") or 0), 10), "rel": round(float(st.get("rel_total") or 0), 10),
             "ri_total": round(float(st.get("ri_total") or 0), 10), "wd_usd": round(float(st.get("wd_usd") or 0), 8),
@@ -2683,6 +2710,23 @@ def _rec_control(b, sp, action, value):
         u = "عملة" if sell else "دولار"
         return {"ok": True, "msg": (f"⚖️ {v:g}% من ربح كل صفقة يرجع ينضاف للأمر الجاي (يبقى داخل البوت — تگدر تسحبه) · الباقي محرر {u}"
                                     if v > 0 else f"⚖️ إعادة الاستثمار انطفت — ربح كل صفقة يتحرر {u} (اللي داخل البوت يبقى لحد ما تسحبه)")}
+    if action == "rec_range":
+        v = value if isinstance(value, dict) else {}
+        try:
+            lo, hi = max(0.0, float(v.get("lo") or 0)), max(0.0, float(v.get("hi") or 0))
+        except Exception:
+            return {"ok": False, "msg": "اكتب أسعار صحيحة (0 = بلا حد)"}
+        if not all(x == x and x != float("inf") for x in (lo, hi)):
+            return {"ok": False, "msg": "اكتب أسعار صحيحة (0 = بلا حد)"}
+        if lo > 0 and hi > 0 and lo >= hi:
+            return {"ok": False, "msg": "الحد الأدنى لازم أصغر من الأعلى"}
+        if not put({"lo": lo, "hi": hi}):
+            return {"ok": False, "msg": "ما گدرت أكتب بملف البوت — جرب بعد ثانية"}
+        act = "يبيع" if sell else "يشتري"
+        if not lo and not hi:
+            return {"ok": True, "msg": f"📏 انشال النطاق — {act} بكل موعد مهما كان السعر"}
+        return {"ok": True, "msg": f"📏 النطاق انحفظ — {act} بالموعد بس لما السعر بين {lo:g} و {hi:g}".replace(" 0 ", " — ")
+                + " · برّه النطاق يتخطّى الموعد ويبلّغك · الخروج بالهدف ما يتأثر"}
     if not alive:
         return {"ok": False, "msg": "البوت متوقف — شغّله أول (الطلب ينفّذه المحرك نفسه)"}
     if action == "rec_sell":
@@ -2748,8 +2792,10 @@ def _rec_msg(b, st, e):
     k = e.get("k")
     SEP = "━━━━━━━━━━━━━"
     lots = [l for l in (st.get("lots") or []) if isinstance(l, dict)]
-    expo = sum(float(l.get("q" if sell else "c") or 0) for l in lots)
+    usd_amt = (not sell) or bool(cfg.get("amt_usd"))
+    expo = sum(float(l.get("c" if usd_amt else "q") or 0) for l in lots)
     cap = float(cfg.get("cap") or 0)
+    ue = "$" if usd_amt else u
     nx = float(st.get("next_at") or 0)
     nxt = datetime.fromtimestamp(nx).strftime("%Y-%m-%d %H:%M") if nx else "—"
     if k == "open":
@@ -2757,9 +2803,11 @@ def _rec_msg(b, st, e):
         head = f"🏷️ *بيع دوري #{e.get('n')} — `{sym}`*" if sell else f"🛒 *شراء دوري #{e.get('n')} — `{sym}`*"
         line = (f"🔴 باع `{q:.8g}` {base} ⇐ `{c:.4f}$` بسعر `{px:.8g}`" if sell else
                 f"🟢 اشترى `{q:.8g}` {base} بـ `{c:.4f}$` بسعر `{px:.8g}`")
+        _fe = float(e.get("fee") or 0)
         return (head + "\n" + SEP + "\n" + line + "\n"
                 + (f"💠 منها `{ri:.8g}`{u} ربح معاد استثماره\n" if ri > 1e-12 else "")
-                + f"📦 المفتوح: `{len(lots)}` أمر · `{expo:.6g}`{u}" + (f" من حد `{cap:g}`{u}" if cap > 0 else "") + "\n"
+                + (f"💸 العمولة: `{_fe:.8g}` {e.get('fc') or ''}\n" if _fe > 0 else "")
+                + f"📦 المفتوح: `{len(lots)}` أمر · `{expo:.6g}`{ue}" + (f" من حد `{cap:g}`{ue}" if cap > 0 else "") + "\n"
                 + f"⏰ الموعد الجاي: {nxt}")
     if k == "close":
         p, pc = float(e.get("profit") or 0), float(e.get("pct") or 0)
@@ -2777,8 +2825,12 @@ def _rec_msg(b, st, e):
     if k == "skip":
         why = e.get("why")
         act = "البيع" if sell else "الشراء"
+        if why == "range":
+            lo_, hi_ = float(e.get("lo") or 0), float(e.get("hi") or 0)
+            return (f"📏 *تخطّى {act} الدوري — `{sym}`*\nالسعر `{float(e.get('px') or 0):.8g}` برّه النطاق"
+                    f" (`{lo_:.8g}` ← `{hi_:.8g}`)".replace("`0` ← ", "— ← ").replace(" ← `0`", " ← —") + f"\n⏰ الموعد الجاي: {nxt}")
         if why == "cap":
-            return (f"⏭️ *تخطّى {act} الدوري — `{sym}`*\nوصل حد الأمان (`{float(e.get('expo') or 0):.6g}`{u} من `{float(e.get('cap') or 0):g}`{u})"
+            return (f"⏭️ *تخطّى {act} الدوري — `{sym}`*\nوصل حد الأمان (`{float(e.get('expo') or 0):.6g}`{ue} من `{float(e.get('cap') or 0):g}`{ue})"
                     f" · يرجع لما ينباع أمر\n⏰ الموعد الجاي: {nxt}")
         if why == "balance":
             return (f"⚠️ *تخطّى {act} الدوري — `{sym}`*\nالرصيد ما يكفي (`{float(e.get('need') or 0):.8g}`{u}) — ما صار شي ويكمّل بالموعد الجاي\n"
@@ -3319,7 +3371,8 @@ def feed_all(limit=60):
             if isinstance(e, dict) and e.get("msg"):
                 if any(x in str(e.get("msg")) for x in _FEED_SKIP):
                     continue                            # 🔕 v3.21.10 (ب٣٠): سطر عبور/حجز الإيقاف — إشعاره «📦 عبر N درجة» يطلع مرة وحدة من اللوحة
-                out.append({"sym": b["symbol"], "base": base, "time": e.get("time", ""), "msg": e.get("msg", "")})
+                out.append({"sym": b["symbol"], "base": base, "time": e.get("time", ""), "msg": e.get("msg", ""),
+                            "dir": os.path.relpath(b["dir"], ROOT)})
     # 🪙 أحداث المُراكِمات (شراء · بيع · ترحيل · سحب)
     try:
         _st = acc_state()
@@ -6297,7 +6350,9 @@ def _pv_cfg_txt(c):
     try:
         if str(c.get("bot_type") or "") in _REC_T:
             _u = {"h": "ساعة", "d": "يوم", "m": "شهر"}.get(c.get("unit") or "d", "يوم")
-            _a = f"{float(c.get('amount') or 0):g}" + ("$" if c.get("bot_type") == "rec_buy" else " " + str(c.get("symbol") or "").split("-")[0])
+            _a = f"{float(c.get('amount') or 0):g}" + ("$" if (c.get("bot_type") == "rec_buy" or c.get("amt_usd")) else " " + str(c.get("symbol") or "").split("-")[0])
+            if float(c.get("lo") or 0) or float(c.get("hi") or 0):
+                _a += f" · 📏 {float(c.get('lo') or 0):g}–{float(c.get('hi') or 0) or '∞'}"
             return (f"كل {int(float(c.get('every') or 1))} {_u} {_a} · هدف {float(c.get('tp_pct') or 0):g}% · "
                     + ("بالمعدل" if c.get("mode") == "avg" else "كل أمر على حدا" + (f" · 💠 {float(c.get('ri_pct') or 0):g}%" if float(c.get("ri_pct") or 0) > 0 else "")))
         if str(c.get("bot_type") or "") in ("dca", "dca_buy"):
@@ -6828,10 +6883,10 @@ def report_html(days=30):
     o.append('<div class="bar"><button onclick="window.print()">🖨️ طباعة / حفظ PDF</button>'
              '<span>من نافذة الطباعة اختار «حفظ كـPDF»</span></div><main class="sheet">')
     o.append(f'<header><div><div class="brand">THE HOLY DASHBOARD</div><h1>تقرير الأداء</h1></div>'
-             f'<div class="per"><b>{E(per_txt)}</b>{v["span"]} يوم · {len([b for b in bots if b["live"]])} بوت جرد'
+             f'<div class="per"><b>{E(per_txt)}</b>{v["span"]} يوم · {len([b for b in bots if b["live"]])} بوت بالدولار'
              f' · صدر {now.strftime("%Y-%m-%d %H:%M")}</div></header>')
     if T.get("t", 0) > 0:
-        o.append(f'<p class="lead">خلال <b>{v["span"]} يوم</b> ربحت بوتات الجرد <b>{f2(T["t"])}$</b>'
+        o.append(f'<p class="lead">خلال <b>{v["span"]} يوم</b> ربحت البوتات <b>{f2(T["t"])}$</b>'
                  f' من <b>{T["c"]} بيعة</b>'
                  + (f' — <b>{T["r_pct"]:.0f}%</b> منه انعاد استثماره داخل الأوامر.' if T.get("r", 0) > 0 else ".") + '</p>')
     best = T.get("best") or {}
@@ -6864,7 +6919,7 @@ def report_html(days=30):
                     f'<td class="n{" lg" if (s.get("cu") and s["c"]) else ""}">{nc}</td></tr>')     # باهت = جزئي (أيام الدفتر بلا عدد)
     rows = "".join(rows)
     if segs:
-        o.append(f'<section><h2>حصة كل بوت جرد</h2><div class="split">{_rep_donut_svg(v, C)}'
+        o.append(f'<section><h2>حصة كل بوت</h2><div class="split">{_rep_donut_svg(v, C)}'
                  f'<div class="wrap"><table><tr><th>البوت</th><th class="n">ربح التداول</th><th class="n">الحصة</th><th class="n">بيعات</th></tr>'
                  f'{rows}</table></div></div></section>')
     # 🤖 البوتات: أداء الفترة · الحالة الآن (جدولين حتى يوسعون A4)
@@ -6891,6 +6946,35 @@ def report_html(days=30):
     o.append('<section><h2>البوتات الآن</h2><div class="wrap"><table>'
              '<tr><th>البوت</th><th>الإعدادات</th><th>إعادة الاستثمار</th><th class="n">المحرر بالدفتر (الفترة) $</th>'
              '<th class="n">داخل الأوامر الآن $</th><th class="n">المحقق (كل الوقت) $</th></tr>' + "".join(cr) + '</table></div></section>')
+    # 🔁 v3.25.1: البوتات الدورية (الشرائي والبيعي) — الحالة الآن
+    rr = []
+    for bd in bot_dirs().values():
+        if not _is_rec(bd) or (bd.get("cfg") or {}).get("is_demo"):
+            continue
+        st0 = _safe(load_json, paths_of(bd)[0], default={}) or {}
+        R0 = _safe(_rec_snapshot, bd, st0, default=None) or {}
+        if not R0:
+            continue
+        sell0 = R0.get("side") == "sell"
+        U0 = (" " + R0.get("base", "")) if sell0 else "$"
+        fq = (lambda q: f"{float(q or 0):,.8g}") if sell0 else (lambda q: f"{float(q or 0):,.4f}")
+        per0 = {"h": "ساعة", "d": "يوم", "m": "شهر"}.get(R0.get("per"), "يوم")
+        amt0 = f"{float(R0.get('amount') or 0):g}" + ("$" if R0.get("amt_usd") else " " + R0.get("base", ""))
+        rng0 = ("—" if not (R0.get("lo") or R0.get("hi")) else f"{R0.get('lo') or '—'} – {R0.get('hi') or '—'}")
+        fee0 = " + ".join(f"{float(v0):.6g} {E(k0)}" for k0, v0 in (R0.get("fees") or {}).items()) or "—"
+        rr.append(f'<tr><td class="bn"><b>{E(bd["symbol"])}</b>{tag("دوري بيعي" if sell0 else "دوري شرائي")}</td>'
+                  f'<td>{"بالمعدل" if R0.get("mode") == "avg" else "كل أمر على حدا"} · كل {int(R0.get("every") or 1)} {per0} · {E(amt0)} · هدف {R0.get("tp")}%</td>'
+                  f'<td class="n">{E(rng0)}</td><td class="n">{len(R0.get("lots") or [])} · {fq(R0.get("expo")) if not R0.get("amt_usd") else f4(R0.get("expo"))}{E(U0 if not R0.get("amt_usd") else "$")}</td>'
+                  f'<td class="n {"ok" if float(R0.get("profit") or 0) >= 0 else "bad"}">{fq(R0.get("profit"))}{E(U0)}</td>'
+                  f'<td class="n">{fq(R0.get("rel"))}</td><td class="n">{fq(R0.get("held"))}</td>'
+                  f'<td class="n">{int(R0.get("cycles") or 0)} / {int(R0.get("orders") or 0)}</td><td class="n">{fee0}</td></tr>')
+    if rr:
+        o.append('<section><h2>البوتات الدورية (الآن)</h2><div class="wrap"><table>'
+                 '<tr><th>البوت</th><th>الإعدادات</th><th class="n">📏 النطاق</th><th class="n">المفتوح · المستثمر</th>'
+                 '<th class="n">الربح الصافي</th><th class="n">منه محرر</th><th class="n">💠 داخل البوت</th><th class="n">صفقات / أوامر</th>'
+                 '<th class="n">💸 العمولات</th></tr>' + "".join(rr) + '</table></div>'
+                 '<p class="muted" style="font-size:11px">الشرائي ربحه دولار (داخل بأرقام التداول فوق) · البيعي ربحه عملة (يرجع يشتري عملات أكثر) — '
+                 'العمولات اللي دفعها فعلاً بالمنصة بعملتها.</p></section>')
     # 🪙 المُراكِمات
     ar = []
     for a in accs:
@@ -9759,9 +9843,11 @@ def deploy_rec(data):
         tp = float(data.get("tp_pct") or 0)
         cap = float(data.get("cap") or 0)
         ri = float(data.get("ri_pct") or 0) if mode == "lots" else 0.0
+        lo = max(0.0, float(data.get("lo") or 0))            # 📏 v3.25.1: نطاق الأوامر الدورية (0 = بلا حد)
+        hi = max(0.0, float(data.get("hi") or 0))
     except Exception:
         return {"ok": False, "msg": "تأكد من الأرقام بكل الخانات"}
-    if not all(x == x and abs(x) != float("inf") for x in (amount, tp, cap, ri)):
+    if not all(x == x and abs(x) != float("inf") for x in (amount, tp, cap, ri, lo, hi)):
         return {"ok": False, "msg": "تأكد من الأرقام بكل الخانات"}
     unit = str(data.get("unit") or "d")
     if unit not in ("h", "d", "m"):
@@ -9782,8 +9868,10 @@ def deploy_rec(data):
         return {"ok": False, "msg": "هدف الربح ما ينزل تحت 0.2% (عمولة الشراء والبيع سوا 0.2%)"}
     if tp > 500:
         return {"ok": False, "msg": "هدف الربح كبير — أقصى 500%"}
+    if lo > 0 and hi > 0 and lo >= hi:
+        return {"ok": False, "msg": "📏 الحد الأدنى لازم أصغر من الأعلى (أو خلّي واحد منهم 0)"}
     if cap <= 0:
-        return {"ok": False, "msg": "حدّد «حد الأمان» — أقصى " + ("مبلغ يدخله البوت بالأوامر المفتوحة" if not sell else "عملات يبيعها وما رجعت")
+        return {"ok": False, "msg": "حدّد «حد الأمان» — أقصى " + ("مبلغ يدخله البوت بالأوامر المفتوحة ($)" if not sell else "دولار يستلمه من بيعات ما رجعت ($)")
                                     + " (يحميك لو السعر مشى ضدك طويلاً)"}
     if cap + 1e-12 < amount:
         return {"ok": False, "msg": "حد الأمان لازم ≥ مبلغ الأمر الواحد"}
@@ -9792,7 +9880,7 @@ def deploy_rec(data):
         _sp = _acc_spec(sym)
         _px = float(_acc_price(sym) or 0)
         _mn = float(_sp.get("minSz") or 0)
-        _q = (amount / _px if _px > 0 else 0.0) if not sell else amount
+        _q = amount / _px if _px > 0 else 0.0                 # 💵 v3.25.1: البيعي مبلغه بالدولار كمان
         if _mn > 0 and _q > 0 and _q + 1e-12 < _mn:
             return {"ok": False, "msg": f"الأمر أصغر من حد OKX: أقل كمية {_mn:g} {base}" + (f" (≈ {_mn * _px:.2f}$)" if _px > 0 else "")}
     except Exception:
@@ -9810,7 +9898,8 @@ def deploy_rec(data):
     full = os.path.join(ROOT, folder)
     os.makedirs(full, exist_ok=True)
     cfg = {**keys, "symbol": sym, "bot_type": bt, "mode": mode, "amount": amount, "every": every, "unit": unit, "at": at,
-           "start_now": bool(data.get("start_now", True)), "tp_pct": tp, "cap": cap, "ri_pct": ri,
+           "start_now": bool(data.get("start_now", True)), "tp_pct": tp, "cap": cap, "ri_pct": ri, "lo": lo, "hi": hi,
+           "amt_usd": True,                                     # 💵 v3.25.1: البيعي يبيع عملات بقيمة المبلغ بالدولار
            "bot_id": "HR" + _hl.md5(os.path.abspath(full).encode()).hexdigest()[:10].upper(),     # 🆔 نفس معادلة المحرك (الرقابة تعرف أوامره)
            "auto_restart": bool(data.get("auto", True))}
     save_json_atomic(os.path.join(full, f"config_{sym}.json"), cfg)
@@ -12919,6 +13008,11 @@ body.boot .card{animation:rise .6s var(--ease) both;animation-delay:calc(var(--i
 .rcl .pl{grid-column:3/5;text-align:end;font-size:11.5px;color:var(--mut)}
 .rcl .pl.up{color:var(--green)}.rcl .pl.dn{color:var(--red)}
 .rcl .pl small{font-size:10px;opacity:.8}
+.rcrow{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;font-size:11.5px;color:var(--mut);padding:5px 10px;margin-bottom:6px;background:rgb(var(--ov-rgb)/.03);border-radius:9px}
+.rcrow b{font-size:12px;color:var(--tx);text-align:end}
+.rcrow small{font-size:10px;color:var(--mut2)}
+.rcrow button{padding:3px 8px;font-size:11px;border-radius:8px}
+.nitem.ngo{cursor:pointer}.nitem.ngo:hover{background:rgb(var(--cyan-rgb)/.08)}
 .rcempty{font-size:12px;color:var(--mut);text-align:center;padding:12px 8px;background:rgb(var(--ov-rgb)/.02);border-radius:9px}
 .dcahead{display:flex;align-items:center;gap:9px;padding:14px 16px 0;flex-wrap:wrap}
 .dcatag{font-size:11px;background:rgb(var(--amber-rgb)/.16);color:var(--amber);border:1px solid rgb(var(--amber-rgb)/.35);padding:2px 9px;border-radius:99px;font-weight:600}
@@ -13837,7 +13931,8 @@ function clearNotif(){NOTIFS=[];renderNotif();$('#bellDot').style.display='none'
 function renderNotif(){
   const body=$('#npBody');$('#npCount').textContent=NOTIFS.length;
   if(!NOTIFS.length){body.innerHTML='<div class="npempty">لا إشعارات بعد — راح تظهر هنا فور حدوثها</div>';return}
-  body.innerHTML=NOTIFS.map(n=>`<div class="nitem ${n.seen?'':'fresh'}"><span class="nicon">${notifIcon(n.msg)}</span><div class="nbody"><div class="ntext"><b>${n.base||''}</b> ${(n.msg||'').replace(/[*`]/g,'').replace(/</g,'&lt;')}</div><div class="ntime">${n.time||''}</div></div></div>`).join('')}
+  body.innerHTML=NOTIFS.map((n,i)=>`<div class="nitem ${n.seen?'':'fresh'}${n.dir&&CARDS.has(n.dir)?' ngo':''}" data-i="${i}" title="${n.dir&&CARDS.has(n.dir)?'اضغط ⇒ كرت البوت':''}"><span class="nicon">${notifIcon(n.msg)}</span><div class="nbody"><div class="ntext"><b>${n.base||''}</b> ${(n.msg||'').replace(/[*`]/g,'').replace(/</g,'&lt;')}</div><div class="ntime">${n.time||''}</div></div></div>`).join('');
+  body.onclick=ev=>{const it=ev.target.closest('.nitem.ngo');if(!it)return;const n=NOTIFS[+it.dataset.i];if(n&&n.dir)holyGo('bot:'+n.dir)}}
 async function pollNotif(){
   try{const feed=await api('/api/feed');
     if(Array.isArray(feed)){
@@ -14278,6 +14373,9 @@ function recC(q){q=+q||0;const t=fmtCoin(Math.abs(q)).replace(/^\+/,'');return (
 function recU(r){return r.side==='sell'?(' '+(r.base||'')):'$'}
 function recV(v,r){v=+v||0;if(r.side==='sell')return recC(v);const a=Math.abs(v);return a>0&&a<0.01?v.toFixed(6):v.toFixed(a>=1000?2:4)}
 function recM(v,r){v=+v||0;if(r.side==='sell')return recC(v);return v.toFixed(Math.abs(v)>=1||v===0?2:4)}   // مبلغ مختصر للخانات
+function recAmt(r){return r.amt_usd?(+r.amount||0)+'$':recC(r.amount)+' '+(r.base||'')}               // 💵 v3.25.1: البيعي مبلغه بالدولار
+function recEx(v,r){v=+v||0;return r.amt_usd?v.toFixed(Math.abs(v)>=1||v===0?2:4)+'$':recC(v)+' '+(r.base||'')}   // المستثمر/الحد بوحدته
+function recRng(r){const lo=+r.lo||0,hi=+r.hi||0;return (!lo&&!hi)?'بلا حدود':`${lo?f4(lo):'—'} ⟷ ${hi?f4(hi):'—'}`}
 function recS(v,r){v=+v||0;return (v>0?'+':'')+recV(v,r)}
 function recEvery(r){const n=+r.every||1;return (n===1?'كل '+(REC_PER[r.per]||'يوم'):`كل ${n} ${REC_PERS[r.per]||'أيام'}`)+(r.at&&r.per!=='h'?' الساعة '+r.at:'')}
 function recLeft(ts){const s=Math.max(0,(+ts||0)-Date.now()/1000);if(s<60)return 'هسه';const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);return d?`${d} يوم ${h} س`:(h?`${h} س ${m} د`:`${m} د`)}
@@ -14302,6 +14400,8 @@ function buildRecCard(b,i){
       <div class="dcacell"><span class="dl">📅 اليوم</span><b class="num" data-k="today" style="font-size:12.5px">—</b></div>
     </div>
     <div class="dcacyc"><div class="dcacyclbl"><span>🛡️ حد الأمان</span><span class="num" data-k="capt">—</span></div><div class="dcabar"><div class="dcafill" data-k="capfill"></div></div></div>
+    <div class="rcrow" data-k="rngrow"><span class="dl" title="البوت يشتري/يبيع بالموعد بس لما السعر داخل النطاق — برّه النطاق يتخطّى ويبلّغك · الخروج بالهدف ما يتأثر">📏 النطاق</span><b class="num" data-k="rng">—</b><button data-k="rngb">✏️</button></div>
+    <div class="rcrow"><span class="dl" title="العمولات اللي دفعها البوت فعلاً بالمنصة (بعملتها) — ونسبة عمولة حسابك المتعلّمة من التنفيذ">💸 العمولات المدفوعة</span><b class="num" data-k="fees">—</b></div>
     <div class="rcri" data-k="ribox" style="display:none">
       <span class="dl" title="الربح المعاد استثماره اللي لسه داخل البوت: بالحصّالة (للأمر الجاي) + حصّته بالأوامر المفتوحة">💠 معاد استثماره</span><b class="num" data-k="held">—</b>
       <button data-k="riw" title="يحرّر الربح المعاد استثماره — حتى لو صار ${sell?'دولار':'عملة'} داخل الأوامر">💠 سحب</button><button data-k="rip" title="نسبة ربح كل صفقة اللي ترجع تنضاف للأمر الجاي">⚖️ —</button></div>
@@ -14329,6 +14429,7 @@ function buildRecCard(b,i){
   R.hist.onclick=()=>recHist(cur());
   R.chart.onclick=()=>toggleChart(el,b);
   R.pw.onclick=()=>recPower(cur(),el._alive);
+  R.rngb.onclick=()=>recRange(cur());
   R.del.onclick=()=>confirmPurge(b.dir);
   R.lots.onclick=ev=>{const t=ev.target.closest('[data-sell]');if(t)recSell(cur(),t.dataset.sell)};
   return el;
@@ -14358,16 +14459,19 @@ function updRecCard(el,b){
     else if(H.state==='warn'){s='⚠️';c='warn';t=`${H.fails_1h} رفض آخر ساعة`}
     if(s){R.hb.style.display='';R.hb.textContent=s;R.hb.className='hbadge '+c;R.hb.title=t;R.hb.onclick=(ev)=>{ev.stopPropagation();showHealth(b)}}
     else R.hb.style.display='none'}
-  R.mode.textContent=(r.mode==='avg'?'📊 بالمعدل':'🧩 كل أمر على حدا')+' · '+recEvery(r)+' · '+(sell?recC(r.amount)+' '+r.base:(+r.amount||0)+'$')+' · 🎯 '+(+r.tp||0)+'%';
+  R.mode.textContent=(r.mode==='avg'?'📊 بالمعدل':'🧩 كل أمر على حدا')+' · '+recEvery(r)+' · '+recAmt(r)+' · 🎯 '+(+r.tp||0)+'%';
   R.profit.innerHTML=`<span dir="ltr">${recS(r.profit,r)}${U}</span>`;R.profit.className='num '+((+r.profit||0)>=0?'dcacoin':'dcaloss');
   R.cp.textContent=cp?f4(+cp):'—';
   const lots=r.lots||[],nO=lots.length;
-  R.nopen.innerHTML=nO?`${nO} · <span dir="ltr">${recM(r.expo,r)}${U}</span>`:'—';
+  R.nopen.innerHTML=nO?`${nO} · <span dir="ltr">${recEx(r.expo,r)}</span>`:'—';
   R.next.textContent=r.paused?'⏸ موقوف':(r.next_at?recLeft(r.next_at):'—');R.next.title=r.next_at?recWhen(r.next_at):'';
   R.today.innerHTML=`<span dir="ltr">${recS(r.today,r)}</span>`;R.today.className='num '+((+r.today||0)>0?'dcacoin':((+r.today||0)<0?'dcaloss':''));
   R.today.style.fontSize='12.5px';
   const cap=+r.cap||0,pc=cap>0?Math.min(100,(+r.expo||0)/cap*100):0;
-  R.capt.innerHTML=cap>0?`<span dir="ltr">${recM(r.expo,r)} / ${recM(cap,r)}${U}</span> · ${pc.toFixed(0)}%`:'بلا حد';
+  R.capt.innerHTML=cap>0?`<span dir="ltr">${recEx(r.expo,r)} / ${recEx(cap,r)}</span> · ${pc.toFixed(0)}%`:'بلا حد';
+  {const out=!r.in_range&&(+r.lo||+r.hi);R.rng.innerHTML=`<span dir="ltr">${recRng(r)}</span>`+(out?' · <span style="color:var(--amber)">⚠️ السعر برّه — الموعد يتخطّى</span>':'');
+   const F=r.fees||{},ks=Object.keys(F);R.fees.innerHTML=ks.length?`<span dir="ltr">${(+r.fee_usd||0).toFixed(4)}$</span>`+((r.fee_other||[]).length?' + '+r.fee_other.map(k=>`${(+F[k]).toPrecision(3)} ${gEsc(k)}`).join(' + '):'')+` <small>· نسبتك ${(+r.fee_rate||0.1)}%</small>`:`— <small>· نسبتك ${(+r.fee_rate||0.1)}%</small>`;
+   R.fees.title=ks.map(k=>`${k}: ${F[k]}`).join(' · ')}
   R.capfill.style.width=pc+'%';R.capfill.classList.toggle('hot',pc>=90);
   const showRi=r.mode!=='avg'||(+r.held||0)>0;
   R.ribox.style.display=showRi?'':'none';
@@ -14396,20 +14500,21 @@ function updRecCard(el,b){
   if(showAll){const act=sell?'↩️ اشترِ الكل هسه':'💰 بِع الكل هسه';
     R.sellall.className='dcabuy'+(tot!=null&&tot<0?' loss':'');
     R.sellall.innerHTML=act+(tot!=null?` (<span dir="ltr">${recS(tot,r)}${U}</span>)`:'')}
-  R.now.textContent=(sell?'🏷️ بيع هسه ':'🛒 اشتري هسه ')+(sell?recC(r.amount)+' '+r.base:(+r.amount||0)+'$');
+  R.now.textContent=(sell?'🏷️ بيع هسه ':'🛒 اشتري هسه ')+recAmt(r);
   R.now.disabled=!!(r.rq&&r.rq.now)||!b.alive;
   R.pw.textContent=b.alive?'⏹':'▶️';R.pw.title=b.alive?'إيقاف البوت':'تشغيل البوت';
   R.pause.textContent=r.paused?'▶️ رجّع الدوري':'⏸ وقّف الدوري';R.pause.title=r.paused?'يرجع يشتري/يبيع بالمواعيد':'يوقف الشراء/البيع بالمواعيد بس — الأهداف والخروج اليدوي يبقون شغّالين';R.pause.className='dcalast'+(r.paused?' on':'');
   // الحالة
   let st='';
   if(r.closing)st=`⏳ ${sell?'يرجع يشتري':'يبيع'} ${(r.closing.ids||[]).map(x=>'#'+String(x).replace('L','')).join(' ')}${r.closing.manual?' (يدوي)':' (الهدف)'}${r.closing.part>0?' · '+Math.round(r.closing.part*100)+'%':''}`;
+  else if(r.unsure)st='🔒 رد المنصة ضاع — البوت يتأكد من رقم الأمر قبل أي إعادة (ما يتكرر)';
   else if(r.pending)st='⏳ أمر بالطريق — ينتظر تأكيد المنصة';
   else if(r.rq&&(r.rq.sell||r.rq.now||r.rq.wd))st='⏳ طلبك وصل — البوت ينفّذه خلال ثواني';
   else{const e=(r.ev||[]).slice(-1)[0];
     if(e){const w=recWhen(e.ts).slice(5);
       st=e.k==='open'?`${sell?'🏷️ باع':'🛒 اشترى'} #${e.n} بسعر ${f4(+e.px)} · ${w}`:
          e.k==='close'?`💰 آخر صفقة ${recS(e.profit,r)}${U} (${(+e.pct||0).toFixed(2)}%)${e.manual?' · يدوي':''} · ${w}`:
-         e.k==='skip'?`⏭️ تخطّى موعد (${({cap:'حد الأمان',balance:'الرصيد ما يكفي',min:'تحت حد OKX',reject:'رفض المنصة'})[e.why]||e.why}) · ${w}`:
+         e.k==='skip'?`⏭️ تخطّى موعد (${({cap:'حد الأمان',balance:'الرصيد ما يكفي',min:'تحت حد OKX',reject:'رفض المنصة',range:'السعر برّه النطاق'})[e.why]||e.why}) · ${w}`:
          e.k==='withdraw'?`💠 سحب ${[e.usd>0?(+e.usd).toFixed(4)+'$':'',e.coin>0?recC(e.coin)+' '+r.base:''].filter(Boolean).join(' + ')} · ${w}`:'—'}
     else st=b.alive?'🔁 ينتظر أول موعد':'○ متوقف'}
   R.status.textContent=st+(r.cycles?` · ${r.cycles} صفقة`:'')+(r.skips?` · ${r.skips} تخطّي`:'');
@@ -14453,11 +14558,12 @@ function recRi(b){
 function recNow(b){
   const r=b.rec||{},sell=r.side==='sell';
   if(!b.alive){toast('البوت متوقف — شغّله أول',false);return}
-  const amt=sell?recC(r.amount)+' '+r.base:(+r.amount||0)+'$';
-  const cap=+r.cap||0,full=cap>0&&(+r.expo||0)+(+r.amount||0)>cap+1e-12;
+  const amt=recAmt(r);
+  const cap=+r.cap||0,full=cap>0&&(+r.expo||0)+(+r.amount||0)>cap+1e-12,out=!r.in_range&&(+r.lo||+r.hi);
   showModal(`<h2>${sell?'🏷️ بيع هسه':'🛒 اشتري هسه'} — ${b.symbol}</h2>
     <p style="color:var(--mut);font-size:13px;line-height:1.9">${sell?'يبيع':'يشتري'} <b>${amt}</b> هسه بسعر السوق كأمر جديد بقائمته${(+r.pot||0)>0?' (ويّا الحصّالة)':''} — خارج الجدول، والموعد الجاي ما يتغيّر.</p>
-    ${full?`<p style="color:var(--amber);font-size:12px;margin-top:8px">🛡️ وصل حد الأمان — البوت راح يتخطّاه (${recV(r.expo,r)} من ${recV(cap,r)}${recU(r)}).</p>`:''}
+    ${full?`<p style="color:var(--amber);font-size:12px;margin-top:8px">🛡️ وصل حد الأمان — البوت راح يتخطّاه (${recEx(r.expo,r)} من ${recEx(cap,r)}).</p>`:''}
+    ${out?`<p style="color:var(--amber);font-size:12px;margin-top:8px">📏 السعر برّه النطاق (${recRng(r)}) — هذا أمر يدوي ينفّذ رغم النطاق (النطاق يحكم المواعيد بس).</p>`:''}
     <div class="mbtns"><button class="primary" id="rc_go">${sell?'🏷️ بيع':'🛒 اشتري'}</button><button onclick="hideModal()">إلغاء</button></div>`);
   $('#rc_go').onclick=()=>{hideModal();ctl(b.dir,'rec_now')};
 }
@@ -14465,6 +14571,18 @@ function recPower(b,alive){
   if(!alive){ctl(b.dir,'start');return}
   const n=((b.rec||{}).lots||[]).length;
   askConfirm('⏹ إيقاف البوت الدوري — '+b.symbol+'؟',`البوت يطفي: ما يشتري/يبيع بالمواعيد${n?` · و<b>${n} أمر مفتوح ما تنراقب أهدافها</b> (الهدف مو أمر بالمنصة — البوت هو اللي يراقب السعر)`:''} لحد ما تشغّله. أوامره كلها فورية فماكو شي معلّق بالمنصة. لو تريد توقف الشراء/البيع بالمواعيد بس وتبقى الأهداف شغّالة: «⏸ وقّف الدوري».`,()=>ctl(b.dir,'stop'))}
+function recRange(b){
+  const r=b.rec||{},sell=r.side==='sell',cp=(window.JPX&&JPX[b.symbol])||r.cp||0;
+  showModal(`<h2>📏 نطاق الأوامر الدورية — ${b.symbol}</h2>
+    <p style="color:var(--mut);font-size:12.5px;line-height:1.9;margin-bottom:10px">البوت ${sell?'يبيع':'يشتري'} بالموعد <b>بس لما السعر بين الحدين</b> — برّه النطاق يتخطّى الموعد ويبلّغك ويرجع لما السعر يرجع. الخروج بالهدف والخروج اليدوي <b>ما يتأثرون</b>. 0 = بلا حد.${cp?` السعر هسه <b dir="ltr">${f4(+cp)}</b>.`:''}</p>
+    <div class="frm"><div class="fld"><label>📉 الحد الأدنى للسعر</label><input id="rc_lo" class="num" value="${+r.lo||0}"></div>
+      <div class="fld"><label>📈 الحد الأعلى للسعر</label><input id="rc_hi" class="num" value="${+r.hi||0}"></div></div>
+    <div class="mbtns"><button class="primary" id="rc_go">📏 احفظ</button><button onclick="$('#rc_lo').value=0;$('#rc_hi').value=0">بلا حدود</button><button onclick="hideModal()">إلغاء</button></div>`);
+  $('#rc_go').onclick=()=>{const lo=+$('#rc_lo').value||0,hi=+$('#rc_hi').value||0;
+    if(lo<0||hi<0||!isFinite(lo)||!isFinite(hi)){toast('اكتب أسعار صحيحة',false);return}
+    if(lo&&hi&&lo>=hi){toast('الحد الأدنى لازم أصغر من الأعلى',false);return}
+    hideModal();ctl(b.dir,'rec_range',{lo,hi})};
+}
 function recPause(b){const r=b.rec||{};ctl(b.dir,r.paused?'rec_resume':'rec_pause');if(b.rec)b.rec.paused=!r.paused}
 async function recHist(b){
   let h=[];try{h=await api('/api/history?dir='+encodeURIComponent(b.dir))}catch(e){}
@@ -14488,9 +14606,11 @@ function recDetails(b){
       <tr><td style="text-align:right">النوع</td><td>${sell?'🔴 بيعي — يبيع عملات بالجدول ويرجع يشتري أكثر (الربح عملة)':'🟢 شرائي — يشتري بالدولار بالجدول ويبيع بالربح (الربح دولار)'}</td></tr>
       <tr><td style="text-align:right">الطريقة</td><td>${r.mode==='avg'?'📊 بالمعدل — هدف واحد على معدل كل الأوامر ويطلع من الكل':'🧩 كل أمر على حدا — لكل أمر هدفه'}</td></tr>
       <tr><td style="text-align:right">الجدول</td><td>${recEvery(r)}</td></tr>
-      <tr><td style="text-align:right">مبلغ كل أمر</td><td class="num">${sell?recC(r.amount)+' '+r.base:(+r.amount||0)+'$'}</td></tr>
+      <tr><td style="text-align:right">مبلغ كل أمر</td><td class="num">${recAmt(r)}${sell&&r.amt_usd?' (يبيع عملات بقيمته)':''}</td></tr>
+      <tr><td style="text-align:right">📏 نطاق المواعيد</td><td class="num">${recRng(r)}</td></tr>
+      <tr><td style="text-align:right">💸 العمولات المدفوعة</td><td class="num">${Object.entries(r.fees||{}).map(([k,v])=>(+v).toPrecision(4)+' '+gEsc(k)).join(' + ')||'—'} · نسبة حسابك ${(+r.fee_rate||0.1)}%</td></tr>
       <tr><td style="text-align:right">🎯 هدف الربح</td><td class="num">${r.tp}% (صافي بعد العمولتين)</td></tr>
-      <tr><td style="text-align:right">🛡️ حد الأمان</td><td class="num">${recV(r.cap,r)}${U}</td></tr>
+      <tr><td style="text-align:right">🛡️ حد الأمان</td><td class="num">${recEx(r.cap,r)}</td></tr>
       ${r.mode==='avg'?'':`<tr><td style="text-align:right">⚖️ إعادة استثمار الربح</td><td class="num">${r.ri_pct}%</td></tr>`}
       <tr><td style="text-align:right">⏰ الموعد الجاي</td><td class="num">${r.paused?'⏸ موقوف':recWhen(r.next_at)}</td></tr>
       <tr><td style="text-align:right">⏭️ مواعيد تخطّاها</td><td class="num">${r.skips||0}</td></tr>
@@ -14518,6 +14638,8 @@ async function openDeployRec(){
     <div class="fld"><label id="rd_tp_l">🎯 هدف الربح % (فوق سعر الشراء)</label><input id="rd_tp" class="num" value="5" oninput="recPreview()"></div>
     <div class="fld"><label id="rd_cap_l">🛡️ حد الأمان — أقصى مبلغ بالأوامر المفتوحة ($)</label><input id="rd_cap" class="num" value="60" oninput="recPreview()"></div>
     <div class="fld" id="rd_ri_f"><label>⚖️ إعادة استثمار الربح % (للأمر الجاي)</label><input id="rd_ri" class="num" value="0" oninput="recPreview()"></div>
+    <div class="fld"><label>📉 الحد الأدنى للسعر (0 = بلا حد)</label><input id="rd_lo" class="num" value="0" oninput="recPreview()"></div>
+    <div class="fld"><label>📈 الحد الأعلى للسعر (0 = بلا حد)</label><input id="rd_hi" class="num" value="0" oninput="recPreview()"></div>
     <div class="fld"><label>المحفظة</label><select id="rd_wallet">${ws.map(w=>`<option>${gEsc(w.name)}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>
   </div>
   <div class="cklist" style="margin-top:12px"><label class="ck"><input type="checkbox" id="rd_now" checked onchange="recPreview()">⚡ أول أمر هسه</label>
@@ -14537,22 +14659,23 @@ function recMode(m){const h=$('#rd_mode');if(!h)return;h.value=m;
   const f=$('#rd_ri_f');if(f)f.style.display=m==='avg'?'none':'';recPreview()}
 function recFormSync(){
   const sell=$('#rd_type').value==='rec_sell',u=$('#rd_unit').value;
-  $('#rd_amt_l').textContent=sell?'🪙 كمية كل أمر (عملة)':'💵 مبلغ كل أمر ($)';
+  $('#rd_amt_l').textContent=sell?'💵 مبلغ كل أمر ($) — يبيع عملات بقيمته':'💵 مبلغ كل أمر ($)';
   $('#rd_tp_l').textContent=sell?'🎯 هدف الربح % (تحت سعر البيع — ربح عملة)':'🎯 هدف الربح % (فوق سعر الشراء)';
-  $('#rd_cap_l').textContent=sell?'🛡️ حد الأمان — أقصى عملات مباعة ما رجعت':'🛡️ حد الأمان — أقصى مبلغ بالأوامر المفتوحة ($)';
+  $('#rd_cap_l').textContent=sell?'🛡️ حد الأمان — أقصى دولار من بيعات ما رجعت ($)':'🛡️ حد الأمان — أقصى مبلغ بالأوامر المفتوحة ($)';
   $('#rd_at_f').style.display=u==='h'?'none':'';
   recPreview()}
 function recFormBody(){
   return {symbol:$('#rd_sym').value.trim().toUpperCase(),rec_type:$('#rd_type').value,mode:$('#rd_mode').value,
     amount:$('#rd_amt').value,every:$('#rd_every').value,unit:$('#rd_unit').value,at:$('#rd_unit').value==='h'?'':$('#rd_at').value,
     start_now:$('#rd_now').checked,tp_pct:$('#rd_tp').value,cap:$('#rd_cap').value,ri_pct:$('#rd_mode').value==='avg'?0:$('#rd_ri').value,
+    lo:($('#rd_lo')||{}).value||0,hi:($('#rd_hi')||{}).value||0,
     wallet:$('#rd_wallet').value,auto:$('#rd_auto').checked};
 }
 function recPreview(){
   const box=$('#rd_preview');if(!box)return;
   const B=recFormBody(),sell=B.rec_type==='rec_sell',base=(B.symbol.split('-')[0]||'العملة');
   const amt=+B.amount||0,n=Math.max(1,Math.floor(+B.every||1)),tp=Math.max(+B.tp_pct||0,0.2),cap=+B.cap||0,ri=Math.min(100,Math.max(0,+B.ri_pct||0)),F=0.001;
-  const U=sell?' '+base:'$',per={h:'ساعة',d:'يوم',m:'شهر'}[B.unit];
+  const U=sell?' '+base:'$',per={h:'ساعة',d:'يوم',m:'شهر'}[B.unit],lo=+B.lo||0,hi=+B.hi||0;
   const need=sell?(1-(1-F)*(1-F)/(1+tp/100))*100:((1+tp/100)/((1-F)*(1-F))-1)*100;
   const perMonth=B.unit==='h'?720/n:(B.unit==='d'?30/n:1/n);
   const maxN=cap>0&&amt>0?Math.floor(cap/amt+1e-9):0;
@@ -14561,11 +14684,12 @@ function recPreview(){
   if(tp<0.5)W.push('🎯 هدف صغير — العمولتين لحالها 0.2% (الهدف صافي بعدها)');
   if(cap>0&&cap<amt)W.push('🛡️ حد الأمان أصغر من الأمر الواحد');
   if(!(cap>0))W.push('🛡️ لازم تحدد حد الأمان');
+  if(lo&&hi&&lo>=hi)W.push('📏 الحد الأدنى لازم أصغر من الأعلى');
   box.innerHTML=`<div class="dnsum">
-    <div class="dnstat"><span>${sell?'🏷️ يبيع':'🛒 يشتري'}</span><b>${sell?recC(amt)+' '+base:amt+'$'}</b><small style="color:var(--mut2);font-size:10px">${n===1?'كل '+per:'كل '+n+' '+({h:'ساعات',d:'أيام',m:'أشهر'})[B.unit]}${B.at&&B.unit!=='h'?' · '+B.at:''}</small></div>
+    <div class="dnstat"><span>${sell?'🏷️ يبيع عملات بقيمة':'🛒 يشتري'}</span><b>${amt}$</b><small style="color:var(--mut2);font-size:10px">${n===1?'كل '+per:'كل '+n+' '+({h:'ساعات',d:'أيام',m:'أشهر'})[B.unit]}${B.at&&B.unit!=='h'?' · '+B.at:''}</small></div>
     <div class="dnstat"><span>🎯 السعر لازم ${sell?'ينزل':'يصعد'}</span><b style="color:var(--cyan)">${sell?'▼':'▲'} ${need.toFixed(2)}%</b><small style="color:var(--mut2);font-size:10px">حتى يربح ${tp}% صافي</small></div>
-    <div class="dnstat"><span>💎 ربح الأمر بالهدف</span><b style="color:var(--green)">+${sell?recC(amt*tp/100):(amt*tp/100).toFixed(4)}${U}</b></div>
-    <div class="dnstat"><span>📅 بالشهر تقريباً</span><b>${perMonth>=1?Math.round(perMonth):perMonth.toFixed(2)} أمر</b><small style="color:var(--mut2);font-size:10px">≈ ${sell?recC(perMonth*amt)+' '+base:(perMonth*amt).toFixed(2)+'$'}</small></div>
+    <div class="dnstat"><span>💎 ربح الأمر بالهدف</span><b style="color:var(--green)">${sell?'+'+tp+'% عملات':'+'+(amt*tp/100).toFixed(4)+'$'}</b>${sell?`<small style="color:var(--mut2);font-size:10px">≈ ${(amt*tp/100).toFixed(4)}$ بقيمتها</small>`:''}</div>
+    <div class="dnstat"><span>📅 بالشهر تقريباً</span><b>${perMonth>=1?Math.round(perMonth):perMonth.toFixed(2)} أمر</b><small style="color:var(--mut2);font-size:10px">≈ ${(perMonth*amt).toFixed(2)}$</small></div>
     <div class="dnstat"><span>🛡️ أقصى أوامر مفتوحة</span><b>${maxN||'—'}</b><small style="color:var(--mut2);font-size:10px">${maxN?'≈ '+spanU+' بلا خروج':''}</small></div>
     <div class="dnstat"><span>${B.mode==='avg'?'📊 بالمعدل':'⚖️ إعادة الاستثمار'}</span><b>${B.mode==='avg'?'يطلع من الكل':ri+'%'}</b></div>
   </div>
@@ -14573,7 +14697,7 @@ function recPreview(){
   <p style="font-size:11px;color:var(--mut2);margin-top:8px;line-height:1.9">${B.mode==='avg'
     ?`📊 كل الأوامر من بداية الدورة تنحسب سوا: لما المعدل يربح ${tp}% صافي ${sell?'يرجع يشتري':'يبيع'} الكل ويبدي دورة جديدة.`
     :`🧩 كل أمر بقائمته وهدفه: أي أمر يوصل ${tp}% صافي ${sell?'يرجع يشتري':'ينباع'} وحده.${ri>0?` ⚖️ ${ri}% من ربحه ينضاف للأمر الجاي (يبقى داخل البوت — تگدر تسحبه)، والباقي محرر.`:' الربح كله محرر.'}`}
-    الهدف ما ينحط أمر بالمنصة: البوت يراقب ويطلع بأمر فوري — وإنت تطلع بأي وقت من الكرت (حتى بخسارة). الرصيد ما يكفي ⇒ يتخطّى الموعد ويبلّغك. الربح ${sell?'عملة':'دولار'} يمشي للمُراكِم والتقارير مثل باقي البوتات.</p>`;
+    ${lo||hi?`📏 يشتغل بالمواعيد بس لما السعر بين ${lo||'—'} و ${hi||'—'} (برّه النطاق يتخطّى ويبلّغك · الخروج ما يتأثر). `:''}الهدف ما ينحط أمر بالمنصة: البوت يراقب ويطلع بأمر فوري — وإنت تطلع بأي وقت من الكرت (حتى بخسارة). كل أمر مرة وحدة بالضبط (رقمه ينحفظ قبل الإرسال) والعمولة الحقيقية محسوبة. الرصيد ما يكفي ⇒ يتخطّى الموعد ويبلّغك. الربح ${sell?'عملة':'دولار'} يمشي للمُراكِم والتقارير مثل باقي البوتات.</p>`;
 }
 function buildDcaCard(b,i){
   const el=document.createElement('div');el.className='card dca';el.style.setProperty('--i',i);el.dataset.dir=b.dir;
@@ -16494,7 +16618,20 @@ function flBub(id,txt,col){const el=document.querySelector(`#flBody .fl-n[data-i
   const m=$('#flMap').getBoundingClientRect(),b=el.getBoundingClientRect(),d=document.createElement('div');
   d.className='fl-bub';d.textContent=txt;d.style.color=col;d.style.left=(b.left-m.left+b.width/2)+'px';d.style.top=(b.top-m.top-4)+'px';
   $('#flFx').appendChild(d);setTimeout(()=>d.remove(),2000);flPulse(id)}
+function flRec(bb,R){                                          // 🔁 v3.25.1: البوت الدوري بالخريطة — حالته كاملة
+  const sell=R.side==='sell',U=sell?' '+(R.base||''):'$',q=v=>sell?recC(v):(+v||0).toFixed(4);
+  return `<table class="pf-tab"><tr><td>🔁 النوع</td><td class="n">${sell?'🔴 دوري بيعي':'🟢 دوري شرائي'} · ${R.mode==='avg'?'بالمعدل':'كل أمر على حدا'}</td></tr>
+    <tr><td>⏰ الجدول</td><td class="n">${recEvery(R)} · ${recAmt(R)} · 🎯 ${R.tp}%</td></tr>
+    <tr><td>⏭️ الأمر الجاي</td><td class="n">${R.paused?'⏸ موقوف':recWhen(R.next_at)}</td></tr>
+    <tr><td>📏 النطاق</td><td class="n">${recRng(R)}${!R.in_range&&(+R.lo||+R.hi)?' · ⚠️ السعر برّه':''}</td></tr>
+    <tr><td>📦 المفتوح · المستثمر</td><td class="n">${(R.lots||[]).length} · ${recEx(R.expo,R)}${+R.cap?' / '+recEx(R.cap,R):''}</td></tr>
+    <tr><td>💎 الربح الصافي</td><td class="n" style="color:${(+R.profit||0)>=0?'var(--green)':'var(--red)'}">${(+R.profit||0)>=0?'+':''}${q(R.profit)}${U}</td></tr>
+    <tr><td>💵 منه محرر · 💠 داخل البوت</td><td class="n">${q(R.rel)} · ${q(R.held)}${U}</td></tr>
+    <tr><td>🔁 صفقات · أوامر</td><td class="n">${R.cycles||0} · ${R.orders||0}</td></tr>
+    <tr><td>💸 العمولات المدفوعة</td><td class="n">${Object.entries(R.fees||{}).map(([k,v])=>(+v).toPrecision(4)+' '+gEsc(k)).join(' + ')||'—'}</td></tr></table>
+    <h3 style="font-size:13px;margin:12px 0 4px">💵 بالدفاتر</h3>`}
 function flInfo(id){
+  let botKey='';
   const r=FL.data;if(!r)return;const ins=r.lines.filter(l=>l.to===id),outs=r.lines.filter(l=>l.from===id);
   const nm=x=>{if(x.startsWith('a:')){const a=r.accs.find(z=>z.id===x);return '🪙 '+(a?a.name:x)}
     if(x.startsWith('p:')){const w=r.wallets.find(z=>z.profit.id===x);return '💰 الصندوق النهائي · '+(w?w.label:'')}
@@ -16518,13 +16655,14 @@ function flInfo(id){
     <tr><td>🪙 راح للمُراكِمات (منذ ${flE(r.since)})</td><td class="n">${fl$(R.to_acc)}</td></tr><tr><td>💰 راح للصندوق النهائي</td><td class="n">${fl$(R.to_final)}</td></tr></table>
     ${(R.split||[]).length?`<h3 style="font-size:13px;margin:12px 0 4px">📊 التوزيع</h3><table class="pf-tab">${R.split.map(s=>`<tr><td>🪙 ${flE(s.name)}${s.enabled?'':' ⏸'}${s.future?` <span style="color:var(--amber);font-size:11px">🕐 يبدي من ${flE(s.start)}</span>`:''}</td><td class="n">${+(+s.pct).toFixed(2)}%</td></tr>`).join('')}<tr><td>💰 للصندوق النهائي</td><td class="n">${(+R.rest).toFixed(R.rest%1?2:0)}%</td></tr></table>`:''}`}
   else{for(const w of r.wallets)for(const b of w.bots)if(b.id===id){title=`${flIco(b.type)} ${flE(b.name)} · ${flE(b.sym)} · ${flE(w.label)}`;
-    h=`<table class="pf-tab"><tr><td>💵 ربح اليوم</td><td class="n">${fl$(b.u_today)}</td></tr><tr><td>⏳ ما انقيّد بعد (يتوزّع نهاية اليوم)</td><td class="n">${fl$(b.u_wait)}</td></tr>
-    <tr><td>💵 منذ ${flE(r.since)}</td><td class="n">${fl$(b.u_tot)}</td></tr>${b.ri?`<tr><td>💠 داخل الأوامر (${b.ri.on?'إعادة استثمار '+b.ri.pct+'%':'موقوفة'})</td><td class="n">${fl$(b.ri.held)}</td></tr>`:''}
+    const bb=botOf(b.key),R=bb&&bb.rec;botKey=b.key;
+    h=(R?flRec(bb,R):'')+`<table class="pf-tab"><tr><td>💵 ربح اليوم</td><td class="n">${fl$(b.u_today)}</td></tr><tr><td>⏳ ما انقيّد بعد (يتوزّع نهاية اليوم)</td><td class="n">${fl$(b.u_wait)}</td></tr>
+    <tr><td>💵 منذ ${flE(r.since)}</td><td class="n">${fl$(b.u_tot)}</td></tr>${b.ri?`<tr><td>💠 داخل الأوامر (${b.ri.on?'إعادة استثمار '+b.ri.pct+'%':'موقوفة'})</td><td class="n">${b.ri.c?flQ(b.ri.held,b.ri.c):fl$(b.ri.held)}</td></tr>`:''}
     ${b.coin?`<tr><td>🪙 عملة اليوم</td><td class="n">${fmtQ(b.c_today)} ${flE(b.base)}</td></tr>`:''}</table>`}}
   if(outs.length)h+=`<h3 style="font-size:13px;margin:12px 0 4px">⬇️ ينزل إلى (المجموع منذ ${flE(r.since)})</h3><table class="pf-tab">${outs.map(row).join('')}</table>`;
   if(ins.length&&!id.startsWith('p:'))h+=`<h3 style="font-size:13px;margin:12px 0 4px">⬆️ يجيه من</h3><table class="pf-tab">${ins.map(row).join('')}</table>`;
   const why=outs.find(l=>l.why);if(why)h+=`<p style="font-size:11.5px;color:var(--amber);margin-top:8px">🪙 ${flE(why.why)}</p>`;
-  h+=`<div class="mbtns" style="margin-top:12px">${a?`<button onclick="hideModal();const x=((DATA&&DATA.accum)||[]).find(z=>z.id==='${flE(a.aid)}');if(x)accEdit(x)">⚙️ الإعدادات</button>`:''}<button onclick="hideModal()">إغلاق</button></div>`;
+  h+=`<div class="mbtns" style="margin-top:12px">${a?`<button onclick="hideModal();const x=((DATA&&DATA.accum)||[]).find(z=>z.id==='${flE(a.aid)}');if(x)accEdit(x)">⚙️ الإعدادات</button>`:''}${botKey&&botOf(botKey)?`<button class="primary" onclick="holyGo('bot:'+${JSON.stringify(botKey).replace(/"/g,'&quot;')})">🤖 افتح الكرت</button>`:''}<button onclick="hideModal()">إغلاق</button></div>`;
   showModal(`<h2>${title||'—'}</h2>`+h)}
 /* ── 💰 الصندوق النهائي (دفتر للعرض — ما يحرّك شي بالمنصة) ── */
 function pfW(wid){return ((FL.data||{}).wallets||[]).find(w=>w.wid===wid)}
@@ -19878,136 +20016,163 @@ REINV_VERSION = _eng_fp(REINV_SRC)
 GRIDP_VERSION = _eng_fp(GRIDP_SRC)
 # 🔁 v3.25.0: محرك البوت الدوري (الشراء/البيع المتكرر) — يُكتب بمجلد البوت باسم recur.py
 _REC_B64 = (
-"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"
+"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"
 )
 REC_SRC = _zlib.decompress(_b64.b64decode(_REC_B64)).decode("utf-8")
 REC_VERSION = _eng_fp(REC_SRC)
