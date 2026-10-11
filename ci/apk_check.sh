@@ -37,6 +37,36 @@ adb shell settings put system accelerometer_rotation 0; adb shell settings put s
 adb shell settings put system user_rotation 0; sleep 3
 adb shell am start -n $P/.MainActivity --es go guard >/dev/null; sleep 4; dump guard
 pid=$(adb shell pidof $P | tr -d '\r'); say "app pid: ${pid:-NONE}"
+# ── 1.1: notifications with the app CLOSED — swiped away · process killed (what phone «cleaners» do) · deep sleep (Doze) ──
+note(){ api /api/app/devices "{\"act\":\"test\",\"tag\":\"$1\"}" >/dev/null; }
+got(){ for i in $(seq 1 ${2:-25}); do adb shell dumpsys notification --noredact | grep -q "$1" && return 0; sleep 1; done; return 1; }
+svc(){ adb shell dumpsys activity services $P | grep -c "WatchService" | tr -d '\r'; }
+adb shell dumpsys jobscheduler | grep -q "$P/.KeepJob" && say "PASS backup check scheduled (every 15 min · survives reboot)" || say "FAIL backup check not scheduled"
+adb shell input keyevent KEYCODE_HOME; sleep 2
+note HOME1; got HOME1 && say "PASS app in background ⇒ notification arrives" || say "FAIL app in background ⇒ no notification"
+sz=$(adb shell wm size | grep -oE "[0-9]+x[0-9]+" | tail -1); W_=${sz%x*}; H_=${sz#*x}
+adb shell input keyevent KEYCODE_APP_SWITCH; sleep 3
+adb shell input swipe $((W_/2)) $((H_*6/10)) $((W_/2)) $((H_/20)) 250; sleep 2
+adb shell input keyevent KEYCODE_HOME; sleep 4
+adb shell dumpsys activity recents | grep -q "A=[0-9]*:$P" && say "INFO swipe-away gesture didn't remove the task on this emulator" || say "INFO task swiped away from recents"
+say "after swipe: watcher services $(svc) · pid $(adb shell pidof $P | tr -d '\r')"
+note SWIPE1; got SWIPE1 40 && say "PASS swiped away ⇒ notification still arrives" || say "FAIL swiped away ⇒ no notification"
+adb root >/dev/null 2>&1; sleep 3
+pid=$(adb shell pidof $P | tr -d '\r')
+if [ -n "$pid" ]; then adb shell kill -9 $pid; say "killed app process $pid (like a phone cleaner)"; else say "INFO no app process to kill"; fi
+sleep 3
+note KILL1
+if got KILL1 30; then say "PASS process killed ⇒ watcher came back by itself ⇒ notification arrives"
+else
+  say "INFO not back by itself within 30 s ⇒ run the 15-minute backup check now"
+  adb shell cmd jobscheduler run -f $P 7311 | sed 's/^/HOLYCI job: /'
+  got KILL1 40 && say "PASS process killed ⇒ backup check delivered the notification" || say "FAIL process killed ⇒ notification never arrived"
+fi
+say "after kill: watcher services $(svc) · pid $(adb shell pidof $P | tr -d '\r')"
+adb shell dumpsys deviceidle force-idle | sed 's/^/HOLYCI doze: /'
+note DOZE1; got DOZE1 40 && say "PASS deep sleep (Doze) ⇒ notification arrives" || say "FAIL deep sleep (Doze) ⇒ no notification"
+adb shell dumpsys deviceidle unforce >/dev/null
+adb shell am start -n $P/.MainActivity >/dev/null; sleep 6
 # ── self-update: the dashboard now carries a «newer» APK (same file, higher code) ⇒ offer · download · sha256 · Android installer ──
 t0=$(adb shell dumpsys package $P | grep -m1 lastUpdateTime | tr -d '\r')
 pkill -f Holy_Dashboard.pyw; sleep 2

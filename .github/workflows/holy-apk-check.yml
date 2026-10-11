@@ -1,4 +1,4 @@
-# 📱 Holy APK check on real Android emulators (Android 9 · 11 · 14): install · open · connect · auto-link ·
+# 📱 Holy APK check on real Android emulators (Android 9 · 11 · 14): install · open · connect · auto-link · app closed (swipe · kill · Doze) ·
 #    notifications · tap-to-place · back button · full screen · self-update · no crash. Results are printed in the job log.
 # Runs only when ci/ or this file changes (bump ci/RUN to test the APK embedded in Holy_Dashboard.pyw).
 name: Holy APK check
