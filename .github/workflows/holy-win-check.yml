@@ -1,0 +1,40 @@
+# 💻 Holy Windows app check on a real Windows machine: the dashboard serves the app with its address inside · --setup window ·
+#    unreachable-address warning · first run (address saved · Desktop + Start shortcuts) · Edge app mode FULL SCREEN on the dashboard ·
+#    screenshots (base64 lines HOLYSHOT in the log). Results: lines HOLYWIN in the job log.
+# Runs only when ci/win* or this file changes (bump ci/RUN_WIN to test the app embedded in Holy_Dashboard.pyw).
+name: Holy Windows app check
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/RUN_WIN', 'ci/win_check.ps1', '.github/workflows/holy-win-check.yml']
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Start the dashboard (fresh folder · no password · no exchange keys)
+        shell: pwsh
+        env:
+          PYTHONUTF8: '1'
+        run: |
+          New-Item -ItemType Directory -Force -Path C:\holy | Out-Null
+          Copy-Item Holy_Dashboard.pyw C:\holy\
+          '{"port": 8099}' | Set-Content -Encoding ascii C:\holy\dashboard_config.json
+          Start-Process python -ArgumentList "Holy_Dashboard.pyw","--headless" -WorkingDirectory C:\holy -RedirectStandardOutput C:\holy\dash.log -RedirectStandardError C:\holy\dash.err -WindowStyle Hidden
+          for ($i = 0; $i -lt 60; $i++) { try { if ((Invoke-WebRequest http://127.0.0.1:8099/ -UseBasicParsing -TimeoutSec 3).StatusCode -eq 200) { break } } catch {}; Start-Sleep 1 }
+          (Invoke-WebRequest http://127.0.0.1:8099/api/app/info -UseBasicParsing).Content
+      - name: Windows app
+        shell: pwsh
+        run: ./ci/win_check.ps1
+      - name: Dashboard log
+        if: always()
+        shell: pwsh
+        run: |
+          Get-Content C:\holy\dash.log -Tail 20 -ErrorAction SilentlyContinue
+          Get-Content C:\holy\dash.err -Tail 20 -ErrorAction SilentlyContinue
