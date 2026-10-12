@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.25.3"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.25.4"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -244,7 +244,7 @@ JOURNAL_KEEP_DAYS = 7
 _JR_LOCK = threading.Lock()
 _JR = {"pruned": "", "rl": {}}
 JR_CATS = {"trade": "🔁 الصفقات", "bot": "🤖 سجل البوت", "profit": "💵 الأرباح", "accum": "🪙 المُراكِم",
-           "user": "👤 أوامرك", "guard": "🛡️ الرقابة", "notify": "🔔 الإشعارات", "system": "⚙️ النظام"}
+           "user": "👤 أوامرك", "guard": "🛡️ الرقابة", "loss": "📉 الخسائر", "notify": "🔔 الإشعارات", "system": "⚙️ النظام"}
 _JR_SECRET = ("key", "secret", "pass", "token", "pw", "pin", "chat_id")
 _JR_SECRET_EXACT = {"api", "sec"}      # 🔒 v3.22.7: حقول المحافظ (api · sec · pass) — «api» و«sec» ما كانت تنحجب بالسجلات ولا بالتقرير التشخيصي
 
@@ -2905,6 +2905,261 @@ def _rec_audit(b, led):
     return out
 
 
+# ═══════════ 📉 v3.25.4: سجل الخسائر — يحسب بس (ولا يتدخل بالبوتات ولا بالأرباح ولا بالصناديق) ═══════════
+#   كل خسارة تتحقق (بيع فعلي) تنكتب مرة وحدة بمعرّفها — لكل محفظة ولكل عملة — من لحظة التفعيل (القديم ما ينحسب):
+#     📉 DCA بيعي: دورة خلصت بخسارة (عملة) · 📈 DCA شرائي: دورة خلصت بخسارة (دولار) · 🪙 المُراكِم: بيع تحت معدله (دولار)
+#     🔁 الدوري بالمعدل: خروج بخسارة · 🔁 الدوري «كل أمر على حدا»: كل أمر انباع بخسارة لحاله (الرابح ما يقاصص الخاسر)
+#     (الدوري الشرائي دولار · البيعي عملة). بوتات الشبكة ما تبيع بخسارة (كل بيعة فوق شرائها) ⇒ ما عدها خسائر.
+#   خسارة على الورق (عملة لسه بيدك) ما تنحسب لحد ما تنباع. السجل بملفه — يبقى بعد حذف البوت وبعد ما سجل البوت يقص قديمه،
+#   و«بداية جديدة للحسابات» ما تمسحه.
+LOSS_FILE = os.path.join(ROOT, "Holy_Losses.json")
+_LOSS_LOCK = threading.Lock()
+LOSS_SRC = {"dca": "📉 DCA بيعي — دورة بخسارة", "dca_buy": "📈 DCA شرائي — دورة بخسارة", "acc": "🪙 المُراكِم — بيع تحت المعدل",
+            "rec_avg": "🔁 الدوري (المعدل) — خروج بخسارة", "rec_lot": "🔁 الدوري — أمر انباع بخسارة"}
+LOSS_KEEP = 50000
+
+
+def _loss_load():
+    d = load_json(LOSS_FILE)
+    return d if isinstance(d, dict) else {}
+
+
+def _loss_split(bt, c, lots):
+    """🔁 خروج «كل أمر على حدا» شمل أكثر من أمر (بيع يدوي للكل/لأوامر مختارة): نتيجة كل أمر لحاله من نفس التنفيذ —
+    الشرائي: عملات الأمر × (الدولار الصافي ÷ العملات المباعة) − كلفته · البيعي: دولار الأمر × (العملات الراجعة ÷ الدولار المصروف) − عملاته.
+    `lots` = لقطة الأوامر قبل الخروج {id: [q, c]}. يرجع [(id, النتيجة, الكلفة, الراجع)] — أو None لو اللقطة ناقصة أو ما تطابق السجل
+    (⇒ الخروج ينحسب كمجموعة وحدة)."""
+    ids = [str(x) for x in (c.get("lots") or [])]
+    if not ids or any(i not in lots for i in ids):
+        return None
+    try:
+        out, inn, cost = float(c.get("out") or 0), float(c.get("in") or 0), float(c.get("cost") or 0)
+        Q = sum(float(lots[i][0]) for i in ids)
+        C = sum(float(lots[i][1]) for i in ids)
+    except Exception:
+        return None
+    res = []
+    if bt == "rec_buy":
+        if Q <= 0 or out <= 0 or abs(C - cost) > 1e-6 + 1e-6 * abs(cost):
+            return None
+        den = max(out, Q)
+        for i in ids:
+            q, cc = float(lots[i][0]), float(lots[i][1])
+            got = inn * q / den
+            res.append((i, got - cc, cc, got))
+    else:
+        if C <= 0 or out <= 0 or abs(Q - cost) > 1e-9 + 1e-6 * abs(cost):
+            return None
+        den = max(out, C)
+        for i in ids:
+            q, cc = float(lots[i][0]), float(lots[i][1])
+            back = inn * cc / den
+            res.append((i, back - q, q, back))
+    return res
+
+
+def _loss_fmt(it):
+    u = it.get("ccy") or ""
+    a = float(it.get("amt") or 0)
+    return (f"{a:.4f}$" if u == "USDT" else f"{a:.8g} {u} ≈ {float(it.get('usd') or 0):.4f}$")
+
+
+def loss_tick():
+    """📉 v3.25.4: يقرا الخسائر الجديدة من سجلات البوتات والمُراكِمات (قراءة بس — ولا شي يتحرك ولا يتغيّر ببوت أو دفتر ربح).
+    كل سجل خروج ينقرا مرة وحدة (`done`) · الأوامر المفتوحة للدوري تنحفظ لقطتها (`lots`) حتى خروج يدوي لأكثر من أمر
+    ينحسب أمر أمر. يرجع عدد الخسائر الجديدة."""
+    with _LOSS_LOCK:
+        L = _loss_load()
+        now = time.time()
+        ch = False
+        if not L.get("since"):
+            L = {"v": 1, "since": now, "since_d": datetime.now().strftime("%Y-%m-%d %H:%M"), "items": [], "done": [], "lots": {}}
+            ch = True
+        since = float(L["since"])
+        items = L.setdefault("items", [])
+        have = {str(x.get("id")) for x in items if isinstance(x, dict)}
+        done = [str(x) for x in (L.get("done") or [])]
+        dset = set(done)
+        lc = L.setdefault("lots", {})
+        live, new = set(), []
+        try:
+            labs = _pf_wallets()[1]
+        except Exception:
+            labs = {}
+
+        def mark(i):
+            dset.add(i); done.append(i)
+
+        def put(it):
+            if it["id"] not in have:
+                have.add(it["id"]); new.append(it)
+
+        for b in bot_dirs().values():
+            cfg = b.get("cfg") or {}
+            bt = str(cfg.get("bot_type") or "")
+            if cfg.get("is_demo") or bt not in ("dca", "dca_buy") + _REC_T:
+                continue
+            st = _safe(load_json, paths_of(b)[0], default=None)
+            if not isinstance(st, dict):
+                continue
+            key = os.path.relpath(b["dir"], ROOT)
+            k_ = str(cfg.get("api_key") or "").strip()
+            w = _gd_wid(k_) if k_ else ""
+            sym = b["symbol"]
+            base, quote = (sym.split("-") + ["USDT"])[:2]
+            com = {"w": w, "wl": labs.get(w, ""), "bot": key, "name": sym, "sym": sym}
+            if bt in ("dca", "dca_buy"):
+                for c in (st.get("cycles_log") or []):
+                    if not isinstance(c, dict) or not c.get("id"):
+                        continue
+                    cid = "dca:" + str(c["id"])
+                    live.add(cid)
+                    try:
+                        ts, p, px = float(c.get("ts") or 0), float(c.get("profit") or 0), float(c.get("px") or 0)
+                    except Exception:
+                        continue
+                    if cid in dset or ts < since:
+                        continue
+                    mark(cid); ch = True
+                    if p < -1e-12:
+                        ccy = base if bt == "dca" else quote
+                        put(dict(com, id=cid, ts=ts, src=bt, ccy=ccy, amt=round(-p, 10), px=px,
+                                 usd=round(-p * px if ccy != quote else -p, 6), n=c.get("n"), manual=bool(c.get("manual"))))
+                continue
+            mode = str(st.get("mode") or cfg.get("mode") or "lots")
+            cache = lc.setdefault(key, {})
+            ccy = quote if bt == "rec_buy" else base
+            for c in (st.get("cycles_log") or []):
+                if not isinstance(c, dict) or not c.get("id"):
+                    continue
+                cid = "rec:" + str(c["id"])
+                live.add(cid)
+                try:
+                    ts, p, px = float(c.get("ts") or 0), float(c.get("profit") or 0), float(c.get("px") or 0)
+                except Exception:
+                    continue
+                ids = [str(x) for x in (c.get("lots") or [])]
+                if cid in dset or ts < since:
+                    for i in ids:
+                        cache.pop(i, None)
+                    continue
+                mark(cid); ch = True
+                val = (lambda a: round(a, 6)) if ccy == quote else (lambda a, px=px: round(a * px, 6))
+                parts = _loss_split(bt, c, cache) if (mode != "avg" and len(ids) > 1) else None
+                if parts is not None:
+                    for (lid, pnl, cost, got) in parts:
+                        if pnl < -1e-12:
+                            put(dict(com, id=cid + "|" + lid, ts=ts, src="rec_lot", ccy=ccy, amt=round(-pnl, 10), px=px, usd=val(-pnl),
+                                     n=c.get("n"), lot=lid, manual=bool(c.get("manual")), cost=round(cost, 10), got=round(got, 10)))
+                elif p < -1e-12:
+                    put(dict(com, id=cid, ts=ts, src="rec_avg" if mode == "avg" else "rec_lot", ccy=ccy, amt=round(-p, 10), px=px, usd=val(-p),
+                             n=c.get("n"), lot=(ids[0] if len(ids) == 1 else ""), lots=len(ids), grp=bool(mode != "avg" and len(ids) > 1),
+                             manual=bool(c.get("manual")), cost=c.get("cost"), got=c.get("in")))
+                for i in ids:
+                    cache.pop(i, None)
+            cur = {}
+            for l in (st.get("lots") or []):
+                if isinstance(l, dict) and l.get("id"):
+                    try:
+                        cur[str(l["id"])] = [round(float(l.get("q") or 0), 12), round(float(l.get("c") or 0), 10)]
+                    except Exception:
+                        pass
+            for i, v in cur.items():
+                if cache.get(i) != v:
+                    cache[i] = v; ch = True
+            if len(cache) > 1000:
+                for i in [i for i in cache if i not in cur][:len(cache) - 1000]:
+                    cache.pop(i, None)
+        try:
+            ast = acc_state() or {}
+            cmap = {a.get("id"): a for a in (acc_cfgs() or []) if isinstance(a, dict)}
+        except Exception:
+            ast, cmap = {}, {}
+        for aid, e in (ast.items() if isinstance(ast, dict) else []):
+            if str(aid).startswith("_") or not isinstance(e, dict):
+                continue
+            a = cmap.get(aid) or {}
+            sym = str(a.get("symbol") or "")
+            w = (_safe(acc_wid, a, default="") or "") if a else ""
+            for x in (e.get("sells") or []):
+                if not isinstance(x, dict):
+                    continue
+                sid = f"acc:{aid}|{x.get('ts')}"
+                live.add(sid)
+                try:
+                    ts, p = float(x.get("ts") or 0), float(x.get("profit") or 0)
+                except Exception:
+                    continue
+                if sid in dset or ts < since:
+                    continue
+                mark(sid); ch = True
+                if p < -1e-9:
+                    usd = float(x.get("usd") or 0)
+                    put({"id": sid, "ts": ts, "w": w, "wl": labs.get(w, ""), "bot": aid, "name": a.get("name") or sym or aid, "sym": sym,
+                         "src": "acc", "ccy": "USDT", "amt": round(-p, 6), "usd": round(-p, 6), "px": x.get("px"), "qty": x.get("qty"),
+                         "got": round(usd, 6), "cost": round(usd - p, 6), "manual": str(x.get("why") or "") != "آلي", "why": str(x.get("why") or "")[:40]})
+        if new:
+            new.sort(key=lambda it: float(it.get("ts") or 0))
+            items.extend(new)
+            for it in new:
+                _safe(journal, "loss", f"📉 {LOSS_SRC.get(it['src'], it['src'])}: −{_loss_fmt(it)} — {it.get('name')}"
+                      + (f" · #{it.get('n')}" if it.get("n") is not None else "") + (f" · أمر {it.get('lot')}" if it.get("lot") else "")
+                      + (" · يدوي" if it.get("manual") else "") + (f" · {it.get('wl')}" if it.get("wl") else ""), "warn",
+                      bot=str(it.get("bot") or ""), sym=str(it.get("sym") or ""), src=it["src"], amount=it.get("amt"), ccy=it.get("ccy"),
+                      usd=it.get("usd"), wallet=it.get("w"), loss=it["id"], default=None)
+            ch = True
+        if len(items) > LOSS_KEEP:
+            L["items"] = items[-LOSS_KEEP:]
+        if ch:
+            L["done"] = list(dict.fromkeys([x for x in done if x in live] + done[-30000:]))
+            _safe(save_json_atomic, LOSS_FILE, L, default=None)
+        return len(new)
+
+
+def loss_view(w=None, src=None, d_from=None, d_to=None, limit=500):
+    """📉 صفحة الخسائر: لكل محفظة مجموعها (دولار + كل عملة + ما يقابلها بالدولار وقتها) ومنين جت · والقائمة بالفلاتر"""
+    _safe(loss_tick, default=None)
+    L = _loss_load()
+    items = [x for x in (L.get("items") or []) if isinstance(x, dict)]
+    try:
+        labs = _pf_wallets()[1]
+    except Exception:
+        labs = {}
+    lab = lambda x: labs.get(x.get("w") or "") or x.get("wl") or ("محفظة غير معروفة" if not x.get("w") else str(x.get("w")))
+    day = lambda x: datetime.fromtimestamp(float(x.get("ts") or 0)).strftime("%Y-%m-%d")
+
+    def acc(e, x):
+        a = float(x.get("amt") or 0)
+        if x.get("ccy") == "USDT":
+            e["usd"] = round(e["usd"] + a, 6)
+        else:
+            e["coins"][x["ccy"]] = round(e["coins"].get(x["ccy"], 0.0) + a, 10)
+        e["eq"] = round(e["eq"] + float(x.get("usd") or 0), 6)
+        e["n"] += 1
+
+    blank = lambda: {"usd": 0.0, "coins": {}, "eq": 0.0, "n": 0}
+    W = {}
+    for x in items:
+        wk = x.get("w") or ""
+        e = W.setdefault(wk, dict(blank(), wid=wk, label=lab(x), src={}))
+        acc(e, x)
+        acc(e["src"].setdefault(x.get("src") or "?", blank()), x)
+    sel = [x for x in items if (not w or (x.get("w") or "") == w) and (not src or x.get("src") == src)
+           and (not d_from or day(x) >= d_from) and (not d_to or day(x) <= d_to)]
+    S = dict(blank(), src={}, days={})
+    for x in sel:
+        acc(S, x)
+        acc(S["src"].setdefault(x.get("src") or "?", blank()), x)
+        acc(S["days"].setdefault(day(x), blank()), x)
+    out = []
+    for x in reversed(sel[-int(limit or 500):]):
+        y = {k: x.get(k) for k in ("id", "ts", "w", "src", "bot", "name", "sym", "ccy", "amt", "usd", "px", "n", "lot", "lots", "grp", "manual", "cost", "got", "qty", "why")}
+        y.update(wl=lab(x), src_t=LOSS_SRC.get(x.get("src"), x.get("src")), day=day(x))
+        out.append(y)
+    return {"ok": True, "since": L.get("since"), "since_d": L.get("since_d"), "srcs": LOSS_SRC,
+            "wallets": sorted(W.values(), key=lambda e: -e["eq"]), "sel": S, "n": len(sel), "n_all": len(items), "items": out}
+
+
 def _ri_eligible(b, cfgs=None):
     """(مُراكِمات مؤهلة، سبب الانتظار) — نفس العملة · مفعّل · نسبة عملة > 0 · **نفس المحفظة**.
 
@@ -2945,12 +3200,15 @@ def accum_coin_handoff():
         seen = list(st.get("_ri_seen") or [])
         seen_set = set(seen)
         done = []
+        live_h = set()                                   # 🔢 v3.25.4: كل تسليم لسه بسجل بوت (ما ينمسح من العلامات أبداً)
         for b in bot_dirs().values():
             try:
                 bst = load_json(paths_of(b)[0]) or {}
             except Exception:
                 continue
-            his = [h for h in _ri_handoffs_of(bst) + _dca_handoffs_of(b, bst) + _rec_handoffs_of(b, bst) if h.get("id") not in seen_set]
+            allh = _ri_handoffs_of(bst) + _dca_handoffs_of(b, bst) + _rec_handoffs_of(b, bst)
+            live_h.update(str(h.get("id")) for h in allh if h.get("id"))
+            his = [h for h in allh if h.get("id") not in seen_set]
             if not his:
                 continue
             mine, _why = _ri_eligible(b, cfgs)
@@ -2999,15 +3257,17 @@ def accum_coin_handoff():
                     lw = st.setdefault("_ri_left_w", {}).setdefault(_bw, {}); lw[base] = round(float(lw.get(base) or 0) + left, 10)
                     ll = st.setdefault("_ri_left_log", {})          # 🧾 باقي كل تسليم بمعرّفه — للتدقيق
                     ll[hid] = left
-                    if len(ll) > 3000:
-                        for _k in list(ll)[:len(ll) - 3000]:
-                            ll.pop(_k, None)
                 seen_set.add(hid)
                 seen.append(hid)
                 done.append((sym, base, coin, avg, rows, left, str(ho.get("why") or "")))
         if not done:
             return 0
-        st["_ri_seen"] = seen[-3000:]
+        # 🔢 v3.25.4: العلامات = كل اللي لسه بسجلات البوتات + آخر 30000 (قبل: آخر 3000 بس — بوتات كثيرة ⇒ تسليم قديم ينعاد مرة ثانية)
+        st["_ri_seen"] = list(dict.fromkeys([x for x in seen if x in live_h] + seen[-30000:]))
+        ll = st.get("_ri_left_log") or {}
+        if len(ll) > 30000:                               # 🧾 باقي التسليمات: القديم اللي طلع من سجلات البوتات بس ينقص
+            for _k in [k for k in ll if k not in live_h][:len(ll) - 30000]:
+                ll.pop(_k, None)
         _acc_save(st)
     for sym, base, coin, avg, rows, left, why in done:
         _dcah = str(why or "").startswith("ربح DCA")
@@ -7419,6 +7679,7 @@ def coin_ledger_tick():
     tot = {"dca": cl.setdefault("total_dca", {}), "ri": cl.setdefault("total_ri", {}), "rec": cl.setdefault("total_rec", {})}
     bots = cl.setdefault("bots", {})
     changed = False
+    live_g = set()                                     # 🔢 v3.25.4: كل حدث لسه بسجل بوت
     for b in bot_dirs().values():
         c0 = b.get("cfg") or {}
         if c0.get("is_demo"):
@@ -7438,6 +7699,7 @@ def coin_ledger_tick():
             evs.append(("ri:" + str(h.get("id")), h.get("coin"), h.get("ts"), "ri"))
         for eid, q, ts, src in evs:
             gid = key + "|" + eid
+            live_g.add(gid)
             if gid in seen:
                 continue
             try:
@@ -7457,7 +7719,7 @@ def coin_ledger_tick():
             journal("profit", f"🪙 {q:+.8g} {base} ربح محرّر بالعملة — {'DCA بيعي' if src == 'dca' else ('البوت الدوري' if src == 'rec' else 'تحرير إعادة الاستثمار')} · يوم {day}", "ok",
                     bot=key, sym=b["symbol"], event=eid, coin=q, base=base, day=day)
     if changed:
-        cl["seen"] = seen_l[-30000:]
+        cl["seen"] = list(dict.fromkeys([x for x in seen_l if x in live_g] + seen_l[-30000:]))   # 🔢 v3.25.4: اللي لسه بسجلات البوتات ما ينمسح
         try:
             save_json_atomic(COIN_LEDGER, cl)
         except Exception:
@@ -7882,7 +8144,9 @@ def profit_tick():
                 _pf_add_usd(pb, accw, usd, aid, f"💰 بيع {float(s.get('qty') or 0):.8g} {base} من المُراكِم ({nm}) · ربحه {float(s.get('profit') or 0):+.4f}$")
                 _safe(journal, "profit", f"💰 للصندوق النهائي ({wl.get(accw) or accw}): {usd:+.4f}$ بيع {float(s.get('qty') or 0):.8g} {base} من المُراكِم {nm}"
                       f" (ربح {float(s.get('profit') or 0):+.4f}$)", "ok", bot=aid, amount=usd, wallet=accw, default=None)
-        pb["cseen"], pb["aseen"], pb["wseen"] = cseen_l[-20000:], aseen_l[-20000:], wseen_l[-20000:]
+        _llk = set(str(x) for x in (ast.get("_ri_left_log") or {}))       # 🔢 v3.25.4: باقي تسليم لسه بالسجل ⇒ علامته ما تنمسح (وإلا ينعاد للنهائي)
+        pb["cseen"] = list(dict.fromkeys([x for x in cseen_l if x in _llk] + cseen_l[-20000:]))
+        pb["aseen"], pb["wseen"] = aseen_l[-20000:], wseen_l[-20000:]
         pb["sseen"], pb["coseen"] = sseen_l[-20000:], coseen_l[-20000:]
         if ch:
             _pf_save(pb)
@@ -10317,6 +10581,7 @@ def _gone_archive(b):
 def delete_bot(b):
     stop_bot(b)
     time.sleep(0.5)
+    _safe(loss_tick, default=None)        # 📉 v3.25.4: آخر خسارة للبوت تنكتب قبل الأرشفة
     try:
         _gone_archive(b)
     except Exception as ex:
@@ -12143,6 +12408,7 @@ def ledger_loop():
             ledger_tick()
             _safe(coin_ledger_tick, default=None)     # 🪙 v3.22.2: الربح المحرّر بالعملات
             _safe(profit_tick, default=None)          # 💰 v3.22.8: دفتر الربح (اللي نزل للمحفظة — مراقبة بس)
+            _safe(loss_tick, default=None)            # 📉 v3.25.4: سجل الخسائر (يحسب بس)
             if n % 10 == 0:              # كل ~5 دقائق — لقطة إعادة الاستثمار
                 _safe(reinvest_tick, default=None)
             n += 1
@@ -12446,6 +12712,13 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
             return self._json(series_of(q.get("dir", [""])[0]))
         if u.path == "/api/settings":
             return self._json(settings_payload())
+        if u.path == "/api/losses":                       # 📉 v3.25.4: سجل الخسائر (يحسب بس)
+            try:
+                return self._json(loss_view(w=q.get("w", [""])[0] or None, src=q.get("src", [""])[0] or None,
+                                            d_from=q.get("from", [""])[0] or None, d_to=q.get("to", [""])[0] or None,
+                                            limit=int(q.get("limit", ["500"])[0] or 500)))
+            except Exception as ex:
+                return self._json({"ok": False, "msg": str(ex)[:200], "items": []})
         if u.path == "/api/flow":                         # 🗺️ v3.22.8: خريطة الأرباح (مراقبة بس)
             return self._json(_safe(flow_view, default={"ok": False, "msg": "تعذّر بناء الخريطة"}))
         if u.path == "/api/journal":                      # 📜 v3.22.6: السجلات المفصّلة بالفلاتر
@@ -13923,6 +14196,7 @@ html.lite .card:hover,html.lite button:hover{transform:none}
       <button onclick="openWallets()">👛 المحافظ</button>
       <button onclick="openWalletView()">💰 محفظتي</button>
       <button id="bGuard" onclick="openGuard()" title="الرقابة: مطابقة الأرصدة والأوامر مع المنصة وكشف البوت الميت">🛡️ الرقابة</button>
+      <button id="bLoss" onclick="openLosses()" title="الخسائر: كل خسارة تحققت (DCA · المُراكِم · الدوري) لكل محفظة وعملة — يحسب بس، ولا يتدخل بالبوتات">📉 الخسائر</button>
       <button onclick="openSettings()">⚙️ الإعدادات</button>
     </div>
   </nav>
@@ -15682,6 +15956,60 @@ function gN(x,d){if(x==null||x==='')return'—';x=+x;if(!isFinite(x))return'—'
   if(t.indexOf('.')>=0)t=t.replace(/0+$/,'').replace(/\.$/,'');return t==='-0'?'0':t}
 function gS(x,d){if(x==null||x==='')return'—';x=+x;if(!isFinite(x))return'—';return(x>0?'+':'')+gN(x,d)}
 function gId(k){return String(k).replace(/[^A-Za-z0-9_]/g,'_')}
+// 📉 v3.25.4: الخسائر — يحسب بس (ولا زر يحرّك فلوس أو يغيّر بوت)
+const LS={f:{w:'',src:'',from:'',to:''},v:null};
+async function openLosses(){
+  showModal(`<h2>📉 الخسائر — حساب بس</h2><div id="ls_body" style="color:var(--mut);font-size:12.5px;padding:18px;text-align:center">⏳ جاري التحميل…</div>
+    <div class="mbtns"><button onclick="hideModal()">إغلاق</button></div>`);
+  await lossLoad();
+}
+async function lossLoad(){
+  const f=LS.f,q=[];for(const k of ['w','src','from','to'])if(f[k])q.push(k+'='+encodeURIComponent(f[k]));
+  try{LS.v=await api('/api/losses'+(q.length?'?'+q.join('&'):''))}catch(e){LS.v=null}lossRender();
+}
+function lossAmt(e){const p=[];if(e.usd>0)p.push(`<b class="bidi" style="color:var(--red)">−${gN(e.usd,4)}$</b>`);
+  for(const[c,v]of Object.entries(e.coins||{}))if(v>0)p.push(`<b class="bidi" style="color:var(--red)">−${gN(v,8)} ${gEsc(c)}</b>`);
+  return p.length?p.join(' · '):'<span style="color:var(--green)">ماكو خسارة</span>'}
+function lossSet(k,v){LS.f[k]=v;lossLoad()}
+function lossRender(){
+  const el=$('#ls_body');if(!el)return;const V=LS.v;
+  if(!V||!V.ok){el.innerHTML='⚠️ تعذّر تحميل الخسائر';return}
+  el.style.textAlign='start';el.style.padding='0';el.style.color='var(--tx)';
+  const box='background:var(--bg1);border:1px solid var(--line2);border-radius:11px;padding:10px;margin-top:9px';
+  const H=t=>`<div style="font-size:12.5px;font-weight:700;color:var(--cyan);margin:15px 0 3px">${t}</div>`;
+  const S=V.srcs||{};let h='';
+  h+=`<div style="${box};font-size:11.5px;line-height:1.9;color:var(--mut)">📉 يحسب <b style="color:var(--tx)">الخسائر بس</b> — ولا يتدخل بالبوتات ولا بالأرباح ولا بالصناديق.
+    من <b style="color:var(--tx)">${gEsc(V.since_d||'—')}</b> (القديم ما ينحسب) · كل خسارة مرة وحدة · لكل محفظة وعملة لحالها.<br>
+    ينحسب: ${Object.values(S).map(t=>gEsc(t)).join(' · ')}<br>
+    الخسارة تنحسب لما تتحقق (بيع فعلي) — عملة لسه بيدك ما تنحسب لحد ما تنباع · الدوري «كل أمر على حدا»: كل أمر خسران لحاله (الرابح ما يقاصصه) · بوتات الشبكة ما تبيع بخسارة.</div>`;
+  h+=H('👛 لكل محفظة');
+  if(!(V.wallets||[]).length)h+=`<div style="${box};text-align:center;color:var(--green)">✅ ماكو ولا خسارة من ${gEsc(V.since_d||'')}</div>`;
+  for(const w of V.wallets||[]){
+    h+=`<div style="${box}"><div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:space-between;align-items:center">
+      <b style="font-size:12.5px">${gEsc(w.label)}</b><span style="font-size:12px">${lossAmt(w)}${Object.keys(w.coins||{}).length?` <span style="color:var(--mut)">(≈ <span class="bidi">${gN(w.eq,4)}$</span> وقتها)</span>`:''} · ${w.n} خسارة</span></div>
+      <div style="font-size:11.5px;line-height:1.9;color:var(--mut);margin-top:4px">${Object.entries(w.src||{}).map(([k,e])=>`${gEsc(S[k]||k)}: ${lossAmt(e)} (${e.n})`).join('<br>')}</div></div>`;
+  }
+  const f=LS.f,ws=V.wallets||[];
+  h+=H('🔎 القائمة');
+  h+=`<div style="${box};display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px">
+    <select onchange="lossSet('w',this.value)" style="max-width:100%"><option value="">👛 كل المحافظ</option>${ws.map(w=>`<option value="${gEsc(w.wid)}"${f.w===w.wid?' selected':''}>${gEsc(w.label)}</option>`).join('')}</select>
+    <select onchange="lossSet('src',this.value)" style="max-width:100%"><option value="">📂 كل الأنواع</option>${Object.entries(S).map(([k,t])=>`<option value="${k}"${f.src===k?' selected':''}>${gEsc(t)}</option>`).join('')}</select>
+    <span>من <input type="date" value="${gEsc(f.from)}" onchange="lossSet('from',this.value)"></span><span>لـ <input type="date" value="${gEsc(f.to)}" onchange="lossSet('to',this.value)"></span>
+    ${f.w||f.src||f.from||f.to?`<button onclick="LS.f={w:'',src:'',from:'',to:''};lossLoad()">✖ مسح الفلاتر</button>`:''}</div>`;
+  const T=V.sel||{};
+  h+=`<div style="${box};font-size:12px">المجموع (${V.n}): ${lossAmt(T)}${Object.keys(T.coins||{}).length?` <span style="color:var(--mut)">(≈ <span class="bidi">${gN(T.eq,4)}$</span>)</span>`:''}</div>`;
+  for(const x of V.items||[]){
+    const amt=x.ccy==='USDT'?`<span class="bidi">−${gN(x.amt,4)}$</span>`:`<span class="bidi">−${gN(x.amt,8)} ${gEsc(x.ccy)}</span> <span class="bidi" style="color:var(--mut)">≈ ${gN(x.usd,4)}$</span>`;
+    const det=[x.n!=null?'#'+x.n:'',x.lot?'أمر '+gEsc(x.lot):'',x.grp?`${x.lots} أوامر سوية`:'',x.lots>1&&x.src==='rec_avg'?`${x.lots} أوامر (المعدل)`:'',x.manual?'يدوي':'',x.px?'بسعر '+gN(x.px,8):''].filter(Boolean).join(' · ');
+    h+=`<div style="${box};display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;font-size:12px">
+      <span style="color:var(--mut);font-size:11px">${gEsc(new Date((x.ts||0)*1000).toLocaleString('en-GB',{hour12:false}).slice(0,17))}</span>
+      <b>${gEsc(x.src_t||x.src)}</b><span>${gEsc(x.name||x.sym||'')}</span>
+      <b style="color:var(--red);margin-inline-start:auto">${amt}</b>
+      <span style="flex-basis:100%;font-size:11px;color:var(--mut)">${gEsc(x.wl||'')}${det?' · '+det:''}</span></div>`;
+  }
+  if(V.n>(V.items||[]).length)h+=`<div style="font-size:11px;color:var(--mut);margin-top:6px">يعرض آخر ${(V.items||[]).length} من ${V.n} — ضيّق الفلاتر لتشوف الأقدم</div>`;
+  el.innerHTML=h;
+}
 async function openGuard(){
   showModal(`<h2>🛡️ الرقابة — المطابقة مع المنصة</h2><div id="gv_body" style="color:var(--mut);font-size:12.5px;padding:18px;text-align:center">⏳ جاري التحميل…</div>
     <div class="mbtns"><button onclick="hideModal()">إغلاق</button></div>`);
@@ -21316,10 +21644,40 @@ def books_audit():
         add(f"المُراكِم {a.get('name') or a.get('id')}: نصيبه من كل يوم منتهي", not miss, "كامل (آخر 7 أيام)" if not miss else " · ".join(miss), "ok" if not miss else "warn")
     for _n, _ok, _d in (_safe(profit_audit, default=[]) or []):      # 💰 v3.22.8
         add(_n, _ok, _d)
+    for _n, _ok, _d, _lv in (_safe(_loss_audit, default=[]) or []):  # 📉 v3.25.4: سجل الخسائر
+        add(_n, _ok, _d, _lv)
     errs = sum(1 for c in C if c["level"] == "err")
     warns = sum(1 for c in C if c["level"] == "warn")
     return {"ok": errs == 0, "errors": errs, "warnings": warns, "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "version": APP_VERSION, "books_since": since, "checks": C}
+
+
+def _loss_audit():
+    """🧮 v3.25.4: سجل الخسائر — كل خروج بخسارة بسجلات البوتات (من بداية السجل) انقرا · ولا خسارة مكررة"""
+    L = _loss_load()
+    if not L.get("since"):
+        return [("📉 سجل الخسائر", True, "ما بدأ بعد (يبدي أول جولة)", "info")]
+    since, done = float(L["since"]), set(str(x) for x in (L.get("done") or []))
+    ids = [str(x.get("id")) for x in (L.get("items") or []) if isinstance(x, dict)]
+    miss = []
+    now = time.time()
+    for b in bot_dirs().values():
+        bt = str((b.get("cfg") or {}).get("bot_type") or "")
+        if (b.get("cfg") or {}).get("is_demo") or bt not in ("dca", "dca_buy") + _REC_T:
+            continue
+        st = _safe(load_json, paths_of(b)[0], default={}) or {}
+        for c in (st.get("cycles_log") or []):
+            try:
+                ts, p = float(c.get("ts") or 0), float(c.get("profit") or 0)
+            except Exception:
+                continue
+            cid = ("dca:" if bt in ("dca", "dca_buy") else "rec:") + str(c.get("id"))
+            if p < -1e-12 and ts >= since and now - ts > 300 and cid not in done:
+                miss.append(cid)
+    dup = len(ids) - len(set(ids))
+    out = [("📉 سجل الخسائر: كل خروج بخسارة انقرا", not miss, "كلها مسجّلة" if not miss else f"ما انقرت {len(miss)}: {miss[:3]}", "ok" if not miss else "err"),
+           ("📉 سجل الخسائر: ولا خسارة مكررة", dup == 0, f"{len(ids)} خسارة" + (f" · {dup} مكررة" if dup else ""), "ok" if dup == 0 else "err")]
+    return out
 
 
 def books_audit_md(A):
@@ -21417,6 +21775,7 @@ def diag_bundle(days=30):
         put("README_DIAG.md", DIAG_README.replace("__V__", APP_VERSION))
         put("money_audit.json", _safe(money_audit, default={"error": "تعذّر"}))      # 💰 كل سنت
         put("profit_book.json", _safe(load_json, PROFIT_FILE, default={}) or {})    # 💰 v3.22.8: دفتر الربح والصناديق
+        put("losses_book.json", _safe(load_json, LOSS_FILE, default={}) or {})      # 📉 v3.25.4: سجل الخسائر
         put("numbers/flow.json", _safe(flow_view, default={}))                      # 🗺️ v3.22.8: لقطة الخريطة
         put("accumulator_state.json", _safe(load_json, ACCUM_FILE, default={}))      # 🪙 المُراكِم: كميات · كلف · تسليمات
         put("accumulators_config.json", _safe(acc_cfgs, default=[]))
