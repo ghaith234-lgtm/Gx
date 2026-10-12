@@ -36,6 +36,11 @@ elif cmd == "find":
             best = n
     if best is not None:
         print("%d %d" % center(best.get("bounds")))
+elif cmd == "switch":            # the first switch that is ON (Android's notification-channel page: the channel's own toggle)
+    for n in nodes(sys.argv[2]):
+        if "Switch" in (n.get("class") or "") and n.get("checked") == "true":
+            print("%d %d" % center(n.get("bounds")))
+            break
 elif cmd == "img":
     from PIL import Image
     try:
@@ -58,7 +63,7 @@ elif cmd == "notif":
         n += 1
         head = b.split("\n", 1)[0]
         keep = [re.search(r"id=\d+", head).group(0) if re.search(r"id=\d+", head) else ""]
-        for key in ("channel=NotificationChannel{mId='", "groupKey=", "android.title=", "android.text=", "android.subText=", "flags=", "vis="):
+        for key in ("channel=NotificationChannel{mId='", "groupKey=", "android.title=", "android.text=", "android.subText=", "android.largeIcon=", "flags=", "vis="):
             for line in b.split("\n"):
                 if key in line:
                     keep.append(line.strip()[:160])

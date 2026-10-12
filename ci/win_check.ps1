@@ -1,8 +1,9 @@
 # 💻 Holy Windows app check on a real Windows machine (GitHub windows-latest):
-#   the dashboard serves the app with its address inside · first run ⇒ shortcuts + saved address · Edge opens the dashboard
-#   FULL SCREEN in app mode with its own profile · the window is the dashboard · --setup shows the address window ·
-#   an address that doesn't answer ⇒ the warning (and nothing opens) · a screenshot (base64 in the log, lines HOLYSHOT).
-#   Results: lines starting with HOLYWIN in the job log.
+#   the dashboard serves the app (1.1: 32-bit · runs on every Windows) with its address + a device key inside · first run ⇒
+#   shortcuts + saved address · Edge opens the dashboard FULL SCREEN in app mode · the app stays as a tray icon (notifications) ·
+#   starts with Windows · a test alert ⇒ a Windows notification · a second start keeps one watcher · unlink ⇒ it knows ·
+#   --setup shows the address window · an address that doesn't answer ⇒ the warning · screenshots (base64 lines HOLYSHOT).
+#   Results: lines starting with HOLYWIN in the job log. The device key itself is never printed.
 $ErrorActionPreference = "Continue"
 Add-Type -AssemblyName System.Drawing, System.Windows.Forms
 Add-Type @"
@@ -58,16 +59,24 @@ for ($k = 0; $k -lt 90; $k++) { try { if ((Invoke-WebRequest "$base/" -UseBasicP
 Check "dashboard up (python $((Get-Command python).Version))" (-not $dash.HasExited) "pid=$($dash.Id)"
 # 1) the dashboard serves the app (logged in: a fresh dashboard has no password)
 $info = Invoke-RestMethod "$base/api/app/info"
-Check "the dashboard knows the Windows app" ($info.win.size -gt 50000 -and $info.win.name -eq "1.0") "size=$($info.win.size) name=$($info.win.name) apk=$($info.apk.name)"
+Check "the dashboard knows the Windows app" ($info.win.size -gt 50000 -and $info.win.name -eq "1.1") "size=$($info.win.size) name=$($info.win.name) apk=$($info.apk.name)"
 Invoke-WebRequest "$base/app/holy.exe?u=$([uri]::EscapeDataString($base))" -OutFile "$A\TheHolyDashboard.exe" -UseBasicParsing
 $bytes = [IO.File]::ReadAllBytes("$A\TheHolyDashboard.exe")
 $txt = [Text.Encoding]::ASCII.GetString($bytes)
 $i = $txt.IndexOf("HOLY-URL-SLOT:")
 Check "downloaded with the address inside" ($i -gt 0 -and $txt.Substring($i + 14, $base.Length) -eq $base) "bytes=$($bytes.Length) slot=$i"
+$slotTok = ($txt.Substring($i + 14, 560) -split [char]0)[1]
+Check "…and a device key for the notifications (not shown)" ($slotTok.Length -ge 40) "key length=$($slotTok.Length)"
+$pe = [BitConverter]::ToInt32($bytes, 0x3c); $mach = [BitConverter]::ToUInt16($bytes, $pe + 4)
+Check "32-bit program (runs on 32 and 64-bit Windows)" ($mach -eq 0x14c) ("machine=0x{0:x}" -f $mach)
+$imports = ([regex]::Matches($txt, "[A-Za-z0-9_]+\.dll") | ForEach-Object { $_.Value.ToLower() } | Sort-Object -Unique) -join " "
+Check "needs no runtime (only Windows' own DLLs)" (-not ($imports -match "vcruntime|msvcp|ucrtbase|api-ms-win-crt|libgcc|msvcrt")) $imports
+$devs0 = (Invoke-RestMethod "$base/api/app/devices" -Method Post -ContentType "application/json" -Body '{"act":"list"}').devs
+Check "the download linked a computer (💻 · not opened yet)" (($devs0 | Where-Object { $_.name -like "*Windows*" }).Count -ge 1) "devices=$($devs0.Count)"
 $sig = Get-AuthenticodeSignature "$A\TheHolyDashboard.exe"
 Write-Host "HOLYWIN ℹ️ signature: $($sig.Status) (unsigned ⇒ SmartScreen asks once)"
 $vi = (Get-Item "$A\TheHolyDashboard.exe").VersionInfo
-Check "version info" ($vi.ProductName -eq "The Holy Dashboard" -and $vi.ProductVersion -eq "1.0") "$($vi.ProductName) $($vi.ProductVersion)"
+Check "version info" ($vi.ProductName -eq "The Holy Dashboard" -and $vi.ProductVersion -eq "1.1") "$($vi.ProductName) $($vi.ProductVersion)"
 $fav = Invoke-WebRequest "$base/favicon.ico" -UseBasicParsing
 Check "favicon.ico served (no login needed)" ($fav.StatusCode -eq 200 -and $fav.RawContentLength -gt 10000) "len=$($fav.RawContentLength)"
 
@@ -91,17 +100,23 @@ $p.WaitForExit(8000) | Out-Null
 Check "…Cancel ⇒ it stops (no browser)" ($p.HasExited -and -not (Get-Process msedge -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match "holyapp=win" })) ""
 Remove-Item "$env:APPDATA\HolyDashboard\holy.ini" -ErrorAction SilentlyContinue      # the dead address must not stay saved for the real run
 
-# 4) the real run: first start ⇒ address saved · shortcuts · Edge full screen on the dashboard
+# 4) the real run: first start ⇒ address + key saved · shortcuts · starts with Windows · Edge full screen · the app stays (tray icon)
+$L = "$env:APPDATA\HolyDashboard\holy.log"
 $p = Start-Process "$A\TheHolyDashboard.exe" -PassThru
-$p.WaitForExit(20000) | Out-Null
-Check "the app hands over to the browser and exits" ($p.HasExited -and $p.ExitCode -eq 0) "exit=$($p.ExitCode)"
+$tray = [IntPtr]::Zero
+for ($k = 0; $k -lt 60 -and $tray -eq [IntPtr]::Zero; $k++) { Start-Sleep -Milliseconds 500; $tray = [W]::FindWindow("HolyTray", [NullString]::Value) }
+Check "the app stays running as the notifications icon (tray)" ((-not $p.HasExited) -and $tray -ne [IntPtr]::Zero) "pid=$($p.Id) tray=$tray"
 $ini = Get-Content "$env:APPDATA\HolyDashboard\holy.ini" -Raw -ErrorAction SilentlyContinue
-Check "address saved to %APPDATA%\HolyDashboard\holy.ini" ($ini -match [regex]::Escape("url=$base")) ($ini -replace "`r?`n", " ")
+Check "address saved to %APPDATA%\HolyDashboard\holy.ini" ($ini -match [regex]::Escape("url=$base")) (($ini -replace "token=[^\r\n]*", "token=(hidden)") -replace "`r?`n", " ")
+$iniTok = if ($ini -match "token=([A-Za-z0-9_\-]+)") { $Matches[1] } else { "" }
+Check "…and the device key (the same one the download carried)" ($iniTok -ne "" -and $iniTok -eq $slotTok) ""
 $sh = New-Object -ComObject WScript.Shell
 foreach ($lnk in @("$([Environment]::GetFolderPath('Desktop'))\The Holy Dashboard.lnk", "$([Environment]::GetFolderPath('Programs'))\The Holy Dashboard.lnk")) {
   $t = if (Test-Path $lnk) { $sh.CreateShortcut($lnk).TargetPath } else { "" }
   Check "shortcut $([IO.Path]::GetFileName([IO.Path]::GetDirectoryName($lnk)))" ($t -eq "$A\TheHolyDashboard.exe") $t
 }
+$run = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -ErrorAction SilentlyContinue).TheHolyDashboard
+Check "starts with Windows (notifications after a restart)" ($run -eq "`"$A\TheHolyDashboard.exe`" --tray") $run
 $title = ""; $win = $null
 for ($k = 0; $k -lt 60; $k++) {
   Start-Sleep -Milliseconds 500
@@ -110,7 +125,7 @@ for ($k = 0; $k -lt 60; $k++) {
   if ($win) { break }
 }
 $cl = (Get-CimInstance Win32_Process -Filter "name='msedge.exe'" | Where-Object { $_.CommandLine -match "holyapp=win" } | Select-Object -First 1).CommandLine
-Check "Edge started in app mode · full screen · own profile · the dashboard address" ($cl -match "--app=" -and $cl -match "--start-fullscreen" -and $cl -match "HolyDashboard\\Browser" -and $cl -match [regex]::Escape("127.0.0.1:8099/?holyapp=win")) $cl
+Check "Edge started in app mode · full screen · own profile · the dashboard address" ($cl -match "--app=" -and $cl -match "--start-fullscreen" -and $cl -match "HolyDashboard\\Browser" -and $cl -match [regex]::Escape("127.0.0.1:8099/?holyapp=win&hv=1.1")) $cl
 Check "the window is the dashboard (title «The Holy Dashboard»)" ($win -ne $null) $win
 Start-Sleep -Seconds 6     # the opening animation ends, the numbers load
 if ($win) {
@@ -121,9 +136,40 @@ if ($win) {
 Shot "dashboard"
 Write-Host "HOLYWIN windows: $(([W]::List() -split "`n" | Select-Object -First 12) -join ' ;; ')"
 
-# 5) open it again ⇒ no new shortcut prompts, the saved address is used (Shift not held)
-$p = Start-Process "$A\TheHolyDashboard.exe" -PassThru; $p.WaitForExit(20000) | Out-Null
-Check "second start uses the saved address (exits 0, no dialog)" ($p.HasExited -and $p.ExitCode -eq 0 -and -not ([W]::FindWindow("HolySetup", [NullString]::Value) -ne [IntPtr]::Zero)) ""
+# 5) notifications: the watcher reaches the feed · a test alert ⇒ a Windows notification · the computer shows as connected
+function LogHas($pat, $sec) { for ($k = 0; $k -lt $sec * 2; $k++) { if ((Get-Content $L -Raw -ErrorAction SilentlyContinue) -match $pat) { return $true }; Start-Sleep -Milliseconds 500 }; return $false }
+Check "the watcher reaches the dashboard feed" (LogHas "feed ok" 30) ""
+Start-Sleep -Seconds 2
+Invoke-RestMethod "$base/api/app/devices" -Method Post -ContentType "application/json" -Body '{"act":"test","sample":"trade"}' | Out-Null
+Check "test alert ⇒ a Windows notification shown" (LogHas "shown 1 notification" 30) ""
+Start-Sleep -Milliseconds 1500; Shot "notification"
+$devs = (Invoke-RestMethod "$base/api/app/devices" -Method Post -ContentType "application/json" -Body '{"act":"list"}').devs
+$pc = $devs | Where-Object { $_.name -like "*Windows*" -and [int]$_.seen -gt [int]$_.created } | Select-Object -First 1
+Check "the dashboard sees this computer connected (💻 in ⚙️)" ($pc -ne $null) "devices=$($devs.Count) $($pc.name)"
+
+# 6) one watcher only: a second start opens the dashboard through the running one · --tray (Windows start) while running ⇒ quits
+$p2 = Start-Process "$A\TheHolyDashboard.exe" -PassThru; $p2.WaitForExit(15000) | Out-Null
+$n = (Get-Process TheHolyDashboard -ErrorAction SilentlyContinue).Count
+Check "second start ⇒ hands over and exits · still one watcher" ($p2.HasExited -and $p2.ExitCode -eq 0 -and $n -eq 1) "exit=$($p2.ExitCode) running=$n"
+$p3 = Start-Process "$A\TheHolyDashboard.exe" -ArgumentList "--tray" -PassThru; $p3.WaitForExit(10000) | Out-Null
+Check "--tray while running ⇒ quits at once" ($p3.HasExited -and (Get-Process TheHolyDashboard -ErrorAction SilentlyContinue).Count -eq 1) ""
+
+# 7) the program asks for a newer copy with its own key ⇒ the same key inside (no new device)
+$up = Invoke-WebRequest "$base/app/holy.exe?u=$([uri]::EscapeDataString($base))" -Headers @{ "X-Holy-Device" = $iniTok } -UseBasicParsing
+$ut = [Text.Encoding]::ASCII.GetString($up.Content); $j = $ut.IndexOf("HOLY-URL-SLOT:")
+$devs2 = (Invoke-RestMethod "$base/api/app/devices" -Method Post -ContentType "application/json" -Body '{"act":"list"}').devs
+Check "a copy fetched by the program keeps its key (no extra device)" ((($ut.Substring($j + 14, 560) -split [char]0)[1]) -eq $iniTok -and $devs2.Count -eq $devs.Count) "devices=$($devs2.Count)"
+
+# 8) unlink from the dashboard ⇒ the program knows at once (and says so) · it keeps running (the window still opens the dashboard)
+if ($pc) {
+  Invoke-RestMethod "$base/api/app/devices" -Method Post -ContentType "application/json" -Body (@{ act = "del"; id = $pc.id } | ConvertTo-Json) | Out-Null
+  Check "unlinked ⇒ the program notices (401)" (LogHas "401 —" 30) ""
+  Check "…and shows «انفصل» as a notification" (LogHas "shown 1 notification \(alert\)" 20) ""
+  Check "…the icon stays (opening the dashboard still works)" ((Get-Process TheHolyDashboard -ErrorAction SilentlyContinue).Count -eq 1) ""
+}
+Write-Host "HOLYWIN holy.log: $((Get-Content $L -Tail 25 -ErrorAction SilentlyContinue) -join ' ;; ')"
+Check "the program's log has no key" (-not ((Get-Content $L -Raw -ErrorAction SilentlyContinue) -match [regex]::Escape($iniTok))) ""
+Get-Process TheHolyDashboard -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Write-Host "HOLYWIN dash.log: $((Get-Content "$D\dash.log" -Tail 6 -ErrorAction SilentlyContinue) -join ' ;; ')"
 Write-Host "HOLYWIN dash.err: $((Get-Content "$D\dash.err" -Tail 6 -ErrorAction SilentlyContinue) -join ' ;; ')"
 Write-Host "HOLYWIN TOTAL $ok ok · $bad failed"

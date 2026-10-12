@@ -69,6 +69,26 @@ adb shell dumpsys deviceidle force-idle | sed 's/^/HOLYCI doze: /'
 note DOZE1; got DOZE1 40 && say "PASS deep sleep (Doze) ⇒ notification arrives" || say "FAIL deep sleep (Doze) ⇒ no notification"
 adb shell dumpsys deviceidle unforce >/dev/null
 adb shell am start -n $P/.MainActivity >/dev/null; sleep 6
+# ── 1.3: the colour logo inside every notification · the watcher line (no «يراقب» · secret on the lock screen) can be turned off ⇒ alerts keep coming ──
+adb shell dumpsys notification --noredact > $OUT/n13.txt
+nl=$(grep -c "android.largeIcon=Icon" $OUT/n13.txt | tr -d '\r'); say "notifications carrying the colour logo: $nl"
+[ "${nl:-0}" -gt 0 ] && say "PASS colour logo (large icon) inside the notifications" || say "FAIL no large icon in the notifications"
+grep -q "android.title=Holy يراقب" $OUT/n13.txt && say "FAIL watcher line still says «Holy يراقب»" || say "PASS watcher line no longer says «يراقب»"
+grep -E "mId='watch'" $OUT/n13.txt | head -1 | cut -c1-240 | sed 's/^/HOLYCI watch channel: /'
+adb shell am start -n $P/.MainActivity --es go app >/dev/null; sleep 6; dump app13; shot app13
+grep -q "أخفيه" $OUT/ui_app13.xml && say "PASS panel offers to hide the watcher line" || say "FAIL no hide row in the panel"
+tap "أخفيه" app13; sleep 4; dump chan; shot chan
+adb shell dumpsys activity activities | grep -m1 -E "mResumedActivity|topResumedActivity" | sed 's/^/HOLYCI top: /'
+xy=$(python3 ci/ci_tools.py switch $OUT/ui_chan.xml)
+if [ -n "$xy" ]; then adb shell input tap $xy; say "turned the watcher line off at $xy"; else say "INFO no switch on the channel page"; fi
+sleep 2; shot chan2; adb shell input keyevent 4; sleep 4
+adb shell dumpsys notification --noredact > $OUT/n13b.txt
+grep -E "mId='watch'" $OUT/n13b.txt | grep -q "mImportance=0" && say "PASS watcher line turned off" || say "FAIL watcher line still on"
+say "watcher services with the line off: $(svc)"
+note HIDE1; got HIDE1 40 && say "PASS line off ⇒ alerts still arrive" || say "FAIL line off ⇒ no alert"
+grep -c "pkg=$P" $OUT/n13b.txt | sed 's/^/HOLYCI our notifications with the line off (before HIDE1): /'
+dump app13b; shot app13b
+grep -q "مخفي" $OUT/ui_app13b.xml && say "PASS panel shows «مخفي»" || say "FAIL panel doesn't show «مخفي»"
 fi
 # ── self-update: the dashboard now carries a «newer» APK (same file, higher code) ⇒ offer · download · sha256 · Android installer ──
 t0=$(adb shell dumpsys package $P | grep -m1 lastUpdateTime | tr -d '\r')
