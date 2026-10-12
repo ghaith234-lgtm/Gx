@@ -12746,7 +12746,8 @@ def brand_fill(html):
             .replace("__BRAND_WORD2__", brand_word_svg("bw2", "bword"))
             .replace("__BRAND_TILE__", brand_tile_svg("bt", "btile"))
             .replace("__BRAND_SPLASHWORD__", brand_word_svg("bws", "bword", n=60, L=90, full=True))
-            .replace("__BRAND_LDR__", brand_mark_svg("bl", "bmark", shadow=False)))
+            .replace("__BRAND_LDR__", brand_mark_svg("bl", "bmark", shadow=False))
+            .replace("__BRAND_WORD_JS__", json.dumps([[x, d] for x, d in BRAND_WORD])))
 
 
 # ═══════════════ 💻 v3.26.0: برنامج ويندوز — شاشة كاملة · ينزل من ⚙️ مثل تطبيق أندرويد ═══════════════
@@ -17331,6 +17332,17 @@ function cardModel(v,o,D,F){
   if(o.all&&!P){const all=(TP.trade_all!=null)?(+TP.trade_all||0):(+D.total_profit||0);
     M.extra.push({ic:'📈',l:'الإجمالي الكلي',v:`${usd(all)} تداول · ${usd(D.total_profit)} محرر`})}
   return M}
+const BRAND_WORD_JS=__BRAND_WORD_JS__,BRAND_WJ=1992;
+function brandWordCanvas(c,xr,y0,cap,ink){     // ✍️ v3.26.0: «THE HOLY DASHBOARD» على الكانفس — نفس الخطوط الرفيعة + خيال طويل يبهت (اتحاد نسخ صلبة ⇒ بلا خطوط)
+  const s=cap/100,w=BRAND_WJ*s,x0=xr-w,L=Math.round(cap*1.1),P=BRAND_WORD_JS.map(([dx,d])=>[dx,new Path2D(d)]);
+  const draw=(cc,ox,oy)=>{for(const [dx,p] of P){cc.save();cc.translate(ox+dx*s,oy);cc.scale(s,s);cc.stroke(p);cc.restore()}};
+  const sh=document.createElement('canvas');sh.width=Math.ceil(w+L+8);sh.height=Math.ceil(cap+L+8);const g=sh.getContext('2d');
+  g.strokeStyle='#000';g.lineWidth=7.2;g.lineJoin='round';
+  for(let i=L;i>=1;i--)draw(g,4+i,4+i);
+  g.globalCompositeOperation='destination-in';const fg=g.createLinearGradient(0,4,0,4+cap+L*.85);
+  fg.addColorStop(0,'rgba(0,0,0,1)');fg.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=fg;g.fillRect(0,0,sh.width,sh.height);
+  c.save();c.globalAlpha=.55;c.drawImage(sh,x0-4,y0-4);c.restore();
+  c.save();c.strokeStyle=ink;c.lineWidth=7.2;c.lineJoin='round';c.lineCap='butt';draw(c,x0,y0);c.restore();return w}
 function cardDraw(M){
   const W=1080,PAD=64,IW=W-2*PAD,FA='"IBM Plex Sans Arabic","Segoe UI",Tahoma,sans-serif',FM='"IBM Plex Mono","Segoe UI",monospace';
   const off=document.createElement('canvas');off.width=W;off.height=2600;const x=off.getContext('2d');x.direction='rtl';x.textBaseline='alphabetic';
@@ -17342,8 +17354,7 @@ function cardDraw(M){
   const MUT='rgba(214,220,255,0.62)',TX='#eef1ff',CY='#22d3ee',VI='#a78bfa',GO='#fbbf24';
   let y=PAD+30;
   // ── الرأس: الاسم · التاريخ ──
-  x.font=`700 34px ${FA}`;const bw=x.measureText('✦ '+M.brand).width;
-  T('✦ '+M.brand,W-PAD,y,`700 34px ${FA}`,grad(W-PAD-bw,W-PAD,VI,CY));
+  brandWordCanvas(x,W-PAD,y-27,28,grad(W-PAD-560,W-PAD,VI,CY));      // 🎨 v3.26.0: الكتابة الرسمية بدل النص
   T(M.date,PAD,y,`500 26px ${FA}`,MUT,'left');
   y+=44;
   x.font=`500 26px ${FA}`;const pw=Math.min(IW,x.measureText(M.period).width+56);
