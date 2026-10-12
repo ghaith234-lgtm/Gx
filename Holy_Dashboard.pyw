@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.25.4"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.25.5"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -4830,6 +4830,84 @@ def _gd_pages(path, keys, idkey, stop_ms=0, pages=5):
     return out, False
 
 
+_FREE_T = {"grid": "🔷 شبكة", "grid_range": "🔷 شبكة مدى", "grid_plus": "🔷 شبكة بلس", "dca": "📉 DCA بيعي", "dca_buy": "📈 DCA شرائي",
+           "rec_buy": "🔁 دوري شرائي", "rec_sell": "🔁 دوري بيعي", "acc": "🪙 مُراكِم"}
+
+
+def _gd_free_claims(b, st):
+    """🤝 v3.25.5: اللي يحتاجه البوت **حر** بالمحفظة (مو داخل أمر بالمنصة) — {عملة: كمية}:
+    🔁 الدوري الشرائي: عملات أوامره المفتوحة + الكسور (− اللي انباع بخروج جاري) · البيعي: دولار أوامره + الكسور (− اللي انصرف)
+    📈 DCA الشرائي: العملة اللي اشتراها بالدورة (صافي) · 📉 DCA البيعي: الدولار من بيعاته (صافي) — بدورة مفتوحة بلا إغلاق جاري
+    🔷 الشبكة: بيعات افتراضية/مخزّنة (عملتها بالمحفظة مو بأمر) — أوامر البيع الحية محجوزة بالمنصة أصلاً.
+    هذني ما محجوزة بالمنصة (ماكو حجز بنفس الحساب) ⇒ بوت ثاني على نفس العملة يكدر يصرفها."""
+    cfg = b.get("cfg") or {}
+    bt = str(cfg.get("bot_type") or "grid")
+    base, quote = (str(b.get("symbol") or "").split("-") + ["USDT"])[:2]
+    out = {}
+    if not isinstance(st, dict):
+        return out
+    try:
+        if bt == "rec_buy":
+            q = sum(float(l.get("q") or 0) for l in (st.get("lots") or []) if isinstance(l, dict)) + float(st.get("dust") or 0)
+            if isinstance(st.get("close"), dict):
+                q -= float(st["close"].get("dq") or 0)
+            out[base] = max(0.0, q)
+        elif bt == "rec_sell":
+            u = sum(float(l.get("c") or 0) for l in (st.get("lots") or []) if isinstance(l, dict)) + float(st.get("dust") or 0)
+            if isinstance(st.get("close"), dict):
+                u -= float(st["close"].get("dv") or 0)
+            out[quote] = max(0.0, u)
+        elif bt in ("dca", "dca_buy"):
+            if st.get("phase") == "selling" and st.get("filled") and not st.get("close") and not st.get("pending_close_id"):
+                v = sum(float(f.get("net") if f.get("net") is not None else (f.get("qty") if bt == "dca_buy" else float(f.get("qty") or 0) * float(f.get("price") or 0)) or 0)
+                        for f in (st.get("filled") or []) if isinstance(f, dict))
+                out[base if bt == "dca_buy" else quote] = max(0.0, v)
+        else:
+            q = 0.0
+            for key in ("virtual_sells", "accum_sells"):
+                for i in (st.get(key) or {}).values():
+                    if isinstance(i, dict):
+                        q += float(i.get("locked_qty") or 0)
+            out[base] = max(0.0, q)
+    except Exception:
+        return {}
+    return {k: round(v, 12) for k, v in out.items() if v > 1e-12}
+
+
+def coin_users(sym="", wallet=None, wid=None, self_id=None):
+    """⚠️ v3.25.5: قبل الإنشاء — مين يستعمل نفس العملة بنفس المحفظة (بوتات + مُراكِمات) وشكد ماسك حر. قراءة بس."""
+    base = str(sym or "").split("-")[0].strip().upper()
+    w = str(wid or "").strip()
+    if not w and wallet is not None:
+        for x in (app_cfg().get("wallets") or []):
+            if str(x.get("name") or "") == str(wallet) and str(x.get("api") or "").strip():
+                w = _gd_wid(x["api"]); break
+    out = {"ok": True, "base": base, "users": [], "free_total": 0.0}
+    if not base or not w:
+        return out
+    for b in bot_dirs().values():
+        c = b.get("cfg") or {}
+        k = str(c.get("api_key") or "").strip()
+        if c.get("is_demo") or not k or _gd_wid(k) != w:
+            continue
+        bb, qq = (str(b.get("symbol") or "").split("-") + ["USDT"])[:2]
+        if base not in (bb.upper(), qq.upper()):
+            continue
+        st = _safe(load_json, paths_of(b)[0], default={}) or {}
+        bt = str(c.get("bot_type") or "grid")
+        fr = float((_safe(_gd_free_claims, b, st, default={}) or {}).get(base) or 0)
+        out["users"].append({"name": os.path.basename(str(b["dir"]).rstrip("/\\")), "sym": b["symbol"], "type": bt,
+                             "label": _FREE_T.get(bt, bt), "free": round(fr, 10)})
+    ast = _safe(acc_state, default={}) or {}
+    for a in (_safe(acc_cfgs, default=[]) or []):
+        if a.get("id") == self_id or acc_wid(a) != w or str(a.get("symbol") or "").split("-")[0].upper() != base:
+            continue
+        out["users"].append({"name": str(a.get("name") or a.get("symbol") or ""), "sym": a.get("symbol"), "type": "acc", "label": _FREE_T["acc"],
+                             "free": round(float((ast.get(a.get("id")) or {}).get("coin") or 0), 10)})
+    out["free_total"] = round(sum(u["free"] for u in out["users"]), 10)
+    return out
+
+
 def _gd_gather(W, prev, now):
     """📡 لقطة محفظة: حالات البوتات ثم أدلة المنصة ثم الرصيد ثم الأوامر المفتوحة.
     شبكة وقراءة فقط — ولا قفل ولا كتابة (الدمج بـ`_gd_apply` تحت القفل).
@@ -4840,7 +4918,7 @@ def _gd_gather(W, prev, now):
             "ok_ev": False, "ev_complete": False, "baseline": False, "bal": {},
             "pending": {}, "fills": [], "bills": [], "ev_max": 0, "coins": {},
             "quotes": {}, "tracked": {}, "bots": {}, "details": {}, "acc": {},
-            "acc_ok": False, "err": [],
+            "acc_ok": False, "err": [], "free": {},
             "qa_bots": {}, "qa_mt1": {}, "qa_bad": [], "qa_badn": [], "qa_seen": {}}     # 🧮 v3.21.5: تدقيق الكميات
     # ── ١ · حالات البوتات ──
     try:
@@ -4876,6 +4954,12 @@ def _gd_gather(W, prev, now):
                 except Exception:
                     pass
             hs = _gd_hist_scan(hp, is_dca=is_dca, now=now, is_rec=is_rec)
+            for _fc, _fq in (_safe(_gd_free_claims, b, st, default={}) or {}).items():      # 🤝 v3.25.5: اللي يحتاجه حر بالمحفظة
+                _fx = snap["free"].setdefault(_fc, {"amt": 0.0, "who": [], "strict": False, "skip": False})
+                _fx["amt"] += _fq
+                _fx["who"].append([name, round(_fq, 10), "rec" if is_rec else ("dca" if is_dca else "grid")])
+                if is_dca:                                        # DCA أو دوري (رصيده حر) ⇒ معادلة الرقابة مطفية ⇒ هذا الفحص يشتغل
+                    _fx["strict"] = True
             cp = float(PX.get(sym) or st.get("current_price") or 0)
             q = snap["quotes"].setdefault(quote, {"bots_frozen": 0.0, "min_next": 0.0})
             modes.setdefault(quote, set()).add("quote")
@@ -4979,6 +5063,12 @@ def _gd_gather(W, prev, now):
                                                     "acc": 0.0, "bots": [], "px": 0.0, "tol_q": 0.0,
                                                     "inflight": False})
                 c["acc"] += qa
+                if qa > 1e-12 or e.get("inflight") or e.get("sell_inflight"):      # 🤝 v3.25.5: عملة المُراكِم حرّة بالمحفظة
+                    _fx = snap["free"].setdefault(base, {"amt": 0.0, "who": [], "strict": False, "skip": False})
+                    _fx["amt"] += qa
+                    _fx["who"].append([str(a.get("name") or sym), round(qa, 10), "acc"])
+                    if e.get("inflight") or e.get("sell_inflight"):
+                        _fx["skip"] = True             # أمره ينتظر التسوية — الرصيد سابق الدفتر
                 if e.get("inflight") or e.get("sell_inflight"):
                     c["inflight"] = True       # ⏳ أمر مُراكِم ينتظر التسوية — الرصيد سابق الدفتر
                 if not c["px"]:
@@ -6200,6 +6290,7 @@ def guard_scan(force=False):
             _safe(_gd_trade_scan, g, now, snaps, default=None)   # 📡 مراقبة التداول: الدفتر ⇄ المنصة · المطالبات · التحذيرات · التدقيق
             try:                                                  # 🔁 v3.25.2: البوت الدوري — حساباته · دفاتره · أوامره · تغطية المحفظة
                 _gd_rec_scan(g, now, snaps)
+                _gd_cover_scan(g, now, snaps)                     # 🤝 v3.25.5: العملة المشتركة على الرصيد الحر
             except Exception as e:
                 try:
                     log_event(f"⚠️ [الرقابة] فحص الدوري: {type(e).__name__}: {e}")
@@ -8640,6 +8731,30 @@ def flow_view():
             "wallets": wallets, "accs": accs, "lines": lines}
 
 
+def _loss_day(w, d, led, live):
+    """📉 v3.25.5: بهاليوم وبهالمحفظة صارت خسارة؟ (يوم سالب بالدفتر لبوت منها · خسارة دولار بصفحة الخسائر · دورة/صفقة خسرانة بسجل بوت حي)"""
+    for k, e in (led or {}).items():
+        if isinstance(e, dict) and not str(k).startswith("_") and (_led_wid(k, e, live) or "") == w and float((e.get("daily") or {}).get(d) or 0) < 0:
+            return True
+    for it in (_loss_load().get("items") or []):
+        try:
+            if it.get("w") == w and it.get("ccy") == "USDT" and datetime.fromtimestamp(float(it.get("ts") or 0)).strftime("%Y-%m-%d") == d:
+                return True
+        except Exception:
+            continue
+    for b in bot_dirs().values():
+        c = b.get("cfg") or {}
+        if str(c.get("bot_type") or "") not in ("dca_buy", "rec_buy") or not str(c.get("api_key") or "").strip() or _gd_wid(c["api_key"]) != w:
+            continue
+        for x in ((_safe(load_json, paths_of(b)[0], default={}) or {}).get("cycles_log") or []):
+            try:
+                if float(x.get("profit") or 0) < 0 and datetime.fromtimestamp(float(x.get("ts") or 0)).strftime("%Y-%m-%d") == d:
+                    return True
+            except Exception:
+                continue
+    return False
+
+
 def profit_audit():
     """🧮 تدقيق دفتر الربح (للتقرير التشخيصي) — 👛 لكل محفظة ولكل يوم:
     ربح بوتاتها = اللي راح للمُراكِمات + اللي نزل للصندوق النهائي (بالسنت) · نصيب كل مُراكِم = اللي انقيّد له من بوتات محفظته ·
@@ -8656,7 +8771,7 @@ def profit_audit():
     ghost = [g for g in (pb.get("ghost") or []) if isinstance(g, dict)]
     acfg = [a for a in acc_cfgs() if a.get("id")]
     kw = lambda k: _led_wid(k, led.get(k) or {}, live) or ""
-    bad = []
+    bad, lossd = [], []
     for d in sorted({d for k in ub for d in (ub[k] or {})}):
         byw = {}
         for k in ub:
@@ -8683,11 +8798,18 @@ def profit_audit():
                     sh[g["aid"]] = float(g["days"][d] or 0)
             for aid in ta:
                 sh.setdefault(aid, None)           # مُراكِم انحذف قبل v3.23.0 (بلا أثر) ⇒ ما نگدر نقارن نصيبه
-            if not near(v, P, 1e-6) or not near(v, pf + sum(ta.values()), 1e-6) or any(
-                    s2 is not None and not near(ta.get(aid, 0), s2, 1e-5) for aid, s2 in sh.items()):
+            _shb = any(s2 is not None and not near(ta.get(aid, 0), s2, 1e-5) for aid, s2 in sh.items())
+            _box = pf + sum(ta.values())
+            if near(v, P, 1e-6) and not _shb and not near(v, _box, 1e-6) and _box + 1e-6 >= max(v, 0.0) and _loss_day(w, d, led, live):
+                # 📉 v3.25.5: خسارة بنفس اليوم بعد ما الربح نزل (الصناديق ما تنقص) أو يوم خلص بالسالب (ماكو توزيع) — موضّحة، مو تناقض
+                lossd.append(f"{d} {(pb.get('wlab') or {}).get(w) or w or '؟'}: صافي البوتات {v:.6f}$ · نزل للصناديق {_box:.6f}$")
+                continue
+            if not near(v, P, 1e-6) or not near(v, _box, 1e-6) or _shb:
                 bad.append(f"{d} {(pb.get('wlab') or {}).get(w) or w or '؟'}: بوتات {v:.6f} / المحفظة {P:.6f} · نهائي {pf:.6f} + مُراكِمات {sum(ta.values()):.6f} {ta} مقابل {sh}")
     out.append(("💰 دفتر الربح: لكل محفظة ويوم — ربح البوتات = المُراكِمات + الصندوق النهائي (بالسنت)", not bad,
-                "كل الأيام المقيّدة متطابقة" if not bad else " · ".join(bad)[:900]))
+                ("كل الأيام المقيّدة متطابقة" if not bad else " · ".join(bad)[:900])
+                + (f" · 📉 {len(lossd)} يوم بيه خسارة (الصافي أقل من اللي نزل للصناديق قبلها، أو يوم خلص بالسالب ⇒ ماكو توزيع) — موضّحة بصفحة 📉 الخسائر: "
+                   + " · ".join(lossd[:4]) if lossd else "")))
     for wid, W in (pb.get("W") or {}).items():
         envs = [e for e in (W.get("env") or []) if isinstance(e, dict)]
         bal = float(W.get("free") or 0) + sum(float(e.get("usd") or 0) for e in envs)
@@ -9565,7 +9687,7 @@ def _gd_rec_scan(g, now, snaps=None):
     cseen = set((cl.get("seen") or []) if isinstance(cl, dict) else [])
     R = g.setdefault("rec", {})
     prev_cov, prev_bad = R.get("cov") or {}, R.get("bad") or {}
-    rows, live, need, bad = [], set(), {}, {}
+    rows, live, bad = [], set(), {}
     for b in bot_dirs().values():
         cfg = b.get("cfg") or {}
         if not _is_rec(b) or cfg.get("is_demo"):
@@ -9636,49 +9758,29 @@ def _gd_rec_scan(g, now, snaps=None):
            not stray)
         fr = F("fee_rate")
         ev("fee", "🟡", "💸 نسبة عمولة غريبة بالبوت الدوري", f"المتعلّمة من التنفيذ {fr * 100:.4f}% (المعتاد 0.05%–0.2%)", not (fr > 0.005))
-        # ٦ احتياج المحفظة (يتجمّع لكل محفظة × عملة)
-        if wid:
-            ccy, amt = (quote, sum(float(l.get("c") or 0) for l in lots)) if sell else (base, sum(float(l.get("q") or 0) for l in lots))
-            if amt > 0:
-                x = need.setdefault((wid, ccy), [0.0, []]); x[0] += amt; x[1].append(key)
+        # ٩ 🚫 v3.25.5: الخروج بالهدف انرفض لأن الرصيد ما يكفي (بوت ثاني صرف العملة/الدولار أو بيع/سحب يدوي) — من سجل البوت
+        xf = 0.0
+        for e_ in (_safe(load_json, hp, default=[]) or [])[:80]:
+            try:
+                m_ = str(e_.get("msg") or "")
+                if _GD_RX_REC_CLOSE.search(m_):
+                    break                                       # خروج نجح بعده ⇒ انحل
+                if m_.startswith("❌") and "بالمحفظة للخروج" in m_:
+                    xf = time.mktime(time.strptime(str(e_.get("time")), "%Y-%m-%d %H:%M:%S"))
+                    break
+            except Exception:
+                continue
+        ev("xfail", "🔴", "🚫 البوت الدوري ما گدر يطلع بالهدف — الرصيد ما يكفي",
+           f"آخر رفض قبل {max(0.0, now - xf) / 60:.0f} دقيقة — المحفظة ما بيها {'الدولار' if sell else 'العملة'} اللي يحتاجه الخروج"
+           " (بوت ثاني على نفس العملة صرفها، أو بيع/سحب يدوي) · البوت يعيد يحاول كل دقيقة · شوف «🤝 الرصيد الحر» بالرقابة",
+           not (xf and now - xf <= 1200))
         nbad = [c for c in checks if not c["ok"]]
         bad[key] = [c["k"] for c in nbad]
-        rows.append({"bot": key, "sym": sym, "side": "sell" if sell else "buy", "alive": alive, "paused": bool(st.get("paused")),
+        rows.append({"bot": key, "sym": sym, "side": "sell" if sell else "buy", "alive": alive, "paused": bool(st.get("paused")), "wid": wid, "ccy": quote if sell else base,
                      "lots": len(lots), "expo": round(expo, 8), "cap": cap, "unit": ue.strip(), "profit": round(pt, 10), "rel": round(rel, 10),
                      "ri": round(rt, 10), "held": round(held, 10), "pend": round(pend_age) if pd else 0, "next_at": nx,
                      "checks": checks, "ok": not nbad})
-    # ٦ تغطية المحفظة — قراءتين ورا بعض حتى تنبّه (تنفيذ بنص الفحص يبيّن نقص لحظي)
-    cov = {}
-    for (wid, ccy), (amt, names) in need.items():
-        snap = by_w.get(wid) or {}
-        if not snap.get("ok_bal"):
-            k0 = f"rec:cov:{wid}:{ccy}"
-            if k0 in prev_cov:
-                cov[k0] = prev_cov[k0]
-                live.add(k0)
-            continue
-        cash = float(((snap.get("bal") or {}).get(ccy) or {}).get("cash") or 0)
-        k = f"rec:cov:{wid}:{ccy}"
-        short = amt - cash
-        if short > max(1e-8, amt * 1e-6):
-            n = int(prev_cov.get(k) or 0) + 1
-            cov[k] = n
-            if n >= 2:
-                _gd_event(g, k, "🔴", f"💰 المحفظة ما بيها اللي تحتاجه الأوامر الدورية المفتوحة — {ccy}",
-                          f"الأوامر المفتوحة تحتاج {amt:.8g} {ccy} وبالمحفظة {cash:.8g} (ناقص {short:.8g}) — البوت ما يكدر يطلع بالهدف"
-                          f" · تأكد ما انسحب أو انباع شي يدوياً · البوتات: {', '.join(names)}", wid=wid, sym=ccy, kind="rec")
-                live.add(k)
-            for r in rows:
-                if r["bot"] in names:
-                    r["checks"].append({"k": "cov", "ok": n < 2, "t": "💰 المحفظة تغطي الأوامر المفتوحة",
-                                        "d": f"تحتاج {amt:.8g} {ccy} · موجود {cash:.8g}" + ("" if n >= 2 else " — ينتظر قراءة ثانية")})
-                    if n >= 2:
-                        r["ok"] = False
-                        bad.setdefault(r["bot"], []).append("cov")
-        else:
-            for r in rows:
-                if r["bot"] in names:
-                    r["checks"].append({"k": "cov", "ok": True, "t": "💰 المحفظة تغطي الأوامر المفتوحة", "d": f"تحتاج {amt:.8g} {ccy} · موجود {cash:.8g}"})
+    cov = {}                                              # ٦ 🤝 v3.25.5: التغطية صارت بـ`_gd_cover_scan` (كل بوتات المحفظة على الرصيد الحر)
     for e in g.get("events") or []:
         kk = str(e.get("key") or "")
         if kk.startswith("rec:") and e.get("status") == "open" and kk not in live:
@@ -9697,6 +9799,69 @@ def _gd_rec_scan(g, now, snaps=None):
         _safe(journal, "guard", f"🛡️🔁 فحص البوتات الدورية: {len(rows)} بوت · " + ("✅ كل الحسابات والدفاتر والأوامر مطابقة" if not nb else f"⚠️ {nb} بيه مشكلة (شوف 🛡️ الرقابة)"),
               "ok" if not nb else "warn", kind="rec", default=None)
     R.update(ts=now, rows=rows, cov=cov, bad=bad)
+    return rows
+
+
+GUARD_COVER_TOL = 1e-4        # 🤝 0.01% تسامح تقريب
+
+
+def _gd_cover_scan(g, now, snaps=None):
+    """🤝 v3.25.5: تغطية العملة المشتركة — لكل محفظة × عملة: اللي تحتاجه البوتات **حر** بالمحفظة (أوامر الدوري المفتوحة ·
+    عملات المُراكِم · اللي ماسكه DCA بدورته · بيعات الشبكة الافتراضية/المخزّنة) ≤ الرصيد الحر (availBal — مو المجموع).
+    أقل ⇒ بوت ثاني على نفس العملة (بأمر حي حجزها أو باعها) أو بيع/سحب يدوي صرف عملة محجوزة ⇒ البيع/الرجوع بالهدف يتأخر.
+    قراءتين ورا بعض (تنفيذ بنص الفحص يبيّن نقص لحظي). يشتغل للعملات اللي معادلة الرقابة مطفية عليها (عليها DCA أو دوري) —
+    ويضم الشبكة والمُراكِم على نفس العملة (قبل: انطفوا ويّاها). قراءة بس."""
+    C = g.setdefault("cover", {})
+    prev = C.get("n") or {}
+    n_new, live, rows = {}, set(), []
+    for snap in snaps or []:
+        if not isinstance(snap, dict) or snap.get("fatal"):
+            continue
+        wid = str(snap.get("wid") or "")
+        lab = snap.get("label") or wid
+        coins = snap.get("coins") or {}
+        for ccy, x in (snap.get("free") or {}).items():
+            mode = (coins.get(ccy) or {}).get("mode")
+            if not (x.get("strict") or mode in ("dca", "mixed")):
+                continue                                         # الشبكة/المُراكِم وحدهم: معادلة الرقابة تكفي
+            k = f"cov:{wid}:{ccy}"
+            if x.get("skip") or not snap.get("ok_bal"):
+                if k in prev:
+                    n_new[k] = prev[k]; live.add(k)
+                continue
+            need = float(x.get("amt") or 0)
+            av = float(((snap.get("bal") or {}).get(ccy) or {}).get("avail") or 0)
+            short = need - av
+            who = " · ".join(f"{nm} {a_:.8g}" for nm, a_, _k in (x.get("who") or []))
+            row = {"wid": wid, "label": lab, "ccy": ccy, "need": round(need, 10), "free": round(av, 10), "who": x.get("who") or [], "ok": True, "wait": False}
+            if short > max(1e-8, need * GUARD_COVER_TOL):
+                n = int(prev.get(k) or 0) + 1
+                n_new[k] = n
+                if n >= 2:
+                    row["ok"] = False
+                    _gd_event(g, k, "🔴", f"🤝 عملة محجوزة للبوتات انصرفت — {ccy}",
+                              f"{lab}: البوتات تحتاج {need:.8g} {ccy} **حرّة** بالمحفظة وموجود حر {av:.8g} (ناقص {short:.8g}) — بوت ثاني على نفس العملة"
+                              f" أو بيع/سحب يدوي صرفها ⇒ البيع أو الرجوع بالهدف يتأخر لحد ما يرجع الرصيد · المحتاجين: {who}", wid=wid, sym=ccy, kind="cover")
+                    live.add(k)
+                else:
+                    row["wait"] = True
+            rows.append(row)
+    for e in g.get("events") or []:
+        kk = str(e.get("key") or "")
+        if (kk.startswith("cov:") or kk.startswith("rec:cov:")) and e.get("status") == "open" and kk not in live:
+            e["status"], e["resolved"] = "resolved", now
+            _safe(journal, "guard", f"🛡️✅ انحلّت: {e.get('title')}", "ok", kind="cover", default=None)
+    R = g.get("rec") or {}
+    for r in R.get("rows") or []:                               # بكرت الدوري بالرقابة: «💰 الرصيد الحر يغطي أوامره»
+        cr = next((x for x in rows if x["wid"] == r.get("wid") and x["ccy"] == r.get("ccy")), None)
+        if not cr:
+            continue
+        r["checks"] = [c for c in (r.get("checks") or []) if c.get("k") != "cov"] + [{
+            "k": "cov", "ok": cr["ok"], "t": "💰 الرصيد الحر يغطي أوامره (ويّا البوتات الثانية على نفس العملة)",
+            "d": f"تحتاج البوتات {cr['need']:.8g} {cr['ccy']} حرة · موجود {cr['free']:.8g}" + (" — ينتظر قراءة ثانية" if cr["wait"] else "")}]
+        if not cr["ok"]:
+            r["ok"] = False
+    C.update(ts=now, n=n_new, rows=rows)
     return rows
 
 
@@ -12712,6 +12877,9 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
             return self._json(series_of(q.get("dir", [""])[0]))
         if u.path == "/api/settings":
             return self._json(settings_payload())
+        if u.path == "/api/coin_users":                   # ⚠️ v3.25.5: مين يستعمل نفس العملة بنفس المحفظة (قبل الإنشاء)
+            return self._json(_safe(coin_users, q.get("sym", [""])[0], q.get("wallet", [None])[0], q.get("wid", [""])[0] or None,
+                                    q.get("self", [""])[0] or None, default={"ok": False, "users": []}))
         if u.path == "/api/losses":                       # 📉 v3.25.4: سجل الخسائر (يحسب بس)
             try:
                 return self._json(loss_view(w=q.get("w", [""])[0] or None, src=q.get("src", [""])[0] or None,
@@ -15163,8 +15331,9 @@ async function openDeployRec(){
     <div class="fld" id="rd_ri_f"><label>⚖️ إعادة استثمار الربح % (للأمر الجاي)</label><input id="rd_ri" class="num" value="0" oninput="recPreview()"></div>
     <div class="fld"><label>📉 الحد الأدنى للسعر (0 = بلا حد)</label><input id="rd_lo" class="num" value="0" oninput="recPreview()"></div>
     <div class="fld"><label>📈 الحد الأعلى للسعر (0 = بلا حد)</label><input id="rd_hi" class="num" value="0" oninput="recPreview()"></div>
-    <div class="fld"><label>المحفظة</label><select id="rd_wallet">${ws.map(w=>`<option>${gEsc(w.name)}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>
+    <div class="fld"><label>المحفظة</label><select id="rd_wallet" onchange="recPreview()">${ws.map(w=>`<option>${gEsc(w.name)}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>
   </div>
+  <div id="rd_share"></div>
   <div class="cklist" style="margin-top:12px"><label class="ck"><input type="checkbox" id="rd_now" checked onchange="recPreview()">⚡ أول أمر هسه</label>
     <label class="ck"><input type="checkbox" id="rd_auto" checked>🤖 يشمله الحارس</label></div>
   <div id="rd_preview" style="margin-top:14px"></div>
@@ -15196,6 +15365,7 @@ function recFormBody(){
 }
 function recPreview(){
   const box=$('#rd_preview');if(!box)return;
+  shareCheck('rd_share',($('#rd_sym')||{}).value,{wallet:($('#rd_wallet')||{}).value});
   const B=recFormBody(),sell=B.rec_type==='rec_sell',base=(B.symbol.split('-')[0]||'العملة');
   const amt=+B.amount||0,n=Math.max(1,Math.floor(+B.every||1)),tp=Math.max(+B.tp_pct||0,0.2),cap=+B.cap||0,ri=Math.min(100,Math.max(0,+B.ri_pct||0)),F=0.001;
   const U=sell?' '+base:'$',per={h:'ساعة',d:'يوم',m:'شهر'}[B.unit],lo=+B.lo||0,hi=+B.hi||0;
@@ -15956,6 +16126,22 @@ function gN(x,d){if(x==null||x==='')return'—';x=+x;if(!isFinite(x))return'—'
   if(t.indexOf('.')>=0)t=t.replace(/0+$/,'').replace(/\.$/,'');return t==='-0'?'0':t}
 function gS(x,d){if(x==null||x==='')return'—';x=+x;if(!isFinite(x))return'—';return(x>0?'+':'')+gN(x,d)}
 function gId(k){return String(k).replace(/[^A-Za-z0-9_]/g,'_')}
+// ⚠️ v3.25.5: عملة عليها بوت ثاني بنفس المحفظة ⇒ تنبيه بالإنشاء (يتشاركون نفس الرصيد — ماكو حجز بالمنصة)
+const SHR={t:{}};
+function shareCheck(box,sym,q){
+  const el=$('#'+box);if(!el)return;sym=String(sym||'').trim().toUpperCase();q=q||{};
+  if(!/^[A-Z0-9]+-[A-Z0-9]+$/.test(sym)){el.innerHTML='';return}
+  clearTimeout(SHR.t[box]);SHR.t[box]=setTimeout(async()=>{
+    const qs='sym='+encodeURIComponent(sym)+(q.wallet!=null?'&wallet='+encodeURIComponent(q.wallet):'')+(q.wid?'&wid='+encodeURIComponent(q.wid):'')+(q.self?'&self='+encodeURIComponent(q.self):'');
+    let r=null;try{r=await api('/api/coin_users?'+qs)}catch(e){}
+    const e2=$('#'+box);if(!e2)return;
+    if(!r||!r.ok||!(r.users||[]).length){e2.innerHTML='';return}
+    e2.innerHTML=`<div class="shrw" style="border:1px solid rgb(var(--amber-rgb)/.55);background:rgb(var(--amber-rgb)/.08);border-radius:10px;padding:9px 11px;font-size:12px;line-height:1.85;margin-top:10px">
+      ⚠️ <b class="bidi">${gEsc(r.base)}</b> بهالمحفظة يستعملها هسه: ${r.users.map(u=>`${gEsc(u.label)} <b>${gEsc(u.name)}</b>${u.free>0?` <span style="color:var(--mut)">(ماسك حر <span class="bidi">${gN(u.free,8)}</span>)</span>`:''}`).join(' · ')}<br>
+      كلهم يتشاركون <b>نفس الرصيد</b> بالمنصة — ماكو حجز: عملات الدوري والمُراكِم وDCA تبقى حرّة بالمحفظة، وبوت ثاني يبيع من نفس العملة يكدر يصرفها ⇒ بيعهم بالهدف يتأخر.
+      خلّي رصيد <b class="bidi">${gEsc(r.base)}</b> يكفي الكل${r.free_total>0?` (محجوز حر هسه <b class="bidi">${gN(r.free_total,8)} ${gEsc(r.base)}</b>)`:''} — والرقابة تنبّهك إذا صار نقص («🤝 عملة محجوزة للبوتات انصرفت»).</div>`;
+  },350);
+}
 // 📉 v3.25.4: الخسائر — يحسب بس (ولا زر يحرّك فلوس أو يغيّر بوت)
 const LS={f:{w:'',src:'',from:'',to:''},v:null};
 async function openLosses(){
@@ -17547,6 +17733,7 @@ let ACC_PV=null;
 function accWalInfo(){
   // 👛 v3.22.9: كل محفظة حسابها مستقل — ربح أمس والمتبقي من النسب للمحفظة المختارة
   const P=ACC_PV;if(!P)return;const a=P.a,pv=P.pv,sel=$('#ac_wal'),info=$('#ac_rem');if(!sel||!info)return;
+  shareCheck('ac_share',($('#ac_s')||{}).value||a.symbol||'',{wid:sel.value,self:a.id||''});
   const W=(pv.wallets||[]).find(w=>w.wid===sel.value);
   if(!W){info.innerHTML='<span style="color:var(--amber)">👛 اختر محفظة — المُراكِم ياخذ من ربح بوتاتها بس ويشتري بمفاتيحها</span>';return}
   const mine=a.id&&(pv.acc_w||{})[a.id]===W.wid&&a.enabled!==false;
@@ -17572,6 +17759,7 @@ async function accEdit(a){
     <select id="ac_wal" onchange="accWalInfo()">${WS.length?WS.map(w=>`<option value="${gEsc(w.wid)}"${w.wid===curW?' selected':''}>${gEsc(w.label)}${w.n_acc?' · '+w.n_acc+' مُراكِم':''}</option>`).join(''):'<option value="">ماكو محفظة — أضف محفظة من 👛 المحافظ أو انشر بوت حقيقي</option>'}</select>
     <small id="ac_wmove" style="display:none;color:var(--amber);font-size:10.5px">⚠️ هالمُراكِم بيه رصيد على محفظته الحالية — تغيير المحفظة يصح بس لو هي نفس الحساب بمفتاح جديد (راح تنسأل للتأكيد)</small></div></div>
   <p id="ac_rem" style="color:var(--mut);font-size:12px;margin-bottom:10px"></p>
+  <div id="ac_share" style="margin-bottom:8px"></div>
  <p style="color:var(--mut2);font-size:11px;margin-top:-4px">
  نسبة الربح تُقسَّم على مُراكِمات <b>نفس المحفظة</b> · ونسبة العملة محصورة
  بمُراكِمات <b>نفس العملة ونفس المحفظة</b>، والباقي يبقى بالمحفظة.</p>
@@ -17886,7 +18074,7 @@ async function openDeployDca(){
   </select></div>
   <p id="dn_desc" style="color:var(--mut);font-size:12px;margin:8px 0 14px">يبيع عند الصعود، المتوسط يرتفع، يشتري عند النزول — الربح بالعملة. اضبط الأرقام وشوف الجدول قبل التشغيل.</p>
   <div class="frm">
-    <div class="fld"><label>الرمز (مثل XRP-USDT)</label><input id="dn_sym" style="text-transform:uppercase" placeholder="XRP-USDT"></div>
+    <div class="fld"><label>الرمز (مثل XRP-USDT)</label><input id="dn_sym" style="text-transform:uppercase" placeholder="XRP-USDT" oninput="shareCheck('dn_share',this.value,{wallet:($('#dn_wallet')||{}).value})"></div>
     <div class="fld"><label>سعر المعاينة (للحساب فقط)</label><input id="dn_bp" class="num" value="2.00"></div>
     <div class="fld"><label>حجم الأمر الأساسي (عملة)</label><input id="dn_base" class="num" value="100"></div>
     <div class="fld"><label>حجم أمر المتوسط (عملة)</label><input id="dn_avg" class="num" value="130"></div>
@@ -17897,7 +18085,7 @@ async function openDeployDca(){
     <div class="fld"><label id="dn_tp_lbl">هدف الربح % (تحت المتوسط)</label><input id="dn_tp" class="num" value="0.5"></div>
     <div class="fld"><label>أوامر على المنصة (الباقي افتراضي)</label><input id="dn_ex" class="num" value="3"></div>
     <div class="fld"><label>⏳ مدة الانتظار بين الدورات (ثانية)</label><input id="dn_wait" class="num" value="30"><small style="color:var(--mut2);font-size:10px">بعد إغلاق كل دورة، يصبر هذه المدة قبل بدء دورة جديدة (يمنع التداول المحموم)</small></div>
-    <div class="fld"><label>المحفظة</label><select id="dn_wallet">${ws.map(w=>`<option>${w.name}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>
+    <div class="fld"><label>المحفظة</label><select id="dn_wallet" onchange="shareCheck('dn_share',$('#dn_sym').value,{wallet:this.value})">${ws.map(w=>`<option>${w.name}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>
   </div>
   <div class="cklist" style="margin-top:12px"><label class="ck"><input type="checkbox" id="dn_auto" checked>🤖 يشمله الحارس</label>
     <label class="ck"><input type="checkbox" id="dn_trail" onchange="$('#dn_trail_box').style.display=this.checked?'':'none';dcaPreview()">🛡️ درع الحركة القوية</label></div>
@@ -17906,6 +18094,7 @@ async function openDeployDca(){
     <p style="color:var(--mut);font-size:11.5px;line-height:1.8;margin-top:6px">أوامر الأمان تبقى بالذاكرة: لما السعر يعبر مستوى، البوت يلاحق القمة (القاع بالشرائي) وينفّذ عند ارتداد هالنسبة — <b>ولا مرة بسعر أسوأ من المستوى</b>. وبعد الهدف يلاحق السعر ويغلق عند الارتداد — <b>ولا مرة أسوأ من الهدف</b>. تگدر تطفّيه وتشغّله من الكرت بأي وقت.</p>
   </div>
   <button class="primary" onclick="dcaPreview()" style="width:100%;margin-top:14px;background:linear-gradient(94deg,var(--cyan),var(--vio))">🔍 احسب الجدول والمخطط</button>
+  <div id="dn_share"></div>
   <div id="dn_preview" style="margin-top:16px"></div>
   <div class="mbtns" style="margin-top:14px"><button class="primary" id="dn_go" style="background:linear-gradient(94deg,var(--green),#16a34a)">🚀 انشر وشغّل</button><button onclick="hideModal()">إلغاء</button></div>`);
   $('#dn_go').onclick=async()=>{
@@ -18158,7 +18347,7 @@ async function openDeploy(pre){pre=pre||{};
   <input type="hidden" id="n_gtype" value="${_gt0}">
   <p id="n_gtype_h" style="color:var(--mut);font-size:12px;margin-bottom:12px"></p>
   <div class="frm">
-    <div class="fld"><label>الرمز (مثال XRP-USDT)</label><input id="n_sym" style="text-transform:uppercase" value="${pre.symbol||''}"></div>
+    <div class="fld"><label>الرمز (مثال XRP-USDT)</label><input id="n_sym" style="text-transform:uppercase" value="${pre.symbol||''}" oninput="shareCheck('n_share',this.value,{wallet:($('#n_wallet')||{}).value})"></div>
     <div class="fld"><label>نسبة الشبكة %</label><input id="n_grid" class="num" value="${pre.grid_pct??1}"></div>
     <div class="fld"><label>قيمة الأمر $</label><input id="n_usd" class="num" value="${pre.usd_value??10}"></div>
     <div class="fld"><label>أدنى سعر (0=بدون)</label><input id="n_min" class="num" value="${pre.min_price??0}"></div>
@@ -18166,7 +18355,7 @@ async function openDeploy(pre){pre=pre||{};
     <div class="fld" id="f_lower"><label>🎚️ حد النطاق الأدنى (0=بلا أرضية)</label><input id="n_lower" class="num" value="${pre.lower_price??0}"><small style="color:var(--mut2);font-size:10px">لا شراء تحت هذا السعر — يُحجز حتى يعود داخل النطاق</small></div>
     <div class="fld" id="f_upper"><label>🎚️ حد النطاق الأعلى (0=بلا سقف)</label><input id="n_upper" class="num" value="${pre.upper_price??0}"><small style="color:var(--mut2);font-size:10px">لا بيع فوق هذا السعر — يحصر التداول داخل النطاق</small></div>
     <div class="fld" id="f_boff"><label>⚡ بُعد الشراء تحت بيعه %</label><input id="n_boff" class="num" value="${pre.buy_offset??0}" oninput="offHint()"><small id="n_boff_h" style="color:var(--mut2);font-size:10px">كل بيع يفتح شراءه على هذا البُعد تحته — ربح الدورة يصير بهذه النسبة بدل مسافة السلم</small></div>
-    <div class="fld"><label>المحفظة</label><select id="n_wallet">${ws.map(w=>`<option>${w.name}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>
+    <div class="fld"><label>المحفظة</label><select id="n_wallet" onchange="shareCheck('n_share',$('#n_sym').value,{wallet:this.value})">${ws.map(w=>`<option>${w.name}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>
   </div>
   <div class="cklist" style="margin-top:14px">
     <label class="ck"><input type="checkbox" id="n_guard" ${pre.guard?'checked':''}>⚔️ درع السكين</label>
@@ -18174,9 +18363,11 @@ async function openDeploy(pre){pre=pre||{};
     <label class="ck"><input type="checkbox" id="n_demo" ${pre.demo?'checked':''}>🧪 تجريبي DEMO</label>
   </div>
   <button class="primary" id="b_rprev" onclick="gridRangePreview()" style="width:100%;margin-top:12px;background:linear-gradient(94deg,var(--cyan),var(--vio))">🔍 معاينة أوامر النطاق (كم USDT وكم عملة)</button>
+  <div id="n_share"></div>
   <div id="n_gpreview" style="margin-top:14px"></div>
   <div class="mbtns" style="margin-top:14px"><button class="primary" id="n_go">🚀 انشر وشغّل</button><button onclick="hideModal()">إلغاء</button></div>`);
   setTimeout(()=>gType(_gt0),0);                               // الحقول تنضبط حسب النوع من أول ما ينفتح
+  setTimeout(()=>shareCheck('n_share',($('#n_sym')||{}).value,{wallet:($('#n_wallet')||{}).value}),0);
   $('#n_go').onclick=async()=>{
     const body={symbol:$('#n_sym').value.trim().toUpperCase(),grid_pct:$('#n_grid').value,usd_value:$('#n_usd').value,
       min_price:$('#n_min').value,forced_base:$('#n_base').value,wallet:$('#n_wallet').value,
