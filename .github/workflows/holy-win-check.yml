@@ -18,18 +18,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Start the dashboard (fresh folder · no password · no exchange keys)
-        shell: pwsh
-        env:
-          PYTHONUTF8: '1'
-        run: |
-          New-Item -ItemType Directory -Force -Path C:\holy | Out-Null
-          Copy-Item Holy_Dashboard.pyw C:\holy\
-          '{"port": 8099}' | Set-Content -Encoding ascii C:\holy\dashboard_config.json
-          Start-Process python -ArgumentList "Holy_Dashboard.pyw","--headless" -WorkingDirectory C:\holy -RedirectStandardOutput C:\holy\dash.log -RedirectStandardError C:\holy\dash.err -WindowStyle Hidden
-          for ($i = 0; $i -lt 60; $i++) { try { if ((Invoke-WebRequest http://127.0.0.1:8099/ -UseBasicParsing -TimeoutSec 3).StatusCode -eq 200) { break } } catch {}; Start-Sleep 1 }
-          (Invoke-WebRequest http://127.0.0.1:8099/api/app/info -UseBasicParsing).Content
-      - name: Windows app
+      - name: Windows app (starts the dashboard itself — a step's processes die when the step ends)
         shell: pwsh
         run: ./ci/win_check.ps1
       - name: Dashboard log
