@@ -12791,7 +12791,7 @@ def win_exe_for(url):
 
 
 
-LOGIN_PAGE = """<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+LOGIN_PAGE = """<!doctype html><html lang="ar" dir="rtl" translate="no"><head><meta charset="utf-8"><meta name="google" content="notranslate">
 <meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="alternate icon" href="/favicon.ico" sizes="16x16 32x32 48x48 256x256">
 <title>🔒 The Holy Dashboard</title><style>
 /* 🎬 v3.26.0: انميشن البداية — الشعار ينرسم خط خط · خياله يطلع · الكتابة تنكشف · وكلشي يختفي (مرة بالجلسة) */
@@ -13772,9 +13772,9 @@ WantedBy=multi-user.target
 
 # ───────────── الواجهة (صفحة وحدة موسعة) ─────────────
 HTML_PAGE = r"""<!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar" dir="rtl" translate="no">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8"><meta name="google" content="notranslate"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#070210">
 <script>try{var _t=localStorage.getItem('dash_theme');if(_t&&_t!=='holy')document.documentElement.dataset.theme=_t;
 if(localStorage.getItem('dash_lite')==='on')document.documentElement.classList.add('lite')}catch(e){}</script>

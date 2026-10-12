@@ -74,7 +74,7 @@ Check "favicon.ico served (no login needed)" ($fav.StatusCode -eq 200 -and $fav.
 # 2) --setup ⇒ the address window (RTL, the icon) · closing it ⇒ nothing opens
 $p = Start-Process "$A\TheHolyDashboard.exe" -ArgumentList "--setup" -PassThru
 $hw = [IntPtr]::Zero
-for ($k = 0; $k -lt 40 -and $hw -eq [IntPtr]::Zero; $k++) { Start-Sleep -Milliseconds 250; $hw = [W]::FindWindow("HolySetup", $null) }
+for ($k = 0; $k -lt 40 -and $hw -eq [IntPtr]::Zero; $k++) { Start-Sleep -Milliseconds 250; $hw = [W]::FindWindow("HolySetup", [NullString]::Value) }
 Check "--setup shows the address window" ($hw -ne [IntPtr]::Zero) "hwnd=$hw"
 if ($hw -ne [IntPtr]::Zero) { Start-Sleep -Milliseconds 600; Shot "setup"; [W]::SendMessage($hw, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null }
 $p.WaitForExit(8000) | Out-Null
@@ -123,7 +123,7 @@ Write-Host "HOLYWIN windows: $(([W]::List() -split "`n" | Select-Object -First 1
 
 # 5) open it again ⇒ no new shortcut prompts, the saved address is used (Shift not held)
 $p = Start-Process "$A\TheHolyDashboard.exe" -PassThru; $p.WaitForExit(20000) | Out-Null
-Check "second start uses the saved address (exits 0, no dialog)" ($p.HasExited -and $p.ExitCode -eq 0 -and -not ([W]::FindWindow("HolySetup", $null) -ne [IntPtr]::Zero)) ""
+Check "second start uses the saved address (exits 0, no dialog)" ($p.HasExited -and $p.ExitCode -eq 0 -and -not ([W]::FindWindow("HolySetup", [NullString]::Value) -ne [IntPtr]::Zero)) ""
 Write-Host "HOLYWIN dash.log: $((Get-Content "$D\dash.log" -Tail 6 -ErrorAction SilentlyContinue) -join ' ;; ')"
 Write-Host "HOLYWIN dash.err: $((Get-Content "$D\dash.err" -Tail 6 -ErrorAction SilentlyContinue) -join ' ;; ')"
 Write-Host "HOLYWIN TOTAL $ok ok · $bad failed"
