@@ -4,7 +4,9 @@ set -u
 P=com.holy.dash
 OUT=ci_out; mkdir -p $OUT
 say(){ echo "HOLYCI $*"; }
-dump(){ adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml $OUT/ui_$1.xml >/dev/null 2>&1; python3 ci/ci_tools.py texts $OUT/ui_$1.xml "$1"; }
+# uiautomator can die once (e.g. right after «adb root» restarts adbd) ⇒ an empty screen ⇒ try again
+dump(){ for t in 1 2 3 4; do rm -f $OUT/ui_$1.xml; adb shell rm -f /sdcard/ui.xml >/dev/null 2>&1; adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml $OUT/ui_$1.xml >/dev/null 2>&1
+  grep -q "<node" $OUT/ui_$1.xml 2>/dev/null && break; sleep 2; done; python3 ci/ci_tools.py texts $OUT/ui_$1.xml "$1"; }
 shot(){ adb exec-out screencap -p > $OUT/$1.png 2>/dev/null; python3 ci/ci_tools.py img $OUT/$1.png "$1"; }
 tap(){ xy=$(python3 ci/ci_tools.py find $OUT/ui_$2.xml "$1"); if [ -n "$xy" ]; then adb shell input tap $xy; say "tap «$1» at $xy"; else say "tap «$1» NOT FOUND"; fi; }
 api(){ curl -s -X POST "localhost:8099$1" -H 'Content-Type: application/json' -d "$2"; echo; }
