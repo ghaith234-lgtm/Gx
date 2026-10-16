@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.26.2"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.26.3"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -3512,6 +3512,76 @@ def acc_alloc_summary():
     return {"day": y, "profit": round(prof, 4), "allocated": round(total_alloc, 4),
             "unallocated": round(prof - total_alloc, 4),
             "used_pct": round(used, 2), "free_pct": round(100 - used, 2), "rows": rows, "wallets": wallets}
+
+
+def acc_log(aid, limit=300):
+    """📜 v3.26.3: سجل المُراكِم — من سجلاته المحفوظة بحالته (نصيب كل يوم · شراء · عملة استلمها · بيع · نقل للمتراكم ·
+    تحويل للصندوق النهائي — دولار أو عملة) + تنبيهاته وأخطاءه من السجلات المفصّلة (7 أيام) · قراءة بس — ولا شي يتحرك"""
+    a = next((x for x in acc_cfgs() if x.get("id") == aid), None)
+    if not a:
+        return {"ok": False, "msg": "المُراكِم مو موجود", "items": []}
+    e = acc_state().get(aid) or {}
+    sym = str(a.get("symbol") or "")
+    base = sym.split("-")[0].upper()
+    out = []
+    T = lambda ts: datetime.fromtimestamp(float(ts)).strftime("%Y-%m-%d %H:%M:%S")
+    q = lambda v: _okx_num(v) if v else "0"
+
+    def add(ts, msg, k):
+        try:
+            out.append({"t": float(ts), "time": T(ts), "msg": msg, "k": k})
+        except Exception:
+            pass
+    dp = e.get("dpct") or {}
+    for d, v in (e.get("days") or {}).items():
+        try:
+            v = float(v or 0)
+            if v <= 0:
+                continue                                 # يوم بلا ربح — ما ينكتب (لا ضجيج)
+            ts = (datetime.strptime(d, "%Y-%m-%d") + timedelta(days=1)).timestamp()
+        except Exception:
+            continue
+        pc = dp.get(d)
+        out.append({"t": ts - 0.5, "time": d + " · نهاية اليوم",
+                    "msg": f"📥 نصيب ربح يوم {d}: +{v:.4f}$" + (f" ({float(pc):g}% من ربح محفظته)" if pc is not None else "") + " ⇒ قيد الشراء",
+                    "k": "share"})
+    for x in (e.get("buys") or []):
+        try:
+            if x.get("hid"):
+                add(x["ts"], f"🪙 استلم {q(x.get('qty'))} {base} من {x.get('why') or 'بوت'} (كلفتها {float(x.get('usd') or 0):.4f}$) — بلا شراء", "coin")
+            else:
+                add(x["ts"], f"🛒 شراء {q(x.get('qty'))} {base} بـ {float(x.get('usd') or 0):.2f}$ @ {x.get('px')} ({x.get('why') or 'آلي'})", "buy")
+        except Exception:
+            continue
+    for x in (e.get("sells") or []):
+        try:
+            pf = float(x.get("profit") or 0)
+            add(x["ts"], f"💰 بيع {q(x.get('qty'))} {base} بـ {float(x.get('usd') or 0):.2f}$ @ {x.get('px')} · "
+                         f"{'ربح' if pf >= 0 else 'خسارة'} {pf:+.2f}$ ⇒ الصندوق النهائي" + (f" ({x['why']})" if x.get("why") else ""), "sell")
+        except Exception:
+            continue
+    for x in (e.get("moves") or []):
+        try:
+            add(x["ts"], f"📦 نُقل {float(x.get('usd') or 0):.2f}$ من قيد الشراء للمتراكم ({x.get('why') or ''})", "move")
+        except Exception:
+            continue
+    for x in (e.get("wlog") or []):
+        try:
+            add(x["ts"], f"📤 تحويل {float(x.get('usd') or 0):.2f}$ من المتراكم للصندوق النهائي", "wd")
+        except Exception:
+            continue
+    for x in (e.get("cout") or []):
+        try:
+            add(x["ts"], f"📤 {q(x.get('qty'))} {base} من المخزون للصندوق النهائي (كلفتها {float(x.get('cost') or 0):.2f}$)", "cout")
+        except Exception:
+            continue
+    try:                                                 # ⚠️ فشل شراء/بيع وتنبيهاته (السجلات المفصّلة — 7 أيام)
+        for j in (journal_query(bot=aid, lv="warn", limit=100) or {}).get("items") or []:
+            add(j.get("t") or 0, ("❌ " if j.get("lv") == "err" else "⚠️ ") + str(j.get("m") or "")[:400], "warn")
+    except Exception:
+        pass
+    out.sort(key=lambda x: x["t"], reverse=True)
+    return {"ok": True, "id": aid, "name": a.get("name") or sym, "sym": sym, "items": out[:max(1, min(1000, int(limit or 300)))]}
 
 
 def acc_snapshot():
@@ -8585,7 +8655,16 @@ def flow_view():
     except Exception:
         wh = ACC_WINDOW_H
     midnight = datetime(dnow.year, dnow.month, dnow.day) + timedelta(days=1)
-    order = sorted(set(wbots) | set((pb.get("W") or {})) | aws,
+    # 📥 v3.26.3: ربح اليوم لكل محفظة من الدفتر نفسه — نفس رقم «محرر اليوم» بالواجهة (ويّا البوت اللي انحذف اليوم)
+    #    ونفس اللي يتوزّع نهاية اليوم (`accum_tick` ⇐ `day_profit_w`) · كان مجموع البوتات الحية بس ⇒ يطلع أقل
+    ltd = {}
+    for k, e in led.items():
+        if str(k).startswith("_") or not isinstance(e, dict):
+            continue
+        v = float((e.get("daily") or {}).get(today) or 0)
+        if abs(v) > 1e-12:
+            ltd.setdefault(_led_wid(k, e, live) or "", []).append((k, e, v))
+    order = sorted(set(wbots) | set((pb.get("W") or {})) | aws | {w for w in ltd if w},
                    key=lambda w: (w not in aws, wlab.get(w) or w))
     closed = [x for x in (ast.get("_closed") or []) if isinstance(x, dict)]
     aw_of = {a.get("id"): acc_wid(a) for a in cfgs}
@@ -8658,7 +8737,10 @@ def flow_view():
                     eid = f"cp|{key}|{base}"
                     lines.append({"id": eid, "from": nid, "to": pnode(wid), "k": "coin", "pct": round(100 - given, 6),
                                   "why": why or "", "t": E(eid), "c": base})
-        has_r = any(x["usd"] for x in bl) or bool(mine) or rp_w.get(wid, 0) > 0 or any(w == wid for (w, _a) in ra_w)
+        wday = day_profit_w(today, wid, led, live)          # 📥 v3.26.3: = «محرر اليوم» لهالمحفظة
+        ktype = {x["key"]: x["type"] for x in bl}
+        has_r = (any(x["usd"] for x in bl) or bool(mine) or rp_w.get(wid, 0) > 0 or any(w == wid for (w, _a) in ra_w)
+                 or abs(wday) > 1e-12)
         rel = None
         if has_r:
             split = []
@@ -8674,8 +8756,23 @@ def flow_view():
             if rest > 1e-9 or rp_w.get(wid, 0) > 0:
                 lines.append({"id": f"rp|{wid}", "from": rnode(wid), "to": pnode(wid), "k": "usd", "pct": rest,
                               "live": mode == "live", "t": round(rp_w.get(wid, 0.0), 10), "c": "USDT"})
-            rel = {"id": rnode(wid), "mode": mode, "today": round(sum(x["u_today"] for x in bl if x["usd"]), 6),
-                   "wait": round(sum(x["u_wait"] for x in bl if x["usd"]), 6), "split": split, "rest": rest,
+            # 💵 v3.26.3: كم يطلع لكل وحدة من النسب لو اليوم خلص هسه — نفس حساب `accum_tick` (المُراكِم الموقوف ياخذ نصيبه ·
+            #    اللي يبدي بيوم جاي ما ياخذ · يوم خسران ما يتوزّع) · الباقي للصندوق النهائي
+            pos_ = max(0.0, wday)
+            for s_ in split:
+                s_["usd"] = 0.0 if s_["future"] else round(pos_ * float(s_["pct"] or 0) / 100.0, 6)
+            src_ = [{"key": k, "name": os.path.basename(str(k).rstrip("/\\")) or k, "sym": str(e.get("symbol") or ""),
+                     "type": ktype.get(k) or str(e.get("type") or "grid"), "v": round(v, 6), "gone": k not in live}
+                    for k, e, v in sorted(ltd.get(wid, []), key=lambda x: -x[2])]
+            wait_ = 0.0                                      # ⏳ اللي ما انقيّد بعد — من الدفتر (حتى المحذوف) · نافذة اللحاق بس
+            for k, e in led.items():
+                if str(k).startswith("_") or not isinstance(e, dict) or _led_wid(k, e, live) != wid:
+                    continue
+                for d, v in (e.get("daily") or {}).items():
+                    if lo <= d <= today:
+                        wait_ += max(0.0, float(v or 0) - float(((ub.get(k) or {}).get(d) or [0])[0] or 0))
+            rel = {"id": rnode(wid), "mode": mode, "today": wday, "wait": round(wait_, 6), "split": split, "rest": rest,
+                   "rest_usd": round(pos_ * rest / 100.0, 6), "src": src_,
                    "to_acc": round(sum(t for (w, _a), t in ra_w.items() if w == wid), 8), "to_final": round(rp_w.get(wid, 0.0), 8)}
         W = (pb.get("W") or {}).get(wid) or {}
         envs = [{"id": e.get("id"), "name": e.get("name"), "pct": float(e.get("pct") or 0), "usd": round(float(e.get("usd") or 0), 8),
@@ -8752,6 +8849,9 @@ def flow_view():
                           "t": round(E(f"co|{aid}|{base}"), 10), "c": base})
     return {"ok": True, "since": since, "today": today, "now": now, "to_midnight": round((midnight - dnow).total_seconds()),
             "window_h": wh, "in_window": in_win, "sum_pct": sum_pct, "sum_w": sumw,
+            # 📥 v3.26.3: مجموع اليوم = `day_profit(today)` (رقم الواجهة بالضبط) · `today_untag` سطر قديم بالدفتر بلا محفظة
+            "today_all": round(sum(v for L in ltd.values() for _k, _e, v in L), 6),
+            "today_untag": round(sum(v for _k, _e, v in ltd.get("", [])), 6),
             "wallets": wallets, "accs": accs, "lines": lines}
 
 
@@ -13169,6 +13269,8 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                                             limit=int(q.get("limit", ["500"])[0] or 500)))
             except Exception as ex:
                 return self._json({"ok": False, "msg": str(ex)[:200], "items": []})
+        if u.path == "/api/acc_log":                      # 📜 v3.26.3: سجل المُراكِم (قراءة بس)
+            return self._json(_safe(acc_log, q.get("id", [""])[0], default={"ok": False, "msg": "تعذّر قراءة السجل", "items": []}))
         if u.path == "/api/flow":                         # 🗺️ v3.22.8: خريطة الأرباح (مراقبة بس)
             return self._json(_safe(flow_view, default={"ok": False, "msg": "تعذّر بناء الخريطة"}))
         if u.path == "/api/journal":                      # 📜 v3.22.6: السجلات المفصّلة بالفلاتر
@@ -14058,6 +14160,8 @@ body.boot .card{animation:rise .6s var(--ease) both;animation-delay:calc(var(--i
 .dcabuy:hover{box-shadow:0 6px 20px rgb(var(--green-rgb)/.3)}
 .dcabuy.loss{background:linear-gradient(94deg,var(--red),#dc2626);color:#fff}
 .dcabtns{display:grid;grid-template-columns:repeat(4,1fr) auto auto;gap:5px;margin-bottom:10px}
+.dcaopts.x3{grid-template-columns:1fr 1fr auto}
+.dcahist{padding:9px 10px;border-radius:10px;font-size:12.5px;white-space:nowrap}
 .dcaopts{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
 .dcaopts .dcashield{margin-bottom:0}
 .dcalast{width:100%;padding:9px 10px;border-radius:10px;font-size:12.5px;border:1px solid var(--line);background:rgb(var(--ov-rgb)/.03);color:var(--mut);text-align:center}
@@ -14156,9 +14260,10 @@ body.boot .card{animation:rise .6s var(--ease) both;animation-delay:calc(var(--i
 .chip.ck:hover{border-color:var(--line2)}
 .chip.gOn{color:var(--amber);border-color:rgb(var(--amber-rgb)/.45);background:rgb(var(--amber-rgb)/.07)}
 .cbtns{display:grid;grid-template-columns:auto 1fr 1fr;gap:8px}
-.cbtns2{display:grid;grid-template-columns:1fr 1fr 1.3fr auto;gap:8px;margin-top:8px}
+.cbtns2{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto auto;gap:6px;margin-top:8px}
+.cbtns2.ri{grid-template-columns:repeat(3,minmax(0,1fr))}
 .cdel{padding:9px 13px}
-.cbtns2 button{padding:9px 8px;font-size:12.5px;white-space:nowrap}
+.cbtns2 button{padding:9px 6px;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cset{background:linear-gradient(94deg,rgb(var(--vio2-rgb)/.4),rgb(var(--cyan2-rgb)/.4));border-color:var(--line2);font-weight:600}
 .cset:hover{box-shadow:0 4px 16px rgb(var(--vio2-rgb)/.25)}
 .cchart{margin:4px 0 12px;border-radius:14px;overflow:hidden;border:1px solid var(--line);height:280px;background:var(--chart-bg);
@@ -14257,7 +14362,9 @@ body.boot .card{animation:rise .6s var(--ease) both;animation-delay:calc(var(--i
 .fl-r .fl-big small{font-size:10.5px;color:var(--mut2);font-weight:400}
 .fl-r .mode{font-size:10.5px;line-height:1.6;margin:0 0 3px}.fl-r .mode.live{color:var(--cyan)}.fl-r .mode.eod{color:var(--amber)}
 .fl-r .sp{display:flex;justify-content:space-between;gap:8px;font-size:10.5px;color:var(--mut);border-top:1px dashed rgb(var(--ov-rgb)/.08);padding-top:2px}
-.fl-r .sp b{color:var(--tx);font-variant-numeric:tabular-nums}
+.fl-r .sp b{color:var(--tx);font-variant-numeric:tabular-nums;white-space:nowrap}
+.fl-r .sp b .fl-am{color:var(--green);font-weight:600;font-size:10px;margin:0 6px}.fl-r .sp b .fl-am.z{color:var(--mut2);font-weight:400}
+.fl-r .fl-gone{font-size:10px;color:var(--mut2);margin:0 0 3px}
 .fl-l{fill:none;stroke-width:2;opacity:.75;transition:opacity .25s,stroke-width .25s}
 .fl-l.k-usd{stroke:var(--green)}.fl-l.k-coin{stroke:var(--amber)}.fl-l.k-wd{stroke:var(--cyan);stroke-dasharray:2 5;stroke-linecap:round}
 .fl-l.dash{stroke-dasharray:6 6}
@@ -15034,7 +15141,8 @@ function buildCard(b,i){
   <div class="cbtns2">
     <button data-k="chart">📈 شارت</button>
     <button data-k="lddr">🪜 السلم</button><button data-k="rilad" style="display:none">💠 سلّم الإعادة</button>
-    <button onclick="openDrawer('${b.dir}')" class="cset">⚙ تفاصيل</button>
+    <button data-k="hist">📜 السجل</button>
+    <button onclick="openDrawer('${b.dir}')" class="cset" title="⚙ تفاصيل البوت">⚙</button>
     <button data-k="del" class="danger cdel" title="حذف نهائي + إلغاء أوامره">🗑</button></div>
   <div class="last" data-k="last"></div>`;
   const R={};el.querySelectorAll('[data-k]').forEach(n=>R[n.dataset.k]=n);el._r=R;
@@ -15043,6 +15151,7 @@ function buildCard(b,i){
   R.ab.onclick=()=>accumPrompt(botOf(b.dir)||b,'buy');     // 🔁 الحالة الحالية (مو نسخة بناء الكرت)
   R.as.onclick=()=>accumPrompt(botOf(b.dir)||b,'sell');
   R.lddr.onclick=()=>openLadder(b.dir);
+  R.hist.onclick=()=>botHist(botOf(b.dir)||b);
   if(R.rilad)R.rilad.onclick=()=>openReinvestLadder(b.dir);
   R.chart.onclick=()=>toggleChart(el,b);
   R.del.onclick=()=>confirmPurge(b.dir);
@@ -15131,7 +15240,7 @@ function updCard(el,b,bench){
   }
   if(R.rilad){
     const _I=b.ri, _sh=!!(_I&&(_I.on||_I.cfg_on||_I.usd>0||_I.coin>0||_I.n_unwind>0));
-    if(R.rilad.style.display!==(_sh?'':'none'))R.rilad.style.display=_sh?'':'none';
+    if(R.rilad.style.display!==(_sh?'':'none')){R.rilad.style.display=_sh?'':'none';R.rilad.parentNode.classList.toggle('ri',_sh)}   // 6 أزرار ⇒ صفّين مرتّبين
   }
   if(R.rirow){
     const I=b.ri;
@@ -15629,9 +15738,12 @@ function recRange(b){
     hideModal();ctl(b.dir,'rec_range',{lo,hi})};
 }
 function recPause(b){const r=b.rec||{};ctl(b.dir,r.paused?'rec_resume':'rec_pause');if(b.rec)b.rec.paused=!r.paused}
-async function recHist(b){
+const BT_LBL={grid:'♾️ لانهائية',grid_range:'🎚️ مدى',grid_plus:'➕ بلس',dca:'📉 DCA بيعي',dca_buy:'📈 DCA شرائي',rec_buy:'دوري شرائي',rec_sell:'دوري بيعي'};
+function recHist(b){return botHist(b)}
+async function botHist(b){                                     // 📜 v3.26.3: سجل البوت — لكل الأنواع (مثل الدوري)
+  if(!b)return;
   let h=[];try{h=await api('/api/history?dir='+encodeURIComponent(b.dir))}catch(e){}
-  showModal(`<h2>📜 سجل ${b.symbol} — ${b.bot_type==='rec_sell'?'دوري بيعي':'دوري شرائي'}</h2>
+  showModal(`<h2>📜 سجل ${gEsc(b.symbol)} — ${BT_LBL[b.bot_type||'grid']||gEsc(b.bot_type||'')}</h2>
     <div style="max-height:60vh;overflow-y:auto">${(h||[]).slice(0,200).map(e=>`<div class="histline"><span class="t">${gEsc(e.time||'')}</span><br>${gEsc(e.msg||'')}</div>`).join('')||'<p style="color:var(--mut)">السجل فارغ</p>'}</div>
     <div class="mbtns"><button onclick="hideModal()">إغلاق</button></div>`);
 }
@@ -15780,7 +15892,7 @@ function buildDcaCard(b,i){
       <b class="num" data-k="lp">—</b>
     </div>
     <button class="dcabuy" data-k="buynow">${b.bot_type==='dca_buy'?'💰 بِع الآن وأغلق الدورة':'💰 اشترِ الآن وأغلق الدورة'}</button>
-    <div class="dcaopts"><button class="dcashield" data-k="dtrail">🛡️ الدرع —</button><button class="dcalast" data-k="dlast">🏁 آخر دورة ويخرج</button></div>
+    <div class="dcaopts x3"><button class="dcashield" data-k="dtrail">🛡️ الدرع —</button><button class="dcalast" data-k="dlast">🏁 آخر دورة ويخرج</button><button class="dcahist" data-k="dhist">📜 السجل</button></div>
     <div class="dcabtns">
       <button data-k="dtable">📋 الجدول</button>
       <button data-k="dladder">🪜 السلم</button>
@@ -15800,6 +15912,7 @@ function buildDcaCard(b,i){
   R.dchart.onclick=()=>toggleChart(el,b);
   R.dtrail.onclick=()=>dcaShield(botOf(b.dir)||b);
   R.dlast.onclick=()=>dcaLast(botOf(b.dir)||b);
+  R.dhist.onclick=()=>botHist(botOf(b.dir)||b);
   R.dpause.onclick=()=>{const bb=botOf(b.dir)||b,d=bb.dca||(bb.dca={}),p=!!d.paused;   // 🔁 الحالة الحالية + يتبدّل فوراً
     d.paused=!p;R.dpause.textContent=p?'⏸ إيقاف':'▶️ استئناف';ctl(b.dir,p?'resume':'pause')};
   R.ddel.onclick=()=>confirmPurge(b.dir);
@@ -17712,18 +17825,20 @@ function flProfit(w){
     <div class="fl-hint">اضغط: الصناديق · تخصيص العملات · الصرف · التصفير</div></div>`}
 function flRel(w){
   const R=w.rel;if(!R)return '';const c=FL_WC[w.ci%FL_WC.length],live=R.mode==='live';
-  const sp=(R.split||[]).map(s=>`<div class="sp"><span>🪙 ${flE(s.name)}${s.future?' 🕐':''}${s.enabled?'':' ⏸'}</span><b>${+(+s.pct).toFixed(2)}%</b></div>`).join('');
+  const am=v=>`<small class="fl-am${(+v||0)>5e-7?'':' z'}">${fl$(v)}</small>`;          // 💵 v3.26.3: المبلغ جنب النسبة
+  const sp=(R.split||[]).map(s=>`<div class="sp"><span>🪙 ${flE(s.name)}${s.future?' 🕐':''}${s.enabled?'':' ⏸'}</span><b>${+(+s.pct).toFixed(2)}%${am(s.usd)}</b></div>`).join('');
+  const gone=(R.src||[]).filter(x=>x.gone).reduce((t,x)=>t+(+x.v||0),0);
   return `<div class="fl-n fl-r" data-id="${flE(R.id)}" data-u="1" data-c="0" style="--wc:${c}" onclick="flInfo('${flE(R.id)}')">
     <h4>📥 الربح المحرر <small>${flE(w.label)}</small></h4>
-    <div class="fl-big">+${fl$(R.today)} <small>اليوم</small></div>
+    <div class="fl-big">${(+R.today||0)<0?'':'+'}${fl$(R.today)} <small>اليوم</small></div>${Math.abs(gone)>5e-7?`<div class="fl-gone">🗑️ منه ${fl$(gone)} من بوت انحذف اليوم</div>`:''}
     ${live?`<div class="mode live">⚡ ماكو مُراكِم شغّال — كل ربح ينزل للصندوق النهائي مباشرة</div>`
           :`<div class="mode eod">⏳ يتوزّع نهاية اليوم بعد ⏱ <b data-cd>${flHMS(FL.data?FL.data.to_midnight:0)}</b>${R.wait>R.today+1e-9?` · ينتظر ${fl$(R.wait)}`:''}</div>`}
-    ${sp}<div class="sp"><span>💰 للصندوق النهائي${live&&(R.split||[]).length?' (اليوم)':''}</span><b>${(+R.rest).toFixed(R.rest%1?2:0)}%</b></div></div>`}
+    ${sp}<div class="sp"><span>💰 للصندوق النهائي${live&&(R.split||[]).length?' (اليوم)':''}</span><b>${(+R.rest).toFixed(R.rest%1?2:0)}%${am(R.rest_usd)}</b></div></div>`}
 function flRender(r){
-  const tot=r.wallets.reduce((s,w)=>s+(w.rel?w.rel.today:0),0),held=r.wallets.reduce((s,w)=>s+w.held,0),pf=r.wallets.reduce((s,w)=>s+w.profit.usd,0);
+  const tot=r.today_all!=null?+r.today_all:r.wallets.reduce((s,w)=>s+(w.rel?w.rel.today:0),0),held=r.wallets.reduce((s,w)=>s+w.held,0),pf=r.wallets.reduce((s,w)=>s+w.profit.usd,0);
   $('#flTop').innerHTML=`<span class="fl-live"><i></i>مباشر</span>
     <span>📅 الخطوط من <b>${flE(r.since)}</b></span>
-    <span>📥 ربح اليوم المحرر <b>${fl$(tot)}</b> · التوزيع بعد ⏱ <b data-cd>${flHMS(r.to_midnight)}</b></span>
+    <span>📥 ربح اليوم المحرر <b>${fl$(tot)}</b>${Math.abs(+r.today_untag||0)>5e-7?` <small style="color:var(--mut2)">(منه ${fl$(r.today_untag)} بلا محفظة)</small>`:''} · التوزيع بعد ⏱ <b data-cd>${flHMS(r.to_midnight)}</b></span>
     <span>💠 داخل الأوامر <b>${fl$(held)}</b></span><span>💰 بالصندوق النهائي <b>${fl$(pf)}</b></span>
     ${r.wallets.filter(w=>w.bots.length||w.acc).map(w=>w.mode==='live'?`<span>👛 ${flE(w.label)}: <b style="color:var(--cyan)">⚡ مباشر للنهائي</b> (ماكو مُراكِم)</span>`
       :`<span>👛 ${flE(w.label)}: المُراكِمات <b>${+(+w.act_pct||0).toFixed(2)}%</b> · للنهائي <b>${Math.max(0,100-(+w.act_pct||0)).toFixed(0)}%</b></span>`).join('')}
@@ -17841,9 +17956,11 @@ function flInfo(id){
     h=`<p style="font-size:12.5px;color:var(--mut);line-height:1.9">${R.mode==='live'
       ?'⚡ ماكو مُراكِم شغّال على هالمحفظة اليوم ⇒ كل دولار ربح من بوتاتها ينزل للصندوق النهائي <b>مباشرة</b> (لحظياً).'
       :'⏳ ربح بوتات هالمحفظة بالدولار يتجمّع هنا طول اليوم، وبعد نص الليل يتوزّع على مُراكِماتها بنسبها — والنسبة اللي ما راحت لمُراكِم تنزل للصندوق النهائي.'}</p>
-    <table class="pf-tab"><tr><td>📥 ربح اليوم</td><td class="n">${fl$(R.today)}</td></tr>${R.mode==='live'?'':`<tr><td>⏳ ينتظر التوزيع</td><td class="n">${fl$(R.wait)}</td></tr>`}
+    <table class="pf-tab"><tr><td>📥 ربح اليوم <small style="color:var(--mut2)">(نفس «محرر اليوم» بالواجهة)</small></td><td class="n">${fl$(R.today)}</td></tr>${R.mode==='live'?'':`<tr><td>⏳ ينتظر التوزيع</td><td class="n">${fl$(R.wait)}</td></tr>`}
     <tr><td>🪙 راح للمُراكِمات (منذ ${flE(r.since)})</td><td class="n">${fl$(R.to_acc)}</td></tr><tr><td>💰 راح للصندوق النهائي</td><td class="n">${fl$(R.to_final)}</td></tr></table>
-    ${(R.split||[]).length?`<h3 style="font-size:13px;margin:12px 0 4px">📊 التوزيع</h3><table class="pf-tab">${R.split.map(s=>`<tr><td>🪙 ${flE(s.name)}${s.enabled?'':' ⏸'}${s.future?` <span style="color:var(--amber);font-size:11px">🕐 يبدي من ${flE(s.start)}</span>`:''}</td><td class="n">${+(+s.pct).toFixed(2)}%</td></tr>`).join('')}<tr><td>💰 للصندوق النهائي</td><td class="n">${(+R.rest).toFixed(R.rest%1?2:0)}%</td></tr></table>`:''}`}
+    ${(R.src||[]).length?`<h3 style="font-size:13px;margin:12px 0 4px">📋 منين إجا ربح اليوم</h3><table class="pf-tab">${R.src.map(x=>`<tr><td>${flIco(x.type)} ${flE(x.name)} <small style="color:var(--mut2)">${flE(x.sym)}</small>${x.gone?' <span style="color:var(--mut2);font-size:11px">🗑️ انحذف</span>':''}</td><td class="n" style="color:${(+x.v||0)<0?'var(--red)':'var(--green)'}">${(+x.v||0)<0?'':'+'}${fl$(x.v)}</td></tr>`).join('')}<tr><td><b>المجموع</b></td><td class="n"><b>${fl$(R.today)}</b></td></tr></table>`:''}
+    ${(R.split||[]).length?`<h3 style="font-size:13px;margin:12px 0 4px">📊 التوزيع${R.mode==='live'?'':' — لو اليوم خلص هسه'}</h3><table class="pf-tab"><tr><td></td><td class="n" style="color:var(--mut2)">النسبة</td><td class="n" style="color:var(--mut2)">المبلغ</td></tr>${R.split.map(s=>`<tr><td>🪙 ${flE(s.name)}${s.enabled?'':' ⏸'}${s.future?` <span style="color:var(--amber);font-size:11px">🕐 يبدي من ${flE(s.start)}</span>`:''}</td><td class="n">${+(+s.pct).toFixed(2)}%</td><td class="n">${fl$(s.usd)}</td></tr>`).join('')}<tr><td>💰 للصندوق النهائي</td><td class="n">${(+R.rest).toFixed(R.rest%1?2:0)}%</td><td class="n">${fl$(R.rest_usd)}</td></tr></table>
+    <p style="font-size:11px;color:var(--mut2);margin-top:6px">${(+R.today||0)<=0?'📉 ماكو ربح صافي اليوم لهسه ⇒ ما يتوزّع شي.':'💵 المبالغ من ربح اليوم لهسه — تكبر ويّاه، وتتثبّت بعد نص الليل.'} ⏸ الموقوف ياخذ نصيبه (بس ما يشتري) · 🕐 اللي يبدي بيوم جاي ما ياخذ.</p>`:''}`}
   else{for(const w of r.wallets)for(const b of w.bots)if(b.id===id){title=`${flIco(b.type)} ${flE(b.name)} · ${flE(b.sym)} · ${flE(w.label)}`;
     const bb=botOf(b.key),R=bb&&bb.rec;botKey=b.key;
     h=(R?flRec(bb,R):'')+`<table class="pf-tab"><tr><td>💵 ربح اليوم</td><td class="n">${fl$(b.u_today)}</td></tr><tr><td>⏳ ما انقيّد بعد (يتوزّع نهاية اليوم)</td><td class="n">${fl$(b.u_wait)}</td></tr>
@@ -17979,6 +18096,13 @@ const ACARDS=new Map();
 let ACC_N={all:0,shown:0};
 function fmtQ(v){if(v==null)return '—';const a=Math.abs(v);
   return a>=1000?v.toFixed(2):a>=1?v.toFixed(4):a>=0.001?v.toFixed(6):v.toFixed(8)}
+async function accLog(a){                                     // 📜 v3.26.3: سجل المُراكِم (قراءة بس)
+  let r={};try{r=await api('/api/acc_log?id='+encodeURIComponent(a.id))}catch(e){}
+  const it=(r&&r.items)||[],col={share:'var(--cyan)',buy:'var(--green)',coin:'var(--amber)',sell:'var(--green)',move:'var(--amber)',wd:'var(--cyan)',cout:'var(--cyan)',warn:'var(--red)'};
+  showModal(`<h2>📜 سجل ${gEsc(a.name||a.symbol||'')} — مُراكِم</h2>
+    <div style="max-height:60vh;overflow-y:auto">${it.map(e=>`<div class="histline" style="border-inline-start:3px solid ${col[e.k]||'var(--line)'};padding-inline-start:8px"><span class="t">${gEsc(e.time||'')}</span><br>${gEsc(e.msg||'')}</div>`).join('')||`<p style="color:var(--mut)">${r&&r.ok===false?gEsc(r.msg||'تعذّر'):'السجل فارغ'}</p>`}</div>
+    <div class="mbtns"><button onclick="hideModal()">إغلاق</button></div>`);
+}
 function renderAccum(list){
   const grid=$('#grid'); if(!grid)return;
   {const w=document.getElementById('riNote');if(w)w.remove()}          // 🃏 v3.26.1: ملاحظة «أرباح N بوت معاد استثمارها» انشالت
@@ -18020,8 +18144,9 @@ function renderAccum(list){
       <button data-k="asell" style="width:100%;margin-top:6px;font-size:11.5px;padding:9px;display:none">💰 بِع</button>
       <button data-k="afin" style="width:100%;margin-top:6px;font-size:11.5px;padding:9px;display:none;border-color:rgb(var(--cyan-rgb)/.55);color:var(--cyan)" title="📤 من المُراكِم للصندوق النهائي — دولار من المتراكم أو عملة من المخزون">📤 للصندوق النهائي</button>
       <div class="mbtns" style="margin-top:6px;gap:6px">
-        <button data-k="apause" style="flex:2;font-size:11px">⏸ إيقاف الشراء</button>
-        <button data-k="aedit" style="flex:1;font-size:11px" title="الإعدادات">⚙️</button>
+        <button data-k="apause" style="flex:2;font-size:11px;padding:9px 6px">⏸ إيقاف الشراء</button>
+        <button data-k="alog" style="flex:1.6;font-size:11px;padding:9px 6px;white-space:nowrap">📜 السجل</button>
+        <button data-k="aedit" style="flex:1;font-size:11px;padding:9px 6px" title="الإعدادات">⚙️</button>
         <button data-k="adel" style="flex:1;font-size:11px;color:var(--red)" title="🛑 إنهاء المُراكِم — عملته ودولاره للصندوق النهائي">🛑</button></div>`;
       el._r={}; el.querySelectorAll('[data-k]').forEach(n=>el._r[n.dataset.k]=n);
       ACARDS.set(a.id,el); grid.appendChild(el);
@@ -18082,6 +18207,7 @@ function renderAccum(list){
     const pend=a.pending||0, pool=a.pool||0, minb=a.min_buy||0, out=(a.in_range===false);
     R.abuy.onclick=()=>accBuyNow(a);
     R.aedit.onclick=()=>accEdit(a);
+    R.alog.onclick=()=>accLog(a);
     R.apause.onclick=()=>accToggleCard(a);
     R.adel.onclick=()=>accDel(a.id);
     R.apause.textContent=a.enabled?'⏸ إيقاف الشراء':'▶ استئناف';
