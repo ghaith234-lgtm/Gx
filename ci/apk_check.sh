@@ -27,15 +27,15 @@ API=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
 ssz=$(adb shell wm size | grep -oE "[0-9]+x[0-9]+" | tail -1); SW=${ssz%x*}; SH=${ssz#*x}
 say "android api $API · webview $(adb shell dumpsys package com.google.android.webview 2>/dev/null | grep -m1 versionName | tr -d '\r ')"
 adb logcat -c
-# ── start from the previous app (1.4 — taken from the v3.26.7 release commit) ⇒ the real update path to 1.5 (tone channels kept · lock off · 120 fps) ──
-OLDC=79b59dc15d109aec3826b026e75700b8cc7af720
+# ── start from the previous app (1.5 — taken from the v3.26.8 release commit) ⇒ the real update path to 1.6 (tone «قطرة» on the SAME channel sound URI · lock · 120 fps) ──
+OLDC=960a3aef957ac3fdbda0a030539bcefed9223560
 if git fetch -q --depth=1 origin $OLDC 2>/dev/null && git show FETCH_HEAD:Holy_Dashboard.pyw | python3 ci/ci_tools.py apk > old.apk 2>/dev/null && [ -s old.apk ]; then
   adb install old.apk 2>&1 | tail -1 | sed 's/^/HOLYCI install previous: /'
   adb shell dumpsys package $P | grep -m1 versionName | tr -d '\r' | sed 's/^/HOLYCI before update: /'
   adb shell am start -n $P/.MainActivity >/dev/null; sleep 8
   adb shell dumpsys notification --noredact | grep -oE "mId='(trade2|alert2|price|info|watch)'[^}]{0,40}" | sort -u | head -5 | sed 's/^/HOLYCI previous channel: /'
   adb shell am force-stop $P
-else say "INFO couldn't fetch the 1.3 app ⇒ fresh install only"; fi
+else say "INFO couldn't fetch the 1.5 app ⇒ fresh install only"; fi
 adb install -r holy.apk 2>&1 | tail -1 | sed 's/^/HOLYCI install: /'
 adb shell pm list packages | grep -q "$P" && say "PASS installed" || { say "FAIL install"; exit 1; }
 adb shell dumpsys package $P | grep -E "versionCode|versionName|targetSdk|signatures|pkgFlags" | head -6 | sed 's/^/HOLYCI pkg: /'
