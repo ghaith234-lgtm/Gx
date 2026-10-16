@@ -47,6 +47,12 @@ elif cmd == "findx":             # exact text only · on screen (a row below the
         if t == want and x2 > x1 and y2 > y1:
             print("%d %d" % center(n.get("bounds")))
             break
+elif cmd == "edit":              # 1.7: the first text box on screen (the dashboard's password field)
+    for n in nodes(sys.argv[2]):
+        x1, y1, x2, y2 = map(int, re.findall(r"\d+", n.get("bounds") or "[0,0][0,0]"))
+        if "EditText" in (n.get("class") or "") and x2 > x1 and y2 > y1:
+            print("%d %d" % center(n.get("bounds")))
+            break
 elif cmd == "switch":            # the first switch that is ON (Android's notification-channel page: the channel's own toggle)
     for n in nodes(sys.argv[2]):
         if "Switch" in (n.get("class") or "") and n.get("checked") == "true":

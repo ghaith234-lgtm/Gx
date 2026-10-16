@@ -1,5 +1,6 @@
 # 💻 Holy Windows app check on a real Windows machine: the dashboard serves the app with its address inside · --setup window ·
-#    unreachable-address warning · first run (address saved · Desktop + Start shortcuts) · Edge app mode FULL SCREEN on the dashboard ·
+#    unreachable-address warning · first run (address saved · Desktop + Start shortcuts) · Edge app mode on the dashboard (1.2: a normal
+#    maximized window — minimize · maximize · close · resizable · F11 = full screen) ·
 #    screenshots (base64 lines HOLYSHOT in the log). Results: lines HOLYWIN in the job log.
 # Runs only when ci/win* or this file changes (bump ci/RUN_WIN to test the app embedded in Holy_Dashboard.pyw).
 name: Holy Windows app check

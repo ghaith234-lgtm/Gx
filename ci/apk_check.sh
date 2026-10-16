@@ -27,15 +27,15 @@ API=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
 ssz=$(adb shell wm size | grep -oE "[0-9]+x[0-9]+" | tail -1); SW=${ssz%x*}; SH=${ssz#*x}
 say "android api $API · webview $(adb shell dumpsys package com.google.android.webview 2>/dev/null | grep -m1 versionName | tr -d '\r ')"
 adb logcat -c
-# ── start from the previous app (1.5 — taken from the v3.26.8 release commit) ⇒ the real update path to 1.6 (tone «قطرة» on the SAME channel sound URI · lock · 120 fps) ──
-OLDC=960a3aef957ac3fdbda0a030539bcefed9223560
+# ── start from the previous app (1.6 — taken from the v3.26.9 release commit) ⇒ the real update path to 1.7 (🔐 the fingerprint opens the dashboard · tone · lock · 120 fps) ──
+OLDC=a1ab0e958a9abccdda9526f2cc73ecc000178c3d
 if git fetch -q --depth=1 origin $OLDC 2>/dev/null && git show FETCH_HEAD:Holy_Dashboard.pyw | python3 ci/ci_tools.py apk > old.apk 2>/dev/null && [ -s old.apk ]; then
   adb install old.apk 2>&1 | tail -1 | sed 's/^/HOLYCI install previous: /'
   adb shell dumpsys package $P | grep -m1 versionName | tr -d '\r' | sed 's/^/HOLYCI before update: /'
   adb shell am start -n $P/.MainActivity >/dev/null; sleep 8
   adb shell dumpsys notification --noredact | grep -oE "mId='(trade2|alert2|price|info|watch)'[^}]{0,40}" | sort -u | head -5 | sed 's/^/HOLYCI previous channel: /'
   adb shell am force-stop $P
-else say "INFO couldn't fetch the 1.5 app ⇒ fresh install only"; fi
+else say "INFO couldn't fetch the 1.6 app ⇒ fresh install only"; fi
 adb install -r holy.apk 2>&1 | tail -1 | sed 's/^/HOLYCI install: /'
 adb shell pm list packages | grep -q "$P" && say "PASS installed" || { say "FAIL install"; exit 1; }
 adb shell dumpsys package $P | grep -E "versionCode|versionName|targetSdk|signatures|pkgFlags" | head -6 | sed 's/^/HOLYCI pkg: /'
@@ -178,9 +178,47 @@ if grep -q "قفل بالبصمة" $OUT/ui_lk1.xml; then
   locked lk3 && say "PASS back after 34 s ⇒ locked (dashboard covered · asks)" || say "FAIL back after 34 s ⇒ not locked ($(python3 ci/ci_tools.py texts $OUT/ui_lk3.xml lk3 | cut -c1-160))"
   pin; dump lk4; shot lk4
   if grep -q "Holy مقفول" $OUT/ui_lk4.xml; then say "FAIL still locked after the PIN"; elif dashv lk4; then say "PASS PIN ⇒ dashboard open again"; else say "FAIL after the PIN: screen unreadable"; fi
+  # ── 1.7 🔐 lock on ⇒ the fingerprint opens the dashboard instead of its password (the password stays the root · the key never printed) ──
+  JAR=$OUT/jar.txt; rm -f $JAR
+  apic(){ curl -s -b $JAR -c $JAR -X POST "localhost:8099$1" -H 'Content-Type: application/json' -d "$2"; echo; }
+  bio_of(){ apic /api/app/devices '{"act":"list"}' | python3 -c "import sys,json;d=json.load(sys.stdin).get('devs') or [{}];print(d[0].get('bio'))" 2>/dev/null; }
+  pkey(){ pf | grep -c '<string name="bio">' | tr -d '\r'; }
+  login(){ apic /api/login '{"pw":"1234"}' >/dev/null; }
+  askpin(){ grep -qE "Enter your PIN|Use PIN|Enter PIN|افتح لوحتك" $OUT/ui_$1.xml && { say "INFO the PIN sheet is up ($1) ⇒ PIN"; pin; dump $1b >/dev/null; }; }
+  dash_restart(){ pkill -f Holy_Dashboard.pyw; sleep 2; (cd /tmp/holy && setsid nohup python3 Holy_Dashboard.pyw >> dash.log 2>&1 < /dev/null &)
+    for i in $(seq 1 40); do curl -sf localhost:8099/ >/dev/null && break; sleep 1; done; }
+  sleep 3
+  [ "$(bio_of)" = "True" ] && say "PASS 1.7: lock on ⇒ the dashboard linked the fingerprint to this phone (📱 list: bio)" || say "FAIL 1.7: no fingerprint link after the lock went on ($(bio_of))"
+  pf | grep -q "<map" && { [ "$(pkey)" = "1" ] && say "PASS 1.7: the app holds the fingerprint key (value not shown)" || say "FAIL 1.7: no key in the app settings"; }
+  api /api/set_pw '{"new":"1234"}' | head -c 120; echo
+  say "dashboard password set ⇒ sessions + fingerprint links reset"
+  sleep 16; dump bio1; askpin bio1; sleep 4; dump bio1
+  pf | grep -q "<map" && { [ "$(pkey)" = "0" ] && say "PASS 1.7: password changed ⇒ the old key refused (401) ⇒ cleared in the app" || say "FAIL 1.7: the old key is still in the app"; }
+  if grep -q "لوحة التحكم محمية" $OUT/ui_bio1.xml; then say "PASS 1.7: …⇒ the password page (type it once)"
+    xy=$(python3 ci/ci_tools.py edit $OUT/ui_bio1.xml)
+    if [ -n "$xy" ]; then adb shell input tap $xy; sleep 1; adb shell input text 1234; sleep 1; adb shell input keyevent 66; say "typed the password once"; else say "FAIL no password box on the page"; fi
+    sleep 14; dump bio2; shot bio2; login
+    dashv bio2 && ! grep -q "لوحة التحكم محمية" $OUT/ui_bio2.xml && say "PASS 1.7: password typed ⇒ dashboard open" || say "FAIL 1.7: still not in after the password ($(python3 ci/ci_tools.py texts $OUT/ui_bio2.xml bio2 | cut -c1-160))"
+    [ "$(bio_of)" = "True" ] && say "PASS 1.7: …⇒ the dashboard linked the fingerprint again by itself" || say "FAIL 1.7: not linked again ($(bio_of))"
+    adb shell input keyevent KEYCODE_HOME; sleep 2
+    dash_restart; say "dashboard restarted (every session gone) — the phone in the background"
+    sleep 32
+    adb shell am start -n $P/.MainActivity >/dev/null; sleep 5; dump bio3; shot bio3
+    locked bio3 && say "PASS 1.7: back after 34 s ⇒ locked" || say "INFO 1.7: back after 34 s ⇒ $(python3 ci/ci_tools.py texts $OUT/ui_bio3.xml bio3 | cut -c1-120)"
+    pin; sleep 8; dump bio4; askpin bio4; sleep 4; dump bio4; shot bio4
+    if grep -q "لوحة التحكم محمية" $OUT/ui_bio4.xml; then say "FAIL 1.7: the password page showed after the PIN (the fingerprint should open it)"
+    elif dashv bio4; then say "PASS 1.7: session gone + PIN/fingerprint only ⇒ dashboard open — no password typed"
+    else say "FAIL 1.7: after the PIN: $(python3 ci/ci_tools.py texts $OUT/ui_bio4.xml bio4 | cut -c1-160)"; fi
+    grep -q "فتح اللوحة بالبصمة انرفض" /tmp/holy/dash.log && say "INFO a refused fingerprint unlock in the log (the stale key — expected once)"
+  else say "FAIL 1.7: no password page after the password was set ($(python3 ci/ci_tools.py texts $OUT/ui_bio1.xml bio1 | cut -c1-160))"; fi
   adb shell am start -n $P/.MainActivity --es go app >/dev/null; sleep 6; seek "إطفاء" lk5; pin
   if pf | grep -q "<map"; then pf | grep -q '<boolean name="lock" value="false"' && say "PASS lock turned OFF after the PIN" || say "FAIL lock still on: $(pf | grep -o 'name="lock"[^/]*')"
   else dump lk6; grep -q "مطفي — أي واحد" $OUT/ui_lk6.xml && say "PASS lock turned OFF after the PIN (panel says مطفي)" || say "FAIL lock still on (panel)"; fi
+  sleep 4; login
+  [ "$(bio_of)" = "False" ] && say "PASS 1.7: lock off ⇒ the fingerprint no longer opens the dashboard (📱 list)" || say "FAIL 1.7: still linked after the lock went off ($(bio_of))"
+  pf | grep -q "<map" && { [ "$(pkey)" = "0" ] && say "PASS 1.7: …and the app dropped its key" || say "FAIL 1.7: the app kept its key"; }
+  apic /api/set_pw '{"cur":"1234","new":"","disable":true}' | head -c 120; echo
+  curl -s -o /dev/null -w "%{http_code}" -X POST localhost:8099/api/app/devices -H 'Content-Type: application/json' -d '{"act":"list"}' | grep -q 200 && say "dashboard password removed again" || say "FAIL the test password is still on"
 else say "FAIL 🔐 row not in the 📱 panel ($(grep -c '<node' $OUT/ui_lk1.xml 2>/dev/null) nodes)"; fi
 adb shell locksettings clear --old 1111 >/dev/null 2>&1; adb shell locksettings set-disabled true >/dev/null 2>&1; say "test PIN removed"
 adb shell input keyevent KEYCODE_WAKEUP; adb shell wm dismiss-keyguard >/dev/null 2>&1

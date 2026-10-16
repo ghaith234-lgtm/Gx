@@ -1,6 +1,7 @@
 # 💻 Holy Windows app check on a real Windows machine (GitHub windows-latest):
 #   the dashboard serves the app (1.1: 32-bit · runs on every Windows) with its address + a device key inside · first run ⇒
-#   shortcuts + saved address · Edge opens the dashboard FULL SCREEN in app mode · the app stays as a tray icon (notifications) ·
+#   shortcuts + saved address · Edge opens the dashboard in app mode (1.2: a normal maximized window — minimize · maximize · close ·
+#   resizable · no address bar · F11 = full screen) · the app stays as a tray icon (notifications) ·
 #   starts with Windows · a test alert ⇒ a Windows notification · a second start keeps one watcher · unlink ⇒ it knows ·
 #   --setup shows the address window · an address that doesn't answer ⇒ the warning · screenshots (base64 lines HOLYSHOT).
 #   Results: lines starting with HOLYWIN in the job log. The device key itself is never printed.
@@ -17,6 +18,11 @@ public class W {
   [DllImport("user32.dll")] public static extern int GetClassName(IntPtr h, StringBuilder s, int n);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint p);
+  [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr h, int i);
+  [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  public static string Rect(IntPtr h) { RECT r; GetWindowRect(h, out r); return r.L + "," + r.T + "," + r.R + "," + r.B; }
   public delegate bool EnumProc(IntPtr h, IntPtr l);
   public struct RECT { public int L, T, R, B; }
   public static string List() { var sb = new StringBuilder();
@@ -59,7 +65,7 @@ for ($k = 0; $k -lt 90; $k++) { try { if ((Invoke-WebRequest "$base/" -UseBasicP
 Check "dashboard up (python $((Get-Command python).Version))" (-not $dash.HasExited) "pid=$($dash.Id)"
 # 1) the dashboard serves the app (logged in: a fresh dashboard has no password)
 $info = Invoke-RestMethod "$base/api/app/info"
-Check "the dashboard knows the Windows app" ($info.win.size -gt 50000 -and $info.win.name -eq "1.1") "size=$($info.win.size) name=$($info.win.name) apk=$($info.apk.name)"
+Check "the dashboard knows the Windows app" ($info.win.size -gt 50000 -and $info.win.name -eq "1.2") "size=$($info.win.size) name=$($info.win.name) apk=$($info.apk.name)"
 Invoke-WebRequest "$base/app/holy.exe?u=$([uri]::EscapeDataString($base))" -OutFile "$A\TheHolyDashboard.exe" -UseBasicParsing
 $bytes = [IO.File]::ReadAllBytes("$A\TheHolyDashboard.exe")
 $txt = [Text.Encoding]::ASCII.GetString($bytes)
@@ -76,7 +82,7 @@ Check "the download linked a computer (💻 · not opened yet)" (($devs0 | Where
 $sig = Get-AuthenticodeSignature "$A\TheHolyDashboard.exe"
 Write-Host "HOLYWIN ℹ️ signature: $($sig.Status) (unsigned ⇒ SmartScreen asks once)"
 $vi = (Get-Item "$A\TheHolyDashboard.exe").VersionInfo
-Check "version info" ($vi.ProductName -eq "The Holy Dashboard" -and $vi.ProductVersion -eq "1.1") "$($vi.ProductName) $($vi.ProductVersion)"
+Check "version info" ($vi.ProductName -eq "The Holy Dashboard" -and $vi.ProductVersion -eq "1.2") "$($vi.ProductName) $($vi.ProductVersion)"
 $fav = Invoke-WebRequest "$base/favicon.ico" -UseBasicParsing
 Check "favicon.ico served (no login needed)" ($fav.StatusCode -eq 200 -and $fav.RawContentLength -gt 10000) "len=$($fav.RawContentLength)"
 
@@ -125,13 +131,29 @@ for ($k = 0; $k -lt 60; $k++) {
   if ($win) { break }
 }
 $cl = (Get-CimInstance Win32_Process -Filter "name='msedge.exe'" | Where-Object { $_.CommandLine -match "holyapp=win" } | Select-Object -First 1).CommandLine
-Check "Edge started in app mode · full screen · own profile · the dashboard address" ($cl -match "--app=" -and $cl -match "--start-fullscreen" -and $cl -match "HolyDashboard\\Browser" -and $cl -match [regex]::Escape("127.0.0.1:8099/?holyapp=win&hv=1.1")) $cl
+Check "Edge started in app mode (no address bar) · a normal maximized window (not full screen) · own profile · the dashboard address" ($cl -match "--app=" -and $cl -match "--start-maximized" -and $cl -notmatch "--start-fullscreen" -and $cl -match "HolyDashboard\\Browser" -and $cl -match [regex]::Escape("127.0.0.1:8099/?holyapp=win&hv=1.2")) $cl
 Check "the window is the dashboard (title «The Holy Dashboard»)" ($win -ne $null) $win
 Start-Sleep -Seconds 6     # the opening animation ends, the numbers load
 if ($win) {
   $f = $win -split "\|"; $rc = $f[4] -split ","
   $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-  Check "…covers the whole screen" ([int]$rc[0] -le 0 -and [int]$rc[1] -le 0 -and [int]$rc[2] -ge $b.Width -and [int]$rc[3] -ge $b.Height) "window=$($f[4]) screen=$($b.Width)x$($b.Height)"
+  $h = [IntPtr][long]$f[0]; $st = [W]::GetWindowLong($h, -16)
+  $btn = (($st -band 0x20000) -ne 0) -and (($st -band 0x10000) -ne 0) -and (($st -band 0x80000) -ne 0) -and (($st -band 0x40000) -ne 0)
+  Check "1.2: the window has its own buttons — minimize · maximize · close — and resizable edges" $btn ("style=0x{0:X8}" -f $st)
+  $wa = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+  Check "…opens maximized (the screen minus the taskbar · not full screen)" ([W]::IsZoomed($h)) "window=$($f[4]) work=$($wa.Width)x$($wa.Height) screen=$($b.Width)x$($b.Height)"
+  [W]::ShowWindow($h, 9) | Out-Null; Start-Sleep -Seconds 2; $r1 = [W]::Rect($h) -split ","
+  Check "…«restore» ⇒ a smaller window (you size it)" (-not [W]::IsZoomed($h) -and ([int]$r1[2] - [int]$r1[0]) -lt $b.Width) ([W]::Rect($h))
+  Shot "window-restored"
+  [W]::ShowWindow($h, 3) | Out-Null; Start-Sleep -Seconds 2
+  Check "…«maximize» ⇒ big again" ([W]::IsZoomed($h)) ([W]::Rect($h))
+  [W]::SetForegroundWindow($h) | Out-Null; Start-Sleep -Milliseconds 800
+  [System.Windows.Forms.SendKeys]::SendWait("{F11}"); Start-Sleep -Seconds 3; $r2 = [W]::Rect($h) -split ","
+  if ([int]$r2[0] -le 0 -and [int]$r2[1] -le 0 -and [int]$r2[2] -ge $b.Width -and [int]$r2[3] -ge $b.Height) {
+    Check "…F11 ⇒ full screen (the dashboard's ⛶ does the same · Esc returns — checked in the browser tests)" $true ([W]::Rect($h)); Shot "fullscreen"
+    [System.Windows.Forms.SendKeys]::SendWait("{F11}"); Start-Sleep -Seconds 3
+    Check "…F11 again ⇒ back to the window" (-not ((([W]::Rect($h) -split ",")[1] -as [int]) -le 0 -and (([W]::Rect($h) -split ",")[3] -as [int]) -ge $b.Height) -or [W]::IsZoomed($h)) ([W]::Rect($h))
+  } else { Write-Host "HOLYWIN ℹ️ F11 not delivered to the window on this runner (focus) — window=$([W]::Rect($h))" }
 }
 Shot "dashboard"
 Write-Host "HOLYWIN windows: $(([W]::List() -split "`n" | Select-Object -First 12) -join ' ;; ')"
