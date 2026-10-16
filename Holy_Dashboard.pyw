@@ -16382,7 +16382,7 @@ function buildCard(b,i){
     <button data-k="del" class="danger cdel" title="حذف نهائي + إلغاء أوامره">🗑</button></div>
   <div class="last" data-k="last"></div>`;
   const R={};el.querySelectorAll('[data-k]').forEach(n=>R[n.dataset.k]=n);el._r=R;
-  SPR.set(b.dir,{profit:spring(R.profit,f4),cp:spring(R.cp,f4)});
+  SPR.set(b.dir,{profit:spring(R.profit,f4)});
   R.pw.onclick=()=>ctl(b.dir,el._alive?'stop':'start');
   R.ab.onclick=()=>accumPrompt(botOf(b.dir)||b,'buy');     // 🔁 الحالة الحالية (مو نسخة بناء الكرت)
   R.as.onclick=()=>accumPrompt(botOf(b.dir)||b,'sell');
@@ -16403,11 +16403,10 @@ function updCard(el,b,bench){
   const cp=(window.JPX&&JPX[b.symbol])||b.cp;
   // تلوين السعر: أخضر صعود، أحمر نزول، مقارنة بآخر قيمة
   const prevCp=el._lastcp;
-  if(prevCp!=null&&cp!==prevCp&&R.cp){
-    const up=cp>prevCp;
-    R.cp.classList.remove('up','dn','flash');void R.cp.offsetWidth;
-    R.cp.classList.add(up?'up':'dn','flash');
-    if(R.ptrend){R.ptrend.textContent=up?'▲':'▼';R.ptrend.className='ptrend '+(up?'up':'dn')}}
+  if(prevCp!=null&&cp!==prevCp&&R.cp){            // 🃏 v3.26.8: اللون يتبدّل بس لما يتغيّر الاتجاه — بلا نبضة تكبير وبلا إعادة ترتيب الصفحة كل ثانيتين
+    const up=cp>prevCp, k=up?'up':'dn';
+    if(!R.cp.classList.contains(k)){R.cp.classList.remove('up','dn');R.cp.classList.add(k)}
+    if(R.ptrend){const a=up?'▲':'▼',pc='ptrend '+k;if(R.ptrend.textContent!==a)R.ptrend.textContent=a;if(R.ptrend.className!==pc)R.ptrend.className=pc}}
   el._lastcp=cp;
   el.classList.toggle('dead',!b.alive);
   R.pill.className='pill '+(b.alive?'ok':'off');R.pill.textContent=b.alive?'نشط':'متوقف';
@@ -16419,7 +16418,8 @@ function updCard(el,b,bench){
     if(s){R.hb.style.display='';R.hb.textContent=s;R.hb.className='hbadge '+c;R.hb.title=t;
           R.hb.onclick=(ev)=>{ev.stopPropagation();showHealth(b)}}
     else R.hb.style.display='none';}
-  S.profit.set(b.profit);S.cp.set(cp);
+  S.profit.set(b.profit);
+  {const t=f4(+cp||0);if(R.cp.textContent!==t)R.cp.textContent=t}   // 🃏 v3.26.8: السعر ينكتب مرة وحدة لما يتغيّر (كان يتدحرج ~60 مرة بالثانية)
   {const _lg=f4(+cp||0).length>10;if(R.cp._lg!==_lg){R.cp._lg=_lg;R.cp.classList.toggle('long',_lg)}}
   // ⏱️ زمن التشغيل + المعدلات (بالدولار للجرد)
   if(R.age){
@@ -20288,7 +20288,6 @@ const THEMES=[['holy','بنفسجي ليلي','#0d0524','#a78bfa','#22d3ee','#fb
   ['graphite','رمادي هادئ','#141619','#a5b4fc','#93c5fd','#e8eaed'],
   ['light','نهاري فاتح','#f3f1fa','#6d28d9','#0e7490','#be123c']];
 /* 🎞️ v3.26.8: الفريمات — 240 · 120 · 60 · 30 (الافتراضي 120) · بالتطبيق 1.5 الشاشة نفسها تتغيّر · 60/30 كمان تخفف حركات اللوحة (بطارية) */
-function appStat(){try{return(IN_APP&&window.HolyApp&&typeof HolyApp.status==='function')?JSON.parse(HolyApp.status()):{}}catch(e){return{}}}
 function uiFps(){const s=appStat();if([30,60,120,240].includes(+s.fps))return +s.fps;const v=+_ls('dash_fps')||0;return [30,60,120,240].includes(v)?v:120}
 let FPSCAP=0;
 function fpsNote(){const s=appStat();

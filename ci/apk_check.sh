@@ -5,8 +5,16 @@ P=com.holy.dash
 OUT=ci_out; mkdir -p $OUT
 say(){ echo "HOLYCI $*"; }
 # uiautomator can die once (e.g. right after «adb root» restarts adbd) ⇒ an empty screen ⇒ try again
-dump(){ for t in 1 2 3 4 5 6; do rm -f $OUT/ui_$1.xml; adb shell rm -f /sdcard/ui.xml >/dev/null 2>&1; adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml $OUT/ui_$1.xml >/dev/null 2>&1
-  grep -q "<node" $OUT/ui_$1.xml 2>/dev/null && break; sleep 3; done; python3 ci/ci_tools.py texts $OUT/ui_$1.xml "$1"; }
+# · it also needs 1 s with no screen change ⇒ «could not get idle state» while live prices tick (that part runs with OKX :8443 paused — see quiet())
+dump(){ local e=""; for t in 1 2 3 4 5 6; do rm -f $OUT/ui_$1.xml; adb shell rm -f /sdcard/ui.xml >/dev/null 2>&1
+  e=$(adb shell uiautomator dump /sdcard/ui.xml 2>&1 | tr -d '\r' | grep -v "^UI hierchary dumped" | tail -1)
+  adb pull /sdcard/ui.xml $OUT/ui_$1.xml >/dev/null 2>&1
+  grep -q "<node" $OUT/ui_$1.xml 2>/dev/null && break
+  [ "$t" = 1 ] && say "uiautomator ($1): ${e:-no answer} ⇒ retry"
+  adb shell 'for p in $(pidof uiautomator); do kill -9 $p; done' >/dev/null 2>&1; sleep 3; done; python3 ci/ci_tools.py texts $OUT/ui_$1.xml "$1"; }
+# live OKX prices (wss :8443) change the screen several times a second ⇒ pause them on this runner for the screen-reading part
+quiet(){ if [ "$1" = on ]; then sudo iptables -I OUTPUT -p tcp --dport 8443 -j REJECT 2>/dev/null && sudo iptables -I INPUT -p tcp --sport 8443 -j DROP 2>/dev/null && say "INFO live prices (OKX :8443) paused while the screen is read"
+  else sudo iptables -D OUTPUT -p tcp --dport 8443 -j REJECT 2>/dev/null; sudo iptables -D INPUT -p tcp --sport 8443 -j DROP 2>/dev/null; say "INFO live prices back"; fi; }
 shot(){ adb exec-out screencap -p > $OUT/$1.png 2>/dev/null; python3 ci/ci_tools.py img $OUT/$1.png "$1"; }
 tap(){ xy=$(python3 ci/ci_tools.py find $OUT/ui_$2.xml "$1"); if [ -n "$xy" ]; then adb shell input tap $xy; say "tap «$1» at $xy"; else say "tap «$1» NOT FOUND"; fi; }
 api(){ curl -s -X POST "localhost:8099$1" -H 'Content-Type: application/json' -d "$2"; echo; }
@@ -92,14 +100,20 @@ for ch in trade2 alert2 price; do
   line=$(grep -oE "mId='$ch'.{0,700}" $OUT/n14.txt | head -1)
   echo "$line" | grep -q "mSound=android.resource://$P/" && say "PASS channel $ch rings the Holy tone ($(echo "$line" | grep -oE "mSound=[^,]+"))" || say "FAIL channel $ch: no Holy tone — $(echo "$line" | cut -c1-220)"
 done
-for ch in trade alert; do
-  line=$(grep -oE "mId='$ch'.{0,900}" $OUT/n14.txt | head -1)
-  if [ -z "$line" ] || echo "$line" | grep -q "mDeleted=true"; then say "PASS old 1.3 channel «$ch» removed"; else say "FAIL old 1.3 channel «$ch» still live — $(echo "$line" | cut -c1-160)"; fi
-done
+# the 1.3 → 1.4 channel clean-up (trade/alert deleted) was proved in the v3.26.7 runs · this run starts from 1.4 ⇒ only OUR app's list counts (other apps have an «alert» channel too)
+awk -v P="$P" 'index($0,"AppSettings: " P " "){f=1;next} /AppSettings: /{f=0} f' $OUT/n14.txt > $OUT/n14_ours.txt
+if [ -s $OUT/n14_ours.txt ]; then
+  say "our channels: $(grep -oE "mId='[a-z0-9]+'" $OUT/n14_ours.txt | sort -u | tr '\n' ' ')"
+  for ch in trade alert; do
+    line=$(grep -oE "mId='$ch'.{0,900}" $OUT/n14_ours.txt | head -1)
+    if [ -z "$line" ] || echo "$line" | grep -q "mDeleted=true"; then say "PASS no live 1.3 channel «$ch» in our app"; else say "FAIL our app still has the 1.3 channel «$ch» — $(echo "$line" | cut -c1-160)"; fi
+  done
+else say "INFO couldn't cut our app's channel list out of dumpsys (1.3 channels were checked in the v3.26.7 runs)"; fi
 grep -B2 -A30 "PRICE1" $OUT/n14.txt | grep -oE "channel=[a-z0-9]+|mId='[a-z0-9]+'" | head -2 | sed 's/^/HOLYCI price notification: /'
 adb shell dumpsys package $P | grep -E "versionName|versionCode" | head -2 | tr -d '\r' | sed 's/^/HOLYCI now: /'
 grep -q "android.title=Holy يراقب" $OUT/n13.txt && say "FAIL watcher line still says «Holy يراقب»" || say "PASS watcher line no longer says «يراقب»"
 grep -E "mId='watch'" $OUT/n13.txt | head -1 | cut -c1-240 | sed 's/^/HOLYCI watch channel: /'
+quiet on
 dump warm >/dev/null                      # the first uiautomator call after «adb root» comes back empty ⇒ warm it up
 adb shell am start -n $P/.MainActivity --es go app >/dev/null; sleep 8; dump app13; shot app13
 hx=$(python3 ci/ci_tools.py find $OUT/ui_app13.xml "أخفيه")
@@ -122,37 +136,52 @@ dump app13b; shot app13b
 grep -q "مخفي" $OUT/ui_app13b.xml && say "PASS panel shows «مخفي»" || say "FAIL panel doesn't show «مخفي»"
 # ── 1.5 🎞️ refresh rate: ⚙️ «الفريمات» ⇒ the window asks the screen for the closest real mode (the emulator has one 60 Hz mode) ──
 pf(){ adb shell cat /data/data/$P/shared_prefs/holy.xml 2>/dev/null | tr -d '\r'; }
+pf | grep -q "<map" && say "app settings file readable (root)" || say "INFO app settings file not readable here (no root) ⇒ the checks read the screen only"
 pf | grep -oE '<(int|boolean) name="(fps|lock)" value="[^"]*"' | sed 's/^/HOLYCI prefs before: /'
 adb shell dumpsys window windows | grep -E "com.holy.dash/com.holy.dash.MainActivity" -A40 | grep -oE "preferredDisplayModeId=[0-9]+|preferredRefreshRate=[0-9.]+" | sort -u | head -3 | sed 's/^/HOLYCI window: /'
-adb shell dumpsys window windows | grep -E "com.holy.dash/com.holy.dash.MainActivity" -A40 | grep -qE "preferredDisplayModeId=[1-9]" && say "PASS 1.5: the app window asks for a display mode (refresh rate)" || say "INFO no preferredDisplayModeId in dumpsys (this Android prints it elsewhere)"
+adb shell dumpsys window windows | grep -E "com.holy.dash/com.holy.dash.MainActivity" -A40 | grep -qE "preferredDisplayModeId=[1-9]|preferredRefreshRate=[1-9]" && say "PASS 1.5: the app window asks the screen for a refresh rate" || say "FAIL 1.5: the app window asks for no refresh rate"
+# the dashboard's windows need Chrome 87+ (CSS inset) ⇒ on an older system WebView the ⚙️/📱 rows have no size ⇒ nothing to tap
+WVM=$(adb shell dumpsys package com.google.android.webview 2>/dev/null | grep -m1 versionName | grep -oE '[0-9]+' | head -1)
+if [ "${WVM:-0}" -lt 87 ]; then say "INFO WebView ${WVM:-?} < 87 ⇒ the ⚙️/📱 windows can't open here ⇒ 🎞️/🔐 taps skipped on this phone (Android 14 runs them)"; else
 adb shell am start -n $P/.MainActivity --es go set >/dev/null; sleep 6; dump set15; shot set15
 if grep -q "الفريمات" $OUT/ui_set15.xml; then say "PASS ⚙️ «الفريمات» row shown"; grep -oE 'text="[^"]*Hz[^"]*"' $OUT/ui_set15.xml | head -1 | sed 's/^/HOLYCI fps note: /'
-  tap "60" set15; sleep 3; pf | grep -q '<int name="fps" value="60"' && say "PASS 60 saved by the app (HolyApp.setFps)" || say "FAIL fps not saved: $(pf | grep -o 'name="fps"[^/]*')"
-  dump set15b; grep -q "الشاشة هسه 60 Hz" $OUT/ui_set15b.xml && say "PASS row shows «الشاشة هسه 60 Hz»" || say "INFO row text: $(grep -oE 'text="[^"]*Hz[^"]*"' $OUT/ui_set15b.xml | head -1)"
-  tap "120" set15b; sleep 2
-else say "INFO «الفريمات» row not readable on this WebView ($(grep -c '<node' $OUT/ui_set15.xml) nodes)"; fi
+  tap "60" set15; sleep 3
+  if pf | grep -q "<map"; then pf | grep -q '<int name="fps" value="60"' && say "PASS 60 saved by the app (HolyApp.setFps)" || say "FAIL fps not saved: $(pf | grep -o 'name="fps"[^/]*')"; fi
+  adb shell dumpsys window windows | grep -E "com.holy.dash/com.holy.dash.MainActivity" -A40 | grep -oE "preferredRefreshRate=[0-9.]+" | head -1 | sed 's/^/HOLYCI window after 60: /'
+  dump set15b; grep -qE "الشاشة هسه .{0,12}60 Hz" $OUT/ui_set15b.xml && say "PASS row shows the screen at 60 Hz" || say "FAIL row text: $(grep -oE 'text="[^"]*Hz[^"]*"' $OUT/ui_set15b.xml | head -1)"
+  tap "120" set15b; sleep 3
+  if pf | grep -q "<map"; then pf | grep -q '<int name="fps" value="120"' && say "PASS back to 120 (saved)" || say "FAIL 120 not saved: $(pf | grep -o 'name="fps"[^/]*')"; fi
+else say "FAIL «الفريمات» row not on the ⚙️ screen ($(grep -c '<node' $OUT/ui_set15.xml 2>/dev/null) nodes)"; fi
 # ── 1.5 🔐 fingerprint lock: a test PIN on the phone ⇒ turn on (asks the PIN) ⇒ 33 s in the background ⇒ locked ⇒ PIN ⇒ open ⇒ turn off ⇒ PIN removed ──
-pin(){ sleep 4; adb shell input text 1111; sleep 1; adb shell input keyevent 66; sleep 4; }
+#    (the emulator has no finger ⇒ the system sheet offers the phone's PIN — the same path a phone without a fingerprint takes)
+pin(){ sleep 4; adb shell input text 1111; sleep 1; adb shell input keyevent 66; sleep 5; }
+locked(){ grep -qE "Holy مقفول|افتح لوحتك" $OUT/ui_$1.xml; }
+dashv(){ grep -qE "The Holy Dashboard|v3\.[0-9]+" $OUT/ui_$1.xml; }
 adb shell locksettings set-pin 1111 >/dev/null 2>&1 && say "test PIN set" || say "INFO couldn't set a test PIN"
 adb shell am start -n $P/.MainActivity --es go app >/dev/null; sleep 7; dump lk1
 if grep -q "قفل بالبصمة" $OUT/ui_lk1.xml; then
   say "PASS 📱 panel shows «🔐 قفل بالبصمة»"; tap "تشغيل" lk1; sleep 3; dump lk1p; shot lk1p
-  say "auth screen: $(python3 ci/ci_tools.py texts $OUT/ui_lk1p.xml lk1p | cut -c1-200)"
-  pin; pf | grep -q '<boolean name="lock" value="true"' && say "PASS lock turned ON after the PIN" || say "FAIL lock not on: $(pf | grep -o 'name="lock"[^/]*')"
+  grep -qE "تأكيد تشغيل القفل|Enter your PIN|Use PIN|Enter PIN" $OUT/ui_lk1p.xml && say "PASS turning it on asks the phone's PIN/fingerprint first" || say "FAIL turning it on didn't ask ($(python3 ci/ci_tools.py texts $OUT/ui_lk1p.xml lk1p | cut -c1-160))"
+  pin; dump lk1q
+  if pf | grep -q "<map"; then pf | grep -q '<boolean name="lock" value="true"' && say "PASS lock turned ON after the PIN" || say "FAIL lock not on: $(pf | grep -o 'name="lock"[^/]*')"
+  else grep -q "شغّال — يطلب البصمة" $OUT/ui_lk1q.xml && say "PASS lock turned ON after the PIN (panel says شغّال)" || say "FAIL lock not on (panel)"; fi
   adb shell input keyevent KEYCODE_HOME; sleep 4
   adb shell am start -n $P/.MainActivity >/dev/null; sleep 5; dump lk2
-  grep -q "Holy مقفول" $OUT/ui_lk2.xml && say "INFO back within 30 s ⇒ still covered (expected: no prompt, uncovered)" || say "PASS back within 30 s ⇒ open without a new fingerprint"
+  if locked lk2; then say "FAIL back within 30 s ⇒ asked again (should open straight away)"; elif dashv lk2; then say "PASS back within 30 s ⇒ open without a new fingerprint"; else say "FAIL back within 30 s ⇒ screen unreadable"; fi
   adb shell input keyevent KEYCODE_HOME; sleep 34
   adb shell am start -n $P/.MainActivity >/dev/null; sleep 5; dump lk3; shot lk3
-  if grep -qE "Holy مقفول|PIN|رمز|Holy" $OUT/ui_lk3.xml && ! grep -q "عنوان اللوحة" $OUT/ui_lk3.xml; then say "PASS back after 33 s ⇒ locked (dashboard covered · asks)"; else say "FAIL back after 33 s ⇒ not locked"; fi
+  locked lk3 && say "PASS back after 34 s ⇒ locked (dashboard covered · asks)" || say "FAIL back after 34 s ⇒ not locked ($(python3 ci/ci_tools.py texts $OUT/ui_lk3.xml lk3 | cut -c1-160))"
   pin; dump lk4; shot lk4
-  grep -q "Holy مقفول" $OUT/ui_lk4.xml && say "FAIL still locked after the PIN" || say "PASS PIN ⇒ dashboard open again"
+  if grep -q "Holy مقفول" $OUT/ui_lk4.xml; then say "FAIL still locked after the PIN"; elif dashv lk4; then say "PASS PIN ⇒ dashboard open again"; else say "FAIL after the PIN: screen unreadable"; fi
   adb shell am start -n $P/.MainActivity --es go app >/dev/null; sleep 6; dump lk5; tap "إطفاء" lk5; pin
-  pf | grep -q '<boolean name="lock" value="false"' && say "PASS lock turned OFF after the PIN" || say "FAIL lock still on: $(pf | grep -o 'name="lock"[^/]*')"
-else say "INFO 🔐 row not readable on this WebView ($(grep -c '<node' $OUT/ui_lk1.xml) nodes)"; fi
+  if pf | grep -q "<map"; then pf | grep -q '<boolean name="lock" value="false"' && say "PASS lock turned OFF after the PIN" || say "FAIL lock still on: $(pf | grep -o 'name="lock"[^/]*')"
+  else dump lk6; grep -q "مطفي — أي واحد" $OUT/ui_lk6.xml && say "PASS lock turned OFF after the PIN (panel says مطفي)" || say "FAIL lock still on (panel)"; fi
+else say "FAIL 🔐 row not in the 📱 panel ($(grep -c '<node' $OUT/ui_lk1.xml 2>/dev/null) nodes)"; fi
 adb shell locksettings clear --old 1111 >/dev/null 2>&1; adb shell locksettings set-disabled true >/dev/null 2>&1; say "test PIN removed"
 adb shell input keyevent KEYCODE_WAKEUP; adb shell wm dismiss-keyguard >/dev/null 2>&1
 fi
+fi
+quiet off
 # ── self-update: the dashboard now carries a «newer» APK (same file, higher code) ⇒ offer · download · sha256 · Android installer ──
 t0=$(adb shell dumpsys package $P | grep -m1 lastUpdateTime | tr -d '\r')
 pkill -f Holy_Dashboard.pyw; sleep 2
