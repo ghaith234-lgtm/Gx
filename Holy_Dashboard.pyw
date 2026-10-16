@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.26.4"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.26.5"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -10018,15 +10018,536 @@ def indic_view():
 
 
 def indic_loop():
-    """⏱️ يحدّث المؤشرات كل 5 دقائق (شموع ساعة — ما تحتاج أسرع)."""
+    """⏱️ يحدّث المؤشرات كل 5 دقائق (شموع ساعة — ما تحتاج أسرع) · 📊 v3.26.5: ويّاها «المؤشرات» الكاملة (`ind2_fetch`)."""
     time.sleep(12)
     while True:
         try:
             if indic_cfg()["on"] and indic_cfg()["coins"]:
                 indic_fetch()
+                _ind2_run()
         except Exception:
             pass
         time.sleep(_IND_EVERY)
+
+# ═══════════════ 📊 v3.26.5: المؤشرات — هل العملة راح تصعد لو تنزل؟ (عرض بس · ولا أمر بالمنصة) ═══════════════
+#   لكل عملة بـ⚙️ «📈 شريط الأسعار»: 10 مؤشرات (الأربعة اللي طلبها المالك + 6 من الأقوى والأشهر) ⇒ كل واحد إشارة من −1 لـ+1 وسطر يفهمه أي واحد ⇒
+#   «المعدل» = متوسط موزون ⇒ ⬆️ صعود قوي · ↗️ يميل للصعود · ↔️ محايد · ↘️ يميل للنزول · ⬇️ نزول قوي + الثقة (كم مؤشر متّفق).
+#   🎯 «قليلة الخطأ»: كل مؤشر ينفحص على نفس العملة — شموع آخر ~12 يوم: إشارة كل ساعة والنتيجة بعد 4 ساعات (`IND2_H`) ⇒ دقته الحقيقية،
+#      والمعدل يعطي وزن أكثر للي أصاب أكثر (من أول 60% من الفترة) ويُقاس على آخر 40% (ما شافها) — وبعدها دقّة حيّة من لما شغّلت (`Holy_Indic.json`).
+IND2 = {"ts": 0.0, "coins": {}, "order": [], "err": "", "summary": {}}
+IND2_FILE = os.path.join(ROOT, "Holy_Indic.json")
+IND2_H = 4                       # ⏱️ الإشارة تُحكم بعد كم ساعة
+IND2_MIN_MOVE = 0.0015           # حركة أصغر من 0.15% = «ما تحرّك» (ما تنحسب صح ولا غلط)
+_IND2_K = [   # (المفتاح · الاسم · الأيقونة · الوزن الأساسي · شنو يفحص بسطر)
+    ("vp", "Volume Profile", "📊", 1.0, "وين انتداول أكثر حجم — السعر فوق منطقة القيمة صعود، تحتها نزول"),
+    ("avwap", "Anchored VWAP", "⚓", 1.0, "متوسط سعر الشراء من آخر قاع وآخر قمة — فوقهم المشترين مسيطرين"),
+    ("of", "Order Flow", "🌊", 1.2, "مين أقوى: صفقات الشراء لو البيع (آخر 24 ساعة) + دفتر الأوامر"),
+    ("pa", "Price Action", "🕯️", 1.2, "شكل الحركة: قمم وقيعان أعلى صعود · أوطى نزول · كسر قمة/قاع"),
+    ("trend", "الاتجاه العام (EMA 50/200)", "📈", 1.2, "السعر فوق متوسط 200 على 4 ساعات = اتجاه عام صاعد"),
+    ("st", "Supertrend", "🟩", 1.0, "مؤشر اتجاه بخط وقف متحرك — أخضر صعود · أحمر نزول"),
+    ("macd", "MACD", "⚡", 0.8, "الزخم: يقوى لو يضعف"),
+    ("rsi", "RSI", "💪", 0.6, "قوة الشراء/البيع — فوق 70 تشبّع شراء · تحت 30 تشبّع بيع"),
+    ("adx", "ADX (قوة الاتجاه)", "🧭", 0.6, "اكو اتجاه حقيقي لو السوق متذبذب — فوق 25 الإشارات أوثق"),
+    ("cmf", "تدفق السيولة (CMF)", "💧", 0.6, "الفلوس داخلة للعملة لو طالعة منها"),
+]
+
+
+def _i2_f(x):
+    """رقم سعر مقروء (بلا صيغة علمية): 62,389 · 1.3448 · 0.00001234"""
+    try:
+        x = float(x or 0)
+    except Exception:
+        return "—"
+    a = abs(x)
+    if a >= 1000:
+        return f"{x:,.0f}"
+    if a >= 1:
+        return f"{x:.4f}".rstrip("0").rstrip(".")
+    if a == 0:
+        return "0"
+    d = max(4, -int(math.floor(math.log10(a))) + 3)
+    return f"{x:.{d}f}".rstrip("0").rstrip(".")
+
+
+def _i2_ema(v, n):
+    out, e, k = [], None, 2.0 / (n + 1.0)
+    for i, x in enumerate(v):
+        if i < n - 1:
+            out.append(None)
+            continue
+        e = (sum(v[i - n + 1:i + 1]) / n) if e is None else x * k + e * (1 - k)
+        out.append(e)
+    return out
+
+
+def _i2_wilder(v, n):
+    out, a = [], None
+    for i, x in enumerate(v):
+        if i < n - 1:
+            out.append(None)
+            continue
+        a = (sum(v[i - n + 1:i + 1]) / n) if a is None else (a * (n - 1) + x) / n
+        out.append(a)
+    return out
+
+
+def _i2_series(O, H, L, C, V):
+    """كل السلاسل مرة وحدة (من الأقدم للأحدث): ATR · RSI · MACD · ADX ±DI · Supertrend · CMF"""
+    n = len(C)
+    tr = [H[0] - L[0]] + [max(H[i] - L[i], abs(H[i] - C[i - 1]), abs(L[i] - C[i - 1])) for i in range(1, n)]
+    atr14, atr10 = _i2_wilder(tr, 14), _i2_wilder(tr, 10)
+    up = [0.0] + [max(C[i] - C[i - 1], 0.0) for i in range(1, n)]
+    dn = [0.0] + [max(C[i - 1] - C[i], 0.0) for i in range(1, n)]
+    au, ad = _i2_wilder(up[1:], 14), _i2_wilder(dn[1:], 14)
+    rsi = [None] + [(None if a is None else (100.0 if b <= 1e-12 and a > 0 else 50.0 if b <= 1e-12 else 100 - 100 / (1 + a / b)))
+                    for a, b in zip(au, ad)]
+    e12, e26 = _i2_ema(C, 12), _i2_ema(C, 26)
+    macd = [(a - b) if (a is not None and b is not None) else None for a, b in zip(e12, e26)]
+    mv = [x for x in macd if x is not None]
+    sg = _i2_ema(mv, 9) if mv else []
+    sig = [None] * (n - len(mv)) + sg
+    hist = [(m - s) if (m is not None and s is not None) else None for m, s in zip(macd, sig)]
+    pdm = [0.0] + [((H[i] - H[i - 1]) if (H[i] - H[i - 1]) > (L[i - 1] - L[i]) and (H[i] - H[i - 1]) > 0 else 0.0) for i in range(1, n)]
+    ndm = [0.0] + [((L[i - 1] - L[i]) if (L[i - 1] - L[i]) > (H[i] - H[i - 1]) and (L[i - 1] - L[i]) > 0 else 0.0) for i in range(1, n)]
+    trs, ps, ns = _i2_wilder(tr[1:], 14), _i2_wilder(pdm[1:], 14), _i2_wilder(ndm[1:], 14)
+    pdi, ndi, dx = [None], [None], [None]
+    for t_, p_, q_ in zip(trs, ps, ns):
+        if t_ is None or t_ <= 0:
+            pdi.append(None); ndi.append(None); dx.append(None)
+            continue
+        a, b = 100 * p_ / t_, 100 * q_ / t_
+        pdi.append(a); ndi.append(b); dx.append(100 * abs(a - b) / (a + b) if a + b > 0 else 0.0)
+    dv = [x for x in dx if x is not None]
+    ax = _i2_wilder(dv, 14) if dv else []
+    adx = [None] * (n - len(ax)) + ax
+    st_dir, st_line, fu, fl = [None] * n, [None] * n, None, None
+    d_ = 1
+    for i in range(n):
+        if atr10[i] is None:
+            continue
+        mid = (H[i] + L[i]) / 2
+        bu, bl = mid + 3 * atr10[i], mid - 3 * atr10[i]
+        fu = bu if fu is None or bu < fu or C[i - 1] > fu else fu
+        fl = bl if fl is None or bl > fl or C[i - 1] < fl else fl
+        if d_ == 1 and C[i] < fl:
+            d_ = -1
+        elif d_ == -1 and C[i] > fu:
+            d_ = 1
+        st_dir[i], st_line[i] = d_, (fl if d_ == 1 else fu)
+    mfv = [((C[i] - L[i]) - (H[i] - C[i])) / (H[i] - L[i]) * V[i] if H[i] > L[i] else 0.0 for i in range(n)]
+    cmf = [None] * n
+    for i in range(19, n):
+        vs = sum(V[i - 19:i + 1])
+        cmf[i] = sum(mfv[i - 19:i + 1]) / vs if vs > 0 else 0.0
+    return {"atr": atr14, "rsi": rsi, "hist": hist, "adx": adx, "pdi": pdi, "ndi": ndi, "st": st_dir, "stl": st_line, "cmf": cmf}
+
+
+def _i2_vp(H, L, C, V, t, look=168, bins=40):
+    a = max(0, t - look + 1)
+    hi, lo = max(H[a:t + 1]), min(L[a:t + 1])
+    if hi <= lo:
+        return None
+    w = (hi - lo) / bins
+    vol = [0.0] * bins
+    for i in range(a, t + 1):
+        b0, b1 = int((L[i] - lo) / w), int((H[i] - lo) / w)
+        b0, b1 = max(0, min(bins - 1, b0)), max(0, min(bins - 1, b1))
+        share = V[i] / (b1 - b0 + 1)
+        for b in range(b0, b1 + 1):
+            vol[b] += share
+    tot = sum(vol)
+    if tot <= 0:
+        return None
+    poc = max(range(bins), key=lambda b: vol[b])
+    lo_b = hi_b = poc
+    acc = vol[poc]
+    while acc < 0.7 * tot and (lo_b > 0 or hi_b < bins - 1):
+        dl = vol[lo_b - 1] if lo_b > 0 else -1
+        du = vol[hi_b + 1] if hi_b < bins - 1 else -1
+        if du >= dl:
+            hi_b += 1; acc += vol[hi_b]
+        else:
+            lo_b -= 1; acc += vol[lo_b]
+    return {"poc": lo + (poc + 0.5) * w, "vah": lo + (hi_b + 1) * w, "val": lo + lo_b * w}
+
+
+def _i2_avwap(H, L, C, V, t, look=168):
+    a = max(0, t - look + 1)
+    ilo = min(range(a, t + 1), key=lambda i: L[i])
+    ihi = max(range(a, t + 1), key=lambda i: H[i])
+
+    def vw(s):
+        pv = vv = 0.0
+        for i in range(s, t + 1):
+            pv += (H[i] + L[i] + C[i]) / 3 * V[i]
+            vv += V[i]
+        return pv / vv if vv > 0 else None
+    return {"lo": vw(ilo), "hi": vw(ihi), "ilo": ilo, "ihi": ihi}
+
+
+def _i2_pivots(H, L, t, look=120, k=3):
+    a = max(k, t - look)
+    hs, ls = [], []
+    for i in range(a, t - k + 1):
+        if H[i] == max(H[i - k:i + k + 1]):
+            hs.append((i, H[i]))
+        if L[i] == min(L[i - k:i + k + 1]):
+            ls.append((i, L[i]))
+    return hs, ls
+
+
+def _i2_signals(D, S, t, T4=None, tv=None, book=None, px=None):
+    """إشارات المؤشرات العشرة عند الشمعة t: {مفتاح: (إشارة −1..+1 · سطر)} — نفس الدالة للحاضر وللفحص على الماضي"""
+    O, H, L, C, V = D["o"], D["h"], D["l"], D["c"], D["v"]
+    p = px if px else C[t]
+    out, lv = {}, {}
+    cl = lambda x: max(-1.0, min(1.0, x))
+    f = _i2_f
+    vp = _i2_vp(H, L, C, V, t)
+    if vp:
+        lv.update(poc=vp["poc"], vah=vp["vah"], val=vp["val"])
+        if p > vp["vah"]:
+            out["vp"] = (0.8, f"فوق منطقة القيمة ({f(vp['vah'])}) — المشترين قبلوا سعر أعلى")
+        elif p < vp["val"]:
+            out["vp"] = (-0.8, f"تحت منطقة القيمة ({f(vp['val'])}) — ضغط بيع")
+        else:
+            s = cl((p - vp["poc"]) / max(vp["vah"] - vp["val"], 1e-12) * 1.2) * 0.5
+            out["vp"] = (s, f"داخل منطقة القيمة · {'فوق' if p >= vp['poc'] else 'تحت'} نقطة التحكم POC {f(vp['poc'])}")
+    av = _i2_avwap(H, L, C, V, t)
+    if av["lo"] and av["hi"]:
+        lv.update(avwap_lo=av["lo"], avwap_hi=av["hi"], sw_lo=L[av["ilo"]], sw_hi=H[av["ihi"]])
+        a_lo, a_hi = p > av["lo"], p > av["hi"]
+        if a_lo and a_hi:
+            out["avwap"] = (1.0, f"فوق VWAP من آخر قاع ({f(av['lo'])}) ومن آخر قمة ({f(av['hi'])}) — المشترين مسيطرين")
+        elif not a_lo and not a_hi:
+            out["avwap"] = (-1.0, f"تحت VWAP من آخر قاع ({f(av['lo'])}) ومن آخر قمة ({f(av['hi'])}) — البايعين مسيطرين")
+        else:
+            rec_low = av["ilo"] > av["ihi"]          # آخر حدث قاع ⇒ السوق طالع منه
+            s = 0.3 if (a_lo and rec_low) else (-0.3 if (not a_hi and not rec_low) else 0.0)
+            out["avwap"] = (s, f"بين VWAP القاع ({f(av['lo'])}) و VWAP القمة ({f(av['hi'])}) — {'طالع من القاع' if rec_low else 'نازل من القمة'}")
+    sg = None
+    if tv:
+        ts_t = D["t"][t]
+        rows = [r for r in tv if r[0] <= ts_t + 1]
+        if len(rows) >= 4:
+            last24, last4 = rows[-24:], rows[-4:]
+            b24, s24 = sum(r[2] for r in last24), sum(r[1] for r in last24)
+            b4, s4 = sum(r[2] for r in last4), sum(r[1] for r in last4)
+            r24 = (b24 - s24) / (b24 + s24) if b24 + s24 > 0 else 0.0
+            r4 = (b4 - s4) / (b4 + s4) if b4 + s4 > 0 else 0.0
+            sg = (cl((0.4 * r24 + 0.6 * r4) * 4), f"شراء {b24 / (b24 + s24) * 100:.0f}% من الصفقات آخر 24 ساعة (آخر 4 ساعات {b4 / (b4 + s4) * 100:.0f}%)")
+    if sg is None:                                   # تقدير من الشموع: وين تسكّر الشمعة بمداها × الحجم
+        a = max(0, t - 23)
+        num = sum(((C[i] - L[i]) - (H[i] - C[i])) / (H[i] - L[i]) * V[i] for i in range(a, t + 1) if H[i] > L[i])
+        den = sum(V[a:t + 1]) or 1.0
+        sg = (cl(num / den * 3), f"تقدير من الشموع: {'الشراء' if num >= 0 else 'البيع'} أقوى آخر 24 ساعة")
+    if book is not None:
+        bi = cl(book * 2)
+        out["of"] = (cl(0.7 * sg[0] + 0.3 * bi), sg[1] + f" · دفتر الأوامر: {'طلبات الشراء' if book >= 0 else 'عروض البيع'} أكثر بـ{abs(book) * 100:.0f}%")
+    else:
+        out["of"] = sg
+    hs, ls = _i2_pivots(H, L, t)
+    if len(hs) >= 2 and len(ls) >= 2:
+        hh, hl = hs[-1][1] > hs[-2][1], ls[-1][1] > ls[-2][1]
+        base = 1.0 if (hh and hl) else (-1.0 if (not hh and not hl) else 0.0)
+        bos = 1 if p > hs[-1][1] else (-1 if p < ls[-1][1] else 0)
+        if bos and base and (bos > 0) != (base > 0):          # 🔄 كسر عكس الاتجاه = تغيّر الاتجاه (CHoCH)
+            out["pa"] = (0.6 * bos, f"كان {'صاعد' if base > 0 else 'نازل'} بس كسر آخر {'قمة' if bos > 0 else 'قاع'} "
+                                    f"({f(hs[-1][1] if bos > 0 else ls[-1][1])}) — بداية تغيّر الاتجاه")
+        elif base:
+            txt = "قمم وقيعان أعلى — اتجاه صاعد" if base > 0 else "قمم وقيعان أوطى — اتجاه نازل"
+            if bos:
+                txt += f" · كسر آخر {'قمة' if bos > 0 else 'قاع'} {f(hs[-1][1] if bos > 0 else ls[-1][1])} (يأكّد)"
+            out["pa"] = (base * (1.0 if bos else 0.8), txt)
+        else:
+            out["pa"] = (0.5 * bos, "قمم وقيعان مختلطة — متذبذب" + (f" · كسر آخر {'قمة' if bos > 0 else 'قاع'}" if bos else ""))
+    if T4:
+        j = T4["idx"](D["t"][t])
+        if j is not None and T4["e200"][j] is not None and T4["e50"][j] is not None:
+            e50, e200 = T4["e50"][j], T4["e200"][j]
+            if p > e200 and e50 > e200:
+                out["trend"] = (1.0, f"فوق متوسط 200 ({f(e200)}) والمتوسط 50 فوقه — الاتجاه العام صاعد")
+            elif p < e200 and e50 < e200:
+                out["trend"] = (-1.0, f"تحت متوسط 200 ({f(e200)}) والمتوسط 50 تحته — الاتجاه العام نازل")
+            else:
+                out["trend"] = (0.3 if p > e200 else -0.3, f"{'فوق' if p > e200 else 'تحت'} متوسط 200 ({f(e200)}) بس المتوسطات ما متّفقة")
+    if S["st"][t] is not None:
+        k = 0
+        while t - k - 1 >= 0 and S["st"][t - k - 1] == S["st"][t]:
+            k += 1
+        lv["st"] = S["stl"][t]
+        _d = f"{(k + 1) // 24} يوم" if k + 1 >= 48 else f"{k + 1} ساعة"
+        out["st"] = (1.0 if S["st"][t] > 0 else -1.0, f"{'أخضر (صعود)' if S['st'][t] > 0 else 'أحمر (نزول)'} من {_d} · خطّه {f(S['stl'][t])}")
+    if t >= 1 and S["hist"][t] is not None and S["hist"][t - 1] is not None:
+        h0, h1 = S["hist"][t - 1], S["hist"][t]
+        if h1 > 0:
+            out["macd"] = (1.0 if h1 >= h0 else 0.4, "الزخم صاعد " + ("ويقوى" if h1 >= h0 else "بس يضعف"))
+        else:
+            out["macd"] = (-1.0 if h1 <= h0 else -0.4, "الزخم نازل " + ("ويقوى" if h1 <= h0 else "بس يضعف"))
+    r = S["rsi"][t]
+    if r is not None:
+        if r >= 70:
+            out["rsi"] = (0.0, f"RSI {r:.0f} — تشبّع شراء (ممكن تصحيح)")
+        elif r <= 30:
+            out["rsi"] = (0.0, f"RSI {r:.0f} — تشبّع بيع (ممكن ارتداد)")
+        else:
+            out["rsi"] = (cl((r - 50) / 20), f"RSI {r:.0f} — {'زخم شراء' if r >= 50 else 'زخم بيع'}")
+    a_ = S["adx"][t]
+    if a_ is not None and S["pdi"][t] is not None:
+        lv["adx"] = a_
+        if a_ < 20:
+            out["adx"] = (0.0, f"ADX {a_:.0f} — ماكو اتجاه واضح (السوق متذبذب) · الإشارات أضعف")
+        else:
+            bull = S["pdi"][t] > S["ndi"][t]
+            out["adx"] = ((0.7 if bull else -0.7) * (1.0 if a_ >= 25 else 0.6),
+                          f"ADX {a_:.0f} — اتجاه {'قوي' if a_ >= 25 else 'متوسط'} لصالح {'المشترين' if bull else 'البايعين'}")
+    cm = S["cmf"][t]
+    if cm is not None:
+        out["cmf"] = (cl(cm * 6), f"CMF {cm:+.2f} — السيولة {'داخلة' if cm > 0.02 else 'طالعة' if cm < -0.02 else 'متوازنة'}")
+    return out, lv
+
+
+def _i2_combine(sig, w):
+    num = den = 0.0
+    for k, (s, _) in sig.items():
+        ww = w.get(k, 0.0)
+        num += ww * s
+        den += ww
+    return (num / den) if den > 0 else 0.0
+
+
+def _i2_verdict(score):
+    if score >= 45:
+        return "up2", "⬆️ صعود قوي"
+    if score >= 15:
+        return "up", "↗️ يميل للصعود"
+    if score > -15:
+        return "flat", "↔️ محايد — انتظر"
+    if score > -45:
+        return "down", "↘️ يميل للنزول"
+    return "down2", "⬇️ نزول قوي"
+
+
+def _i2_backtest(D, S, T4, tv, H=IND2_H):
+    """🎯 دقة كل مؤشر على نفس العملة: إشارة كل ساعة من الماضي ⇒ صح لو السعر بعد H ساعات راح باتجاهها (حركة > 0.15%)"""
+    C, n = D["c"], len(D["c"])
+    t0, t1 = 120, n - 2 - H                  # آخر شمعة لسه تتكوّن ⇒ ما تنحسب نتيجة
+    pts = []
+    for t in range(t0, t1 + 1):
+        sg, _ = _i2_signals(D, S, t, T4, tv, None)
+        ret = C[t + H] / C[t] - 1 if C[t] > 0 else 0.0
+        pts.append((sg, ret))
+    if not pts:
+        return {}, {}, None
+    cut = int(len(pts) * 0.6)
+    acc, acc_a = {}, {}
+    for part, rng in (("a", pts[:cut]), ("all", pts)):
+        dd = {}
+        for sg, ret in rng:
+            if abs(ret) < IND2_MIN_MOVE:
+                continue
+            for k, (s, _) in sg.items():
+                if abs(s) < 0.15:
+                    continue
+                e = dd.setdefault(k, [0, 0])
+                e[1] += 1
+                e[0] += 1 if (s > 0) == (ret > 0) else 0
+        (acc_a if part == "a" else acc).update(dd)
+    base = {k: w for k, _, _, w, _ in _IND2_K}
+    wts = {}
+    for k, b in base.items():
+        h_, n_ = acc_a.get(k, [0, 0])
+        wts[k] = round(b * (max(0.25, min(2.0, 1 + (h_ / n_ - 0.5) * 4)) if n_ >= 15 else 1.0), 3)
+    hit = tot = 0
+    for sg, ret in pts[cut:]:                  # 🧪 المعدل بالأوزان على الفترة اللي ما انحسبت منها الأوزان
+        if abs(ret) < IND2_MIN_MOVE:
+            continue
+        sc = _i2_combine(sg, wts) * 100
+        if abs(sc) < 15:
+            continue
+        tot += 1
+        hit += 1 if (sc > 0) == (ret > 0) else 0
+    return ({k: {"pct": round(v[0] / v[1] * 100), "n": v[1]} for k, v in acc.items() if v[1]}, wts,
+            {"pct": round(hit / tot * 100) if tot else None, "n": tot})
+
+
+def _i2_candles(sym, bar, limit=300):
+    r = _okx_pub(f"/api/v5/market/candles?instId={sym}&bar={bar}&limit={limit}")
+    out = []
+    try:
+        if r and str(r.get("code")) == "0":
+            for c in r.get("data") or []:
+                out.append((int(c[0]) / 1000.0, float(c[1]), float(c[2]), float(c[3]), float(c[4]), float(c[5])))
+    except Exception:
+        out = []
+    out.sort()
+    return out
+
+
+def _i2_taker(base):
+    """🌊 صفقات الشراء والبيع لكل ساعة (OKX — حجم الـtaker): [(ts, بيع, شراء)] من الأقدم"""
+    r = _okx_pub(f"/api/v5/rubik/stat/taker-volume?ccy={base}&instType=SPOT&period=1H")
+    out = []
+    try:
+        if r and str(r.get("code")) == "0":
+            for x in r.get("data") or []:
+                out.append((int(x[0]) / 1000.0, float(x[1]), float(x[2])))
+    except Exception:
+        out = []
+    out.sort()
+    return out
+
+
+def _i2_book(sym, px):
+    """📚 دفتر الأوامر قرب السعر (±1%): (طلبات الشراء − عروض البيع) ÷ المجموع بالدولار"""
+    r = _okx_pub(f"/api/v5/market/books?instId={sym}&sz=200")
+    try:
+        d = (r or {}).get("data") or []
+        if not d or not px:
+            return None
+        bu = sum(float(b[0]) * float(b[1]) for b in d[0].get("bids") or [] if float(b[0]) >= px * 0.99)
+        au = sum(float(a[0]) * float(a[1]) for a in d[0].get("asks") or [] if float(a[0]) <= px * 1.01)
+        return (bu - au) / (bu + au) if bu + au > 0 else None
+    except Exception:
+        return None
+
+
+def ind2_coin(sym):
+    """📊 كل المؤشرات لعملة وحدة + المعدل + الدقة (قراءة عامة من OKX بلا مفاتيح)"""
+    c1 = _i2_candles(sym, "1H", 300)
+    if len(c1) < 150:
+        return None
+    D = {"t": [x[0] for x in c1], "o": [x[1] for x in c1], "h": [x[2] for x in c1], "l": [x[3] for x in c1], "c": [x[4] for x in c1], "v": [x[5] for x in c1]}
+    S = _i2_series(D["o"], D["h"], D["l"], D["c"], D["v"])
+    c4 = _i2_candles(sym, "4H", 300)
+    T4 = None
+    if len(c4) >= 60:
+        cl4 = [x[4] for x in c4]
+        t4 = [x[0] for x in c4]
+        import bisect as _bs
+
+        def _idx(ts, t4=t4):
+            j = _bs.bisect_right(t4, ts - 4 * 3600 + 3600) - 1      # آخر شمعة 4 ساعات مسكّرة وقت الساعة ts
+            return j if j >= 0 else None
+        T4 = {"e50": _i2_ema(cl4, 50), "e200": _i2_ema(cl4, 200) if len(cl4) >= 200 else _i2_ema(cl4, len(cl4) // 2), "idx": _idx}
+    base = sym.split("-")[0].upper()
+    tv = _i2_taker(base)
+    t = len(D["c"]) - 1
+    px = D["c"][t]
+    book = _i2_book(sym, px)
+    sig, lv = _i2_signals(D, S, t, T4, tv, book, px)
+    acc, wts, oos = _i2_backtest(D, S, T4, tv)
+    if not wts:
+        wts = {k: w for k, _, _, w, _ in _IND2_K}
+    score = round(_i2_combine(sig, wts) * 100)
+    vk, vt = _i2_verdict(score)
+    nz = [(k, s) for k, (s, _) in sig.items() if abs(s) >= 0.15]
+    agree = sum(wts.get(k, 0) for k, s in nz if (s > 0) == (score > 0)) if score else 0.0
+    tw = sum(wts.get(k, 0) for k, _ in nz) or 1.0
+    conf = (agree / tw * 100) if abs(score) >= 15 else None      # ↔️ محايد: ماكو ثقة اتجاه (المؤشرات مختلفة)
+    if conf is not None and lv.get("adx") is not None and lv["adx"] < 20:
+        conf *= 0.85                                                # 🧭 سوق متذبذب ⇒ الإشارات أضعف
+    parts = []
+    for k, nm, ico, w0, what in _IND2_K:
+        if k not in sig:
+            continue
+        s, tx = sig[k]
+        parts.append({"k": k, "name": nm, "ico": ico, "s": round(s, 3), "txt": tx, "what": what, "w": wts.get(k, w0),
+                      "acc": (acc.get(k) or {}).get("pct"), "n": (acc.get(k) or {}).get("n", 0)})
+    chg = (px / D["c"][-25] - 1) * 100 if len(D["c"]) > 25 and D["c"][-25] else 0.0
+    return {"sym": sym, "base": base, "px": px, "chg24": round(chg, 2), "score": score, "verdict": vk, "txt": vt,
+            "conf": (int(max(0, min(100, round(conf)))) if conf is not None else None), "parts": parts, "acc_bt": oos, "levels": {k: v for k, v in lv.items() if v is not None},
+            "h": IND2_H, "of_src": "okx" if tv else "candles", "ts": time.time()}
+
+
+def _i2_track(rows):
+    """📒 دقّة حيّة: لقطة كل ساعة (السعر · المعدل · كل مؤشر) ⇒ بعد IND2_H ساعات تنحكم صح/غلط بسعر تلك الساعة · 14 يوم"""
+    db = _safe(load_json, IND2_FILE, default={}) or {}
+    if not isinstance(db, dict):
+        db = {}
+    now = time.time()
+    for r in rows:
+        L = db.setdefault(r["sym"], [])
+        if not L or now - float(L[-1].get("ts") or 0) >= 3300:
+            L.append({"ts": round(now), "px": r["px"], "sc": r["score"], "p": {x["k"]: x["s"] for x in r["parts"]}})
+        for e in L:
+            if e.get("r") is None and now - e["ts"] >= IND2_H * 3600:
+                e["r"] = round(r["px"] / e["px"] - 1, 6) if now - e["ts"] < (IND2_H + 2) * 3600 else None
+                if e["r"] is None:
+                    e["r"] = "x"                                   # 🛟 اللوحة كانت طافية وقت الحكم ⇒ ما تنحسب
+        db[r["sym"]] = [e for e in L if now - e["ts"] < 14 * 86400][-400:]
+        hit = tot = 0
+        ph = {}
+        for e in db[r["sym"]]:
+            rr = e.get("r")
+            if not isinstance(rr, (int, float)) or abs(rr) < IND2_MIN_MOVE:
+                continue
+            if abs(e.get("sc") or 0) >= 15:
+                tot += 1
+                hit += 1 if ((e["sc"] > 0) == (rr > 0)) else 0
+            for k, s in (e.get("p") or {}).items():
+                if abs(s) >= 0.15:
+                    x = ph.setdefault(k, [0, 0])
+                    x[1] += 1
+                    x[0] += 1 if ((s > 0) == (rr > 0)) else 0
+        r["acc_live"] = {"pct": round(hit / tot * 100) if tot else None, "n": tot}
+        for x in r["parts"]:
+            v = ph.get(x["k"])
+            x["live"] = {"pct": round(v[0] / v[1] * 100), "n": v[1]} if v and v[1] else None
+    try:
+        save_json_atomic(IND2_FILE, db)
+    except Exception:
+        pass
+
+
+def ind2_fetch():
+    """⏱️ كل العملات المختارة (⚙️ «📈 شريط الأسعار») — بفاصل حتى ما نتجاوز حد OKX العام"""
+    coins = ticker_cfg()["coins"]
+    rows, bad = [], []
+    for sym in coins:
+        r = _safe(ind2_coin, sym, default=None)
+        if r:
+            rows.append(r)
+        else:
+            bad.append(sym)
+        time.sleep(0.45)
+    _safe(_i2_track, rows, default=None)
+    up = sum(1 for r in rows if r["score"] >= 15)
+    dn = sum(1 for r in rows if r["score"] <= -15)
+    IND2.update(ts=time.time(), coins={r["sym"]: r for r in rows}, order=[r["sym"] for r in rows],
+                err=("ما وصلت بيانات: " + "، ".join(bad[:4])) if bad else "",
+                summary={"up": up, "down": dn, "flat": len(rows) - up - dn,
+                         "avg": round(sum(r["score"] for r in rows) / len(rows)) if rows else 0})
+    return IND2
+
+
+def ind2_view():
+    return {"ok": True, "on": indic_cfg()["on"], "ts": IND2["ts"], "age": round(time.time() - (IND2["ts"] or 0), 1), "every": _IND_EVERY,
+            "h": IND2_H, "rows": [IND2["coins"][s] for s in IND2["order"] if s in IND2["coins"]], "summary": IND2["summary"],
+            "err": IND2["err"], "fng": INDIC.get("fng") or {}, "kinds": [{"k": k, "name": nm, "ico": ico, "what": wh} for k, nm, ico, _, wh in _IND2_K]}
+
+
+_IND2_RUN = {"busy": False}
+
+
+def _ind2_run():
+    """مرة وحدة بنفس الوقت (الحلقة · أو فتح النافذة قبل أول حساب)"""
+    if _IND2_RUN["busy"]:
+        return
+    _IND2_RUN["busy"] = True
+    try:
+        ind2_fetch()
+    finally:
+        _IND2_RUN["busy"] = False
+
+
+def ind2_api():
+    """📊 GET /api/indicators — لو لسه ما انحسب ⇒ يبدي بالخلفية والنافذة ترجع تسأل بعد ثواني"""
+    v = ind2_view()
+    if not v["rows"] and v["on"] and ticker_cfg()["coins"] and not _IND2_RUN["busy"]:
+        threading.Thread(target=_safe, args=(_ind2_run,), daemon=True).start()
+    v["busy"] = _IND2_RUN["busy"] or (not v["rows"] and v["on"] and bool(ticker_cfg()["coins"]))
+    return v
 
 
 # ═══════════════ 🪙 المُراكِم تحت الرقابة ═══════════════
@@ -13586,6 +14107,8 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                                "rel": _safe(released_log, default={})})
         if u.path == "/api/guard":
             return self._json(_safe(guard_view, default={"ok": False, "msg": "تعذّر تحميل الرقابة"}))
+        if u.path == "/api/indicators":                   # 📊 v3.26.5: المؤشرات (قراءة عامة من المنصة · عرض بس)
+            return self._json(_safe(ind2_api, default={"ok": False, "rows": [], "msg": "تعذّر حساب المؤشرات"}))
         if u.path == "/api/link_audit":                   # 🔗 v3.26.4: «افحص الترابط هسه» (قراءة الأرقام بس — يحدّث نافذة الرقابة وأحداثها)
             return self._json(_safe(link_now, default={"ok": False, "msg": "تعذّر فحص الترابط", "checks": []}))
         if u.path == "/api/export.zip":
@@ -15011,6 +15534,38 @@ button.warn{border-color:rgb(var(--amber-rgb)/.55);color:var(--amber);box-shadow
 /* ═══ 📊 شريط المؤشرات ═══ */
 .tape2{display:flex;align-items:center;gap:0;padding:3px 0;background:rgb(var(--ov-rgb)/.02)}
 .tapewrap{flex:1;overflow:hidden;min-width:0}
+.tape1{display:flex;align-items:center}.tape1.onlybtn .tapewrap{visibility:hidden}
+.indbtn{flex:none;margin:0 8px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap;direction:rtl;
+  border:1px solid rgb(var(--cyan-rgb)/.5);color:var(--cyan);background:rgb(var(--cyan-rgb)/.08);cursor:pointer;line-height:1.5}
+.indbtn:hover{background:rgb(var(--cyan-rgb)/.16)}
+.ind-top{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px}
+.ind-chip{font-size:11.5px;padding:3px 10px;border-radius:999px;border:1px solid var(--line);background:rgb(var(--ov-rgb)/.04);color:var(--mut);white-space:nowrap}
+.ind-chip b{color:var(--tx)}
+.ind-list{display:grid;grid-template-columns:minmax(0,1fr);gap:9px;margin-top:8px}
+@media (min-width:760px){.ind-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.ind-c{border:1px solid var(--line2);border-radius:13px;padding:11px 12px;background:var(--bg1);cursor:pointer;text-align:start}
+.ind-c.up2,.ind-c.up{border-color:rgb(var(--green-rgb)/.45)}.ind-c.down2,.ind-c.down{border-color:rgb(var(--red-rgb)/.45)}
+.ind-c.open{grid-column:1/-1;cursor:default}
+.ind-h{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.ind-h .cn{font-size:15px;font-weight:800}.ind-h .px{font-size:12px;color:var(--mut);font-variant-numeric:tabular-nums;direction:ltr}
+.ind-h .chg{font-size:11px;direction:ltr}.ind-h .chg.up{color:var(--green)}.ind-h .chg.dn{color:var(--red)}
+.ind-v{margin-inline-start:auto;font-size:14px;font-weight:800;white-space:nowrap}
+.ind-v.up2,.ind-v.up{color:var(--green)}.ind-v.down2,.ind-v.down{color:var(--red)}.ind-v.flat{color:var(--mut)}
+.ind-bar{position:relative;height:7px;border-radius:99px;margin:9px 2px 4px;direction:ltr;
+  background:linear-gradient(90deg,rgb(var(--red-rgb)/.75),rgb(var(--ov-rgb)/.18) 42%,rgb(var(--ov-rgb)/.18) 58%,rgb(var(--green-rgb)/.75))}
+.ind-bar i{position:absolute;top:-4px;width:4px;height:15px;border-radius:3px;background:var(--tx);box-shadow:0 0 0 2px var(--bg1);transform:translateX(-50%)}
+.ind-sub{font-size:11px;color:var(--mut2);line-height:1.7}
+.ind-dots{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
+.ind-dot{font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);white-space:nowrap;color:var(--mut)}
+.ind-dot.p{color:var(--green);border-color:rgb(var(--green-rgb)/.45)}.ind-dot.n{color:var(--red);border-color:rgb(var(--red-rgb)/.45)}
+.ind-det{margin-top:9px;border-top:1px dashed var(--line2);padding-top:6px}
+.ind-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:6px 0;border-bottom:1px dashed rgb(var(--ov-rgb)/.07);font-size:12px}
+.ind-row .w{font-weight:700;white-space:nowrap}.ind-row .w.p{color:var(--green)}.ind-row .w.n{color:var(--red)}.ind-row .w.z{color:var(--mut2)}
+.ind-row small{grid-column:1/-1;color:var(--mut2);font-size:11px;line-height:1.6;overflow-wrap:anywhere}
+.ind-lv{font-size:11.5px;line-height:1.9;margin-top:6px;color:var(--mut)}
+.ind-lv b{color:var(--tx);direction:ltr;unicode-bidi:isolate}
+.ind-help{margin-top:12px;font-size:12px;color:var(--mut);line-height:1.9}
+.ind-help summary{cursor:pointer;color:var(--cyan);font-weight:700}
 .fng{flex:none;padding:2px 12px;border-inline-end:1px solid var(--line2);font-size:11.5px;white-space:nowrap}
 .fng small{font-size:10.5px}
 .fgw{display:inline-flex;align-items:center;gap:7px}.fgr{flex:none;margin:-3px 0}
@@ -15227,7 +15782,7 @@ html.lite .card:hover,html.lite button:hover{transform:none}
   <span class="navhint r" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><svg viewBox="0 0 24 24"><path d="M10 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
   </div>
 </header>
-<div id="tape" class="tape" style="display:none" title="أسعار حية — من الإعدادات ⚙️ ← 📈 شريط الأسعار"><div id="tapein" class="tapein"></div></div>
+<div id="tape" class="tape tape1" style="display:none"><button id="indBtn" class="indbtn" style="display:none" onclick="openInd()" title="📊 المؤشرات: العملة راح تصعد لو تنزل؟ — كل عملة بالشريط بعشر مؤشرات ومعدلها">📊 المؤشرات</button><div class="tapewrap" title="أسعار حية — من الإعدادات ⚙️ ← 📈 شريط الأسعار"><div id="tapein" class="tapein"></div></div></div>
 <div id="tape2" class="tape tape2" style="display:none" title="مؤشرات العملات المختارة — من ⚙️ الإعدادات ← 📈 شريط الأسعار"><span id="fng" class="fng"></span><div class="tapewrap"><div id="tape2in" class="tapein"></div></div></div>
 <div id="mbar" onclick="goTop()" title="ارجع للأعلى"><span id="mPulse" class="pulse off"></span><span title="ربح التداول اليوم">🔄 <b id="mTrade" class="num">0.00</b></span><span title="إجمالي الربح المحرر">💵 <b id="mTotal" class="num">0.00</b></span><span title="الربح المحرر اليوم">📅 <b id="mToday" class="num">0.00</b></span><span id="mGuard"></span></div>
 <div class="toolbar">
@@ -16739,7 +17294,7 @@ function tapeSync(d){
     inn.innerHTML=one+one; inn.dataset.sig=sig;
     Object.entries(LIVE.last).forEach(([k,v])=>{if(Date.now()-v.ts<20000)livePx(k,v.px,v.chg)});
   }
-  if(!TAPES.p)TAPES.p=new Tape(el,inn);
+  if(!TAPES.p)TAPES.p=new Tape($('#tape .tapewrap')||el,inn);
   TAPES.p.setLoop(Math.max(20,+T.speed||45));
   liveWS(wsCoins(coins));                           // ⚡ لحظي من المنصة مباشرة (الشريط + البوتات)
   for(const r of rows){
@@ -16753,6 +17308,58 @@ function tapeSync(d){
     });
   }
 }
+
+/* 📊 v3.26.5: المؤشرات — زر فوق «الخوف والطمع» · لكل عملة بالشريط: الحكم + الثقة + الدقة · 10 مؤشرات بسطر واحد لكل مؤشر */
+let INDV=null, INDO={}, INDT=0;
+function indBtnSync(d){const t1=$('#tape'),t2=$('#tape2'),b=$('#indBtn'),fg=$('#fng');if(!t1||!b)return;
+  const T=((d||DATA||{}).ticker)||{}, tOn=!!(T.on&&((T.coins||[]).length||(T.rows||[]).length)), iOn=!!(t2&&t2.style.display!=='none');
+  b.style.display=iOn?'':'none';
+  if(!tOn&&iOn){t1.style.display='';t1.classList.add('onlybtn')}else t1.classList.remove('onlybtn');
+  if(iOn&&fg&&fg.offsetWidth)b.style.width=Math.max(104,fg.offsetWidth-16)+'px';else b.style.width=''}
+async function openInd(){
+  showModal(`<h2>📊 المؤشرات — العملة راح تصعد لو تنزل؟</h2><div id="ind_body" style="color:var(--mut);font-size:12.5px;padding:16px;text-align:center">${LDR('جاري الحساب…')}</div>
+    <div class="mbtns"><button onclick="openTicker()">⚙️ العملات</button><button onclick="hideModal()">إغلاق</button></div>`);
+  await indLoad()}
+async function indLoad(){clearTimeout(INDT);try{INDV=await api('/api/indicators')}catch(e){INDV=null}indRender();
+  if(INDV&&INDV.busy&&!(INDV.rows||[]).length&&$('#ind_body'))INDT=setTimeout(indLoad,3000)}
+function indTog(s){INDO[s]=!INDO[s];indRender()}
+function indRender(){
+  const el=$('#ind_body');if(!el)return;const V=INDV;
+  if(!V||V.ok===false){el.innerHTML='⚠️ تعذّر حساب المؤشرات';return}
+  if(!V.on){el.innerHTML='المؤشرات مطفية — شغّلها من ⚙️ الإعدادات ← 📈 شريط الأسعار';return}
+  const R=V.rows||[];
+  if(!R.length){el.innerHTML=V.busy?LDR('⏳ أول حساب للمؤشرات — ثواني…'):('ماكو عملات بالشريط — ضيفها من ⚙️ ← 📈 شريط الأسعار'+(V.err?'<br><small>'+gEsc(V.err)+'</small>':''));return}
+  el.style.cssText='text-align:right';
+  const S=V.summary||{}, f=V.fng||{}, H=V.h||4;
+  const word=s=>s>=0.15?['صعود','p']:s<=-0.15?['نزول','n']:['محايد','z'];
+  const pc=a=>a&&a.pct!=null?`${a.pct}% <small>(${a.n})</small>`:'—';
+  let h=`<div class="ind-top"><span class="ind-chip">⏱ للساعات الجاية (~${H} ساعات)</span>
+    <span class="ind-chip">السوق: <b style="color:var(--green)">⬆️ ${S.up||0}</b> · <b style="color:var(--red)">⬇️ ${S.down||0}</b> · <b>↔️ ${S.flat||0}</b></span>
+    ${f.v!=null?`<span class="ind-chip">الخوف والطمع <b>${f.v}</b> ${gEsc(f.txt||'')}</span>`:''}<span class="ind-chip">🔄 ${V.ts?gAgo(V.ts):'—'} · كل ${Math.round((V.every||300)/60)} د</span></div>`;
+  h+=`<div class="ind-list">${R.map(r=>{const op=!!INDO[r.sym],sc=Math.max(-100,Math.min(100,+r.score||0));
+    const parts=r.parts||[], acc=r.acc_bt||{}, live=r.acc_live||{};
+    const dots=parts.map(p=>{const w=word(+p.s);return `<span class="ind-dot ${w[1]}" title="${gEsc(p.name)}: ${w[0]}">${p.ico} ${w[0]}</span>`}).join('');
+    let det='';
+    if(op){const L=r.levels||{},px=+r.px||0,sup=[],res=[];
+      [['VAL',L.val],['POC',L.poc],['VAH',L.vah],['VWAP القاع',L.avwap_lo],['VWAP القمة',L.avwap_hi],['سوبرترند',L.st],['آخر قاع',L.sw_lo],['آخر قمة',L.sw_hi]]
+        .forEach(([n,v])=>{if(v==null||!isFinite(+v))return;(+v<=px?sup:res).push([n,+v])});
+      sup.sort((a,b)=>b[1]-a[1]);res.sort((a,b)=>a[1]-b[1]);
+      det=`<div class="ind-det" onclick="event.stopPropagation()">${parts.map(p=>{const w=word(+p.s);return `<div class="ind-row"><span>${p.ico} <b>${gEsc(p.name)}</b></span><span class="w ${w[1]}">${w[0]}</span>
+        <small>${gEsc(p.txt)}${p.acc!=null?` · 🎯 دقته على ${gEsc(r.base)}: ${p.acc}% (${p.n})`:''}${p.live&&p.live.pct!=null?` · حيّة ${p.live.pct}% (${p.live.n})`:''}</small></div>`}).join('')}
+        <div class="ind-lv">🛡️ دعم تحت السعر: ${sup.slice(0,3).map(x=>`${x[0]} <b>${fmtPx(x[1])}</b>`).join(' · ')||'—'}<br>🚧 مقاومة فوقه: ${res.slice(0,3).map(x=>`${x[0]} <b>${fmtPx(x[1])}</b>`).join(' · ')||'—'}</div>
+        ${r.of_src!=='okx'?'<div class="ind-sub">🌊 Order Flow: OKX ما عطت حجم الشراء/البيع لهالعملة ⇒ تقدير من الشموع</div>':''}</div>`}
+    return `<div class="ind-c ${gEsc(r.verdict)}${op?' open':''}" onclick="indTog('${gEsc(r.sym)}')">
+      <div class="ind-h"><span class="cn">${gEsc(r.base)}</span><span class="px">${fmtPx(r.px)}</span><span class="chg ${(+r.chg24||0)>=0?'up':'dn'}">${(+r.chg24||0)>=0?'▲':'▼'}${Math.abs(+r.chg24||0).toFixed(2)}%</span>
+        <span class="ind-v ${gEsc(r.verdict)}">${gEsc(r.txt)}</span></div>
+      <div class="ind-bar" title="المعدل ${sc} من −100 (نزول) لـ+100 (صعود)"><i style="left:${((sc+100)/2).toFixed(1)}%"></i></div>
+      <div class="ind-sub">المعدل <b style="color:var(--tx)">${sc>0?'+':''}${sc}</b>${r.conf!=null?` · ثقة <b style="color:var(--tx)">${r.conf}%</b>`:' · المؤشرات مختلفة'} · 🎯 دقة المعدل على ${gEsc(r.base)}: <b style="color:var(--tx)">${pc(acc)}</b>${live&&live.n?` · حيّة ${pc(live)}`:''}</div>
+      <div class="ind-dots">${dots}</div>${det||'<div class="ind-sub" style="margin-top:5px">اضغط للتفاصيل ←</div>'}</div>`}).join('')}</div>`;
+  h+=`<details class="ind-help"><summary>شلون أقرا هذا؟</summary>
+    <div>• <b>الحكم</b> (⬆️ ↗️ ↔️ ↘️ ⬇️) = <b>معدل</b> المؤشرات العشرة (من −100 نزول لـ+100 صعود) — كل مؤشر وزنه حسب دقّته على نفس العملة.</div>
+    <div>• <b>الثقة</b> = كم من المؤشرات متّفقة ويّا الحكم · <b>🎯 الدقة</b> = كم مرة أصاب: إشارة كل ساعة بآخر ~12 يوم وتنحكم بعد ${H} ساعات (على فترة ما انحسبت منها الأوزان) · <b>حيّة</b> = من لما شغّلت اللوحة.</div>
+    ${(V.kinds||[]).map(k=>`<div>${k.ico} <b>${gEsc(k.name)}</b>: ${gEsc(k.what)}</div>`).join('')}
+    <div style="color:var(--amber);margin-top:6px">⚠️ المؤشرات احتمالات مو ضمان — حتى 60% دقة تعتبر زينة بالأسواق. ما تفتح ولا تسكّر أي أمر — قراءة بس. ${V.err?'<br>'+gEsc(V.err):''}</div></details>`;
+  el.innerHTML=h}
 
 /* 🧾 سجل ربح اليوم — ضغطة على 🔄 ربح التداول أو 📅 الربح المحرر */
 let DL=null, DLK='trade';
@@ -16882,7 +17489,7 @@ function indicSync(d){
   const I=d.indic||{}, el=$('#tape2'), inn=$('#tape2in'), fg=$('#fng');
   if(!el||!inn)return;
   const rows=I.rows||[], f=I.fng||{};
-  if(!I.on||(!rows.length&&f.v==null)){el.style.display='none';return}
+  if(!I.on||(!rows.length&&f.v==null)){el.style.display='none';indBtnSync(d);return}
   el.style.display='flex';
   if(fg){
     if(f.v!=null){
@@ -16908,6 +17515,7 @@ function indicSync(d){
     inn.innerHTML=one+one; inn.dataset.sig=sig;
   }
   if(!TAPES.i)TAPES.i=new Tape($('#tape2 .tapewrap')||el,inn);
+  indBtnSync(d);
   TAPES.i.setLoop(Math.max(30,(+((DATA||{}).ticker||{}).speed||45)*1.4));
   const TR={up:['📈 صاعد','var(--green)'],down:['📉 هابط','var(--red)'],flat:['➖ عرضي','var(--mut)']};
   for(const r of rows){
