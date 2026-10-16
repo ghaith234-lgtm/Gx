@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.26.5"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.26.6"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -10014,7 +10014,8 @@ def _fng_ar(v):
 def indic_view():
     c = indic_cfg()
     return {"on": c["on"], "rows": INDIC["rows"], "fng": INDIC["fng"], "err": INDIC["err"],
-            "age": round(time.time() - (INDIC["ts"] or 0), 1), "every": _IND_EVERY}
+            "age": round(time.time() - (INDIC["ts"] or 0), 1), "every": _IND_EVERY,
+            "sum": (globals().get("IND2") or {}).get("summary") or {}}          # 📊 v3.26.6: ⬆️/⬇️ على زر المؤشرات
 
 
 def indic_loop():
@@ -10524,7 +10525,8 @@ def ind2_fetch():
 def ind2_view():
     return {"ok": True, "on": indic_cfg()["on"], "ts": IND2["ts"], "age": round(time.time() - (IND2["ts"] or 0), 1), "every": _IND_EVERY,
             "h": IND2_H, "rows": [IND2["coins"][s] for s in IND2["order"] if s in IND2["coins"]], "summary": IND2["summary"],
-            "err": IND2["err"], "fng": INDIC.get("fng") or {}, "kinds": [{"k": k, "name": nm, "ico": ico, "what": wh} for k, nm, ico, _, wh in _IND2_K]}
+            "err": IND2["err"], "fng": INDIC.get("fng") or {}, "kinds": [{"k": k, "name": nm, "ico": ico, "what": wh} for k, nm, ico, _, wh in _IND2_K],
+            "pxa": _safe(pxa_view, default={})}
 
 
 _IND2_RUN = {"busy": False}
@@ -10548,6 +10550,210 @@ def ind2_api():
         threading.Thread(target=_safe, args=(_ind2_run,), daemon=True).start()
     v["busy"] = _IND2_RUN["busy"] or (not v["rows"] and v["on"] and bool(ticker_cfg()["coins"]))
     return v
+
+
+# ═══════════════ 🔔 v3.26.6: إشعارات الأسعار — مثل إشعارات البرامج (تيليغرام + التطبيق + 🔔 اللوحة) · مو مزعجة · تنطفي وتشتغل ═══════════════
+#   للعملات المختارة (⚙️ «📈 شريط الأسعار»): ⚡ حركة قوية خلال 15 دقيقة أو ساعة · 🔥/🔻 كل درجة خلال 24 ساعة (5% · 10% · 15%…) ·
+#   📊 المؤشرات صارت «صعود قوي/نزول قوي» — عتبة أكبر للعملة المتقلبة (حسب تذبذبها) · نفس الحركة ما تتكرر (ساعة ونص إلا لو تضاعفت) ·
+#   كل الإشعارات بنفس الدقيقة برسالة وحدة · حد يومي · زر الكتم 🔕 يكتمها ويّا الباقي. قراءة أسعار عامة بس — ولا أمر.
+PXA_FILE = os.path.join(ROOT, "Holy_PriceAlerts.json")
+_PXA = {"hist": {}, "lock": threading.Lock()}
+PXA_SENS = {   # m15/h1: أقل حركة % · k15/kh: × تذبذب الساعة (ATR%) للعملة المتقلبة · d1: درجة الـ24 ساعة
+    "low":  {"lbl": "هادئة",   "m15": 2.5, "h1": 4.5, "k15": 2.0, "kh": 3.5, "d1": 8.0},
+    "mid":  {"lbl": "متوسطة",  "m15": 1.5, "h1": 3.0, "k15": 1.5, "kh": 2.5, "d1": 5.0},
+    "high": {"lbl": "حساسة",   "m15": 1.0, "h1": 2.0, "k15": 1.2, "kh": 2.0, "d1": 3.0},
+}
+PXA_CH = {"both": "تيليغرام + التطبيق", "tg": "تيليغرام بس", "app": "التطبيق بس"}
+PXA_COOL = 90 * 60               # نفس العملة ونفس الاتجاه (15 دقيقة/ساعة) ما تتكرر خلال ساعة ونص — إلا لو الحركة تضاعفت تقريباً
+PXA_IND_COOL = 6 * 3600          # 📊 «صعود قوي/نزول قوي» لنفس العملة مرة كل 6 ساعات بالأكثر
+
+
+def pxa_cfg():
+    c = _safe(app_cfg, default={}) or {}
+    s = str(c.get("pxa_sens") or "mid")
+    ch = str(c.get("pxa_ch") or "both")
+    try:
+        cap = max(3, min(100, int(c.get("pxa_cap") or 20)))
+    except Exception:
+        cap = 20
+    return {"on": bool(c.get("pxa_on", True)), "sens": s if s in PXA_SENS else "mid", "ch": ch if ch in PXA_CH else "both",
+            "ind": bool(c.get("pxa_ind", True)), "cap": cap}
+
+
+def _pxa_ago(H, now, sec, slack):
+    """السعر قبل sec ثانية من عيّنات الدقيقة (أقرب عيّنة بنافذة slack) — None لو ماكو (اللوحة لسه مشتغلة)"""
+    best = None
+    for ts, px in H:
+        d = abs((now - ts) - sec)
+        if d <= slack and (best is None or d < best[0]):
+            best = (d, px)
+    return best[1] if best else None
+
+
+def pxa_tick(now=None, rows=None, send=True):
+    """🔔 جولة إشعارات الأسعار (بعد كل تحديث للأسعار · العيّنة كل دقيقة) — ترجع الإشعارات اللي طلعت"""
+    cfg = pxa_cfg()
+    now = float(now if now is not None else time.time())
+    rows = rows if rows is not None else list(TICKER.get("rows") or [])
+    coins = set(ticker_cfg()["coins"])
+    with _PXA["lock"]:
+        for r in rows:
+            sym, px = r.get("sym"), float(r.get("px") or 0)
+            if sym not in coins or px <= 0:
+                continue
+            H = _PXA["hist"].setdefault(sym, [])
+            if not H or now - H[-1][0] >= 55:
+                H.append((now, px))
+                del H[:-1700]                               # ≈ 28 ساعة بعيّنة كل دقيقة
+        if not cfg["on"]:
+            return []
+        st = _safe(load_json, PXA_FILE, default={}) or {}
+        if not isinstance(st, dict):
+            st = {}
+        st0 = json.dumps(st, sort_keys=True, ensure_ascii=False)
+        day = datetime.fromtimestamp(now).strftime("%Y-%m-%d")
+        if st.get("day") != day:
+            st.update(day=day, n=0, capped=False)
+        S = PXA_SENS[cfg["sens"]]
+        atr = {x.get("sym"): float(x.get("atr") or 0) for x in (INDIC.get("rows") or [])}
+        last = st.setdefault("last", {})
+        al = []
+        for r in rows:
+            sym, px = r.get("sym"), float(r.get("px") or 0)
+            if sym not in coins or px <= 0:
+                continue
+            base = sym.split("-")[0]
+            H = _PXA["hist"].get(sym) or []
+            L = last.setdefault(sym, {})
+            d24 = r.get("chg")
+            a_ = atr.get(sym) or 0.0
+            tail = f"السعر {_px_s(px)}$" + (f" · 24 ساعة {float(d24):+.1f}%" if d24 is not None else "")
+            for win, sec, slack, th, lab in (("h1", 3600, 360, max(S["h1"], S["kh"] * a_), "خلال ساعة"),
+                                             ("m15", 900, 150, max(S["m15"], S["k15"] * a_), "خلال 15 دقيقة")):
+                p0 = _pxa_ago(H, now, sec, slack)
+                if not p0:
+                    continue
+                ch = (px / p0 - 1) * 100
+                if abs(ch) < th:
+                    continue
+                d = "up" if ch > 0 else "dn"
+                if now - float(L.get(d + "_ts") or 0) < PXA_COOL and abs(ch) < abs(float(L.get(d + "_mv") or 0)) * 1.8:
+                    break                                   # 🔕 نفس الحركة انبلّغت قبل شوية
+                al.append({"sym": sym, "k": win, "d": d, "mv": round(ch, 2), "px": px,
+                           "t": f"{'🚀' if d == 'up' else '📉'} {base} {'صعد' if d == 'up' else 'نزل'} {ch:+.1f}% {lab}", "b": tail})
+                L[d + "_ts"], L[d + "_mv"] = now, round(ch, 3)
+                break                                       # إشعار قصير واحد للعملة بالجولة (الساعة قبل الربع)
+            if d24 is not None:
+                d24 = float(d24)
+                lvl = int(abs(d24) // S["d1"])
+                key, oth = ("s_up", "s_dn") if d24 >= 0 else ("s_dn", "s_up")
+                L[oth] = 0
+                prev = int(L.get(key) or 0)
+                if lvl > prev and lvl >= 1:
+                    al.append({"sym": sym, "k": "d1", "d": "up" if d24 >= 0 else "dn", "mv": round(d24, 2), "px": px,
+                               "t": f"{'🔥' if d24 >= 0 else '🔻'} {base} {d24:+.1f}% خلال 24 ساعة", "b": f"السعر {_px_s(px)}$"})
+                    L[key] = lvl
+                elif lvl < prev and abs(d24) < (prev - 0.5) * S["d1"]:
+                    L[key] = lvl                                # 🔁 ينعاد يتسلّح بس لما يرجع نص درجة (ما يتكرر لو يتذبذب حول 5%)
+            if cfg["ind"]:
+                R = (IND2.get("coins") or {}).get(sym)
+                if R and now - float(R.get("ts") or 0) < 1200:
+                    v = R.get("verdict")
+                    if v in ("up2", "down2"):
+                        if L.get("ind") != v and now - float(L.get("ind_ts") or 0) >= PXA_IND_COOL:
+                            al.append({"sym": sym, "k": "ind", "d": "up" if v == "up2" else "dn", "mv": R.get("score"), "px": px,
+                                       "t": f"📊 {base}: المؤشرات صارت {R.get('txt')}" + (f" (ثقة {R['conf']}%)" if R.get("conf") is not None else ""),
+                                       "b": f"السعر {_px_s(px)}$ · المعدل {int(R.get('score') or 0):+d}"})
+                            L["ind_ts"] = now
+                        L["ind"] = v
+                    else:
+                        L["ind"] = v
+        cut = []
+        room = cfg["cap"] - int(st.get("n") or 0)
+        if len(al) > max(0, room):
+            cut, al = al[max(0, room):], al[:max(0, room)]
+        st["n"] = int(st.get("n") or 0) + len(al)
+        note = ""
+        if cut and not st.get("capped"):
+            st["capped"] = True
+            note = f"🔕 وصلت حد إشعارات الأسعار اليوم ({cfg['cap']}) — باقي اليوم بلا إشعارات أسعار"
+        log = st.setdefault("log", [])
+        for a in al:
+            log.insert(0, {"ts": round(now), "sym": a["sym"], "k": a["k"], "t": a["t"], "b": a["b"]})
+        del log[50:]
+        if json.dumps(st, sort_keys=True, ensure_ascii=False) != st0:     # 💾 بس لو تغيّر شي (الجولة كل 10 ثواني)
+            try:
+                save_json_atomic(PXA_FILE, st)
+            except Exception:
+                pass
+    if send and (al or note):
+        _pxa_send(al, note, cfg)
+    return al
+
+
+def _pxa_send(al, note, cfg):
+    """📨 رسالة وحدة للجولة: إشعار واحد ⇒ عنوانه هو الإشعار · أكثر ⇒ «🔔 إشعارات الأسعار (N)» وكل عملة بسطر"""
+    if len(al) == 1:
+        text = al[0]["t"] + "\n" + al[0]["b"] + (("\n" + note) if note else "")
+    elif al:
+        text = f"🔔 إشعارات الأسعار ({len(al)})\n" + "\n".join(f"{a['t']} · {a['b'].split(' · ')[0]}" for a in al) + (("\n" + note) if note else "")
+    else:
+        text = note
+    for a in al:                                                # 🔔 مركز الإشعارات باللوحة — اسم العملة يطلع بالعريض قبل النص ⇒ نشيله من النص
+        bt = re.sub(r"\s" + re.escape(a["sym"].split("-")[0]) + r":?(?=\s)", "", a["t"], count=1)
+        _safe(_dash_event, a["sym"], bt + " · " + a["b"], default=None)
+    if TG_MUTED["v"]:
+        journal("notify", "🔕 إشعار أسعار ما انرسل (الكتم شغّال): " + text[:300], "info")
+        return False
+    ok = True
+    if cfg["ch"] in ("both", "tg"):
+        ok = bool(tg_send(text, plain=True)) and ok             # plain = بلا تنسيق وبلا نسخة ثانية للتطبيق
+    if cfg["ch"] in ("both", "app"):
+        _safe(app_feed_push, text, "ind", default=None)          # 📱 الضغط عليه يفتح «📊 المؤشرات»
+    return ok
+
+
+def pxa_set(v):
+    v = v or {}
+    c = app_cfg()
+    if v.get("on") is not None:
+        c["pxa_on"] = bool(v["on"])
+    if v.get("sens") in PXA_SENS:
+        c["pxa_sens"] = v["sens"]
+    if v.get("ch") in PXA_CH:
+        c["pxa_ch"] = v["ch"]
+    if v.get("ind") is not None:
+        c["pxa_ind"] = bool(v["ind"])
+    save_app_cfg(c)
+    p = pxa_cfg()
+    return {"ok": True, "msg": ("🔔 إشعارات الأسعار شغّالة — " + PXA_SENS[p["sens"]]["lbl"] + " · " + PXA_CH[p["ch"]]) if p["on"] else "🔕 إشعارات الأسعار مطفية",
+            "pxa": pxa_view()}
+
+
+def pxa_test():
+    """🧪 إشعار تجربة بنفس الطريق (حتى تشوف شكله بتيليغرام والموبايل)"""
+    cfg = pxa_cfg()
+    rows = list(TICKER.get("rows") or [])
+    r = rows[0] if rows else {"sym": "BTC-USDT", "px": 0, "chg": 0}
+    base = r["sym"].split("-")[0]
+    a = {"sym": r["sym"], "t": f"🧪 تجربة — 🚀 {base} صعد +3.0% خلال ساعة",
+         "b": f"السعر {_px_s(r.get('px') or 0)}$ · هيج راح توصلك إشعارات الأسعار ({PXA_SENS[cfg['sens']]['lbl']} · {PXA_CH[cfg['ch']]})"}
+    if TG_MUTED["v"]:
+        return {"ok": False, "msg": "🔕 الكتم شغّال (زر 🔔 فوق) — ما ينرسل شي لحد ما تفكّه"}
+    sent = _pxa_send([a], "", dict(cfg, on=True))
+    return {"ok": True, "msg": "🧪 انرسلت التجربة" + ("" if sent or cfg["ch"] == "app" else " — تيليغرام ما استلم (تأكد من التوكن والـChat ID)")}
+
+
+def pxa_view():
+    c = pxa_cfg()
+    st = _safe(load_json, PXA_FILE, default={}) or {}
+    today = datetime.now().strftime("%Y-%m-%d")
+    S = PXA_SENS[c["sens"]]
+    return {**c, "sens_lbl": S["lbl"], "ch_lbl": PXA_CH[c["ch"]], "muted": bool(TG_MUTED["v"]),
+            "n_today": int(st.get("n") or 0) if st.get("day") == today else 0, "log": (st.get("log") or [])[:15],
+            "rule": f"⚡ {S['m15']:g}% خلال 15 دقيقة · {S['h1']:g}% خلال ساعة (أكبر للعملة المتقلبة) · 🔥 كل {S['d1']:g}% خلال 24 ساعة"
+                    + (" · 📊 صعود/نزول قوي من المؤشرات" if c["ind"] else "") + f" · حد {c['cap']} باليوم",
+            "sens_opts": {k: v["lbl"] for k, v in PXA_SENS.items()}, "ch_opts": PXA_CH}
 
 
 # ═══════════════ 🪙 المُراكِم تحت الرقابة ═══════════════
@@ -11065,11 +11271,12 @@ def _gd_acc_scan(g, now):
 
 
 def ticker_loop():
-    """⏱️ يحدّث الأسعار كل 30 ثانية — ويوقف كلياً لو الشريط مطفي."""
+    """⏱️ يحدّث الأسعار كل 10 ثواني — ويوقف كلياً لو الشريط مطفي (🔔 v3.26.6: إلا لو إشعارات الأسعار شغّالة ⇒ تحتاج الأسعار)."""
     while True:
         try:
-            if ticker_cfg()["on"] and ticker_cfg()["coins"]:
+            if (ticker_cfg()["on"] or pxa_cfg()["on"]) and ticker_cfg()["coins"]:
                 ticker_fetch()
+                _safe(pxa_tick, default=None)          # 🔔 إشعارات الأسعار
         except Exception:
             pass
         time.sleep(10)          # احتياط لو المتصفح ما وصل للقناة اللحظية
@@ -12950,13 +13157,16 @@ def _app_short(text):
     return {"k": kind, "t": title, "b": body, "usd": usd, "go": _app_go(str(text), title)}
 
 
-def app_feed_push(text):
-    """📨 كل إشعار تيليغرام (بعد زر الكتم) ينضاف هنا مختصراً — بس لو في جهاز مربوط · نفس النص خلال 3 ساعات ما يتكرر."""
+def app_feed_push(text, go=None):
+    """📨 كل إشعار تيليغرام (بعد زر الكتم) ينضاف هنا مختصراً — بس لو في جهاز مربوط · نفس النص خلال 3 ساعات ما يتكرر ·
+    `go` (v3.26.6): وين يفتح لما ينضغط (إشعارات الأسعار ⇒ «📊 المؤشرات»)."""
     with _APPD_LOCK:
         _appd_load()
         if not _APPD["devs"]:
             return False
     it = _app_short(text)
+    if go:
+        it["go"] = go
     hk = _hl.sha256(str(text).encode("utf-8", "replace")).hexdigest()[:20]
     with _APPF_COND:
         _appf_load()
@@ -14395,6 +14605,10 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                 threading.Thread(target=lambda: _safe(indic_fetch, default=None), daemon=True).start()
                 return self._json({"ok": True, "msg": f"📈 انحفظ الشريط — {len(_c['ticker_coins'])} عملة"
                                                       + ("" if _c["ticker_on"] else " (مطفي)")})
+            if act == "pxa_set":                          # 🔔 v3.26.6: إشعارات الأسعار — تشغيل/إطفاء · الحساسية · وين توصل
+                return self._json(pxa_set(data.get("value") or {}))
+            if act == "pxa_test":
+                return self._json(pxa_test())
             if act == "guard_cfg":
                 v = data.get("value") or {}
                 _by = "👤 اللوحة (" + str((self.client_address or ["?"])[0]) + ")"
@@ -15534,8 +15748,7 @@ button.warn{border-color:rgb(var(--amber-rgb)/.55);color:var(--amber);box-shadow
 /* ═══ 📊 شريط المؤشرات ═══ */
 .tape2{display:flex;align-items:center;gap:0;padding:3px 0;background:rgb(var(--ov-rgb)/.02)}
 .tapewrap{flex:1;overflow:hidden;min-width:0}
-.tape1{display:flex;align-items:center}.tape1.onlybtn .tapewrap{visibility:hidden}
-.indbtn{flex:none;margin:0 8px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap;direction:rtl;
+.indbtn{flex:none;margin:0 8px;padding:3px 11px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap;direction:rtl;
   border:1px solid rgb(var(--cyan-rgb)/.5);color:var(--cyan);background:rgb(var(--cyan-rgb)/.08);cursor:pointer;line-height:1.5}
 .indbtn:hover{background:rgb(var(--cyan-rgb)/.16)}
 .ind-top{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px}
@@ -15566,6 +15779,22 @@ button.warn{border-color:rgb(var(--amber-rgb)/.55);color:var(--amber);box-shadow
 .ind-lv b{color:var(--tx);direction:ltr;unicode-bidi:isolate}
 .ind-help{margin-top:12px;font-size:12px;color:var(--mut);line-height:1.9}
 .ind-help summary{cursor:pointer;color:var(--cyan);font-weight:700}
+.indbtn small{font-weight:600;margin-inline-start:4px}.indbtn small b{font-weight:700}
+.ind-fng{display:flex;align-items:center;gap:12px;border:1px solid var(--line2);border-radius:13px;padding:10px 12px;background:var(--bg1);margin-top:4px}
+.ind-fng svg{flex:none}.ind-fng .fgn{font:700 9px 'IBM Plex Mono',monospace}
+.ind-fng-t{flex:1;min-width:0;display:grid;gap:3px;font-size:12px}
+.ind-fng-t span{font-size:15px;font-weight:800}
+.ind-fng-bar{position:relative;height:6px;border-radius:99px;direction:ltr;margin:3px 0;
+  background:linear-gradient(90deg,var(--red),var(--amber) 35%,rgb(var(--ov-rgb)/.25) 50%,var(--green) 65%,var(--cyan))}
+.ind-fng-bar i{position:absolute;top:-4px;width:4px;height:14px;border-radius:3px;background:var(--tx);box-shadow:0 0 0 2px var(--bg1);transform:translateX(-50%)}
+.ind-fng-t small{color:var(--mut2);font-size:11px;line-height:1.6}
+.ind-al{border:1px solid var(--line2);border-radius:13px;padding:10px 12px;background:var(--bg1);margin-top:9px;font-size:12px}
+.ind-al-h{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.ind-al-h button,.ind-al-o button{font-size:11.5px;padding:4px 11px;border-radius:999px}
+.ind-al-h button.on,.ind-al-o button.on{border-color:var(--green);color:var(--green);background:rgb(var(--green-rgb)/.1)}
+.ind-al-o{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px;color:var(--mut)}
+.ind-al.off .ind-al-o{opacity:.55}
+.ind-al details{margin-top:8px}.ind-al summary{cursor:pointer;color:var(--cyan)}
 .fng{flex:none;padding:2px 12px;border-inline-end:1px solid var(--line2);font-size:11.5px;white-space:nowrap}
 .fng small{font-size:10.5px}
 .fgw{display:inline-flex;align-items:center;gap:7px}.fgr{flex:none;margin:-3px 0}
@@ -15782,8 +16011,8 @@ html.lite .card:hover,html.lite button:hover{transform:none}
   <span class="navhint r" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><svg viewBox="0 0 24 24"><path d="M10 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
   </div>
 </header>
-<div id="tape" class="tape tape1" style="display:none"><button id="indBtn" class="indbtn" style="display:none" onclick="openInd()" title="📊 المؤشرات: العملة راح تصعد لو تنزل؟ — كل عملة بالشريط بعشر مؤشرات ومعدلها">📊 المؤشرات</button><div class="tapewrap" title="أسعار حية — من الإعدادات ⚙️ ← 📈 شريط الأسعار"><div id="tapein" class="tapein"></div></div></div>
-<div id="tape2" class="tape tape2" style="display:none" title="مؤشرات العملات المختارة — من ⚙️ الإعدادات ← 📈 شريط الأسعار"><span id="fng" class="fng"></span><div class="tapewrap"><div id="tape2in" class="tapein"></div></div></div>
+<div id="tape" class="tape" style="display:none" title="أسعار حية — من الإعدادات ⚙️ ← 📈 شريط الأسعار"><div id="tapein" class="tapein"></div></div>
+<div id="tape2" class="tape tape2" style="display:none" title="مؤشرات العملات المختارة — من ⚙️ الإعدادات ← 📈 شريط الأسعار"><button id="indBtn" class="indbtn" onclick="openInd()" title="📊 المؤشرات: العملة راح تصعد لو تنزل؟ — كل عملة بالشريط بعشر مؤشرات ومعدلها · الخوف والطمع · 🔔 إشعارات الأسعار">📊 المؤشرات</button><div class="tapewrap"><div id="tape2in" class="tapein"></div></div></div>
 <div id="mbar" onclick="goTop()" title="ارجع للأعلى"><span id="mPulse" class="pulse off"></span><span title="ربح التداول اليوم">🔄 <b id="mTrade" class="num">0.00</b></span><span title="إجمالي الربح المحرر">💵 <b id="mTotal" class="num">0.00</b></span><span title="الربح المحرر اليوم">📅 <b id="mToday" class="num">0.00</b></span><span id="mGuard"></span></div>
 <div class="toolbar">
   <div class="srch">
@@ -17294,7 +17523,7 @@ function tapeSync(d){
     inn.innerHTML=one+one; inn.dataset.sig=sig;
     Object.entries(LIVE.last).forEach(([k,v])=>{if(Date.now()-v.ts<20000)livePx(k,v.px,v.chg)});
   }
-  if(!TAPES.p)TAPES.p=new Tape($('#tape .tapewrap')||el,inn);
+  if(!TAPES.p)TAPES.p=new Tape(el,inn);
   TAPES.p.setLoop(Math.max(20,+T.speed||45));
   liveWS(wsCoins(coins));                           // ⚡ لحظي من المنصة مباشرة (الشريط + البوتات)
   for(const r of rows){
@@ -17311,11 +17540,31 @@ function tapeSync(d){
 
 /* 📊 v3.26.5: المؤشرات — زر فوق «الخوف والطمع» · لكل عملة بالشريط: الحكم + الثقة + الدقة · 10 مؤشرات بسطر واحد لكل مؤشر */
 let INDV=null, INDO={}, INDT=0;
-function indBtnSync(d){const t1=$('#tape'),t2=$('#tape2'),b=$('#indBtn'),fg=$('#fng');if(!t1||!b)return;
-  const T=((d||DATA||{}).ticker)||{}, tOn=!!(T.on&&((T.coins||[]).length||(T.rows||[]).length)), iOn=!!(t2&&t2.style.display!=='none');
-  b.style.display=iOn?'':'none';
-  if(!tOn&&iOn){t1.style.display='';t1.classList.add('onlybtn')}else t1.classList.remove('onlybtn');
-  if(iOn&&fg&&fg.offsetWidth)b.style.width=Math.max(104,fg.offsetWidth-16)+'px';else b.style.width=''}
+function indBtnSync(d){const b=$('#indBtn');if(!b)return;const S=(((d||DATA||{}).indic)||{}).sum||{};   // 📊 v3.26.6: بمكان «الخوف والطمع» + ⬆️/⬇️
+  const h='📊 المؤشرات'+((S.up||S.down)?` <small><b style="color:var(--green)">⬆️${S.up||0}</b> <b style="color:var(--red)">⬇️${S.down||0}</b></small>`:'');
+  if(b._h!==h){b.innerHTML=h;b._h=h}}
+let INDALO=false;
+function indFng(f){if(!f||f.v==null)return '';const v=Math.max(0,Math.min(100,Math.round(+f.v)));                   // 😨🤑 السوق كله — فوق
+  const c=v<25?'var(--red)':v<45?'var(--amber)':v<56?'var(--mut)':v<75?'var(--green)':'var(--cyan)';
+  return `<div class="ind-fng"><svg width="52" height="52" viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="12.5" fill="none" stroke="var(--line)" stroke-width="3"/>
+    <circle cx="15" cy="15" r="12.5" fill="none" stroke="${c}" stroke-width="3" stroke-linecap="round" stroke-dasharray="78.54" stroke-dashoffset="${(78.54*(1-v/100)).toFixed(2)}" transform="rotate(-90 15 15)"/>
+    <text class="fgn" x="15" y="18.3" text-anchor="middle" fill="${c}">${v}</text></svg>
+    <div class="ind-fng-t"><b>😨 الخوف والطمع — السوق كله</b><span style="color:${c}">${v} · ${gEsc(f.txt||'')}</span><div class="ind-fng-bar"><i style="left:${v}%"></i></div>
+    <small>0 خوف شديد ← 100 طمع شديد · الخوف الشديد غالباً فرصة، والطمع الشديد وقت حذر</small></div></div>`}
+function indAl(P){if(!P||P.on==null)return '';                                       // 🔔 إشعارات الأسعار — تشتغل وتنطفي
+  const o=(m,k,cur)=>Object.entries(m||{}).map(([a,l])=>`<button class="${cur===a?'on':''}" onclick="pxaSet({${k}:'${a}'})">${gEsc(l)}</button>`).join('');
+  return `<div class="ind-al${P.on?'':' off'}"><div class="ind-al-h"><b>🔔 إشعارات الأسعار <small style="color:var(--mut2);font-weight:400">${P.on?gEsc(P.sens_lbl)+' · '+gEsc(P.ch_lbl):'مطفية'}</small></b>
+    <span style="display:flex;gap:6px"><button id="pxa_on" class="${P.on?'on':''}" onclick="pxaSet({on:${P.on?'false':'true'}})">${P.on?'✅ شغّالة':'⏸️ مطفية'}</button>
+    <button onclick="INDALO=!INDALO;indRender()">${INDALO?'▲':'⚙️'} الخيارات</button></span></div>
+    ${P.muted?'<div class="ind-sub" style="color:var(--amber)">🔕 كتم الإشعارات شغّال (زر 🔔 فوق) — ما يوصل شي لحد ما تفكّه</div>':''}
+    ${INDALO?`<div class="ind-al-o">الحساسية: ${o(P.sens_opts,'sens',P.sens)}</div><div class="ind-al-o">وين توصل: ${o(P.ch_opts,'ch',P.ch)}</div>
+    <label class="ind-al-o"><input type="checkbox" ${P.ind?'checked':''} onchange="pxaSet({ind:this.checked})"> 📊 بلّغني لما المؤشرات تصير صعود قوي أو نزول قوي</label>
+    <div class="ind-al-o"><button onclick="pxaTest()">🧪 جرّب إشعار</button></div>`:''}
+    <div class="ind-sub" style="margin-top:6px">${gEsc(P.rule||'')} · نفس الحركة ما تتكرر · كل الإشعارات بنفس الدقيقة برسالة وحدة · اليوم ${P.n_today||0}</div>
+    ${(P.log||[]).length?`<details><summary>آخر الإشعارات (${P.log.length})</summary>${P.log.map(x=>`<div class="ind-sub">${new Date(x.ts*1000).toLocaleString('ar',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})} · ${gEsc(x.t)} · ${gEsc(x.b)}</div>`).join('')}</details>`:''}</div>`}
+async function pxaSet(v){try{const r=await api('/api/control',{action:'pxa_set',value:v});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok));if(r&&r.pxa&&INDV)INDV.pxa=r.pxa}catch(e){toast('تعذر الاتصال',false)}indRender()}
+async function pxaTest(){try{const r=await api('/api/control',{action:'pxa_test'});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok))}catch(e){toast('تعذر الاتصال',false)}
+  try{INDV=await api('/api/indicators')}catch(e){}indRender()}
 async function openInd(){
   showModal(`<h2>📊 المؤشرات — العملة راح تصعد لو تنزل؟</h2><div id="ind_body" style="color:var(--mut);font-size:12.5px;padding:16px;text-align:center">${LDR('جاري الحساب…')}</div>
     <div class="mbtns"><button onclick="openTicker()">⚙️ العملات</button><button onclick="hideModal()">إغلاق</button></div>`);
@@ -17328,14 +17577,15 @@ function indRender(){
   if(!V||V.ok===false){el.innerHTML='⚠️ تعذّر حساب المؤشرات';return}
   if(!V.on){el.innerHTML='المؤشرات مطفية — شغّلها من ⚙️ الإعدادات ← 📈 شريط الأسعار';return}
   const R=V.rows||[];
-  if(!R.length){el.innerHTML=V.busy?LDR('⏳ أول حساب للمؤشرات — ثواني…'):('ماكو عملات بالشريط — ضيفها من ⚙️ ← 📈 شريط الأسعار'+(V.err?'<br><small>'+gEsc(V.err)+'</small>':''));return}
+  if(!R.length){el.innerHTML=(V.busy?LDR('⏳ أول حساب للمؤشرات — ثواني…'):('ماكو عملات بالشريط — ضيفها من ⚙️ ← 📈 شريط الأسعار'+(V.err?'<br><small>'+gEsc(V.err)+'</small>':'')))
+    +`<div style="text-align:right">${indFng(V.fng)}${indAl(V.pxa)}</div>`;return}
   el.style.cssText='text-align:right';
   const S=V.summary||{}, f=V.fng||{}, H=V.h||4;
   const word=s=>s>=0.15?['صعود','p']:s<=-0.15?['نزول','n']:['محايد','z'];
   const pc=a=>a&&a.pct!=null?`${a.pct}% <small>(${a.n})</small>`:'—';
   let h=`<div class="ind-top"><span class="ind-chip">⏱ للساعات الجاية (~${H} ساعات)</span>
     <span class="ind-chip">السوق: <b style="color:var(--green)">⬆️ ${S.up||0}</b> · <b style="color:var(--red)">⬇️ ${S.down||0}</b> · <b>↔️ ${S.flat||0}</b></span>
-    ${f.v!=null?`<span class="ind-chip">الخوف والطمع <b>${f.v}</b> ${gEsc(f.txt||'')}</span>`:''}<span class="ind-chip">🔄 ${V.ts?gAgo(V.ts):'—'} · كل ${Math.round((V.every||300)/60)} د</span></div>`;
+    <span class="ind-chip">🔄 ${V.ts?gAgo(V.ts):'—'} · كل ${Math.round((V.every||300)/60)} د</span></div>${indFng(f)}${indAl(V.pxa)}`;
   h+=`<div class="ind-list">${R.map(r=>{const op=!!INDO[r.sym],sc=Math.max(-100,Math.min(100,+r.score||0));
     const parts=r.parts||[], acc=r.acc_bt||{}, live=r.acc_live||{};
     const dots=parts.map(p=>{const w=word(+p.s);return `<span class="ind-dot ${w[1]}" title="${gEsc(p.name)}: ${w[0]}">${p.ico} ${w[0]}</span>`}).join('');
@@ -17451,7 +17701,7 @@ function openTicker(){
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:9px;
       border-top:1px solid var(--line);padding-top:9px">
       <div style="font-size:12px;color:var(--mut2);max-width:60%">📊 <b>شريط المؤشرات</b> تحته — لكل عملة: الاتجاه · القوة النسبية ·
-        تذبذب الساعة · موقع السعر بمدى 7 أيام. ومعاه مؤشر الخوف والطمع العام. (نفس العملات المختارة)</div>
+        تذبذب الساعة · موقع السعر بمدى 7 أيام. ببدايته زر «📊 المؤشرات» (فيه الخوف والطمع و🔔 إشعارات الأسعار). (نفس العملات المختارة)</div>
       <button id="tk_ind" data-off="${I.on?'0':'1'}" class="${I.on?'on':''}" onclick="tkToggle2()">${I.on?'✅ شغّال':'⏸️ مطفي'}</button></div>
     <div id="tk_chips" class="tkchips"></div>
     <div style="display:flex;gap:6px;margin-top:10px">
@@ -18664,6 +18914,7 @@ function holyGoNow(){const t=HGO;HGO=null;if(!t)return;
   if(k==='guard')return openGuard();
   if(k==='app')return openAppPanel();
   if(k==='win')return openWinPanel();
+  if(k==='ind')return openInd();                                  // 🔔 v3.26.6: إشعار سعر انضغط ⇒ «📊 المؤشرات»
   if(k==='bot')return holyFlash(CARDS.get(v));
   if(k==='sym'){for(const [d,el] of CARDS){if((botOf(d)||{}).symbol===v)return holyFlash(el)}return}
   if(k==='acc'){const L=(DATA&&DATA.accum)||[];const a=L.find(x=>x.name===v||x.id===v||x.symbol===v);if(a)return holyFlash(ACARDS.get(a.id));return}
