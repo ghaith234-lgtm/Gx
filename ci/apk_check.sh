@@ -14,6 +14,15 @@ api(){ curl -s -X POST "localhost:8099$1" -H 'Content-Type: application/json' -d
 API=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
 say "android api $API · webview $(adb shell dumpsys package com.google.android.webview 2>/dev/null | grep -m1 versionName | tr -d '\r ')"
 adb logcat -c
+# ── 1.4: start from the previous app (1.3 — taken from the v3.26.6 release commit) ⇒ the real update path: old channels go · the Holy-tone channels come ──
+OLDC=cbfbf7c03a3b465c77a86b2da09f36e9cb27cd0f
+if git fetch -q --depth=1 origin $OLDC 2>/dev/null && git show FETCH_HEAD:Holy_Dashboard.pyw | python3 ci/ci_tools.py apk > old.apk 2>/dev/null && [ -s old.apk ]; then
+  adb install old.apk 2>&1 | tail -1 | sed 's/^/HOLYCI install 1.3: /'
+  adb shell dumpsys package $P | grep -m1 versionName | tr -d '\r' | sed 's/^/HOLYCI before update: /'
+  adb shell am start -n $P/.MainActivity >/dev/null; sleep 8
+  adb shell dumpsys notification --noredact | grep -oE "mId='(trade|alert|info|watch)'[^}]{0,40}" | sort -u | head -4 | sed 's/^/HOLYCI 1.3 channel: /'
+  adb shell am force-stop $P
+else say "INFO couldn't fetch the 1.3 app ⇒ fresh install only"; fi
 adb install -r holy.apk 2>&1 | tail -1 | sed 's/^/HOLYCI install: /'
 adb shell pm list packages | grep -q "$P" && say "PASS installed" || { say "FAIL install"; exit 1; }
 adb shell dumpsys package $P | grep -E "versionCode|versionName|targetSdk|signatures|pkgFlags" | head -6 | sed 's/^/HOLYCI pkg: /'
@@ -71,10 +80,24 @@ adb shell dumpsys deviceidle force-idle | sed 's/^/HOLYCI doze: /'
 note DOZE1; got DOZE1 40 && say "PASS deep sleep (Doze) ⇒ notification arrives" || say "FAIL deep sleep (Doze) ⇒ no notification"
 adb shell dumpsys deviceidle unforce >/dev/null
 adb shell am start -n $P/.MainActivity >/dev/null; sleep 6
-# ── 1.3: the colour logo inside every notification · the watcher line (no «يراقب» · secret on the lock screen) can be turned off ⇒ alerts keep coming ──
+# ── 1.3 (1.4: no big picture any more): the notifications · the watcher line (no «يراقب» · secret on the lock screen) can be turned off ⇒ alerts keep coming ──
 adb shell dumpsys notification --noredact > $OUT/n13.txt
-nl=$(grep -c "android.largeIcon=Icon" $OUT/n13.txt | tr -d '\r'); say "notifications carrying the colour logo: $nl"
-[ "${nl:-0}" -gt 0 ] && say "PASS colour logo (large icon) inside the notifications" || say "FAIL no large icon in the notifications"
+nl=$(grep -c "android.largeIcon=Icon" $OUT/n13.txt | tr -d '\r'); say "notifications carrying a big picture: $nl"
+[ "${nl:-0}" -eq 0 ] && say "PASS 1.4: no big picture (large icon) inside the notifications" || say "FAIL 1.4: a large icon is still inside the notifications"
+# ── 1.4: the Holy tone on trades · alerts · prices (channel sound = the app's own raw file) · the 1.3 channels deleted · price kind on its own channel ──
+api /api/app/devices '{"act":"test","sample":"price","tag":"PRICE1"}' >/dev/null
+got PRICE1 30 && say "PASS price test notification arrived" || say "FAIL price test notification never arrived"
+adb shell dumpsys notification --noredact > $OUT/n14.txt
+for ch in trade2 alert2 price; do
+  line=$(grep -oE "mId='$ch'.{0,700}" $OUT/n14.txt | head -1)
+  echo "$line" | grep -q "mSound=android.resource://$P/" && say "PASS channel $ch rings the Holy tone ($(echo "$line" | grep -oE "mSound=[^,]+"))" || say "FAIL channel $ch: no Holy tone — $(echo "$line" | cut -c1-220)"
+done
+for ch in trade alert; do
+  line=$(grep -oE "mId='$ch'.{0,900}" $OUT/n14.txt | head -1)
+  if [ -z "$line" ] || echo "$line" | grep -q "mDeleted=true"; then say "PASS old 1.3 channel «$ch» removed"; else say "FAIL old 1.3 channel «$ch» still live — $(echo "$line" | cut -c1-160)"; fi
+done
+grep -B2 -A30 "PRICE1" $OUT/n14.txt | grep -oE "channel=[a-z0-9]+|mId='[a-z0-9]+'" | head -2 | sed 's/^/HOLYCI price notification: /'
+adb shell dumpsys package $P | grep -E "versionName|versionCode" | head -2 | tr -d '\r' | sed 's/^/HOLYCI now: /'
 grep -q "android.title=Holy يراقب" $OUT/n13.txt && say "FAIL watcher line still says «Holy يراقب»" || say "PASS watcher line no longer says «يراقب»"
 grep -E "mId='watch'" $OUT/n13.txt | head -1 | cut -c1-240 | sed 's/^/HOLYCI watch channel: /'
 dump warm >/dev/null                      # the first uiautomator call after «adb root» comes back empty ⇒ warm it up

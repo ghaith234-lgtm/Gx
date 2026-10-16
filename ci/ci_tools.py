@@ -55,6 +55,10 @@ elif cmd == "img":
         print(f"HOLYIMG {sys.argv[3]} " + base64.b64encode(bo.getvalue()).decode())
     except Exception as e:
         print(f"HOLYIMG {sys.argv[3]} ERROR {e}")
+elif cmd == "apk":               # 1.4: the APK embedded in a dashboard source (stdin) ⇒ stdout (to install the previous app first)
+    m = re.search(r'^APP_APK_B64 = "([A-Za-z0-9+/=]+)"', sys.stdin.read(), re.M)
+    if m:
+        sys.stdout.buffer.write(base64.b64decode(m.group(1)))
 elif cmd == "notif":
     pkg = sys.argv[2]
     txt = sys.stdin.read()
