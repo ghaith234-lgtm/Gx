@@ -5,8 +5,8 @@ P=com.holy.dash
 OUT=ci_out; mkdir -p $OUT
 say(){ echo "HOLYCI $*"; }
 # uiautomator can die once (e.g. right after «adb root» restarts adbd) ⇒ an empty screen ⇒ try again
-dump(){ for t in 1 2 3 4; do rm -f $OUT/ui_$1.xml; adb shell rm -f /sdcard/ui.xml >/dev/null 2>&1; adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml $OUT/ui_$1.xml >/dev/null 2>&1
-  grep -q "<node" $OUT/ui_$1.xml 2>/dev/null && break; sleep 2; done; python3 ci/ci_tools.py texts $OUT/ui_$1.xml "$1"; }
+dump(){ for t in 1 2 3 4 5 6; do rm -f $OUT/ui_$1.xml; adb shell rm -f /sdcard/ui.xml >/dev/null 2>&1; adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml $OUT/ui_$1.xml >/dev/null 2>&1
+  grep -q "<node" $OUT/ui_$1.xml 2>/dev/null && break; sleep 3; done; python3 ci/ci_tools.py texts $OUT/ui_$1.xml "$1"; }
 shot(){ adb exec-out screencap -p > $OUT/$1.png 2>/dev/null; python3 ci/ci_tools.py img $OUT/$1.png "$1"; }
 tap(){ xy=$(python3 ci/ci_tools.py find $OUT/ui_$2.xml "$1"); if [ -n "$xy" ]; then adb shell input tap $xy; say "tap «$1» at $xy"; else say "tap «$1» NOT FOUND"; fi; }
 api(){ curl -s -X POST "localhost:8099$1" -H 'Content-Type: application/json' -d "$2"; echo; }
@@ -77,9 +77,12 @@ nl=$(grep -c "android.largeIcon=Icon" $OUT/n13.txt | tr -d '\r'); say "notificat
 [ "${nl:-0}" -gt 0 ] && say "PASS colour logo (large icon) inside the notifications" || say "FAIL no large icon in the notifications"
 grep -q "android.title=Holy يراقب" $OUT/n13.txt && say "FAIL watcher line still says «Holy يراقب»" || say "PASS watcher line no longer says «يراقب»"
 grep -E "mId='watch'" $OUT/n13.txt | head -1 | cut -c1-240 | sed 's/^/HOLYCI watch channel: /'
-adb shell am start -n $P/.MainActivity --es go app >/dev/null; sleep 6; dump app13; shot app13
-grep -q "أخفيه" $OUT/ui_app13.xml && say "PASS panel offers to hide the watcher line" || say "FAIL no hide row in the panel"
-tap "أخفيه" app13; sleep 4; dump chan; shot chan
+dump warm >/dev/null                      # the first uiautomator call after «adb root» comes back empty ⇒ warm it up
+adb shell am start -n $P/.MainActivity --es go app >/dev/null; sleep 8; dump app13; shot app13
+if grep -q "أخفيه" $OUT/ui_app13.xml; then say "PASS panel offers to hide the watcher line"; tap "أخفيه" app13
+else say "FAIL no hide row in the panel (screen dump: $(grep -c '<node' $OUT/ui_app13.xml 2>/dev/null) nodes) ⇒ opening Android's page directly to still test hiding"
+  adb shell am start -a android.settings.CHANNEL_NOTIFICATION_SETTINGS --es android.provider.extra.APP_PACKAGE $P --es android.provider.extra.CHANNEL_ID watch >/dev/null; fi
+sleep 4; dump chan; shot chan
 adb shell dumpsys activity activities | grep -m1 -E "mResumedActivity|topResumedActivity" | sed 's/^/HOLYCI top: /'
 xy=$(python3 ci/ci_tools.py switch $OUT/ui_chan.xml)
 if [ -n "$xy" ]; then adb shell input tap $xy; say "turned the watcher line off at $xy"; else say "INFO no switch on the channel page"; fi
