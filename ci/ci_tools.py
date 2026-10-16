@@ -29,6 +29,9 @@ elif cmd == "find":
     best = None
     for n in nodes(sys.argv[2]):
         t = (n.get("text") or n.get("content-desc") or "").strip()
+        x1, y1, x2, y2 = map(int, re.findall(r"\d+", n.get("bounds") or "[0,0][0,0]"))
+        if x2 <= x1 or y2 <= y1:          # zero-size (e.g. a window the old WebView can't lay out) — not tappable
+            continue
         if t == want:
             best = n
             break

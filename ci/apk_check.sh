@@ -79,7 +79,10 @@ grep -q "android.title=Holy يراقب" $OUT/n13.txt && say "FAIL watcher line s
 grep -E "mId='watch'" $OUT/n13.txt | head -1 | cut -c1-240 | sed 's/^/HOLYCI watch channel: /'
 dump warm >/dev/null                      # the first uiautomator call after «adb root» comes back empty ⇒ warm it up
 adb shell am start -n $P/.MainActivity --es go app >/dev/null; sleep 8; dump app13; shot app13
-if grep -q "أخفيه" $OUT/ui_app13.xml; then say "PASS panel offers to hide the watcher line"; tap "أخفيه" app13
+hx=$(python3 ci/ci_tools.py find $OUT/ui_app13.xml "أخفيه")
+if [ -n "$hx" ]; then say "PASS panel offers to hide the watcher line"; tap "أخفيه" app13
+elif grep -q "أخفيه" $OUT/ui_app13.xml; then say "INFO the 🙈 row is in the page but has no size — this WebView ($(adb shell dumpsys package com.google.android.webview | grep -m1 versionName | tr -d '\r ')) can't lay out the dashboard's windows (CSS inset needs Chrome 87+) ⇒ opening Android's page directly"
+  adb shell am start -a android.settings.CHANNEL_NOTIFICATION_SETTINGS --es android.provider.extra.APP_PACKAGE $P --es android.provider.extra.CHANNEL_ID watch >/dev/null
 else say "FAIL no hide row in the panel (screen dump: $(grep -c '<node' $OUT/ui_app13.xml 2>/dev/null) nodes) ⇒ opening Android's page directly to still test hiding"
   adb shell am start -a android.settings.CHANNEL_NOTIFICATION_SETTINGS --es android.provider.extra.APP_PACKAGE $P --es android.provider.extra.CHANNEL_ID watch >/dev/null; fi
 sleep 4; dump chan; shot chan
