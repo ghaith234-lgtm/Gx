@@ -15139,12 +15139,11 @@ html[data-theme="light"]{--glint:#c58a00}
 html[data-mood="up"]{--glint:var(--green)}
 html[data-mood="down"]{--glint:var(--red)}
 .bword .bglow{stroke:var(--glint);stroke-width:9.5}
-@keyframes hlGlint{0%{stroke:var(--tx)}10%,26%{stroke:var(--glint)}48%,100%{stroke:var(--tx)}}
-@keyframes hlGlow{0%{filter:none}14%{filter:drop-shadow(0 0 5px var(--glint))}52%,100%{filter:none}}
-.brand .bmark.glint{animation:hlGlow 1.9s ease-out 1}
-.brand .bmark.glint .br{animation:hlGlint 1.9s linear 1}
-html.lite .brand .bmark.glint,html.lite .brand .bmark.glint .br{animation:none}
-@media (prefers-reduced-motion:reduce){.brand .bmark.glint,.brand .bmark.glint .br{animation:none}}
+.brand .bmark{transition:filter .45s ease}.brand .bmark .br{transition:stroke .3s ease}
+.brand .bmark.glint{filter:drop-shadow(0 0 5px var(--glint))}
+.brand .bmark.glint .br{stroke:var(--glint)}
+html.lite .brand .bmark.glint{filter:none}html.lite .brand .bmark.glint .br{stroke:inherit}
+@media (prefers-reduced-motion:reduce){.brand .bmark.glint{filter:none}.brand .bmark.glint .br{stroke:inherit}}
 .hword{display:none}
 /* ⏳ حركة الشعار وقت التحميل: الخط الصاعد يجري · الشمعتين تنبض */
 @keyframes bmFlow{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
@@ -17580,7 +17579,7 @@ let PXAO=false, PXAV=null, GLT=0;
 function glintOk(){try{return !matchMedia('(prefers-reduced-motion: reduce)').matches&&!document.documentElement.classList.contains('lite')}catch(e){return false}}
 function glintRun(){if(document.hidden||!glintOk())return;
   document.querySelectorAll('.bword[data-glint] animateTransform').forEach(a=>{try{a.beginElement()}catch(e){}});
-  document.querySelectorAll('.brand .bmark').forEach(m=>{m.classList.remove('glint');void m.getBoundingClientRect();m.classList.add('glint')})}
+  document.querySelectorAll('.brand .bmark').forEach(m=>{m.classList.add('glint');clearTimeout(m._gt);m._gt=setTimeout(()=>m.classList.remove('glint'),800)})}
 function glintInit(){const NS='http://www.w3.org/2000/svg';
   document.querySelectorAll('.bword[data-glint] linearGradient.bglint').forEach(g=>{if(g.querySelector('animateTransform'))return;const W=+g.dataset.w||1000,a=document.createElementNS(NS,'animateTransform');
     [['attributeName','gradientTransform'],['type','translate'],['from',Math.round(-.45*W)+' 0'],['to',Math.round(1.15*W)+' 0'],['dur','1.9s'],['begin','indefinite'],['fill','remove'],
@@ -19011,7 +19010,6 @@ async function appRender(){
           +' · فحص احتياطي كل 15 دقيقة'+(s.strict?`<br><b style="color:var(--amber)">${gEsc(s.maker||'موبايلك')} يسكّر التطبيقات بالخلفية</b> — فعّل «التشغيل التلقائي» أو «بلا قيود» وقفّل Holy بالتطبيقات الأخيرة 🔒`:'')),
           s.running===undefined?'':`<button class="${s.strict?'primary':''}" onclick="try{HolyApp.bgSettings()}catch(e){toast('حدّث التطبيق أول',false)}">الإعداد</button>`):''}
       ${row('🧪','إشعار تجريبي','يوصل خلال ثواني لو كلشي تمام',`<button onclick="appTest()">أرسل</button>`)}
-      ${row('🎵','نغمة الإشعارات',(+s.code||0)>=5?'نغمة Holy الخاصة (الصفقات · التنبيهات · الأسعار) — تكدر تغيّرها لكل نوع من إعدادات أندرويد للتطبيق':'حدّث التطبيق لنسخة 1.4 حتى تصير إلها نغمة Holy الخاصة')}
       ${row('🔒','شاشة القفل',s.hideLock?'المبالغ مخفية لحد ما تفتح القفل':'الإشعار كامل حتى على شاشة القفل',
           `<button onclick="HolyApp.setHideLock(${s.hideLock?'false':'true'});setTimeout(appRender,300)">${s.hideLock?'أظهرها':'اخفها'}</button>`)}
       ${s.paired&&s.watching&&(+s.android||0)>=26&&typeof HolyApp.watchSettings==='function'?row('🙈','«Holy يراقب» بالإشعارات',s.watchHidden?'مخفي — والإشعارات تبقى توصل':
@@ -19020,6 +19018,7 @@ async function appRender(){
           `<button onclick="HolyApp.watchSettings()">${s.watchHidden?'الإعداد':'أخفيه'}</button>`):''}
       ${row('⬆️','نسخة التطبيق',`${gEsc(s.name||'?')} · باللوحة: ${gEsc(A.name||'?')}`+((+A.code||0)>(+s.code||0)?' — <b style="color:var(--green)">في تحديث</b>':' — آخر نسخة'),
           `<button onclick="HolyApp.checkUpdate()">${(+A.code||0)>(+s.code||0)?'حدّث':'افحص'}</button>`)}
+      ${row('🎵','نغمة الإشعارات',(+s.code||0)>=5?'نغمة Holy الخاصة (الصفقات · التنبيهات · الأسعار) — تكدر تغيّرها لكل نوع من إعدادات أندرويد للتطبيق':'حدّث التطبيق لنسخة 1.4 حتى تصير إلها نغمة Holy الخاصة')}
       ${row('🔗','عنوان اللوحة',`<span dir="ltr">${gEsc(s.origin||location.origin)}</span>`,`<button onclick="HolyApp.changeServer()">تغيير</button>`)}
     </div>
     <div class="ap-note">اللوحة نفسها تفتح بالتطبيق — فكل تحديث للوحة يوصلك فوراً. التطبيق يتحدث وحده لما تنزل له نسخة جديدة.</div>`;
