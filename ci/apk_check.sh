@@ -14,13 +14,13 @@ api(){ curl -s -X POST "localhost:8099$1" -H 'Content-Type: application/json' -d
 API=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
 say "android api $API · webview $(adb shell dumpsys package com.google.android.webview 2>/dev/null | grep -m1 versionName | tr -d '\r ')"
 adb logcat -c
-# ── 1.4: start from the previous app (1.3 — taken from the v3.26.6 release commit) ⇒ the real update path: old channels go · the Holy-tone channels come ──
-OLDC=cbfbf7c03a3b465c77a86b2da09f36e9cb27cd0f
+# ── start from the previous app (1.4 — taken from the v3.26.7 release commit) ⇒ the real update path to 1.5 (tone channels kept · lock off · 120 fps) ──
+OLDC=79b59dc15d109aec3826b026e75700b8cc7af720
 if git fetch -q --depth=1 origin $OLDC 2>/dev/null && git show FETCH_HEAD:Holy_Dashboard.pyw | python3 ci/ci_tools.py apk > old.apk 2>/dev/null && [ -s old.apk ]; then
-  adb install old.apk 2>&1 | tail -1 | sed 's/^/HOLYCI install 1.3: /'
+  adb install old.apk 2>&1 | tail -1 | sed 's/^/HOLYCI install previous: /'
   adb shell dumpsys package $P | grep -m1 versionName | tr -d '\r' | sed 's/^/HOLYCI before update: /'
   adb shell am start -n $P/.MainActivity >/dev/null; sleep 8
-  adb shell dumpsys notification --noredact | grep -oE "mId='(trade|alert|info|watch)'[^}]{0,40}" | sort -u | head -4 | sed 's/^/HOLYCI 1.3 channel: /'
+  adb shell dumpsys notification --noredact | grep -oE "mId='(trade2|alert2|price|info|watch)'[^}]{0,40}" | sort -u | head -5 | sed 's/^/HOLYCI previous channel: /'
   adb shell am force-stop $P
 else say "INFO couldn't fetch the 1.3 app ⇒ fresh install only"; fi
 adb install -r holy.apk 2>&1 | tail -1 | sed 's/^/HOLYCI install: /'
@@ -120,6 +120,38 @@ note HIDE1; got HIDE1 40 && say "PASS line off ⇒ alerts still arrive" || say "
 grep -c "pkg=$P" $OUT/n13b.txt | sed 's/^/HOLYCI our notifications with the line off (before HIDE1): /'
 dump app13b; shot app13b
 grep -q "مخفي" $OUT/ui_app13b.xml && say "PASS panel shows «مخفي»" || say "FAIL panel doesn't show «مخفي»"
+# ── 1.5 🎞️ refresh rate: ⚙️ «الفريمات» ⇒ the window asks the screen for the closest real mode (the emulator has one 60 Hz mode) ──
+pf(){ adb shell cat /data/data/$P/shared_prefs/holy.xml 2>/dev/null | tr -d '\r'; }
+pf | grep -oE '<(int|boolean) name="(fps|lock)" value="[^"]*"' | sed 's/^/HOLYCI prefs before: /'
+adb shell dumpsys window windows | grep -E "com.holy.dash/com.holy.dash.MainActivity" -A40 | grep -oE "preferredDisplayModeId=[0-9]+|preferredRefreshRate=[0-9.]+" | sort -u | head -3 | sed 's/^/HOLYCI window: /'
+adb shell dumpsys window windows | grep -E "com.holy.dash/com.holy.dash.MainActivity" -A40 | grep -qE "preferredDisplayModeId=[1-9]" && say "PASS 1.5: the app window asks for a display mode (refresh rate)" || say "INFO no preferredDisplayModeId in dumpsys (this Android prints it elsewhere)"
+adb shell am start -n $P/.MainActivity --es go set >/dev/null; sleep 6; dump set15; shot set15
+if grep -q "الفريمات" $OUT/ui_set15.xml; then say "PASS ⚙️ «الفريمات» row shown"; grep -oE 'text="[^"]*Hz[^"]*"' $OUT/ui_set15.xml | head -1 | sed 's/^/HOLYCI fps note: /'
+  tap "60" set15; sleep 3; pf | grep -q '<int name="fps" value="60"' && say "PASS 60 saved by the app (HolyApp.setFps)" || say "FAIL fps not saved: $(pf | grep -o 'name="fps"[^/]*')"
+  dump set15b; grep -q "الشاشة هسه 60 Hz" $OUT/ui_set15b.xml && say "PASS row shows «الشاشة هسه 60 Hz»" || say "INFO row text: $(grep -oE 'text="[^"]*Hz[^"]*"' $OUT/ui_set15b.xml | head -1)"
+  tap "120" set15b; sleep 2
+else say "INFO «الفريمات» row not readable on this WebView ($(grep -c '<node' $OUT/ui_set15.xml) nodes)"; fi
+# ── 1.5 🔐 fingerprint lock: a test PIN on the phone ⇒ turn on (asks the PIN) ⇒ 33 s in the background ⇒ locked ⇒ PIN ⇒ open ⇒ turn off ⇒ PIN removed ──
+pin(){ sleep 4; adb shell input text 1111; sleep 1; adb shell input keyevent 66; sleep 4; }
+adb shell locksettings set-pin 1111 >/dev/null 2>&1 && say "test PIN set" || say "INFO couldn't set a test PIN"
+adb shell am start -n $P/.MainActivity --es go app >/dev/null; sleep 7; dump lk1
+if grep -q "قفل بالبصمة" $OUT/ui_lk1.xml; then
+  say "PASS 📱 panel shows «🔐 قفل بالبصمة»"; tap "تشغيل" lk1; sleep 3; dump lk1p; shot lk1p
+  say "auth screen: $(python3 ci/ci_tools.py texts $OUT/ui_lk1p.xml lk1p | cut -c1-200)"
+  pin; pf | grep -q '<boolean name="lock" value="true"' && say "PASS lock turned ON after the PIN" || say "FAIL lock not on: $(pf | grep -o 'name="lock"[^/]*')"
+  adb shell input keyevent KEYCODE_HOME; sleep 4
+  adb shell am start -n $P/.MainActivity >/dev/null; sleep 5; dump lk2
+  grep -q "Holy مقفول" $OUT/ui_lk2.xml && say "INFO back within 30 s ⇒ still covered (expected: no prompt, uncovered)" || say "PASS back within 30 s ⇒ open without a new fingerprint"
+  adb shell input keyevent KEYCODE_HOME; sleep 34
+  adb shell am start -n $P/.MainActivity >/dev/null; sleep 5; dump lk3; shot lk3
+  if grep -qE "Holy مقفول|PIN|رمز|Holy" $OUT/ui_lk3.xml && ! grep -q "عنوان اللوحة" $OUT/ui_lk3.xml; then say "PASS back after 33 s ⇒ locked (dashboard covered · asks)"; else say "FAIL back after 33 s ⇒ not locked"; fi
+  pin; dump lk4; shot lk4
+  grep -q "Holy مقفول" $OUT/ui_lk4.xml && say "FAIL still locked after the PIN" || say "PASS PIN ⇒ dashboard open again"
+  adb shell am start -n $P/.MainActivity --es go app >/dev/null; sleep 6; dump lk5; tap "إطفاء" lk5; pin
+  pf | grep -q '<boolean name="lock" value="false"' && say "PASS lock turned OFF after the PIN" || say "FAIL lock still on: $(pf | grep -o 'name="lock"[^/]*')"
+else say "INFO 🔐 row not readable on this WebView ($(grep -c '<node' $OUT/ui_lk1.xml) nodes)"; fi
+adb shell locksettings clear --old 1111 >/dev/null 2>&1; adb shell locksettings set-disabled true >/dev/null 2>&1; say "test PIN removed"
+adb shell input keyevent KEYCODE_WAKEUP; adb shell wm dismiss-keyguard >/dev/null 2>&1
 fi
 # ── self-update: the dashboard now carries a «newer» APK (same file, higher code) ⇒ offer · download · sha256 · Android installer ──
 t0=$(adb shell dumpsys package $P | grep -m1 lastUpdateTime | tr -d '\r')
