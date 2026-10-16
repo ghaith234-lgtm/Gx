@@ -182,7 +182,7 @@ if grep -q "قفل بالبصمة" $OUT/ui_lk1.xml; then
   JAR=$OUT/jar.txt; rm -f $JAR
   apic(){ curl -s -b $JAR -c $JAR -X POST "localhost:8099$1" -H 'Content-Type: application/json' -d "$2"; echo; }
   bio_of(){ apic /api/app/devices '{"act":"list"}' | python3 -c "import sys,json;d=json.load(sys.stdin).get('devs') or [{}];print(d[0].get('bio'))" 2>/dev/null; }
-  pkey(){ pf | grep -c '<string name="bio">' | tr -d '\r'; }
+  pkey(){ pf | grep -c '<string name="bio">[^<]' | tr -d '\r'; }   # a non-empty key (a refused key is saved as "" ⇒ no key)
   login(){ apic /api/login '{"pw":"1234"}' >/dev/null; }
   askpin(){ grep -qE "Enter your PIN|Use PIN|Enter PIN|افتح لوحتك" $OUT/ui_$1.xml && { say "INFO the PIN sheet is up ($1) ⇒ PIN"; pin; dump $1b >/dev/null; }; }
   dash_restart(){ pkill -f Holy_Dashboard.pyw; sleep 2; (cd /tmp/holy && setsid nohup python3 Holy_Dashboard.pyw >> dash.log 2>&1 < /dev/null &)
