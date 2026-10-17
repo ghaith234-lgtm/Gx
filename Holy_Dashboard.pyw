@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.29.0"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.30.0"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -3675,6 +3675,9 @@ def overview():
                                                     + sum(float((b.get("dca") or {}).get("coin_profit") or 0) for b in usd_dca), 4),
             "coins_today": {k: v["t"] for k, v in (_safe(coins_period, _today, _today, default={}) or {}).items()},
             "coins_all": _A.get("coins") or {},
+            # 🪙 v3.30.0: ربح تداول العملات (DCA البيعي · الدوري البيعي) — اليوم والكلي من دفتره
+            "ctrade_today": (_safe(coin_trade_period, _today, _today, default={}) or {}).get("coins") or {},
+            "ctrade_all": _safe(coin_trade_all, default={}) or {},
             "stats": _safe(trade_stats, default={"avg": 0.0, "month": 0.0, "best": None}),
             "dca_coin": dca_coin,
             "accum": _safe(acc_snapshot, default=[]),
@@ -7266,7 +7269,7 @@ def _arc_live(arcb, days=20):
     return out
 
 
-def profit_view(days=30, tick=True):
+def profit_view(days=30, tick=True, start_hint=None):
     """📊 ربح التداول **بيوم ما انكسب** (مو يوم ما انحرر) — لكل بوت جرد ولكل يوم.
 
     المصدر: أرشيف إعادة الاستثمار (بيعة بيعة من سجل كل بوت، يتحدّث كل ~5 دقائق ويعيش أشهر):
@@ -7317,6 +7320,12 @@ def profit_view(days=30, tick=True):
     start = datetime.strptime(first, "%Y-%m-%d").date() if first else today
     if start < d0:
         start = d0
+    try:                                                # 🖨️ v3.30.0: التقرير يبدي من أول يوم بيه أي ربح (مُراكِم · عملة) حتى لو قبل أول ربح بوت
+        _sh = datetime.strptime(start_hint, "%Y-%m-%d").date() if start_hint else None
+        if _sh and d0 <= _sh < start:
+            start = _sh
+    except Exception:
+        pass
     dl, dd = [], start
     while dd <= today:
         dl.append(dd.strftime("%Y-%m-%d"))
@@ -7458,6 +7467,7 @@ def profit_view(days=30, tick=True):
                     if bd and dayt[bd] > 1e-12 else None),
            "other": round(sum(b["t"] for b in oth), 6), "n_other": len(oth)}
     tot["coins"] = {kk: vv["t"] for kk, vv in (_safe(coins_period, dl[0] if dl else today_s, today_s, default={}) or {}).items()}
+    tot["ctrade"] = (_safe(coin_trade_period, d0.strftime("%Y-%m-%d"), today_s, default={}) or {}).get("coins") or {}   # 🪙 v3.30.0: كل المدة المطلوبة
     return {"ok": True, "from": dl[0] if dl else today_s, "to": today_s, "span": span, "req": days, "bucket": bk,
             "days": out_days, "bots": bots, "tot": tot, "ts": time.time()}
 
@@ -7631,6 +7641,22 @@ tr.tot td{font-weight:700;border-top:2px solid #1a1530;border-bottom:0;backgroun
 footer{margin-top:14px;font-size:10.5px;color:#9a97aa;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
 @media (max-width:700px){.bars.wide{display:none}.bars.narrow{display:block}.sheet{margin:0;border-radius:0;border:0;padding:18px 14px}.kpi{grid-template-columns:repeat(2,minmax(0,1fr))}
   .split{grid-template-columns:minmax(0,1fr)}.cards{grid-template-columns:minmax(0,1fr)}header .per{text-align:right}}
+tr.grp td{font-weight:700;background:#f7f6fb;border-top:1px solid #e6e3ef}
+td.sub{padding-inline-start:22px}
+td.wl{white-space:normal;min-width:180px}td.wl small{display:block;font-size:10.5px;color:#6b6880;margin-top:2px}
+.srcleg{display:grid;gap:8px}.srcleg .sl{display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;font-size:13px}
+.srcleg .sl b{font-family:'IBM Plex Mono',monospace;direction:ltr}.srcleg .sl small{color:#8a879a;font-family:'IBM Plex Mono',monospace;min-width:48px;text-align:left}
+tr.cur td{background:#f1fbf5}
+.h3{font-size:13px;font-weight:600;margin:14px 0 6px;color:#4a4560}
+.mapsvg{margin-top:6px}
+@media print{th{white-space:normal;vertical-align:bottom}td.bn{white-space:normal}}   /* 🖨️ v3.30.0: الجداول العريضة (الدوري · البوتات الآن) تنطبع كاملة بعرض A4 */
+
+.mapsvg text{font-family:'IBM Plex Sans Arabic','Segoe UI',Tahoma,sans-serif}
+.mapsvg .mh{font-size:14px;font-weight:700;fill:#1a1530}
+.mapsvg .mt{font-size:13px;font-weight:600;fill:#1a1530}
+.mapsvg .mv{font-size:14px;font-weight:700;fill:#1a1530;font-family:'IBM Plex Mono',monospace}
+.mapsvg .ms{font-size:11.5px;fill:#6b6880}
+.mapsvg .ml{font-size:12px;font-weight:700;font-family:'IBM Plex Mono',monospace}
 @page{size:A4;margin:11mm}
 @media print{body{background:#fff}.bar{display:none}.bars.wide{display:block!important}.bars.narrow{display:none!important}.sheet{max-width:none;margin:0;border:0;border-radius:0;padding:0}
   .wrap{overflow:visible}table{font-size:10px}td,th{padding:3px 5px}section{margin-top:16px}
@@ -7638,15 +7664,154 @@ footer{margin-top:14px;font-size:10.5px;color:#9a97aa;display:flex;justify-conte
 """
 
 
+_REP_MN = ("كانون الثاني", "شباط", "آذار", "نيسان", "أيار", "حزيران", "تموز", "آب", "أيلول", "تشرين الأول", "تشرين الثاني", "كانون الأول")
+# 💵 v3.30.0: مصادر ربح الدولار (كلها شراء وبيع) — لون ثابت لكل مصدر بالدائري والجداول
+_REP_SRC = (("grid", "🧱 الجرد (لانهائية · مدى · بلس)", "#2a78d6"), ("dca_buy", "📈 DCA الشرائي", "#1baf7a"),
+            ("rec_buy", "🔁 الدوري الشرائي", "#eda100"), ("acc", "🪙 المُراكِمات (ربح البيع)", "#e87ba4"),
+            ("other", "♻️ غيرها (سحب الدوري البيعي · قديم)", "#b4b2a9"))
+
+
+def _rep_src_of(t):
+    return "grid" if t in ("grid", "grid_range", "grid_plus") else (t if t in ("dca_buy", "rec_buy") else "other")
+
+
+def _rep_src_donut(parts, S=230):
+    """🍩 منين جا ربح الدولار: شريحة لكل مصدر (الجرد · DCA الشرائي · الدوري الشرائي · المُراكِمات) — الخسارة ما تنرسم (تنكتب بالجدول)."""
+    segs = [(c, v) for _k, _n, c, v in parts if v > 1e-9]
+    tot = sum(v for _c, v in segs)
+    if tot <= 1e-12:
+        return ""
+    c0, r1, r0 = S / 2, S / 2 - 6, S / 2 - 38
+    gap = 2 / ((r0 + r1) / 2) if len(segs) > 1 else 0
+    o = [f'<svg viewBox="0 0 {S} {S}" class="donut" role="img" aria-label="منين جا ربح الدولار">']
+    a = 0.0
+    for col, v in segs:
+        da = v / tot * 2 * math.pi
+        if len(segs) == 1:
+            o.append(f'<circle cx="{c0}" cy="{c0}" r="{(r0 + r1) / 2}" fill="none" stroke="{col}" stroke-width="{r1 - r0}"/>')
+        elif da > gap:
+            o.append(f'<path d="{_rep_arc(c0, c0, r0, r1, a + gap / 2, a + da - gap / 2)}" fill="{col}"/>')
+        a += da
+    o.append(f'<text x="{c0}" y="{c0 + 2}" text-anchor="middle" class="c1">{tot:.2f}$</text>'
+             f'<text x="{c0}" y="{c0 + 22}" text-anchor="middle" class="c2">ربح الدولار</text></svg>')
+    return "".join(o)
+
+
+def _rep_map_svg(fv):
+    """🗺️ لقطة الخريطة (ثابتة — تنطبع): لكل محفظة البوتات ⇒ 📥 الربح المحرر ⇒ المُراكِمات و💰 الصندوق النهائي ·
+    خط الدولار بنفسجي (عليه النسبة) · خط العملة ذهبي متقطّع · نفس `flow_view` اللي ترسم منه صفحة 🗺️ الخريطة."""
+    import html as _h
+    E = lambda s: _h.escape(str("" if s is None else s))
+    cut = lambda s, n: (s if len(s) <= n else s[:n - 1] + "…")
+    L = lambda t: "\u2066" + t + "\u2069"             # ⁦…⁩ الرقم ووحدته يبقون سوا داخل النص العربي
+    wallets = [w for w in (fv.get("wallets") or []) if w.get("bots") or w.get("rel") or w.get("acc")]
+    if not wallets:
+        return '<p class="empty">ماكو محفظة بيها بوتات بعد.</p>'
+    accs = {a["id"]: a for a in (fv.get("accs") or [])}
+    W = 1000
+    XB, WB = 790, 200          # البوتات (يمين — العربي يبدي من اليمين)
+    XR, WR = 548, 176          # 📥 الربح المحرر
+    XA, WA = 306, 176          # 🪙 المُراكِمات
+    XP, WP = 10, 230           # 💰 الصندوق النهائي
+    RH, GAP, TOP = 46, 10, 34
+    ico = {"grid": "♾️", "grid_range": "🎚️", "grid_plus": "➕", "dca": "📉", "dca_buy": "📈", "rec_buy": "🔁", "rec_sell": "🔂"}
+    tl = dict(_PV_TYPE_ALL)
+    out, y0 = [], 0
+    lines = fv.get("lines") or []
+    for w in wallets:
+        bots = w.get("bots") or []
+        mine = [a for a in (fv.get("accs") or []) if (a.get("wid") or "?") == w.get("wid")]
+        n = max(len(bots), len(mine), 2)
+        hb = TOP + n * (RH + GAP) + 10
+        pos = {}
+        g = [f'<g transform="translate(0,{y0})">',
+             f'<rect x="1" y="1" width="{W - 2}" height="{hb - 2}" rx="14" fill="#fbfaff" stroke="#e6e3ef"/>',
+             f'<text x="{W - 16}" y="23" text-anchor="start" class="mh">👛 {E(cut(w.get("label") or w.get("wid") or "", 40))}'
+             f'{" · مُراكِم" if w.get("acc") else ""}</text>']
+        for i, b in enumerate(bots):
+            y = TOP + i * (RH + GAP)
+            pos[b["id"]] = (XB, y + RH / 2)
+            sub = (f'اليوم {L("+%.4f$" % float(b.get("u_today") or 0))}' if b.get("usd") else "")
+            if b.get("coin") and float(b.get("c_today") or 0):
+                sub = (sub + " · " if sub else "") + "🪙 " + L(f'+{float(b["c_today"]):.6g} {E(b.get("base"))}')
+            g.append(f'<rect x="{XB}" y="{y}" width="{WB}" height="{RH}" rx="10" fill="#fff" stroke="#cfcbdc"/>'
+                     f'<text x="{XB + WB - 10}" y="{y + 19}" text-anchor="start" class="mt">{ico.get(b.get("type"), "🤖")} {E(b.get("base"))} · '
+                     f'{E(tl.get(b.get("type"), "جرد"))}</text>'
+                     f'<text x="{XB + WB - 10}" y="{y + 36}" text-anchor="start" class="ms">{E(sub or cut(b.get("name") or "", 26))}</text>')
+        r = w.get("rel")
+        if r:
+            yr = TOP + (n * (RH + GAP) - GAP) / 2 - 34
+            pos[r["id"]] = (XR, yr + 34)
+            g.append(f'<rect x="{XR}" y="{yr}" width="{WR}" height="68" rx="12" fill="#eef9fc" stroke="#0891b2"/>'
+                     f'<text x="{XR + WR - 10}" y="{yr + 20}" text-anchor="start" class="mt">📥 الربح المحرر</text>'
+                     f'<text x="{XR + WR - 10}" y="{yr + 40}" text-anchor="start" class="mv">اليوم {L("%.4f$" % float(r.get("today") or 0))}</text>'
+                     f'<text x="{XR + WR - 10}" y="{yr + 58}" text-anchor="start" class="ms">'
+                     f'{"يتوزّع نهاية اليوم" if r.get("mode") == "eod" else "مباشر للنهائي"}</text>')
+        for i, a in enumerate(mine):
+            y = TOP + i * (RH + GAP)
+            pos[a["id"]] = (XA, y + RH / 2)
+            g.append(f'<rect x="{XA}" y="{y}" width="{WA}" height="{RH}" rx="10" fill="#fdf2f7" stroke="#e87ba4"/>'
+                     f'<text x="{XA + WA - 10}" y="{y + 19}" text-anchor="start" class="mt">🪙 {E(cut(a.get("name") or "", 18))}</text>'
+                     f'<text x="{XA + WA - 10}" y="{y + 36}" text-anchor="start" class="ms">{L("%g%%" % float(a.get("pct") or 0))} · '
+                     f'{L("%.6g %s" % (float(a.get("coin") or 0), E(a.get("base"))))}</text>')
+        p = w.get("profit") or {}
+        if p:
+            yp = TOP + (n * (RH + GAP) - GAP) / 2 - 40
+            pos[p["id"]] = (XP + WP, yp + 40)
+            cs = " · ".join(L(f"{float(q):.6g} {E(k)}") for k, q in list((p.get("coins_all") or {}).items())[:3])
+            g.append(f'<rect x="{XP}" y="{yp}" width="{WP}" height="80" rx="12" fill="#f4f1fe" stroke="#7c3aed"/>'
+                     f'<text x="{XP + WP - 10}" y="{yp + 21}" text-anchor="start" class="mt">💰 الصندوق النهائي</text>'
+                     f'<text x="{XP + WP - 10}" y="{yp + 44}" text-anchor="start" class="mv">{L("%.4f$" % float(p.get("usd") or 0))}</text>'
+                     f'<text x="{XP + WP - 10}" y="{yp + 64}" text-anchor="start" class="ms">{cs or "بلا عملات"}</text>')
+        for ln in lines:
+            a0, b0 = pos.get(ln.get("from")), pos.get(ln.get("to"))
+            if not a0 or not b0:
+                continue
+            x1, y1 = a0
+            fa = accs.get(ln.get("from"))
+            if fa is not None:                       # من المُراكِم للنهائي: يطلع من يسار مربّعه
+                x1 = XA
+            x2, y2 = b0
+            if ln.get("to", "").startswith("a:"):
+                x2 = XA + WA
+            elif ln.get("to", "").startswith("r:"):
+                x2 = XR + WR
+            mx = (x1 + x2) / 2
+            coin = ln.get("k") == "coin"
+            col = "#c98500" if coin else "#7c3aed"
+            dash = ' stroke-dasharray="6 5"' if (coin or ln.get("dash")) else ""
+            g.append(f'<path d="M{x1:.1f},{y1:.1f} C{mx:.1f},{y1:.1f} {mx:.1f},{y2:.1f} {x2:.1f},{y2:.1f}" fill="none" stroke="{col}" '
+                     f'stroke-width="{1.4 if coin else 1.8}" opacity=".75"{dash}/>')
+            lab = f"{float(ln['pct']):g}%" if ln.get("pct") is not None else ""
+            if lab:
+                g.append(f'<text x="{mx:.1f}" y="{(y1 + y2) / 2 - 4:.1f}" text-anchor="middle" class="ml" fill="{col}">{lab}</text>')
+        g.append("</g>")
+        out.append("".join(g))
+        y0 += hb + 12
+    return (f'<svg viewBox="0 0 {W} {y0}" class="mapsvg" style="direction:rtl" role="img" aria-label="لقطة خريطة الأرباح">' + "".join(out) + "</svg>")
+
+
 def report_html(days=30):
-    """🖨️ التقرير المصوّر — ملف HTML واحد مستقل: الچارتات مرسومة بداخله (بلا إنترنت) · جاهز للطباعة وحفظ PDF (A4).
-    كل رقم من نفس الدوال اللي تشتغل عليها اللوحة: profit_view · reconcile · acc_snapshot · money_audit · health_scan."""
+    """🖨️ التقرير المصوّر (v3.30.0 — من جديد) — ملف HTML واحد مستقل: الچارتات والخريطة مرسومة بداخله (بلا إنترنت) · A4.
+    الأساس ربح التداول اليومي: 💵 الدولار من كل مصدر (الجرد · DCA الشرائي · الدوري الشرائي · المُراكِمات) · 📆 كل شهر (للسحب) ·
+    🪙 تداول العملات (DCA البيعي · الدوري البيعي) · 📥 وين راح الربح المحرر · 🗺️ لقطة الخريطة · البوتات الآن · الصحة · السجل اليومي.
+    كل رقم من نفس الدوال اللي تشتغل عليها اللوحة (profit_view · trade_book · coin_trade_period · acc_pl_period · flow_view …)."""
     import html as _h
     E = lambda s: _h.escape(str("" if s is None else s))
     f2 = lambda x: f"{float(x or 0):,.2f}"
     f4 = lambda x: f"{float(x or 0):,.4f}"
+    fq = lambda x: f"{float(x or 0):,.8g}"
     C = _REP_C
-    v = profit_view(days)
+    now = datetime.now()
+    today_s = now.strftime("%Y-%m-%d")
+    try:
+        req0 = (now.date() - timedelta(days=max(1, min(400, int(days or 30))) - 1)).strftime("%Y-%m-%d")
+    except Exception:
+        req0 = today_s
+    AP = _safe(acc_pl_period, req0, today_s, True, default={}) or {}
+    CT = _safe(coin_trade_period, req0, today_s, True, default={}) or {}
+    fa = [d for d, x in sorted((AP.get("days") or {}).items()) if abs(float(x)) > 1e-9][:1] + sorted(CT.get("days") or {})[:1]
+    v = profit_view(days, True, min(fa) if fa else None)     # 📅 الفترة تبدي من أول يوم بيه أي ربح (بوت · مُراكِم · عملة) ⇒ كل الأقسام نفس الأيام
     T = v.get("tot") or {}
     bots = v.get("bots") or []
     rec = _safe(reconcile, default={}) or {}
@@ -7657,13 +7822,25 @@ def report_html(days=30):
     hs = _safe(health_scan, default={}) or {}
     aud = _safe(money_audit, default={}) or {}
     gd = _safe(load_json, GUARD_FILE, default={}) or {}
-    now = datetime.now()
+    tb = _safe(trade_book, True, default={}) or {}
+    AP = _safe(acc_pl_period, v["from"], today_s, default={}) or {}
+    APA = _safe(acc_pl_period, "0000-00-00", "9999-99-99", default={}) or {}
+    CT = _safe(coin_trade_period, v["from"], today_s, default={}) or {}
+    CTA = _safe(coin_trade_all, default={}) or {}
+    fv = _safe(flow_view, default={}) or {}
     fd = datetime.strptime(v["from"], "%Y-%m-%d")
     td = datetime.strptime(v["to"], "%Y-%m-%d")
     per_txt = f"من {fd.day}/{fd.month}/{fd.year} إلى {td.day}/{td.month}/{td.year}"     # كلمات مو سهم — السهم ينقلب بالعربي
     col = lambda b: C["bots"][b["slot"]] if b.get("slot", -1) >= 0 else C["other"]
     unit = {"day": "يوم", "week": "أسبوع", "month": "شهر"}.get(v.get("bucket"), "يوم")
     inside_now = sum(float((recb.get(b["k"]) or {}).get("inside") or 0) for b in bots)
+    tag = lambda x: ('<span class="tag">' + E(x) + '</span>') if x else ""
+    acc_t = float(AP.get("tot") or 0)
+    usd_all = float(T.get("t") or 0) + acc_t
+    dim = int(tb.get("dim") or _cal.monthrange(now.year, now.month)[1])
+    mtd = float(tb.get("mtd") or 0)
+    mtd_acc = sum(float(x) for d, x in (APA.get("days") or {}).items() if d[:7] == today_s[:7])
+    month_avg = float(tb.get("month") or 0)
     o = []
     o.append(f'<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">'
              f'<meta name="viewport" content="width=device-width,initial-scale=1">'
@@ -7675,68 +7852,158 @@ def report_html(days=30):
     o.append(f'<header><div><div class="brand">{brand_word_svg("rw", "rwm", n=22, L=60)}</div><h1>تقرير الأداء</h1></div>'
              f'<div class="per"><b>{E(per_txt)}</b>{v["span"]} يوم · {len([b for b in bots if b["live"]])} بوت بالدولار'
              f' · صدر {now.strftime("%Y-%m-%d %H:%M")}</div></header>')
-    if T.get("t", 0) > 0:
-        o.append(f'<p class="lead">خلال <b>{v["span"]} يوم</b> ربحت البوتات <b>{f2(T["t"])}$</b>'
-                 f' من <b>{T["c"]} بيعة</b>'
-                 + (f' — <b>{T["r_pct"]:.0f}%</b> منه انعاد استثماره داخل الأوامر.' if T.get("r", 0) > 0 else ".") + '</p>')
+    # ═════ 💵 ربح التداول بالدولار — الأساس ═════
+    if usd_all > 0:
+        o.append(f'<p class="lead">خلال <b>{v["span"]} يوم</b> ربحت البوتات <b>{f2(T.get("t"))}$</b> من <b>{T.get("c", 0)} بيعة</b>'
+                 + (f' والمُراكِمات <b>{f2(acc_t)}$</b> من <b>{AP.get("c", 0)} بيعة</b> — المجموع <b>{f2(usd_all)}$</b>' if abs(acc_t) > 1e-9 else "")
+                 + (f' · <b>{T["r_pct"]:.0f}%</b> من ربح البوتات انعاد استثماره داخل الأوامر.' if float(T.get("r_pct") or 0) >= 0.5 else ".") + '</p>')
     best = T.get("best") or {}
+    mname = f"{_REP_MN[now.month - 1]} ({dim} يوم)"
     o.append('<div class="kpi">'
-             f'<div class="k hero"><small>ربح التداول</small><b>{f2(T.get("t"))}$</b><i>{v["span"]} يوم</i></div>'
-             f'<div class="k"><small>متوسط اليوم</small><b>{f2(T.get("avg"))}$</b><i>{T.get("active", 0)} يوم بيه ربح</i></div>'
-             f'<div class="k"><small>أفضل يوم</small><b>{f2(best.get("v")) + "$" if best else "—"}</b><i>{E(best.get("full", ""))}</i></div>'
-             f'<div class="k"><small>البيعات</small><b>{T.get("c", 0)}</b>'
-             f'<i>{"أيام قديمة بلا عدد" if T.get("cu") else "%.1f باليوم" % (T.get("c", 0) / max(1, v["span"]))}</i></div>'
-             f'<div class="k"><small>مباشر للربح المحرر</small><b>{f2(T.get("n"))}$</b>'
-             f'<i>{(T.get("n", 0) / T["t"] * 100 if T.get("t") else 0):.0f}% من ربح التداول</i></div>'
-             f'<div class="k"><small>معاد استثماره</small><b>{f2(T.get("r"))}$</b><i>{T.get("r_pct", 0):.0f}% من ربح التداول</i></div>'
-             f'<div class="k"><small>الربح المحرر بالدفتر</small><b>{f2(T.get("led"))}$</b><i>يشمل تحرير إعادة الاستثمار والسحب</i></div>'
-             f'<div class="k"><small>داخل الأوامر الآن</small><b>{f2(inside_now)}$</b><i>معاد استثماره ولسه ما انحرر</i></div>'
+             f'<div class="k hero"><small>💵 ربح التداول اليومي (الدولار)</small><b>{f2(usd_all)}$</b><i>{v["span"]} يوم · البوتات + المُراكِمات</i></div>'
+             f'<div class="k"><small>🔄 البوتات</small><b>{f2(T.get("t"))}$</b><i>مباشر {f2(T.get("n"))} · معاد {f2(T.get("r"))}</i></div>'
+             f'<div class="k"><small>🪙 المُراكِمات (ربح البيع)</small><b>{f2(acc_t)}$</b><i>{AP.get("c", 0)} بيعة · الخسارة تنقص</i></div>'
+             f'<div class="k"><small>📊 متوسط اليوم</small><b>{f2(usd_all / max(1, v["span"]))}$</b><i>{T.get("active", 0)} يوم بيه ربح</i></div>'
+             f'<div class="k"><small>📆 المعدل الشهري — {E(mname)}</small><b>{f2(month_avg)}$</b><i>البوتات: متوسط يومها بكل التاريخ × {dim} (نفس الشريط)</i></div>'
+             f'<div class="k"><small>📅 هذا الشهر لحد هسه (للسحب)</small><b>{f2(mtd + mtd_acc)}$</b>'
+             f'<i>من 1/{now.month} · البوتات {f2(mtd)} + المُراكِمات {f2(mtd_acc)}</i></div>'
+             f'<div class="k"><small>🏆 أفضل يوم (البوتات)</small><b>{f2(best.get("v")) + "$" if best else "—"}</b><i>{E(best.get("full", ""))}</i></div>'
+             f'<div class="k"><small>📥 الربح المحرر بالدفتر</small><b>{f2(T.get("led"))}$</b><i>داخل الأوامر الآن {f2(inside_now)}$</i></div>'
              '</div>')
-    # 📊 الربح يوم بيوم
-    o.append(f'<section><h2>ربح التداول لكل {unit}</h2>'
+    o.append(f'<section><h2>ربح البوتات لكل {unit}</h2>'
              f'<div class="leg"><span><i style="background:{C["d"]}"></i>مباشر للربح المحرر {f2(T.get("n"))}$</span>'
              f'<span><i style="background:{C["r"]}"></i>معاد استثماره {f2(T.get("r"))}$</span></div>'
              f'{_rep_bars_svg(v, C)}{_rep_bars_svg(v, C, W=420, H=260, fs=15, fm=16, nl=5, cls="narrow")}</section>')   # 📱 نسخة للموبايل
-    # 🍩 حصة كل بوت
-    segs = _rep_segs(v, C)
-    stot = sum(s["t"] for s in segs) or 1.0
-    tag = lambda x: ('<span class="tag">' + E(x) + '</span>') if x else ""
+    # 💵 منين جا ربح الدولار — كل مصدر وكل بوت لحاله
+    grp = {k: [] for k, _n, _c in _REP_SRC}
+    for b in bots:
+        grp[_rep_src_of(b.get("type"))].append(b)
+    parts = [(k, n, c, (sum(b["t"] for b in grp[k]) if k != "acc" else acc_t)) for k, n, c in _REP_SRC]
     rows = []
-    for s in segs:
-        nc = "—" if (s["c"] is None or (s.get("cu") and not s["c"])) else str(s["c"])
-        rows.append(f'<tr><td><i class="sw" style="background:{s["col"]}"></i>{E(s["name"])}{tag(s["tl"])}</td>'
-                    f'<td class="n">{f4(s["t"])}$</td><td class="n">{s["t"] / stot * 100:.1f}%</td>'
-                    f'<td class="n{" lg" if (s.get("cu") and s["c"]) else ""}">{nc}</td></tr>')     # باهت = جزئي (أيام الدفتر بلا عدد)
-    rows = "".join(rows)
-    if segs:
-        o.append(f'<section><h2>حصة كل بوت</h2><div class="split">{_rep_donut_svg(v, C)}'
-                 f'<div class="wrap"><table><tr><th>البوت</th><th class="n">ربح التداول</th><th class="n">الحصة</th><th class="n">بيعات</th></tr>'
-                 f'{rows}</table></div></div></section>')
-    # 🤖 البوتات: أداء الفترة · الحالة الآن (جدولين حتى يوسعون A4)
-    pr, cr = [], []
+    for k, n, c in _REP_SRC:
+        items = grp[k] if k != "acc" else (AP.get("accs") or [])
+        if not items:
+            continue
+        st_ = sum(b["t"] for b in items) if k != "acc" else acc_t
+        rows.append(f'<tr class="grp"><td><i class="sw" style="background:{c}"></i>{E(n)}</td><td class="n">{f4(st_)}</td>'
+                    f'<td class="n">{(st_ / usd_all * 100 if usd_all > 1e-12 else 0):.1f}%</td><td></td><td></td><td></td><td></td></tr>')
+        for b in items:
+            if k == "acc":
+                bst = b.get("best") or {}
+                rows.append(f'<tr><td class="bn sub">{E(b["name"])}{tag(b.get("sym"))}{tag("قبل v3.30") if abs(b.get("old") or 0) > 1e-9 else ""}</td>'
+                            f'<td class="n {"bad" if b["p"] < 0 else ""}">{f4(b["p"])}</td><td></td><td class="n">—</td><td class="n">—</td><td class="n">{b["c"]}</td>'
+                            f'<td class="n">{(f4(bst.get("v")) + " · " + str(int(bst["d"][8:10])) + "/" + str(int(bst["d"][5:7]))) if bst else "—"}</td></tr>')
+            else:
+                bst = b.get("best") or {}
+                nc = "—" if (b["cu"] and not b["c"]) else str(b["c"])
+                rows.append(f'<tr><td class="bn sub"><i class="sw" style="background:{col(b)}"></i>{E(b["name"])}{tag(b["tl"])}</td>'
+                            f'<td class="n">{f4(b["t"])}</td><td></td><td class="n">{f4(b["n"])}</td><td class="n">{f4(b["r"])}</td><td class="n{" lg" if b["cu"] else ""}">{nc}</td>'
+                            f'<td class="n">{(f4(bst.get("v")) + " · " + str(int(bst["d"][8:10])) + "/" + str(int(bst["d"][5:7]))) if bst.get("d") else "—"}</td></tr>')
+    rows.append(f'<tr class="tot"><td>المجموع</td><td class="n">{f4(usd_all)}</td><td class="n">100%</td><td class="n">{f4(T.get("n"))}</td>'
+                f'<td class="n">{f4(T.get("r"))}</td><td class="n">{int(T.get("c", 0)) + int(AP.get("c") or 0)}</td><td></td></tr>')
+    leg = "".join(f'<div class="sl"><i class="sw" style="background:{c}"></i><span>{E(n)}</span><b>{f2(v_)}$</b>'
+                  f'<small>{(v_ / usd_all * 100 if usd_all > 1e-12 else 0):.1f}%</small></div>' for _k, n, c, v_ in parts if abs(v_) > 1e-9)
+    o.append(f'<section><h2>منين جا ربح الدولار — كل مصدر وكل بوت</h2><div class="split">{_rep_src_donut(parts)}<div class="srcleg">{leg}</div></div>'
+             f'<div class="wrap"><table><tr><th>المصدر · البوت</th><th class="n">الربح $</th><th class="n">الحصة</th><th class="n">مباشر $</th><th class="n">معاد $</th>'
+             f'<th class="n">بيعات</th><th class="n">أفضل يوم</th></tr>{"".join(rows)}</table></div>'
+             '<p class="muted">الجرد وDCA الشرائي والدوري الشرائي: ربح التداول بيوم البيعة (مباشر + معاد استثماره) — نفس أرقام الشريط · '
+             'المُراكِمات: ربح بيع المخزون (البيع − كلفة الشراء) بيوم البيع — رأس ماله أصلاً من الربح المحرر.</p></section>')
+    # ═════ 📆 كل شهر (يفيدك نهاية الشهر للسحب) ═════
+    mons = dict(tb.get("months") or {})
+    accm = {}
+    for d, x in (APA.get("days") or {}).items():
+        accm[d[:7]] = accm.get(d[:7], 0.0) + float(x)
+    mrows = []
+    for ym in sorted(set(mons) | set(accm), reverse=True)[:24]:
+        y_, m_ = int(ym[:4]), int(ym[5:7])
+        dn = _cal.monthrange(y_, m_)[1]
+        mt = float((mons.get(ym) or {}).get("t") or 0)
+        ml = float((mons.get(ym) or {}).get("l") or 0)
+        ma = float(accm.get(ym) or 0)
+        cur = ym == today_s[:7]
+        span_m = now.day if cur else dn
+        f0 = str(tb.get("first") or "")
+        if f0[:7] == ym:
+            span_m = (min(now.date(), datetime(y_, m_, dn).date()) - datetime.strptime(f0, "%Y-%m-%d").date()).days + 1
+        avg_m = (mt + ma) / max(1, span_m)
+        mrows.append(f'<tr{" class=cur" if cur else ""}><td>{E(_REP_MN[m_ - 1])} {y_}{tag("لحد هسه") if cur else ""}</td>'
+                     f'<td class="n">{dn}</td><td class="n">{f4(mt)}</td><td class="n">{f4(ma)}</td><td class="n"><b>{f4(mt + ma)}</b></td>'
+                     f'<td class="n">{f4(avg_m)}</td><td class="n">{f4(ml)}</td>'
+                     f'<td class="n">{f2(avg_m * dn) if cur else "—"}</td></tr>')
+    if mrows:
+        o.append('<section><h2>كل شهر — حسب أيام الشهر نفسه</h2><div class="wrap"><table>'
+                 '<tr><th>الشهر</th><th class="n">أيامه</th><th class="n">البوتات $</th><th class="n">المُراكِمات $</th><th class="n">المجموع $</th>'
+                 '<th class="n">متوسط اليوم $</th><th class="n">المحرر بالدفتر $</th><th class="n">المتوقّع نهاية الشهر $</th></tr>'
+                 + "".join(mrows) + '</table></div>'
+                 f'<p class="muted">الشهر الحالي «لحد هسه» = من يوم 1 لليوم · المتوقّع = متوسط يومه × {dim} يوم · '
+                 'متوسط شهر بدت بيه البوتات بنصّه = على أيامه من أول يوم بيه ربح.</p></section>')
+    # ═════ 🪙 ربح تداول العملات — DCA البيعي · الدوري البيعي ═════
+    cb = CT.get("bots") or []
+    if cb or CTA:
+        crow = []
+        for b in cb:
+            bst = b.get("best") or {}
+            crow.append(f'<tr><td class="bn">{E(b["name"])}</td><td class="n">{fq(b["q"])}</td><td class="n">{fq(b["qr"])}</td>'
+                        f'<td class="n"><b>{fq(b["t"])}</b> {E(b["b"])}</td><td class="n">{b["c"] or "—"}</td>'
+                        f'<td class="n">{(fq(bst.get("v")) + " · " + str(int(bst["d"][8:10])) + "/" + str(int(bst["d"][5:7]))) if bst else "—"}</td></tr>')
+        cks = sorted(set(CT.get("coins") or {}) | set(CTA))
+        ckp = "".join(f'<div class="k"><small>🪙 {E(k)}</small><b>{fq((CT.get("coins") or {}).get(k, 0))}</b>'
+                      f'<i>الكلي {fq(CTA.get(k, 0))} {E(k)}</i></div>' for k in cks)
+        cdays = CT.get("days") or {}
+        cdr = "".join(f'<tr><td>{int(d[8:10])}/{int(d[5:7])}/{d[:4]}</td>' + "".join(f'<td class="n">{fq(r.get(k)) if r.get(k) else "·"}</td>' for k in cks)
+                      + '</tr>' for d, r in sorted(cdays.items(), reverse=True)[:62])
+        o.append('<section><h2>🪙 ربح تداول العملات — DCA البيعي والدوري البيعي</h2>'
+                 '<p class="muted">نفس ربح التداول اليومي بس للعملات: ربح كل دورة/صفقة بيومها — المحرر + المعاد استثماره · كل بوت لحاله · '
+                 'ما يدخل بأرقام الدولار.</p>'
+                 + (f'<div class="kpi">{ckp}</div>' if ckp else "")
+                 + ('<div class="wrap"><table><tr><th>البوت</th><th class="n">محرر</th><th class="n">معاد استثماره</th><th class="n">ربح التداول</th>'
+                    '<th class="n">دورات</th><th class="n">أفضل يوم</th></tr>' + "".join(crow) + '</table></div>' if crow
+                    else '<p class="empty">ماكو ربح عملات بالفترة.</p>')
+                 + (f'<h3 class="h3">يوم بيوم</h3><div class="wrap"><table><tr><th>اليوم</th>' + "".join(f'<th class="n">{E(k)}</th>' for k in cks)
+                    + '</tr>' + cdr + '</table></div>' if cdr else "")
+                 + '</section>')
+    # ═════ 📥 الربح المحرر — وين راح ═════
+    wr = []
+    for w in (fv.get("wallets") or []):
+        r = w.get("rel") or {}
+        p = w.get("profit") or {}
+        if not r and not p.get("usd") and not w.get("bots"):
+            continue
+        envs = " · ".join(f'{E(e.get("name"))} \u2066{f2(e.get("usd"))}$\u2069' for e in (p.get("env") or []))
+        cs = " · ".join(f"\u2066{fq(q)} {E(k)}\u2069" for k, q in (p.get("coins_all") or {}).items())
+        sub = " · ".join(x for x in ((f"🪙 {cs}" if cs else ""), (f"📦 {envs}" if envs else "")) if x)
+        wr.append(f'<tr><td class="wl"><b>{E(w.get("label"))}</b>{f"<small>{sub}</small>" if sub else ""}</td><td class="n">{f4(r.get("today"))}</td>'
+                  f'<td class="n">{f4(r.get("wait"))}</td><td class="n">{f4(r.get("to_acc"))}</td><td class="n">{f4(r.get("to_final"))}</td>'
+                  f'<td class="n"><b>{f4(p.get("usd"))}</b></td></tr>')
+    if wr:
+        o.append('<section><h2>📥 الربح المحرر — وين راح</h2><div class="wrap"><table>'
+                 '<tr><th>المحفظة</th><th class="n">محرر اليوم $</th><th class="n">ينتظر التوزيع $</th><th class="n">للمُراكِمات (الكلي) $</th>'
+                 '<th class="n">للصندوق النهائي (الكلي) $</th><th class="n">💰 بالنهائي الآن $</th></tr>'
+                 + "".join(wr) + '</table></div>'
+                 f'<p class="muted">المحرر = الدولار اللي طلع من البوتات ربحاً · نهاية اليوم ياخذ كل مُراكِم نسبته والباقي للصندوق النهائي — '
+                 f'الأرقام «الكلي» من يوم تفعيل دفتر الربح ({E(fv.get("since") or "—")}) · دفتر للعرض: ما يحرّك شي بالمنصة.</p></section>')
+    # ═════ 🗺️ لقطة الخريطة ═════
+    if fv.get("wallets"):
+        o.append('<section class="pb"><h2>🗺️ خريطة الأرباح (لقطة)</h2>'
+                 f'<div class="leg"><span><i style="background:#7c3aed"></i>دولار (والنسبة عليه)</span>'
+                 f'<span><i style="background:#c98500"></i>عملة (متقطّع)</span></div>{_safe(_rep_map_svg, fv, default="")}'
+                 f'<p class="muted">لقطة لحظة صدور التقرير — نفس صفحة 🗺️ الخريطة باللوحة.</p></section>')
+    # 🤖 البوتات الآن
+    cr = []
     for b in bots:
         rb = recb.get(b["k"]) or {}
         ri = ("—" if not rb else (f'شغّالة {float(rb.get("pct") or 0):.0f}%' if rb.get("ri_on") else "مطفية"))
         nm = f'<i class="sw" style="background:{col(b)}"></i><b>{E(b["name"])}</b>{tag(b["tl"])}'
-        bst = b.get("best") or {}
-        bdt = (lambda d: f"{int(d[8:10])}/{int(d[5:7])}")(bst["d"]) if bst.get("d") else "—"
-        pr.append(f'<tr><td class="bn">{nm}</td><td class="n">{f4(b["t"])}</td><td class="n">{f4(b["n"])}</td>'
-                  f'<td class="n">{f4(b["r"])}</td><td class="n{" lg" if b["cu"] else ""}">{"—" if (b["cu"] and not b["c"]) else b["c"]}</td><td class="n">{f4(b.get("avg"))}</td>'
-                  f'<td class="n">{(f4(bst.get("v")) + " · " + bdt) if bst else "—"}</td></tr>')
         cr.append(f'<tr><td class="bn">{nm}</td><td>{E(b.get("cfg_txt") or "—")}</td><td>{E(ri)}</td>'
                   f'<td class="n">{f4(b["led"])}</td><td class="n">{f4(rb.get("inside")) if rb else "—"}</td>'
                   f'<td class="n">{f2(rb.get("realized")) if rb else "—"}</td></tr>')
-    pr.append(f'<tr class="tot"><td>المجموع</td><td class="n">{f4(T.get("t"))}</td><td class="n">{f4(T.get("n"))}</td>'
-              f'<td class="n">{f4(T.get("r"))}</td><td class="n{" lg" if T.get("cu") else ""}">{T.get("c", 0)}</td><td class="n">{f4(T.get("avg"))}</td><td></td></tr>')
-    cr.append(f'<tr class="tot"><td>المجموع</td><td></td><td></td><td class="n">{f4(T.get("led"))}</td><td class="n">{f4(inside_now)}</td>'
-              f'<td class="n">{f2(sum(float((recb.get(b["k"]) or {}).get("realized") or 0) for b in bots))}</td></tr>')
-    o.append('<section><h2>أداء البوتات خلال الفترة</h2><div class="wrap"><table>'
-             '<tr><th>البوت</th><th class="n">ربح التداول $</th><th class="n">مباشر $</th><th class="n">معاد $</th>'
-             '<th class="n">بيعات</th><th class="n">متوسط اليوم $</th><th class="n">أفضل يوم $</th></tr>' + "".join(pr) + '</table></div></section>')
-    o.append('<section><h2>البوتات الآن</h2><div class="wrap"><table>'
-             '<tr><th>البوت</th><th>الإعدادات</th><th>إعادة الاستثمار</th><th class="n">المحرر بالدفتر (الفترة) $</th>'
-             '<th class="n">داخل الأوامر الآن $</th><th class="n">المحقق (كل الوقت) $</th></tr>' + "".join(cr) + '</table></div></section>')
-    # 🔁 v3.25.1: البوتات الدورية (الشرائي والبيعي) — الحالة الآن
+    if cr:
+        cr.append(f'<tr class="tot"><td>المجموع</td><td></td><td></td><td class="n">{f4(T.get("led"))}</td><td class="n">{f4(inside_now)}</td>'
+                  f'<td class="n">{f2(sum(float((recb.get(b["k"]) or {}).get("realized") or 0) for b in bots))}</td></tr>')
+        o.append('<section><h2>البوتات الآن</h2><div class="wrap"><table>'
+                 '<tr><th>البوت</th><th>الإعدادات</th><th>إعادة الاستثمار</th><th class="n">المحرر بالدفتر (الفترة) $</th>'
+                 '<th class="n">داخل الأوامر الآن $</th><th class="n">المحقق (كل الوقت) $</th></tr>' + "".join(cr) + '</table></div></section>')
+    # 🔁 البوتات الدورية (الشرائي والبيعي) — الحالة الآن
     rr = []
     for bd in bot_dirs().values():
         if not _is_rec(bd) or (bd.get("cfg") or {}).get("is_demo"):
@@ -7747,25 +8014,25 @@ def report_html(days=30):
             continue
         sell0 = R0.get("side") == "sell"
         U0 = (" " + R0.get("base", "")) if sell0 else "$"
-        fq = (lambda q: f"{float(q or 0):,.8g}") if sell0 else (lambda q: f"{float(q or 0):,.4f}")
+        fq0 = (lambda q: f"{float(q or 0):,.8g}") if sell0 else (lambda q: f"{float(q or 0):,.4f}")
         per0 = {"h": "ساعة", "d": "يوم", "m": "شهر"}.get(R0.get("per"), "يوم")
         amt0 = f"{float(R0.get('amount') or 0):g}" + ("$" if R0.get("amt_usd") else " " + R0.get("base", ""))
         rng0 = ("—" if not (R0.get("lo") or R0.get("hi")) else f"{R0.get('lo') or '—'} – {R0.get('hi') or '—'}")
         fee0 = " + ".join(f"{float(v0):.6g} {E(k0)}" for k0, v0 in (R0.get("fees") or {}).items()) or "—"
         rr.append(f'<tr><td class="bn"><b>{E(bd["symbol"])}</b>{tag("دوري بيعي" if sell0 else "دوري شرائي")}</td>'
                   f'<td>{"بالمعدل" if R0.get("mode") == "avg" else "كل أمر على حدا"} · كل {int(R0.get("every") or 1)} {per0} · {E(amt0)} · هدف {R0.get("tp")}%</td>'
-                  f'<td class="n">{E(rng0)}</td><td class="n">{len(R0.get("lots") or [])} · {fq(R0.get("expo")) if not R0.get("amt_usd") else f4(R0.get("expo"))}{E(U0 if not R0.get("amt_usd") else "$")}</td>'
-                  f'<td class="n {"ok" if float(R0.get("profit") or 0) >= 0 else "bad"}">{fq(R0.get("profit"))}{E(U0)}</td>'
-                  f'<td class="n">{fq(R0.get("rel"))}</td><td class="n">{fq(R0.get("held"))}</td>'
+                  f'<td class="n">{E(rng0)}</td><td class="n">{len(R0.get("lots") or [])} · {fq0(R0.get("expo")) if not R0.get("amt_usd") else f4(R0.get("expo"))}{E(U0 if not R0.get("amt_usd") else "$")}</td>'
+                  f'<td class="n {"ok" if float(R0.get("profit") or 0) >= 0 else "bad"}">{fq0(R0.get("profit"))}{E(U0)}</td>'
+                  f'<td class="n">{fq0(R0.get("rel"))}</td><td class="n">{fq0(R0.get("held"))}</td>'
                   f'<td class="n">{int(R0.get("cycles") or 0)} / {int(R0.get("orders") or 0)}</td><td class="n">{fee0}</td></tr>')
     if rr:
         o.append('<section><h2>البوتات الدورية (الآن)</h2><div class="wrap"><table>'
                  '<tr><th>البوت</th><th>الإعدادات</th><th class="n">📏 النطاق</th><th class="n">المفتوح · المستثمر</th>'
                  '<th class="n">الربح الصافي</th><th class="n">منه محرر</th><th class="n">💠 داخل البوت</th><th class="n">صفقات / أوامر</th>'
                  '<th class="n">💸 العمولات</th></tr>' + "".join(rr) + '</table></div>'
-                 '<p class="muted" style="font-size:11px">الشرائي ربحه دولار (داخل بأرقام التداول فوق) · البيعي ربحه عملة (يرجع يشتري عملات أكثر) — '
+                 '<p class="muted" style="font-size:11px">الشرائي ربحه دولار (داخل بأرقام الدولار فوق) · البيعي ربحه عملة (بقسم 🪙 تداول العملات) — '
                  'العمولات اللي دفعها فعلاً بالمنصة بعملتها.</p></section>')
-    # 🪙 المُراكِمات
+    # 🪙 المُراكِمات الآن
     ar = []
     for a in accs:
         if not isinstance(a, dict):
@@ -7803,37 +8070,47 @@ def report_html(days=30):
              + '</div>']
     o.append('<section><h2>الصحة والتدقيق</h2><div class="cards">' + "".join(cards) + '</div></section>')
     DEFS = ('<div class="defs">'
-            '<p><b>ربح التداول</b> = ربح البيعات بيوم ما انكسبت: الحصة المباشرة (نزلت للربح المحرر) + الحصة المعاد استثمارها (دخلت الأوامر) — '
-            'من سجل صفقات كل بوت، مؤرشف كل ~5 دقائق. صافي بعد العمولة. بيعات اللحاق (البيع المجمّع) محسوبة.</p>'
+            '<p><b>ربح التداول اليومي</b> = أساس التقرير: ربح كل بيعة بيوم ما انكسبت. <b>بالدولار</b> من الجرد وDCA الشرائي والدوري الشرائي '
+            '(الحصة المباشرة اللي نزلت للربح المحرر + الحصة المعاد استثمارها داخل الأوامر — صافي بعد العمولة) ومن <b>المُراكِمات</b> (ربح بيع المخزون: '
+            'البيع − كلفة الشراء · الخسارة تنقص). <b>بالعملات</b> من DCA البيعي والدوري البيعي (المحرر + المعاد استثماره) — ما ينجمع ويّا الدولار.</p>'
+            '<p><b>المعدل الشهري</b> = متوسط اليوم بكل التاريخ × أيام الشهر الحالي (28 · 29 · 30 · 31) — مو × 30. '
+            '<b>هذا الشهر لحد هسه</b> = من يوم 1 لليوم (اللي تسحبه نهاية الشهر).</p>'
             '<p><b>الربح المحرر بالدفتر</b> = اللي نزل للربح المحرر بيومه، ويشمل تحرير إعادة الاستثمار والسحب (أرباح انكسبت بأيام قبلها) — '
             'فممكن يختلف يوم بيوم عن ربح التداول، وما ينعد مرتين.</p>'
-            '<p>الأيام قبل ما يبدي أرشيف بوت معيّن: رقمه من الدفتر — بالسجل خانته <i>باهتة مائلة</i> (و«—» لو الدفتر ما سجّل شي: يمكن ربحه انعاد استثماره فما نعرفه)، '
-            'واليوم معلّم «دفتر» لو كل بوتاته منه أو «دفتر جزئي» لو بعضها، '
-            'وبيعات هذي الأيام غير معروفة (—) أو جزئية (باهتة = بيعات البوتات المؤرشفة بس). لو كانت إعادة الاستثمار شغّالة وقتها، حصتها المعاد استثمارها تبين بيوم تحريرها بالدفتر، مو بيوم كسبها.</p>'
-            '<p><b>البوتات الآن</b> و<b>المُراكِمات</b> = الحالة لحظة صدور التقرير. «—» بالمُراكِم = السعر الحي غير متوفر لحظتها.</p></div>')
+            '<p>الأيام قبل ما يبدي أرشيف بوت معيّن: رقمه من الدفتر — بالسجل خانته <i>باهتة مائلة</i> (و«—» لو الدفتر ما سجّل شي: يمكن ربحه انعاد استثماره) · '
+            'سطر «قبل v3.30» = ربح انسجّل قبل هالنسخة وما بقى سجله التفصيلي (بوت محذوف أو أقدم من سجل البوت) — رقمه صحيح بيومه.</p>'
+            '<p><b>البوتات الآن</b> و<b>المُراكِمات</b> و<b>الخريطة</b> = الحالة لحظة صدور التقرير. «—» بالمُراكِم = السعر الحي غير متوفر لحظتها.</p></div>')
     # 📅 السجل اليومي
-    tb = [b for b in bots if b.get("slot", -1) >= 0]
-    tb.sort(key=lambda b: -b["t"])                     # نفس ترتيب الدائري والجداول (الأكبر أول) — اللون يبقى ثابت للبوت
-    hd = "".join(f'<th class="n"><i class="sw" style="background:{col(b)}"></i>{E(b["name"])}</th>' for b in tb)
+    tbt = [b for b in bots if b.get("slot", -1) >= 0]
+    tbt.sort(key=lambda b: -b["t"])                    # نفس ترتيب الجداول (الأكبر أول) — اللون يبقى ثابت للبوت
+    hd = "".join(f'<th class="n"><i class="sw" style="background:{col(b)}"></i>{E(b["name"])}</th>' for b in tbt)
+    apd = APA.get("days") or {}
+    has_acc = bool(AP.get("accs"))
     dr = []
     for d in (v.get("days") or []):
         byk = {x["k"]: x["t"] for x in d.get("by") or []}
-        oth = sum(t for kk, t in byk.items() if kk not in {b["k"] for b in tb})
+        oth = sum(t for kk, t in byk.items() if kk not in {b["k"] for b in tbt})
         lk = set(d.get("lk") or [])
+        ad = sum(float(x) for dd, x in apd.items() if d["d"] <= dd <= d["d2"])
         dmark = {"l": " <span class=muted>(دفتر)</span>", "al": " <span class=muted>(دفتر جزئي)</span>"}.get(d.get("src"), "")
         dr.append(f'<tr><td>{E(d["full"])}{dmark}</td>'
-                  + "".join(f'<td class="n{" lg" if b["k"] in lk else ""}">{f4(byk.get(b["k"], 0)) if byk.get(b["k"]) else ("—" if b["k"] in lk else "·")}</td>' for b in tb)
+                  + "".join(f'<td class="n{" lg" if b["k"] in lk else ""}">{f4(byk.get(b["k"], 0)) if byk.get(b["k"]) else ("—" if b["k"] in lk else "·")}</td>' for b in tbt)
                   + (f'<td class="n">{f4(oth) if oth else "·"}</td>' if T.get("n_other") else "")
                   + f'<td class="n">{f4(d["n"])}</td><td class="n">{f4(d["r"])}</td><td class="n"><b>{f4(d["t"])}</b></td>'
-                  f'<td class="n{" lg" if (d.get("cu") and d.get("c")) else ""}">{"—" if (d.get("cu") and not d.get("c")) else str(d.get("c", 0))}</td>'
+                  + (f'<td class="n">{f4(ad) if abs(ad) > 1e-9 else "·"}</td><td class="n"><b>{f4(d["t"] + ad)}</b></td>' if has_acc else "")
+                  + f'<td class="n{" lg" if (d.get("cu") and d.get("c")) else ""}">{"—" if (d.get("cu") and not d.get("c")) else str(d.get("c", 0))}</td>'
                   f'<td class="n">{f4(d["led"])}</td></tr>')
-    dr.append('<tr class="tot"><td>المجموع</td>' + "".join(f'<td class="n">{f4(b["t"])}</td>' for b in tb)
+    dr.append('<tr class="tot"><td>المجموع</td>' + "".join(f'<td class="n">{f4(b["t"])}</td>' for b in tbt)
               + (f'<td class="n">{f4(T.get("other"))}</td>' if T.get("n_other") else "")
               + f'<td class="n">{f4(T.get("n"))}</td><td class="n">{f4(T.get("r"))}</td><td class="n">{f4(T.get("t"))}</td>'
-              f'<td class="n{" lg" if T.get("cu") else ""}">{T.get("c", 0)}</td><td class="n">{f4(T.get("led"))}</td></tr>')
+              + (f'<td class="n">{f4(sum(float(x) for dd, x in apd.items() if v["from"] <= dd <= v["to"]))}</td>'
+                 f'<td class="n">{f4(float(T.get("t") or 0) + sum(float(x) for dd, x in apd.items() if v["from"] <= dd <= v["to"]))}</td>' if has_acc else "")
+              + f'<td class="n{" lg" if T.get("cu") else ""}">{T.get("c", 0)}</td><td class="n">{f4(T.get("led"))}</td></tr>')
     o.append(f'<section class="pb"><h2>السجل لكل {unit}</h2><div class="wrap"><table><tr><th>{"اليوم" if v.get("bucket") == "day" else "الفترة"}</th>{hd}'
              + ('<th class="n">غيرها</th>' if T.get("n_other") else "")
-             + '<th class="n">مباشر</th><th class="n">معاد</th><th class="n">المجموع</th><th class="n">بيعات</th><th class="n">المحرر بالدفتر</th></tr>'
+             + '<th class="n">مباشر</th><th class="n">معاد</th><th class="n">البوتات</th>'
+             + ('<th class="n">المُراكِمات</th><th class="n">الكل $</th>' if has_acc else "")
+             + '<th class="n">بيعات</th><th class="n">المحرر بالدفتر</th></tr>'
              + "".join(dr) + '</table></div></section>')
     o.append(DEFS)                                      # الملاحظات بآخر صفحة السجل (بلا صفحة فاضية)
     o.append(f'<footer><span>The Holy Dashboard v{E(APP_VERSION)}</span><span>{now.strftime("%Y-%m-%d %H:%M")}</span></footer>')
@@ -8167,6 +8444,7 @@ def coin_ledger_tick():
             save_json_atomic(COIN_LEDGER, cl)
         except Exception:
             pass
+    _safe(coin_trade_tick, default=None)               # 🪙 v3.30.0: دفتر تداول العملات — نفس القفل ونفس المواعيد (حتى قبل حذف البوت)
     return cl
 
 
@@ -8184,6 +8462,305 @@ def coins_period(start, end):
                 o[k] += v
                 o["t"] += v
     return {k: {kk: round(vv, 10) for kk, vv in v.items()} for k, v in out.items() if abs(v["t"]) > 1e-12}
+
+
+# ───────────── 🪙 v3.30.0: ربح تداول العملات + 💵 ربح المُراكِمات يوم بيوم — حسابات بس (ما تلمس البوتات ولا أي دفتر ثاني) ─────────────
+#   🪙 تداول العملات = نفس «ربح التداول» بالدولار بس للبوتات اللي ربحها عملة: DCA البيعي (ربح كل دورة) + الدوري البيعي (المحرر +
+#   المعاد استثماره من كل صفقة) — بيوم ما انكسب · كل بوت لحاله · يبقى بعد حذف البوت (`Holy_CoinTrade.json`).
+#   عملة تحرير إعادة استثمار الجرد وسحب المعاد استثماره **تحويلات** (انحسبت ربح تداول يوم انكسبت) ⇒ مو هنا (تبقى بـ«🪙 المحرر»).
+#   💵 المُراكِمات = ربح بيع كل مُراكِم (ربح أو خسارة) بيومه (`Holy_AccProfit.json`) — يبقى بعد إنهاء المُراكِم.
+import calendar as _cal
+COINTR_FILE = os.path.join(ROOT, "Holy_CoinTrade.json")
+ACCPL_FILE = os.path.join(ROOT, "Holy_AccProfit.json")
+_CT_T = ("dca", "rec_sell")
+_CT_TL = {"dca": "DCA بيعي", "rec_sell": "دوري بيعي"}
+
+
+def _ct_day(ts):
+    return datetime.fromtimestamp(float(ts or time.time())).strftime("%Y-%m-%d")
+
+
+def _ct_events(bt, st):
+    """(المعرّف، المحرر q، المعاد استثماره qr، الوقت) لكل دورة — نفس اللي يقراه سجل ربح اليوم (`bot_day_events`)."""
+    out = []
+    for c in (st.get("cycles_log") or []):
+        if not isinstance(c, dict) or not c.get("id"):
+            continue
+        if bt == "dca":
+            out.append((str(c["id"]), c.get("profit"), 0.0, c.get("ts")))
+        elif bt == "rec_sell":
+            out.append((str(c["id"]), c.get("rel") if c.get("rel") is not None else c.get("profit"), c.get("ri") or 0.0, c.get("ts")))
+    return out
+
+
+def _ct_backfill(T, booked, rel_live, live_k, since):
+    """أول مرة بس: اللي بدفتر العملات وما لگيناه بسجلات البوتات الحية (بوت محذوف · دورات أقدم من سجل البوت) ⇒ سطر
+    «قبل v3.30» لكل عملة بيومه — حتى الكلي ما ينقص. الدوري البيعي: سقفه اللي سجّله دفتر العملات للمحذوف (بلا سحب الشرائي)."""
+    cl = load_json(COIN_LEDGER) or {}
+    if not isinstance(cl, dict):
+        return
+    cap = {}
+    for k, e in (cl.get("bots") or {}).items():
+        if isinstance(e, dict) and e.get("type") == "rec_sell" and k not in live_k:
+            b0 = str(e.get("sym") or "").split("-")[0].upper()
+            cap[b0] = cap.get(b0, 0.0) + max(0.0, float(e.get("rec") or 0))
+    daily = T.setdefault("daily", {})
+    meta = T.setdefault("bots", {})
+    cd = cl.get("daily") or {}
+    for day in sorted(cd):
+        if (since and day < since) or not isinstance(cd.get(day), dict):
+            continue
+        for base, e in cd[day].items():
+            for src, bt in (("dca", "dca"), ("rec", "rec_sell")):
+                try:
+                    v = float((e or {}).get(src) or 0) - booked.get((day, base, bt), 0.0)
+                except Exception:
+                    continue
+                if src == "rec":
+                    v = min(v - rel_live.get((day, base), 0.0), cap.get(base, 0.0))
+                if v <= 1e-9:
+                    continue
+                if src == "rec":
+                    cap[base] = cap.get(base, 0.0) - v
+                k = f"_old|{bt}|{base}"
+                r = daily.setdefault(day, {}).setdefault(k, {"b": base, "q": 0.0, "qr": 0.0, "c": 0})
+                r["q"] = round(float(r.get("q") or 0) + v, 10)
+                meta[k] = {"sym": base + "-USDT", "type": bt, "b": base, "old": True}
+
+
+def coin_trade_tick():
+    """🪙 v3.30.0: دفتر «ربح تداول العملات» — كل دورة مرة وحدة بمعرّفها وبيومها الحقيقي (حتى لو اللوحة كانت طافية وقتها).
+    يشتغل ويّا دفتر العملات (نفس القفل · قبل حذف البوت) · «بداية جديدة للحسابات» تحترمها (`_books_since`)."""
+    T = load_json(COINTR_FILE) or {}
+    if not isinstance(T, dict):
+        T = {}
+    first = not T.get("v")
+    seen_l = list(T.get("seen") or [])
+    seen = set(seen_l)
+    daily = T.setdefault("daily", {})
+    meta = T.setdefault("bots", {})
+    since = _safe(_books_since, default="") or ""
+    changed, live_g, live_k = first, set(), {}
+    booked, rel_live = {}, {}
+    for b in bot_dirs().values():
+        c0 = b.get("cfg") or {}
+        bt = str(c0.get("bot_type") or "")
+        if c0.get("is_demo") or bt not in _CT_T + _REC_T:
+            continue
+        st = _safe(load_json, paths_of(b)[0], default={}) or {}
+        key = os.path.relpath(b["dir"], ROOT)
+        base = str(b["symbol"]).split("-")[0].upper()
+        if first and bt in _REC_T:                     # سحب المعاد استثماره (بدفتر العملات تحت «rec») ⇒ ينطرح من الباقي
+            for r in (st.get("releases") or []):
+                try:
+                    if r.get("id") and float(r.get("coin") or 0) > 0:
+                        k2 = (_ct_day(r.get("ts")), base)
+                        rel_live[k2] = rel_live.get(k2, 0.0) + float(r["coin"])
+                except Exception:
+                    continue
+        if bt not in _CT_T:
+            continue
+        live_k[key] = b
+        m0 = {"sym": b["symbol"], "type": bt, "b": base, "mode": str(c0.get("mode") or "")}
+        if meta.get(key) != m0:
+            meta[key] = m0
+            changed = True
+        for eid, q, qr, ts in _ct_events(bt, st):
+            gid = key + "|" + eid
+            live_g.add(gid)
+            try:
+                q, qr, day = float(q or 0), float(qr or 0), _ct_day(ts)
+            except Exception:
+                continue
+            if first:
+                k3 = (day, base, bt)
+                booked[k3] = booked.get(k3, 0.0) + q
+            if gid in seen:
+                continue
+            seen.add(gid)
+            seen_l.append(gid)
+            changed = True
+            if (since and day < since) or abs(q) + abs(qr) < 1e-14:
+                continue
+            e = daily.setdefault(day, {}).setdefault(key, {"b": base, "q": 0.0, "qr": 0.0, "c": 0})
+            e["q"] = round(float(e.get("q") or 0) + q, 10)
+            e["qr"] = round(float(e.get("qr") or 0) + qr, 10)
+            e["c"] = int(e.get("c") or 0) + 1
+    if first:
+        _ct_backfill(T, booked, rel_live, live_k, since)
+        T["v"] = 1
+    if changed:
+        T["seen"] = list(dict.fromkeys([x for x in seen_l if x in live_g] + seen_l[-30000:]))
+        _safe(save_json_atomic, COINTR_FILE, T, default=None)
+    return T
+
+
+def _ct_name(k, m, live, dup):
+    base = m.get("b") or "?"
+    t = _CT_TL.get(m.get("type"), "")
+    if m.get("old"):
+        return f"{base} · {t} (قبل v3.30 · محذوف/قديم)"
+    if m.get("type") == "rec_sell" and m.get("mode"):
+        t += " · " + ("بالمعدل" if m["mode"] == "avg" else "كل أمر على حدا")
+    return f"{base} · {t}" + (" · " + k if dup else "") + ("" if k in live else " (محذوف)")
+
+
+def coin_trade_period(start, end, tick=False):
+    """🪙 ربح تداول العملات لفترة (تواريخ شاملة) — من الدفتر: لكل عملة · لكل بوت · لكل يوم (المحرر q + المعاد استثماره qr)."""
+    if tick:
+        _safe(coin_trade_tick, default=None)
+    T = load_json(COINTR_FILE) or {}
+    daily = (T.get("daily") or {}) if isinstance(T, dict) else {}
+    meta = (T.get("bots") or {}) if isinstance(T, dict) else {}
+    live = {os.path.relpath(b["dir"], ROOT) for b in bot_dirs().values()}
+    coins, bots, days = {}, {}, {}
+    for d, row in daily.items():
+        if not (start <= d <= end) or not isinstance(row, dict):
+            continue
+        for k, e in row.items():
+            try:
+                q, qr, c = float(e.get("q") or 0), float(e.get("qr") or 0), int(e.get("c") or 0)
+            except Exception:
+                continue
+            base = e.get("b") or (meta.get(k) or {}).get("b") or "?"
+            coins[base] = coins.get(base, 0.0) + q + qr
+            dd = days.setdefault(d, {})
+            dd[base] = dd.get(base, 0.0) + q + qr
+            B = bots.setdefault(k, {"b": base, "q": 0.0, "qr": 0.0, "c": 0, "d": {}})
+            B["q"] += q
+            B["qr"] += qr
+            B["c"] += c
+            B["d"][d] = round(B["d"].get(d, 0.0) + q + qr, 10)
+    grp = {}
+    for k in bots:
+        m = meta.get(k) or {}
+        grp[(m.get("b"), m.get("type"), bool(m.get("old")))] = grp.get((m.get("b"), m.get("type"), bool(m.get("old"))), 0) + 1
+    out = []
+    for k, B in bots.items():
+        m = meta.get(k) or {"b": B["b"]}
+        best = max(B["d"].items(), key=lambda kv: kv[1]) if B["d"] else None
+        t = B["q"] + B["qr"]
+        out.append({"k": k, "name": _ct_name(k, m, live, grp.get((m.get("b"), m.get("type"), bool(m.get("old"))), 0) > 1),
+                    "b": B["b"], "type": m.get("type") or "", "tl": _CT_TL.get(m.get("type"), ""), "mode": m.get("mode") or "",
+                    "live": k in live, "old": bool(m.get("old")), "q": round(B["q"], 10), "qr": round(B["qr"], 10), "t": round(t, 10),
+                    "c": B["c"], "act": sum(1 for v in B["d"].values() if abs(v) > 1e-14),
+                    "best": {"d": best[0], "v": best[1]} if best and best[1] > 1e-14 else None, "days": B["d"]})
+    out.sort(key=lambda x: (x["b"], -x["t"], x["k"]))
+    return {"coins": {k: round(v, 10) for k, v in coins.items() if abs(v) > 1e-12}, "bots": out,
+            "days": {d: {b: round(v, 10) for b, v in r.items()} for d, r in sorted(days.items())}}
+
+
+def coin_trade_all():
+    """🪙 ربح تداول العملات الكلي لكل عملة (كل الأيام · ويّا المحذوف)."""
+    return coin_trade_period("0000-00-00", "9999-99-99")["coins"]
+
+
+def acc_pl_tick():
+    """💵 v3.30.0: ربح بيع المُراكِمات يوم بيوم — كل بيعة مرة وحدة (`مُراكِم|وقتها` — نفس علامة دفتر الربح) · يبقى بعد إنهاء المُراكِم.
+    أول مرة: «المحقق» بالمُراكِم اللي ما لگيناه بآخر بيعاته (أقدم من آخر 200) ⇒ سطر «قبل v3.30» بأول يوم معروف."""
+    B = load_json(ACCPL_FILE) or {}
+    if not isinstance(B, dict):
+        B = {}
+    first = not B.get("v")
+    seen_l = list(B.get("seen") or [])
+    seen = set(seen_l)
+    daily = B.setdefault("daily", {})
+    names = B.setdefault("names", {})
+    since = _safe(_books_since, default="") or ""
+    cfg = {a.get("id"): a for a in (acc_cfgs() or []) if isinstance(a, dict)}
+    st = acc_state() or {}
+    changed, live_s, bsum, bday = first, set(), {}, {}
+    for aid, e in st.items():
+        if str(aid).startswith("_") or not isinstance(e, dict):
+            continue
+        a = cfg.get(aid)
+        if a:
+            nm = {"name": a.get("name") or a.get("symbol") or aid, "sym": a.get("symbol") or "", "w": acc_wid(a) or ""}
+            if names.get(aid) != nm:
+                names[aid] = nm
+                changed = True
+        for s in (e.get("sells") or []):
+            if not isinstance(s, dict):
+                continue
+            sk = f"{aid}|{s.get('ts')}"
+            live_s.add(sk)
+            try:
+                p, u, day = float(s.get("profit") or 0), float(s.get("usd") or 0), _ct_day(s.get("ts"))
+            except Exception:
+                continue
+            if first:
+                bsum[aid] = bsum.get(aid, 0.0) + p
+                bday[aid] = min(bday.get(aid, day), day)
+            if sk in seen:
+                continue
+            seen.add(sk)
+            seen_l.append(sk)
+            changed = True
+            if since and day < since:
+                continue
+            r = daily.setdefault(day, {}).setdefault(aid, {"p": 0.0, "u": 0.0, "c": 0})
+            r["p"] = round(float(r.get("p") or 0) + p, 6)
+            r["u"] = round(float(r.get("u") or 0) + u, 6)
+            r["c"] = int(r.get("c") or 0) + 1
+    if first:
+        today = datetime.now().strftime("%Y-%m-%d")
+        rows = [(aid, float(e.get("realized") or 0), bday.get(aid)) for aid, e in st.items()
+                if not str(aid).startswith("_") and isinstance(e, dict)]
+        for x in (st.get("_closed") or []):
+            if isinstance(x, dict) and x.get("id") and x["id"] not in st:
+                rows.append((x["id"], float(x.get("realized") or 0), _ct_day(x.get("ts"))))
+                names.setdefault(x["id"], {"name": x.get("name") or x.get("sym") or x["id"], "sym": x.get("sym") or "", "w": x.get("wid") or ""})
+        for aid, real, d0 in rows:
+            v = round(real - bsum.get(aid, 0.0), 6)
+            day = d0 or today
+            if abs(v) < 1e-6 or (since and day < since):
+                continue
+            r = daily.setdefault(day, {}).setdefault(aid, {"p": 0.0, "u": 0.0, "c": 0})
+            r["p"] = round(float(r.get("p") or 0) + v, 6)
+            r["old"] = round(float(r.get("old") or 0) + v, 6)
+        B["v"] = 1
+    if changed:
+        B["seen"] = list(dict.fromkeys([x for x in seen_l if x in live_s] + seen_l[-20000:]))
+        _safe(save_json_atomic, ACCPL_FILE, B, default=None)
+    return B
+
+
+def acc_pl_period(start, end, tick=False):
+    """💵 ربح بيع المُراكِمات لفترة (تواريخ شاملة): المجموع · لكل مُراكِم · لكل يوم (الخسارة تنقص)."""
+    if tick:
+        _safe(acc_pl_tick, default=None)
+    B = load_json(ACCPL_FILE) or {}
+    daily = (B.get("daily") or {}) if isinstance(B, dict) else {}
+    names = (B.get("names") or {}) if isinstance(B, dict) else {}
+    live = {a.get("id") for a in (acc_cfgs() or []) if isinstance(a, dict)}
+    accs, days, tot, cnt = {}, {}, 0.0, 0
+    for d, row in daily.items():
+        if not (start <= d <= end) or not isinstance(row, dict):
+            continue
+        for aid, r in row.items():
+            try:
+                p, u, c = float(r.get("p") or 0), float(r.get("u") or 0), int(r.get("c") or 0)
+            except Exception:
+                continue
+            A = accs.setdefault(aid, {"p": 0.0, "u": 0.0, "c": 0, "old": 0.0, "d": {}})
+            A["p"] += p
+            A["u"] += u
+            A["c"] += c
+            A["old"] += float(r.get("old") or 0)
+            A["d"][d] = round(A["d"].get(d, 0.0) + p, 6)
+            days[d] = days.get(d, 0.0) + p
+            tot += p
+            cnt += c
+    out = []
+    for aid, A in accs.items():
+        nm = names.get(aid) or {}
+        best = max(A["d"].items(), key=lambda kv: kv[1]) if A["d"] else None
+        out.append({"aid": aid, "name": (nm.get("name") or aid) + ("" if aid in live else " (منتهي)"), "sym": nm.get("sym") or "",
+                    "w": nm.get("w") or "", "live": aid in live, "p": round(A["p"], 6), "u": round(A["u"], 6), "c": A["c"],
+                    "old": round(A["old"], 6), "act": sum(1 for v in A["d"].values() if abs(v) > 1e-9),
+                    "best": {"d": best[0], "v": best[1]} if best and best[1] > 1e-9 else None, "days": A["d"]})
+    out.sort(key=lambda x: (-x["p"], x["aid"]))
+    return {"tot": round(tot, 6), "c": cnt, "accs": out, "days": {d: round(v, 6) for d, v in sorted(days.items())}}
 
 
 # ───────────── 🗺️ v3.22.8: خريطة الأرباح + 💰 صناديق الربح — مراقبة بس (التوزيعات نفسها ما تنلمس ولا سطر) ─────────────
@@ -8610,6 +9187,7 @@ def profit_close_acc(aid):
         if e.get("inflight") or e.get("sell_inflight"):
             return False, "⏳ في أمر ينتظر تأكيد المنصة — أنهِه بعد ما يتسوّى (دقيقة)"
         _safe(profit_tick, default=None)          # البيع/التحويل/الأيام اللي تنتظر ⇒ تنقيّد قبل لا يختفي
+        _safe(acc_pl_tick, default=None)          # 💵 v3.30.0: بيعاته تنقيّد بأيامها قبل لا تنمسح حالته
         wid = acc_wid(a) or "?"
         sym = str(a.get("symbol") or "")
         base = sym.split("-")[0]
@@ -9269,7 +9847,8 @@ _TB_CACHE = {"t": 0.0, "v": None}
 def trade_book(force=False):
     """📚 v3.22.3: أرقام الأيام بنفس محرّك التقرير (`_pv_per_rows`):
     · الإجمالي = مجموع كل الأيام (تداول n+r · محرر = الدفتر) — ويّا البوتات المحذوفة والمعاد بناؤها (الدفتر والأرشيف يبقون)
-    · متوسط اليوم = آخر 30 يوم بنفس قاعدة التقرير (من أول يوم بيه رقم) · المعدل الشهري = كل التاريخ ÷ أيامه × 30
+    · متوسط اليوم = آخر 30 يوم بنفس قاعدة التقرير (من أول يوم بيه رقم)
+    · 📆 v3.30.0: المعدل الشهري = كل التاريخ ÷ أيامه × **أيام الشهر الحالي** (28–31 — كان × 30) · هذا الشهر لحد هسه · كل شهر (التداول والمحرر)
     · أفضل يوم = أعلى يوم بكل التاريخ."""
     if not force and _TB_CACHE["v"] is not None and time.time() - _TB_CACHE["t"] < 60:
         return _TB_CACHE["v"]
@@ -9324,8 +9903,20 @@ def trade_book(force=False):
     best = max(dt.items(), key=lambda kv: kv[1]) if dt else None
     dt30, dl30, span30 = _agg(today - timedelta(days=29))
     t30 = sum(dt30.values())
+    dim = _cal.monthrange(today.year, today.month)[1]
+    ym0 = today.strftime("%Y-%m")
+    months = {}
+    for ds, x in dt.items():
+        m_ = months.setdefault(ds[:7], {"t": 0.0, "l": 0.0})
+        m_["t"] += x
+    for ds, x in dl.items():
+        m_ = months.setdefault(ds[:7], {"t": 0.0, "l": 0.0})
+        m_["l"] += x
     out = {"trade_all": round(t_all, 6), "rel_all": round(l_all, 6), "span_all": span_all,
-           "month": round(t_all / span_all * 30, 6) if span_all else 0.0,
+           "month": round(t_all / span_all * dim, 6) if span_all else 0.0, "dim": dim,
+           "mtd": round(sum(x for ds, x in dt.items() if ds[:7] == ym0), 6),
+           "months": {k: {"t": round(v["t"], 6), "l": round(v["l"], 6)} for k, v in sorted(months.items())},
+           "first": (today - timedelta(days=span_all - 1)).strftime("%Y-%m-%d") if span_all else "",
            "avg": round(t30 / span30, 6) if span30 else 0.0, "span30": span30, "t30": round(t30, 6),
            "best": ({"d": best[0], "v": round(best[1], 6)} if best and best[1] > 1e-12 else None)}
     _TB_CACHE.update(t=time.time(), v=out)
@@ -9336,9 +9927,11 @@ _TS_CACHE = {"t": 0.0, "v": None}
 
 
 def trade_stats():
-    """📊 للشريط والتقارير — من `trade_book` (نفس محرّك التقرير): متوسط اليوم (آخر 30 يوم) · المعدل الشهري (كل التاريخ) · أفضل يوم (كل التاريخ)."""
+    """📊 للشريط والتقارير — من `trade_book` (نفس محرّك التقرير): متوسط اليوم (آخر 30 يوم) · المعدل الشهري (كل التاريخ × أيام الشهر) ·
+    هذا الشهر لحد هسه · أفضل يوم (كل التاريخ)."""
     tb = trade_book()
-    return {"avg": tb["avg"], "month": tb["month"], "span": tb["span30"], "span_all": tb["span_all"], "best": tb["best"]}
+    return {"avg": tb["avg"], "month": tb["month"], "dim": tb.get("dim", 30), "mtd": tb.get("mtd", 0.0),
+            "span": tb["span30"], "span_all": tb["span_all"], "best": tb["best"]}
 
 
 def _bot_label(key):
@@ -9463,7 +10056,8 @@ def build_report(kind, ref=None):
         worst = min(days, key=lambda d: PD[d]["n"] + PD[d]["r"])
         L.append(f"🏆 أفضل يوم `{_tp_wd(best)} {best[5:]}` `{PD[best]['n'] + PD[best]['r']:.4f}$`")
         L.append(f"📉 أضعف يوم `{_tp_wd(worst)} {worst[5:]}` `{PD[worst]['n'] + PD[worst]['r']:.4f}$`")
-        L.append(f"🔮 بهذا المعدل شهرياً `{avg * 30:.2f}$`")
+        _dm = _cal.monthrange(datetime.now().year, datetime.now().month)[1]
+        L.append(f"🔮 بهذا المعدل هذا الشهر ({_dm} يوم) `{avg * _dm:.2f}$`")
     L.append(f"💵 *الربح المحرر:* `{T['rel']:.4f}$`")
     diff = T["rel"] - T["n"]
     if diff >= 0.01:
@@ -12723,6 +13317,8 @@ def _books_locked(fn):
 ledger_tick = _books_locked(ledger_tick)
 coin_ledger_tick = _books_locked(coin_ledger_tick)
 reinvest_tick = _books_locked(reinvest_tick)
+coin_trade_tick = _books_locked(coin_trade_tick)      # 🪙 v3.30.0
+acc_pl_tick = _books_locked(acc_pl_tick)              # 💵 v3.30.0
 
 
 def books_fresh_start():
@@ -12763,6 +13359,12 @@ def books_fresh_start():
                             tot[src][base] = round(tot[src].get(base, 0.0) + q, 10)
             cl["total_dca"], cl["total_ri"], cl["total_rec"], cl["bots"] = tot["dca"], tot["ri"], tot["rec"], {}
             save_json_atomic(COIN_LEDGER, cl)                # «seen» يبقى ⇒ الأحداث القديمة ما تنعاد
+        for _fn in (COINTR_FILE, ACCPL_FILE):                # 🪙💵 v3.30.0: نفس القاعدة — الأيام قبل اليوم تنمسح · «seen» يبقى
+            _B = load_json(_fn) or {}
+            if isinstance(_B, dict) and _B:
+                _B["daily"] = {d: v for d, v in (_B.get("daily") or {}).items() if d >= today}
+                _B["v"] = _B.get("v") or 1
+                save_json_atomic(_fn, _B)
         save_json_atomic(GONE, {"bots": {}})
         save_json_atomic(BOOKS_SINCE, {"since": today, "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
         _HDP_CACHE.clear()
@@ -14567,6 +15169,7 @@ def ledger_loop():
             _safe(coin_ledger_tick, default=None)     # 🪙 v3.22.2: الربح المحرّر بالعملات
             _safe(profit_tick, default=None)          # 💰 v3.22.8: دفتر الربح (اللي نزل للمحفظة — مراقبة بس)
             _safe(loss_tick, default=None)            # 📉 v3.25.4: سجل الخسائر (يحسب بس)
+            _safe(acc_pl_tick, default=None)          # 💵 v3.30.0: ربح بيع المُراكِمات يوم بيوم (يحسب بس)
             if n % 10 == 0:              # كل ~5 دقائق — لقطة إعادة الاستثمار
                 _safe(reinvest_tick, default=None)
             n += 1
@@ -15152,6 +15755,10 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                                                 after=float(q.get("after", [""])[0]) if q.get("after", [""])[0] else None))
             except Exception as ex:
                 return self._json({"ok": False, "msg": str(ex), "items": []})
+        if u.path == "/api/ctrade":                       # 🪙 v3.30.0: ربح تداول العملات — اليوم والكلي لكل عملة ولكل بوت
+            _t0 = datetime.now().strftime("%Y-%m-%d")
+            return self._json({"ok": True, "today": _safe(coin_trade_period, _t0, _t0, True, default={}) or {},
+                               "all": _safe(coin_trade_period, "0000-00-00", "9999-99-99", default={}) or {}})
         if u.path == "/api/profit":                       # 📊 ربح التداول يوم بيوم + حصة كل بوت
             try:
                 pdays = int((q.get("days") or ["30"])[0])
@@ -16519,8 +17126,8 @@ nav.actions .gsep{width:1px;height:24px;background:var(--line);margin:0 4px;flex
 .hrow>.ops:not(.opsb){grid-column:3;grid-row:1;justify-self:end;margin:0!important}
 .hrow>.totals{grid-column:1/-1;grid-row:2;width:100%;justify-content:center;margin:0!important}
 .hrow>.stats{grid-column:1/-1;grid-row:2;width:100%;margin:0}
-/* 📊 v3.22.2: عشر خانات متساوية — خمسة اليوم فوق · خمسة الإجمالي تحت (الموبايل: كل خانة يمّ إجماليها) */
-.stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+/* 📊 v3.22.2: خانات متساوية — اليوم فوق · الإجمالي تحت (الموبايل: كل خانة يمّ إجماليها) · 🪙 v3.30.0: 12 خانة (6 × 2) */
+.stats{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
 /* 📏 v3.22.4: الخانات أقصر (66 ⇐ 48 بكسل) حتى الكروت تبين بالحاسوب */
 .st{position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:0;min-height:0;
   padding:5px 12px;border:1px solid var(--line);border-radius:11px;background:rgb(var(--ov-rgb)/.035)}
@@ -16533,14 +17140,15 @@ nav.actions .gsep{width:1px;height:24px;background:var(--line);margin:0 4px;flex
 .st.rot .sv{transition:opacity .28s ease}.st.rot .sv.fade{opacity:0}
 .st .spk{position:absolute;left:0;right:0;bottom:0;width:100%;height:22px;opacity:.32;pointer-events:none}
 .st.pos .sv>span{background:linear-gradient(92deg,var(--green),var(--cyan));-webkit-background-clip:text;background-clip:text}
-.pc-kpi.stats{grid-template-columns:repeat(5,minmax(0,1fr));margin:4px 0 14px}
+.pc-kpi.stats{grid-template-columns:repeat(6,minmax(0,1fr));margin:4px 0 14px}
+@media (min-width:761px) and (max-width:1279px){.st .sl[data-s]{font-size:0}.st .sl[data-s]::before{content:attr(data-s);font-size:11px}}   /* 6 بالصف ⇒ الاسم المختصر */
 @media (max-width:760px){
   /* 📱 v3.23.2: كلها تبين بلا سحب — عمودين · كل خانة يمّ إجماليها (اليوم ⇐ الكلي) · شريط بسطر واحد: الاسم المختصر ⇐ الرقم · بلا خط الحركة
      (نفس الترتيب بالشريط العلوي ولوحة التقارير — الحاسوب ما تغيّر) */
   .stats,.pc-kpi.stats{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-flow:row;gap:5px;overflow:visible}
-  .stats>.st:nth-child(1){order:1}.stats>.st:nth-child(6){order:2}.stats>.st:nth-child(2){order:3}.stats>.st:nth-child(7){order:4}
-  .stats>.st:nth-child(3){order:5}.stats>.st:nth-child(8){order:6}.stats>.st:nth-child(4){order:7}.stats>.st:nth-child(5){order:8}
-  .stats>.st:nth-child(9){order:9}.stats>.st:nth-child(10){order:10}
+  .stats>.st:nth-child(1){order:1}.stats>.st:nth-child(7){order:2}.stats>.st:nth-child(2){order:3}.stats>.st:nth-child(8){order:4}
+  .stats>.st:nth-child(3){order:5}.stats>.st:nth-child(9){order:6}.stats>.st:nth-child(4){order:7}.stats>.st:nth-child(10){order:8}
+  .stats>.st:nth-child(5){order:9}.stats>.st:nth-child(6){order:10}.stats>.st:nth-child(11){order:11}.stats>.st:nth-child(12){order:12}
   .st{flex-direction:row;align-items:center;justify-content:space-between;gap:6px;min-height:32px;padding:4px 9px;border-radius:9px}
   .st .sl{flex:1 1 auto;min-width:0;font-size:10.5px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .st .sl[data-s]{font-size:0}.st .sl[data-s]::before{content:attr(data-s);font-size:10.5px}
@@ -16833,11 +17441,13 @@ html.lite .card:hover,html.lite button:hover{transform:none}
       <div class="st click" id="totTrade" onclick="openDayLog('trade')" title="ربح التداول اليوم: بدون إعادة استثمار + 💠 المعاد استثماره — يصفّر بنهاية اليوم · اضغط للتفاصيل"><span class="sl" data-s="🔄 تداول اليوم">🔄 ربح التداول</span><b class="sv"><span id="tTrade" class="num">0.00</span><small>$</small></b></div>
       <div class="st click" id="totToday" onclick="openDayLog('rel')" title="الربح المحرر اليوم: الدولار اللي طلع من البوتات ربحاً (الجرد · DCA الشرائي · الدوري) — يدخل الربح اليومي والمُراكِم ياخذ نسبته · اضغط للتفاصيل"><span class="sl" data-s="📅 محرر اليوم">📅 ربح المحرر</span><b class="sv"><span id="tToday" class="num">0.00</span><small>$</small></b></div>
       <div class="st click rot" id="stCoinD" onclick="coinsModal()" title="الربح المحرّر بالعملات اليوم: ربح DCA البيعي + الدوري البيعي + العملة المحرّرة من إعادة الاستثمار (للمُراكِم أو للمحفظة) — يتقلّب بين العملات · اضغط للتفاصيل"><span class="sl" data-s="🪙 عملات اليوم" data-x="🪙 اليوم">🪙 ربح المحرر للعملات</span><b class="sv" id="tCoinD">—</b></div>
-      <div class="st" id="stMonth" title="المعدل الشهري = ربح التداول بكل التاريخ ÷ عدد أيامه × 30"><span class="sl" data-s="📆 معدل شهري">📆 معدل ربح التداول الشهري</span><b class="sv"><span id="tMonth" class="num">0.00</span><small>$</small></b></div>
+      <div class="st click rot" id="stCtD" onclick="ctModal()" title="ربح تداول العملات اليوم: DCA البيعي + الدوري البيعي — ربح كل دورة/صفقة (المحرر + المعاد استثماره) بيومها · نفس ربح التداول اليومي بس للعملات · يتقلّب بين العملات · اضغط للتفاصيل (كل بوت لحاله)"><span class="sl" data-s="🪙 تداول عملات" data-x="🪙 تداول ع">🪙 ربح تداول العملات اليوم</span><b class="sv" id="tCtD">—</b></div>
+      <div class="st" id="stMonth" title="المعدل الشهري = متوسط ربح التداول باليوم (كل التاريخ) × أيام هذا الشهر"><span class="sl" data-s="📆 معدل شهري">📆 معدل ربح التداول الشهري</span><b class="sv"><span id="tMonth" class="num">0.00</span><small>$</small></b></div>
       <div class="st" id="stAvg" title="متوسط ربح التداول باليوم — آخر 30 يوم (من أول يوم بيه ربح)"><span class="sl" data-s="📊 متوسط اليوم">📊 متوسط اليوم</span><b class="sv"><span id="tAvg" class="num">0.00</span><small>$</small></b><svg id="spark" class="spk" viewBox="0 0 118 34" preserveAspectRatio="none" aria-hidden="true"></svg></div>
       <div class="st" id="totTradeAll" title="ربح التداول الإجمالي = مجموع ربح التداول بكل الأيام (مباشر + 💠 معاد) — ويّا البوتات المحذوفة"><span class="sl" data-s="📈 تداول كلي">📈 ربح التداول الإجمالي</span><b class="sv"><span id="tTradeAll" class="num">0.00</span><small>$</small></b></div>
       <div class="st" id="totAll" title="ربح المحرر الإجمالي = مجموع الدفتر اليومي بكل الأيام — صافي بعد العمولة · ويّا البوتات المحذوفة"><span class="sl" data-s="💵 محرر كلي">💵 ربح المحرر الإجمالي</span><b class="sv"><span id="tTotal" class="num">0.00</span><small>$</small></b></div>
       <div class="st click rot" id="stCoinA" onclick="coinsModal()" title="ربح العملات الإجمالي: DCA البيعي + الدوري البيعي + العملة المحرّرة من إعادة الاستثمار — يتقلّب بين العملات · اضغط للتفاصيل"><span class="sl" data-s="🪙 عملات كلي" data-x="🪙 الكلي">🪙 ربح إجمالي العملات</span><b class="sv" id="tCoinA">—</b></div>
+      <div class="st click rot" id="stCtA" onclick="ctModal()" title="ربح تداول العملات الإجمالي: DCA البيعي + الدوري البيعي بكل الأيام (ويّا المحذوف) — يتقلّب بين العملات · اضغط للتفاصيل"><span class="sl" data-s="🪙 تداول ع كلي" data-x="🪙 كلي ع">🪙 ربح تداول العملات الإجمالي</span><b class="sv" id="tCtA">—</b></div>
       <div class="st" id="stBest" title="أفضل يوم ربح تداول (كل التاريخ — نفس التقرير)"><span class="sl" data-s="🏆 أفضل يوم">🏆 أفضل يوم</span><b class="sv"><span id="tBest" class="num">—</span><small>$</small></b></div>
       <div class="st" id="totOrd" title="أوامرك المفتوحة بالمنصة: بيع ↑ · شراء ↓"><span class="sl" data-s="📋 الأوامر">📋 الأوامر المنشورة على المنصة</span><b class="sv" id="tEx">—</b></div>
     </div>
@@ -17461,6 +18071,22 @@ function coinsModal(){
     <p style="font-size:11px;color:var(--mut2);margin-top:10px;line-height:1.8">من ربح DCA البيعي (صافي بعد العمولة لكل دورة) والدوري البيعي (الجزء المحرر من كل صفقة) ومن العملة المحرّرة من إعادة الاستثمار — تروح للمُراكِم إذا مفتوح وإلا تبقى بالمحفظة. مراقبة بس (مثل الربح المحرر بالدولار) · الإجمالي ما ينقص لما تحذف بوت.</p>
     <div class="mbtns"><button onclick="hideModal()">إغلاق</button></div>`);
 }
+/* 🪙 v3.30.0: ربح تداول العملات — DCA البيعي + الدوري البيعي (المحرر + المعاد استثماره) · لكل عملة ولكل بوت (اليوم · الكلي) */
+async function ctModal(){
+  showModal('<h2>🪙 ربح تداول العملات</h2><p style="color:var(--mut);font-size:12.5px">⏳ يحمّل…</p>');
+  let r=null;try{r=await api('/api/ctrade')}catch(e){}
+  const T=(r&&r.today)||{},A=(r&&r.all)||{},tc=T.coins||{},ac=A.coins||{},ks=[...new Set([...Object.keys(tc),...Object.keys(ac)])].sort();
+  const tb={};(T.bots||[]).forEach(b=>tb[b.k]=b);
+  let h='';
+  if(!ks.length)h='<p style="color:var(--mut);font-size:12.5px">ماكو ربح تداول بالعملات بعد — يجي من DCA البيعي (ربح كل دورة) والدوري البيعي (ربح كل صفقة: المحرر + المعاد استثماره).</p>';
+  else{h='<div style="overflow-x:auto"><table class="dntbl"><thead><tr><th>العملة</th><th>اليوم</th><th>الإجمالي</th></tr></thead><tbody>'+
+    ks.map(k=>`<tr><td>${gEsc(k)}</td><td class="num">${tc[k]!=null?fmtCoin(tc[k]):'—'}</td><td class="num">${ac[k]!=null?fmtCoin(ac[k]):'—'}</td></tr>`).join('')+'</tbody></table></div>'+
+    '<h3 style="font-size:13px;margin:14px 0 6px">كل بوت لحاله</h3><div style="overflow-x:auto"><table class="dntbl"><thead><tr><th>البوت</th><th>اليوم</th><th>الإجمالي</th><th>دورات</th></tr></thead><tbody>'+
+    (A.bots||[]).map(b=>{const t=tb[b.k];return `<tr><td>${gEsc(b.name)}</td><td class="num">${t?fmtCoin(t.t)+' '+gEsc(b.b):'—'}</td><td class="num">${fmtCoin(b.t)} ${gEsc(b.b)}</td><td class="num">${b.c||'—'}</td></tr>`}).join('')+'</tbody></table></div>'}
+  showModal(`<h2>🪙 ربح تداول العملات</h2>${h}
+    <p style="font-size:11px;color:var(--mut2);margin-top:10px;line-height:1.8">نفس «ربح التداول اليومي» بالدولار بس للبوتات اللي ربحها عملة: DCA البيعي (صافي كل دورة بعد العمولة) والدوري البيعي (المحرر + المعاد استثماره من كل صفقة) — بيوم ما انكسب · كل بوت لحاله · يبقى بعد حذف البوت. يختلف عن «🪙 ربح المحرر للعملات» لأن ذاك يحسب العملة اللي تحرّرت (ويّا عملة تحرير إعادة استثمار الجرد) — حسابات بس، ما يتدخل بشغل البوت.</p>
+    <div class="mbtns"><button onclick="hideModal()">إغلاق</button></div>`);
+}
 function drawSpark(a){if(!a||!a.length){$('#spark').innerHTML='';return}
   a=a.map(x=>(x&&typeof x==='object')?(+x.v||0):(+x||0));   // 📈 الخادم يرسل {d,v} لكل يوم — كان يرسم NaN (نفس خلل چارت التقارير)
   const W=118,Hh=34,mx=Math.max(...a,0.0001),mn=Math.min(...a,0);
@@ -17477,11 +18103,12 @@ function updTop(d){sTot.set(d.total_profit);sDay.set(d.today_profit);drawSpark(d
   const tb=$('#tBest');if(tb)tb.textContent=ST.best?(+ST.best.v).toFixed(2):'—';
   const sb=$('#stBest');if(sb&&ST.best){const p=String(ST.best.d).split('-');sb.title=`أفضل يوم ربح تداول (كل التاريخ — نفس التقرير): ${(+ST.best.v).toFixed(4)}$ · ${+p[2]}/${+p[1]}/${p[0]}`}
   rotSet($('#tCoinD'),d.coins_today||{});rotSet($('#tCoinA'),d.coins_all||{});
+  rotSet($('#tCtD'),d.ctrade_today||{});rotSet($('#tCtA'),d.ctrade_all||{});     // 🪙 v3.30.0: تداول العملات
   const eT=$('#totTrade'), eA=$('#totTradeAll');
   if(eT)eT.title=`ربح التداول اليوم ${(+TP.today||0).toFixed(4)}$ = بدون إعادة استثمار ${tpN.toFixed(4)}$ + 💠 معاد استثماره ${tpR.toFixed(4)}$ · يصفّر بنهاية اليوم · اضغط للتفاصيل`;
   if(eA)eA.title=`ربح التداول الإجمالي ${tpAll.toFixed(4)}$ = مجموع ربح التداول بكل الأيام (مباشر + 💠 معاد استثماره) — نفس أيام التقرير، ويّا البوتات المحذوفة · منه لسه 💠 داخل الأوامر ${(+TP.held||0).toFixed(4)}$`+((+TP.handoff||0)>0?` · 💠 للمُراكِم ${(+TP.handoff).toFixed(4)}$`:'');
   const eR=$('#totAll');if(eR)eR.title=`ربح المحرر الإجمالي ${(+d.total_profit||0).toFixed(4)}$ = مجموع الدفتر اليومي بكل الأيام (صافي بعد العمولة) — ويّا البوتات المحذوفة والمعاد بناؤها`;
-  const eM=$('#stMonth');if(eM)eM.title=`المعدل الشهري = ربح التداول بكل التاريخ ÷ ${ (d.stats||{}).span_all||0 } يوم × 30`;
+  const eM=$('#stMonth');if(eM)eM.title=`المعدل الشهري = ربح التداول بكل التاريخ ÷ ${ (d.stats||{}).span_all||0 } يوم × ${(d.stats||{}).dim||30} (أيام هذا الشهر) · هذا الشهر لحد هسه ${(+((d.stats||{}).mtd)||0).toFixed(2)}$ — يفيدك للسحب نهاية الشهر`;
   const eV=$('#stAvg');if(eV)eV.title=`متوسط اليوم = ربح التداول آخر ${(d.stats||{}).span||0} يوم ÷ عدد الأيام (نفس تقرير 30 يوم)`;
   /* 🧹 v3.22.4: صف «📊 وُزّع» وجنبه (تعذّر جلب الرصيد · أوامر تُرفض · سلّم فيه خلل) انشال من الشريط بطلب المالك:
      المحاسبة بنافذة 🪙 المُراكِم (زر «📊 التوزيع») · الرصيد ⚠️ بكل كرت · الرفض والخلل على زر 🛡️ الرقابة وعلى كرت البوت نفسه */
@@ -19631,14 +20258,16 @@ function pcKpi(v){
   el.innerHTML=c('','🔄 ربح التداول',pcN(T.t),'$',`مباشر ${pcN(T.n,4)} · معاد ${pcN(T.r,4)}`,'🔄 تداول')
     +c('','📅 ربح المحرر',pcN(T.led),'$','الربح المحرر بالفترة (الدفتر)','📅 محرر')
     +c('pcCoinP','🪙 ربح المحرر للعملات','','','ربح DCA البيعي + عملة إعادة الاستثمار بالفترة','🪙 عملات')
-    +c('','📆 معدل ربح التداول الشهري',pcN(ST.month),'$',`ربح التداول بكل التاريخ ÷ ${ST.span_all||0} يوم × 30 (نفس الشريط)`,'📆 معدل شهري')
+    +c('pcCtP','🪙 ربح تداول العملات','','','DCA البيعي + الدوري البيعي بالفترة — المحرر + المعاد استثماره (كل بوت لحاله بالضغط على خانة الشريط)','🪙 تداول ع')
+    +c('','📆 معدل ربح التداول الشهري',pcN(ST.month),'$',`ربح التداول بكل التاريخ ÷ ${ST.span_all||0} يوم × ${ST.dim||30} (أيام هذا الشهر — نفس الشريط) · هذا الشهر لحد هسه ${pcN(ST.mtd)}$`,'📆 معدل شهري')
     +c('','📊 متوسط اليوم',pcN(T.avg),'$',`${T.active||0} يوم بيه ربح من ${v.span}`,'📊 المتوسط')
     +c('','📈 ربح التداول الإجمالي',pcN(all),'$','مجموع كل الأيام (مباشر + معاد) — ويّا المحذوفة','📈 تداول كلي')
     +c('','💵 ربح المحرر الإجمالي',pcN(D.total_profit),'$','مجموع الدفتر اليومي بكل الأيام — ويّا المحذوفة','💵 محرر كلي')
     +c('pcCoinA','🪙 ربح إجمالي العملات','','','حتى الآن','🪙 الكلي')
+    +c('pcCtA','🪙 ربح تداول العملات الإجمالي','','','حتى الآن · DCA البيعي + الدوري البيعي (ويّا المحذوف)','🪙 تداول ع كلي')
     +c('','🏆 أفضل يوم',SB?pcN(SB.v):'—','$',SB?'كل التاريخ (نفس الشريط) · '+bfull:'','🏆 أفضل يوم')
     +`<div class="st" title="أوامرك المفتوحة بالمنصة"><span class="sl" data-s="📋 الأوامر">📋 الأوامر المنشورة على المنصة</span><b class="sv">${typeof D.ex_b==='number'?`<span>${D.ex_s}↑ · ${D.ex_b}↓</span><small>${D.ex_b+D.ex_s}</small>`:'<span>—</span>'}</b></div>`;
-  rotSet($('#pcCoinP'),T.coins||{});rotSet($('#pcCoinA'),D.coins_all||{})}
+  rotSet($('#pcCoinP'),T.coins||{});rotSet($('#pcCoinA'),D.coins_all||{});rotSet($('#pcCtP'),T.ctrade||{});rotSet($('#pcCtA'),D.ctrade_all||{})}
 function pcBars(v){
   const box=$('#pcBars'),days=v.days||[];
   if(!days.length||!((v.tot||{}).t>0)){box.innerHTML='<p class="pc-empty">ماكو ربح تداول مسجّل بالفترة بعد.</p>';return}
@@ -24820,6 +25449,8 @@ def diag_bundle(days=30):
                                            for c in (_LK.get("checks") or [])]))
         put("accounting_audit.json", _A)
         put("coin_ledger.json", _safe(load_json, COIN_LEDGER, default={}))
+        put("coin_trade.json", _safe(load_json, COINTR_FILE, default={}))        # 🪙 v3.30.0
+        put("acc_profit.json", _safe(load_json, ACCPL_FILE, default={}))         # 💵 v3.30.0
         put("gone_bots.json", _safe(load_json, GONE, default={}))
         put("books_since.json", _safe(load_json, BOOKS_SINCE, default={}) or {"since": ""})
         put("numbers/overview.json", _safe(overview, default={}))
