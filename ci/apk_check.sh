@@ -66,6 +66,8 @@ linked=$(curl -s -X POST localhost:8099/api/app/devices -H 'Content-Type: applic
 if [ "$linked" = "0" ]; then say "SKIP app-closed tests — this phone never linked (its system WebView cannot run the page)"; else
 note(){ api /api/app/devices "{\"act\":\"test\",\"tag\":\"$1\"}" >/dev/null; }
 got(){ for i in $(seq 1 ${2:-25}); do adb shell dumpsys notification --noredact | grep -q "$1" && return 0; sleep 1; done; return 1; }
+# the channel of the notification carrying tag $1 in dump $2 = the last «channel=» seen before the tag (the record header sits above its extras)
+rch(){ awk -v T="$1" 'match($0,/channel=[a-z0-9]+/){c=substr($0,RSTART,RLENGTH)} index($0,T){print c; exit}' "$2" | tr -d '\r'; }
 svc(){ adb shell dumpsys activity services $P | grep -c "WatchService" | tr -d '\r'; }
 adb shell dumpsys jobscheduler | grep -q "$P/.KeepJob" && say "PASS backup check scheduled (every 15 min · survives reboot)" || say "FAIL backup check not scheduled"
 adb shell input keyevent KEYCODE_HOME; sleep 2
@@ -114,16 +116,16 @@ if [ -s $OUT/n14_ours.txt ]; then
     if [ -z "$line" ] || echo "$line" | grep -q "mDeleted=true"; then say "PASS no live 1.3 channel «$ch» in our app"; else say "FAIL our app still has the 1.3 channel «$ch» — $(echo "$line" | cut -c1-160)"; fi
   done
 else say "INFO couldn't cut our app's channel list out of dumpsys (1.3 channels were checked in the v3.26.7 runs)"; fi
-grep -B2 -A30 "PRICE1" $OUT/n14.txt | grep -oE "channel=[a-z0-9]+|mId='[a-z0-9]+'" | head -2 | sed 's/^/HOLYCI price notification: /'
+say "price notification: $(rch PRICE1 $OUT/n14.txt)"
 # ── 1.8: 📊 indicator alerts on their OWN channel «ind» (Holy tone · own group) — apart from 📈 prices (the owner: «تاتيني معا») ──
 api /api/app/devices '{"act":"test","sample":"ind","tag":"IND1"}' >/dev/null
 got IND1 30 && say "PASS 1.8: indicator test notification arrived" || say "FAIL 1.8: indicator test notification never arrived"
 adb shell dumpsys notification --noredact > $OUT/n18.txt
 line=$(grep -oE "mId='ind'.{0,700}" $OUT/n18.txt | head -1)
 echo "$line" | grep -q "mSound=android.resource://$P/" && say "PASS 1.8: channel ind («📊 تنبيهات المؤشرات») rings the Holy tone" || say "FAIL 1.8: channel ind: no Holy tone — $(echo "$line" | cut -c1-220)"
-ich=$(grep -B2 -A30 "IND1" $OUT/n18.txt | grep -oE "channel=[a-z0-9]+" | head -1)
+ich=$(rch IND1 $OUT/n18.txt)
 [ "$ich" = "channel=ind" ] && say "PASS 1.8: the indicator alert sits on channel «ind» (not «price»)" || say "FAIL 1.8: indicator alert channel: ${ich:-none}"
-pch=$(grep -B2 -A30 "PRICE1" $OUT/n18.txt | grep -oE "channel=[a-z0-9]+" | head -1)
+pch=$(rch PRICE1 $OUT/n18.txt)
 [ "$pch" = "channel=price" ] && say "PASS 1.8: price alerts still on «price»" || say "INFO 1.8: price alert channel now: ${pch:-gone from the shade}"
 adb shell dumpsys package $P | grep -E "versionName|versionCode" | head -2 | tr -d '\r' | sed 's/^/HOLYCI now: /'
 grep -q "android.title=Holy يراقب" $OUT/n13.txt && say "FAIL watcher line still says «Holy يراقب»" || say "PASS watcher line no longer says «يراقب»"
