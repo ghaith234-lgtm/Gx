@@ -1,0 +1,23 @@
+# 🔮 Holy forecast check on REAL prices: runs the dashboard's own forecast engine (🔮 التوقعات) on public OKX daily candles for 10 coins
+#    and prints how often each horizon (day · week · month · 3 months) was right in the past. Results: lines HOLYFC in the job log.
+# Runs only when ci/fc_check.py, ci/RUN_FC or this file changes (bump ci/RUN_FC to measure the forecast embedded in Holy_Dashboard.pyw).
+name: Holy forecast check
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/fc_check.py', 'ci/RUN_FC', '.github/workflows/holy-fc-check.yml']
+permissions:
+  contents: read
+jobs:
+  real-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Forecast on real OKX prices (public data · no keys · no orders · no notifications)
+        run: |
+          pip install -q requests
+          python3 ci/fc_check.py Holy_Dashboard.pyw
