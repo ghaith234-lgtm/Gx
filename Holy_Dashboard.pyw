@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.28.0"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.28.1"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -9182,12 +9182,14 @@ def profit_audit():
                 sh.setdefault(aid, None)           # مُراكِم انحذف قبل v3.23.0 (بلا أثر) ⇒ ما نگدر نقارن نصيبه
             _shb = any(s2 is not None and not near(ta.get(aid, 0), s2, 1e-5) for aid, s2 in sh.items())
             _box = pf + sum(ta.values())
-            if near(v, P, 1e-6) and not _shb and not near(v, _box, 1e-6) and _box + 1e-6 >= max(v, 0.0) and _loss_day(w, d, led, live):
+            _rt = 1e-6 + 5e-7 * len(ta)            # 🔢 v3.28.1: نصيب كل مُراكِم ينحفظ مقرّب لـ6 مراتب (نص مليون من الدولار لكل واحد) ⇒ هالفرق تقريب، مو تناقض
+            if near(v, P, 1e-6) and not _shb and not near(v, _box, _rt) and _box + _rt >= max(v, 0.0) and _loss_day(w, d, led, live):
                 # 📉 v3.25.5: خسارة بنفس اليوم بعد ما الربح نزل (الصناديق ما تنقص) أو يوم خلص بالسالب (ماكو توزيع) — موضّحة، مو تناقض
                 lossd.append(f"{d} {(pb.get('wlab') or {}).get(w) or w or '؟'}: صافي البوتات {v:.6f}$ · نزل للصناديق {_box:.6f}$")
                 continue
-            if not near(v, P, 1e-6) or not near(v, _box, 1e-6) or _shb:
-                bad.append(f"{d} {(pb.get('wlab') or {}).get(w) or w or '؟'}: بوتات {v:.6f} / المحفظة {P:.6f} · نهائي {pf:.6f} + مُراكِمات {sum(ta.values()):.6f} {ta} مقابل {sh}")
+            if not near(v, P, 1e-6) or not near(v, _box, _rt) or _shb:
+                bad.append(f"{d} {(pb.get('wlab') or {}).get(w) or w or '؟'}: بوتات {v:.6f} / المحفظة {P:.6f} · نهائي {pf:.6f} + مُراكِمات {sum(ta.values()):.6f} "
+                           f"(الفرق {_box - v:+.6f}$) {ta} مقابل {sh}")
     out.append(("💰 دفتر الربح: لكل محفظة ويوم — ربح البوتات = المُراكِمات + الصندوق النهائي (بالسنت)", not bad,
                 ("كل الأيام المقيّدة متطابقة" if not bad else " · ".join(bad)[:900])
                 + (f" · 📉 {len(lossd)} يوم بيه خسارة (الصافي أقل من اللي نزل للصناديق قبلها، أو يوم خلص بالسالب ⇒ ماكو توزيع) — موضّحة بصفحة 📉 الخسائر: "
