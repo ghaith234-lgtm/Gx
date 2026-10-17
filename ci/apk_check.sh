@@ -27,15 +27,15 @@ API=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
 ssz=$(adb shell wm size | grep -oE "[0-9]+x[0-9]+" | tail -1); SW=${ssz%x*}; SH=${ssz#*x}
 say "android api $API · webview $(adb shell dumpsys package com.google.android.webview 2>/dev/null | grep -m1 versionName | tr -d '\r ')"
 adb logcat -c
-# ── start from the previous app (1.6 — taken from the v3.26.9 release commit) ⇒ the real update path to 1.7 (🔐 the fingerprint opens the dashboard · tone · lock · 120 fps) ──
-OLDC=a1ab0e958a9abccdda9526f2cc73ecc000178c3d
+# ── start from the previous app (1.7 — taken from the v3.27.0 release commit) ⇒ the real update path to 1.8 (📊 indicator alerts on their own channel · 🔐 fingerprint · tone · lock · 120 fps) ──
+OLDC=594cb5c4189a2c01437f6b888ad23233ea25bd46
 if git fetch -q --depth=1 origin $OLDC 2>/dev/null && git show FETCH_HEAD:Holy_Dashboard.pyw | python3 ci/ci_tools.py apk > old.apk 2>/dev/null && [ -s old.apk ]; then
   adb install old.apk 2>&1 | tail -1 | sed 's/^/HOLYCI install previous: /'
   adb shell dumpsys package $P | grep -m1 versionName | tr -d '\r' | sed 's/^/HOLYCI before update: /'
   adb shell am start -n $P/.MainActivity >/dev/null; sleep 8
   adb shell dumpsys notification --noredact | grep -oE "mId='(trade2|alert2|price|info|watch)'[^}]{0,40}" | sort -u | head -5 | sed 's/^/HOLYCI previous channel: /'
   adb shell am force-stop $P
-else say "INFO couldn't fetch the 1.6 app ⇒ fresh install only"; fi
+else say "INFO couldn't fetch the 1.7 app ⇒ fresh install only"; fi
 adb install -r holy.apk 2>&1 | tail -1 | sed 's/^/HOLYCI install: /'
 adb shell pm list packages | grep -q "$P" && say "PASS installed" || { say "FAIL install"; exit 1; }
 adb shell dumpsys package $P | grep -E "versionCode|versionName|targetSdk|signatures|pkgFlags" | head -6 | sed 's/^/HOLYCI pkg: /'
@@ -115,6 +115,16 @@ if [ -s $OUT/n14_ours.txt ]; then
   done
 else say "INFO couldn't cut our app's channel list out of dumpsys (1.3 channels were checked in the v3.26.7 runs)"; fi
 grep -B2 -A30 "PRICE1" $OUT/n14.txt | grep -oE "channel=[a-z0-9]+|mId='[a-z0-9]+'" | head -2 | sed 's/^/HOLYCI price notification: /'
+# ── 1.8: 📊 indicator alerts on their OWN channel «ind» (Holy tone · own group) — apart from 📈 prices (the owner: «تاتيني معا») ──
+api /api/app/devices '{"act":"test","sample":"ind","tag":"IND1"}' >/dev/null
+got IND1 30 && say "PASS 1.8: indicator test notification arrived" || say "FAIL 1.8: indicator test notification never arrived"
+adb shell dumpsys notification --noredact > $OUT/n18.txt
+line=$(grep -oE "mId='ind'.{0,700}" $OUT/n18.txt | head -1)
+echo "$line" | grep -q "mSound=android.resource://$P/" && say "PASS 1.8: channel ind («📊 تنبيهات المؤشرات») rings the Holy tone" || say "FAIL 1.8: channel ind: no Holy tone — $(echo "$line" | cut -c1-220)"
+ich=$(grep -B2 -A30 "IND1" $OUT/n18.txt | grep -oE "channel=[a-z0-9]+" | head -1)
+[ "$ich" = "channel=ind" ] && say "PASS 1.8: the indicator alert sits on channel «ind» (not «price»)" || say "FAIL 1.8: indicator alert channel: ${ich:-none}"
+pch=$(grep -B2 -A30 "PRICE1" $OUT/n18.txt | grep -oE "channel=[a-z0-9]+" | head -1)
+[ "$pch" = "channel=price" ] && say "PASS 1.8: price alerts still on «price»" || say "INFO 1.8: price alert channel now: ${pch:-gone from the shade}"
 adb shell dumpsys package $P | grep -E "versionName|versionCode" | head -2 | tr -d '\r' | sed 's/^/HOLYCI now: /'
 grep -q "android.title=Holy يراقب" $OUT/n13.txt && say "FAIL watcher line still says «Holy يراقب»" || say "PASS watcher line no longer says «يراقب»"
 grep -E "mId='watch'" $OUT/n13.txt | head -1 | cut -c1-240 | sed 's/^/HOLYCI watch channel: /'
