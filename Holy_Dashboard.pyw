@@ -16597,6 +16597,7 @@ button.warn{border-color:rgb(var(--amber-rgb)/.55);color:var(--amber);box-shadow
 .fc-r .fb{text-align:end;white-space:nowrap;font-size:11.5px;overflow:hidden;direction:ltr;unicode-bidi:isolate}
 .fc-r.v-su .fv,.fc-r.v-u .fv{color:var(--green)}.fc-r.v-sd .fv,.fc-r.v-d .fv{color:var(--red)}.fc-r.v-f .fv{color:var(--mut)}
 .fc-r.short{opacity:.7}
+@media(max-width:380px){.fc-r{grid-template-columns:38px minmax(0,1.2fr) minmax(0,1.3fr) 46px;gap:4px;padding:5px 5px;font-size:11.5px}.fc-r .fg{font-size:10.5px}.fc-r .fb{font-size:10.5px}.fc-r .fh{font-size:10.5px}}
 .fc-r.fc-hd{background:none;padding-top:0;padding-bottom:0;font-size:10.5px;color:var(--mut2);font-weight:600}
 .fc-r.fc-hd span{font-weight:600;font-size:10.5px;color:var(--mut2)}
 .fb.g{color:var(--green)}.fb.y{color:var(--amber)}.fb.n{color:var(--mut)}.fb.r{color:var(--red)}.fb.short{color:var(--mut2)}
