@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.28.1"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.29.0"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -10553,35 +10553,49 @@ def ind2_api():
     return v
 
 
-# ═══════════════ 🔮 v3.28.0: التوقعات — يوم · أسبوع · شهر · 3 أشهر (عرض بس · ولا إشعار · ولا أمر بالمنصة) ═══════════════
-#   لكل عملة بـ⚙️ «📈 شريط الأسعار» (قراءة عامة من OKX — شموع يوم UTC لحد ~5 سنين · بلا مفاتيح · بلا اشتراك):
-#   📺 تقييم TradingView «Technical Ratings» — نفس طريقتهم المنشورة (15 متوسط + 11 مذبذب ⇒ شراء قوي … بيع قوي) على اليومي والأسبوعي والشهري ·
-#   🔁 «أحداث سابقة» — خوارزمية: تدوّر بتاريخ نفس العملة على أكثر الأيام اللي تشبه اليوم (تقييم TradingView · الاتجاه · الزخم · التذبذب ·
-#      البعد عن القمة · بيتكوين) وتشوف شنو صار بعدها ⇒ احتمال الصعود + النطاق المتوقع (80%) لكل مدى ·
-#   🎯 «مقياس الصدق» — نفس الخوارزمية تنفحص على ماضي العملة يوم بيوم (ما تشوف المستقبل أبداً): كم مرة أصابت · هل النطاق صدق ·
-#      وهل هي أحسن من «صعود دائماً» — وسجل حي من لما تشتغل. ما بيها إشعارات ولا تلمس نظام الإشعارات.
-FC = {"ts": 0.0, "coins": {}, "order": [], "err": "", "fng": None}
+# ═══════════════ 🔮 v3.29.0: التوقعات — يوم · أسبوع · شهر · 3 أشهر (عرض بس · ولا إشعار · ولا أمر بالمنصة) ═══════════════
+#   نفس مؤشرات 📊 (_i2_series · _i2_signals — بلا أي تغيير بيها) بس على شموع أطول: يوم ← 4 ساعات · أسبوع ← يوم · شهر ← 3 أيام · 3 أشهر ← أسبوع
+#   + إضافات (حسابات بس — ولا برنامج ولا مكتبة): 🧠 Lorentzian (أقرب 8 حالات بمسافة لورنتز) · 〰️ Nadaraya-Watson (النسخة اللي ما تعيد رسم الماضي) ·
+#     😨 الخوف والطمع بأطرافه · 💸 التمويل (لليوم والأسبوع) · ⚡ انضغاط التذبذب (علامة بس: حركة كبيرة جاية واتجاهها ما ينعرف)
+#   لكل مدى: «شنو تكول المؤشرات» (كم صاعد من كم) + شارة صدقها على نفس العملة (فحص على ماضيها وهي ما تشوف المستقبل — مقابل الصدفة)
+#   + النطاق المتوقع 80% (يتعيّر على نص الماضي وينقاس على النص الثاني) + الدعم والمقاومة.
+#   🪶 خفيف: فحص الماضي ينحفظ (Holy_Forecast.json) ⇒ أول مرة بس يفحص التاريخ، وبعدها كل مرة الشموع الجديدة بس.
+import bisect, heapq
+FC = {"ts": 0.0, "coins": {}, "order": [], "err": ""}
 FC_FILE = os.path.join(ROOT, "Holy_Forecast.json")
-FC_H = (("d", "يوم", 1), ("w", "أسبوع", 7), ("m", "شهر", 30), ("q", "3 أشهر", 91))
-FC_MAX_DAYS = 2000               # ~5.5 سنين شموع يوم لكل عملة
-FC_EVERY = 1800                  # ⏱️ التوقع الحي كل نص ساعة · فحص الصدق مرة باليوم (لما تتسكّر شمعة يوم جديدة)
+FC_VER = 4                       # 🧮 نسخة الحساب — لو تتغيّر ينعاد فحص الماضي مرة وحدة
+FC_H = (("d", "يوم", "4H", 6, 1), ("w", "أسبوع", "1D", 7, 7), ("m", "شهر", "3D", 10, 30), ("q", "3 أشهر", "1W", 13, 91))   # (مفتاح · اسم · الشموع · كم شمعة قدّام · كم يوم)
+FC_TFS = {"4H": 4 * 3600, "1D": 86400, "3D": 3 * 86400, "1W": 7 * 86400}
+FC_TFN = {"4H": "4 ساعات", "1D": "يوم", "3D": "3 أيام", "1W": "أسبوع"}
+FC_TRD = {"d": "1D", "w": "1D", "m": "1W", "q": "1W"}     # 📈 الاتجاه العام: متوسط 200 يوم (يوم · أسبوع) · متوسط 200 أسبوع (شهر · 3 أشهر)
+FC_MAX_DAYS = 2000               # ~5.5 سنين شموع يوم
+FC_MAX_4H = 1500                 # ~250 يوم شموع 4 ساعات
+FC_BT = {"4H": (900, 2), "1D": (1500, 1), "3D": (650, 1), "1W": (280, 1)}   # 🎯 فحص الماضي: آخر كم شمعة · كل كم شمعة
+FC_MIN = {"4H": 260, "1D": 260, "3D": 120, "1W": 60}      # أقل شموع حتى ينحسب المدى
+FC_WARM = {"4H": 210, "1D": 210, "3D": 150, "1W": 110}     # 🎯 الفحص يبدي بعد كم شمعة (حتى المؤشرات تكتمل)
+FC_EVERY = 1800                  # ⏱️ كل نص ساعة
+FC_MOVE = 0.001                  # حركة أصغر من 0.1% = «ما تحرّك» (ما تنحسب صح ولا غلط)
 _FC_EPOCH = datetime(1970, 1, 1)     # يوم UTC بلا utcfromtimestamp (مهجورة من بايثون 3.12 وتطبع تحذير)
 _FC_RUN = {"busy": False}
-_FC_EVAL = {}                    # {sym: (آخر يوم مسكّر, {k: accuracy})}
-_FC_W = {   # وزن كل صفة بكل مدى: (tv_d, tv_w, tv_m, trend, cross, mom, rsi, vol, dd, btc, btcm)
-    "d": (1.6, 0.8, 0.4, 0.8, 0.5, 1.0, 1.2, 0.8, 0.6, 0.8, 0.6),
-    "w": (1.2, 1.4, 0.6, 1.0, 0.7, 1.0, 0.8, 0.8, 0.8, 0.8, 0.6),
-    "m": (0.6, 1.2, 1.2, 1.2, 1.0, 0.9, 0.5, 0.7, 1.0, 0.8, 0.5),
-    "q": (0.3, 0.8, 1.4, 1.4, 1.2, 0.7, 0.3, 0.6, 1.2, 0.7, 0.4),
-}
-_FC_K = {"d": 40, "w": 40, "m": 30, "q": 25}          # كم «حدث سابق» يتشابه
-_FC_TVL = ((0.5, "شراء قوي", "sb"), (0.1, "شراء", "b"), (-0.1, "محايد", "n"), (-0.5, "بيع", "s"), (-9, "بيع قوي", "ss"))
+_FC_X = [   # ➕ الإضافات (حسابات بس) — (مفتاح · الاسم · الأيقونة · شنو يفحص)
+    ("lc", "Lorentzian (أقرب الحالات)", "🧠", "يدوّر بماضي نفس العملة على أقرب 8 حالات تشبه هسه (RSI · CCI · WaveTrend · ADX) وشنو صار بعدها"),
+    ("nw", "Nadaraya-Watson", "〰️", "خط ناعم للسعر (النسخة اللي ما تعيد رسم الماضي) — طالع لو نازل"),
+    ("fng", "الخوف والطمع (بأطرافه)", "😨", "خوف شديد عادةً قريب من قاع · طمع شديد قريب من قمة — بالوسط ما يميل"),
+    ("fund", "التمويل (Funding)", "💸", "المشترين بالعقود يدفعون هواية ⇒ الشراء مزدحم (عكسه للبيع) — لليوم والأسبوع"),
+]
+_FC_NWW = [(1.0 + i * i / (2.0 * 8.0 * 8.0 * 8.0)) ** -8.0 for i in range(26)]   # 〰️ Rational Quadratic: نافذة 8 · وزن 8 · 25 شمعة
 
 
-def _fc_days_okx(sym, after=None, hist=True, limit=100):
-    """🕯️ شموع يوم UTC من OKX (الأحدث أول) ⇒ [[ts, o, h, l, c, v, مسكّرة؟]]"""
+def _fc_meta():
+    m = {k: (nm, ico, wh) for k, nm, ico, _, wh in _IND2_K}
+    m.update({k: (nm, ico, wh) for k, nm, ico, wh in _FC_X})
+    return m
+
+
+def _fc_okx_rows(sym, bar, after=None, hist=True, limit=100):
+    """🕯️ شموع OKX العامة (الأحدث أول) ⇒ [[ts, o, h, l, c, v, مسكّرة؟]]"""
     p = "/api/v5/market/history-candles" if hist else "/api/v5/market/candles"
-    r = _okx_pub(f"{p}?instId={sym}&bar=1Dutc&limit={limit}" + (f"&after={int(after)}" if after else ""))
+    r = _okx_pub(f"{p}?instId={sym}&bar={bar}&limit={limit}" + (f"&after={int(after)}" if after else ""))
     out = []
     try:
         if r and str(r.get("code")) == "0":
@@ -10595,9 +10609,10 @@ def _fc_days_okx(sym, after=None, hist=True, limit=100):
     return out
 
 
-def _fc_days_binance(sym, end_ms=None):
+def _fc_bin_rows(sym, interval, end_ms=None):
     """🛟 احتياط: Binance (للعملة اللي OKX ما رجّع شموعها) — الأقدم أول"""
-    u = "https://api.binance.com/api/v3/klines?symbol=" + sym.replace("-", "") + "&interval=1d&limit=1000" + (f"&endTime={int(end_ms)}" if end_ms else "")
+    u = ("https://api.binance.com/api/v3/klines?symbol=" + sym.replace("-", "") + f"&interval={interval}&limit=1000"
+         + (f"&endTime={int(end_ms)}" if end_ms else ""))
     j = _http_json(u, timeout=12)
     out = []
     try:
@@ -10614,32 +10629,32 @@ def _fc_db():
     return db if isinstance(db, dict) else {}
 
 
-def fc_candles(sym, db):
-    """شموع اليوم المسكّرة (الأقدم أول · محفوظة بـHoly_Forecast.json وتتحدث بالجديد بس) + شمعة اليوم الحالية (لسه تتكوّن)"""
-    e = db.setdefault("c", {}).setdefault(sym, {})
+def _fc_cache(sym, db, sec, bar, ibin, maxn):
+    """شموع مسكّرة (الأقدم أول · محفوظة وتتحدث بالجديد بس — التاريخ كله أول مرة صفحة صفحة) + الشمعة الحالية (لسه تتكوّن)"""
+    e = db.setdefault(sec, {}).setdefault(sym, {})
+    step = FC_TFS["4H"] if sec == "c4" else 86400
     rows = [list(x) for x in e.get("d") or []]
     live = None
-    recent = _fc_days_okx(sym, hist=False, limit=100)
+    recent = _fc_okx_rows(sym, bar, hist=False, limit=100)
     src = "okx"
     if not recent and not rows:
-        recent = _fc_days_binance(sym)
-        recent = list(reversed(recent))
+        recent = list(reversed(_fc_bin_rows(sym, ibin)))
         src = "binance"
     for c in recent:
         if not c[6]:
             live = c[:6]
     done = sorted({c[0]: c[:6] for c in recent if c[6]}.items())
     have = {r[0] for r in rows}
-    need_back = not rows or (done and done[0][0] > (rows[-1][0] if rows else 0) + 86400)
+    need_back = not rows or (done and done[0][0] > (rows[-1][0] if rows else 0) + step)
     for ts, c in done:
         if ts not in have:
             rows.append(c)
     rows.sort()
-    if need_back and src == "okx":                          # أول مرة (أو اللوحة طافية أكثر من 100 يوم) ⇒ التاريخ كله صفحة صفحة
+    if need_back and src == "okx":                          # أول مرة (أو اللوحة طافية أطول من 100 شمعة) ⇒ التاريخ صفحة صفحة
         rows = [list(c) for _, c in done]
         oldest = rows[0][0] if rows else None
-        while oldest and len(rows) < FC_MAX_DAYS:
-            pg = _fc_days_okx(sym, after=oldest * 1000, hist=True, limit=100)
+        while oldest and len(rows) < maxn:
+            pg = _fc_okx_rows(sym, bar, after=oldest * 1000, hist=True, limit=100)
             pg = [c[:6] for c in pg if c[6] and c[0] < oldest]
             if not pg:
                 break
@@ -10648,613 +10663,510 @@ def fc_candles(sym, db):
             time.sleep(0.25)                                # حد OKX العام
     elif need_back and src == "binance":
         rows = [list(c) for _, c in done]
-        while rows and len(rows) < FC_MAX_DAYS:
-            pg = [c[:6] for c in _fc_days_binance(sym, end_ms=rows[0][0] * 1000 - 1) if c[6] and c[0] < rows[0][0]]
+        while rows and len(rows) < maxn:
+            pg = [c[:6] for c in _fc_bin_rows(sym, ibin, end_ms=rows[0][0] * 1000 - 1) if c[6] and c[0] < rows[0][0]]
             if not pg:
                 break
             rows = sorted(pg) + rows
             time.sleep(0.25)
-    rows = rows[-FC_MAX_DAYS:]
+    rows = rows[-maxn:]
     if rows:
         e["d"] = [[int(r[0])] + [float(f"{x:.10g}") for x in r[1:6]] for r in rows]
         e["src"] = src
     return rows, live
 
 
-# ── 📺 TradingView «Technical Ratings» — نفس طريقتهم المنشورة: كل مؤشر شراء (+1) · بيع (−1) · محايد (0) ⇒ معدل المتوسطات · معدل المذبذبات · الكل ──
-def _fc_sma(v, n):
-    out, s = [None] * len(v), 0.0
-    for i, x in enumerate(v):
-        s += x
-        if i >= n:
-            s -= v[i - n]
-        if i >= n - 1:
-            out[i] = s / n
+def fc_candles(sym, db):
+    """🕯️ شموع اليوم UTC (لحد ~5.5 سنين)"""
+    return _fc_cache(sym, db, "c", "1Dutc", "1d", FC_MAX_DAYS)
+
+
+def fc_candles4(sym, db):
+    """🕯️ شموع 4 ساعات (لحد ~250 يوم) — لمدى اليوم"""
+    return _fc_cache(sym, db, "c4", "4H", "4h", FC_MAX_4H)
+
+
+def _fc_group(rows, live, nd, off):
+    """شموع 3 أيام (من 1970 مثل OKX) أو أسبوع (يبدي الاثنين UTC) من اليومي ⇒ (المسكّرة, الحالية)"""
+    gs = []
+    for r, ok in [(r, True) for r in rows] + ([(live, False)] if live else []):
+        k = (int(r[0]) // 86400 + off) // nd
+        if gs and gs[-1][0] == k:
+            g = gs[-1][1]
+            g[2] = max(g[2], r[2]); g[3] = min(g[3], r[3]); g[4] = r[4]; g[5] += r[5]
+            gs[-1][2] += 1
+            gs[-1][3] = gs[-1][3] and ok
+        else:
+            gs.append([k, [int(r[0]), r[1], r[2], r[3], r[4], r[5]], 1, ok])
+    if gs and gs[0][2] < nd and gs[0][3]:
+        gs.pop(0)                                           # أول مجموعة ناقصة (التاريخ يبدي بنصها)
+    done = [g[1] for g in gs if g[2] == nd and g[3]]
+    cur = gs[-1][1] if gs and not (gs[-1][2] == nd and gs[-1][3]) else None
+    return done, cur
+
+
+def _fc_ema(v, n):
+    """EMA يتحمّل الفراغات (يبدي من أول قيمة)"""
+    out, e, k = [], None, 2.0 / (n + 1.0)
+    for x in v:
+        if x is None:
+            out.append(e)
+            continue
+        e = x if e is None else x * k + e * (1 - k)
+        out.append(e)
     return out
 
 
-def _fc_wma(v, n):
-    out, d = [None] * len(v), n * (n + 1) / 2.0
-    for i in range(n - 1, len(v)):
-        out[i] = sum(v[i - n + 1 + j] * (j + 1) for j in range(n)) / d
-    return out
-
-
-def _fc_hl(H, L, n, i):
-    return max(H[i - n + 1:i + 1]), min(L[i - n + 1:i + 1])
-
-
-def _fc_tv_series(O, H, L, C, V):
-    """📺 لكل شمعة: (الكل, المتوسطات, المذبذبات, [شراء, بيع, محايد] للمتوسطات, [..] للمذبذبات) — None قبل ما يكفي التاريخ"""
+def _fc_lcf(D, S):
+    """🧠 صفات Lorentzian لكل شمعة (كلها 0..1): RSI 14 · RSI 9 · CCI 20 · WaveTrend · ADX"""
+    C, H, L = D["c"], D["h"], D["l"]
     n = len(C)
-    if n < 30:
-        return [None] * n
-    mas = [_fc_sma(C, k) for k in (10, 20, 30, 50, 100, 200)] + [_i2_ema(C, k) if n >= k else [None] * n for k in (10, 20, 30, 50, 100, 200)]
-    pv = [c * v for c, v in zip(C, V)]
-    sp, sv = _fc_sma(pv, 20), _fc_sma(V, 20)
-    vwma = [(a / b if (a is not None and b) else None) for a, b in zip(sp, sv)]
-    w1, w2 = _fc_wma(C, 4), _fc_wma(C, 9)                    # Hull 9: WMA(2·WMA(4) − WMA(9), 3)
-    raw = [(2 * a - b) if (a is not None and b is not None) else 0.0 for a, b in zip(w1, w2)]
-    hma = _fc_wma(raw, 3)
-    hma = [x if (i >= 11) else None for i, x in enumerate(hma)]
-    S = _i2_series(O, H, L, C, V)
-    rsi, adx, pdi, ndi = S["rsi"], S["adx"], S["pdi"], S["ndi"]
-    e12, e26 = _i2_ema(C, 12), _i2_ema(C, 26)
-    macd = [(a - b) if (a is not None and b is not None) else None for a, b in zip(e12, e26)]
-    mv = [x for x in macd if x is not None]
-    msig = [None] * (n - len(mv)) + (_i2_ema(mv, 9) if len(mv) >= 9 else [None] * len(mv))
-    e50, e13 = _i2_ema(C, 50) if n >= 50 else [None] * n, _i2_ema(C, 13)
-    kraw = [None] * n
-    for i in range(13, n):
-        hh, ll = _fc_hl(H, L, 14, i)
-        kraw[i] = 100 * (C[i] - ll) / (hh - ll) if hh > ll else 50.0
-    kv = [x for x in kraw if x is not None]
-    k3 = [None] * (n - len(kv)) + _fc_sma(kv, 3)
-    k3v = [x for x in k3 if x is not None]
-    d3 = [None] * (n - len(k3v)) + _fc_sma(k3v, 3)
-    tp = [(h + l + c) / 3 for h, l, c in zip(H, L, C)]
-    tps = _fc_sma(tp, 20)
+    up = [max(C[i] - C[i - 1], 0.0) for i in range(1, n)]
+    dn = [max(C[i - 1] - C[i], 0.0) for i in range(1, n)]
+    au, ad = _i2_wilder(up, 9), _i2_wilder(dn, 9)
+    r9 = [None] + [(None if a is None else (100.0 if b <= 1e-12 and a > 0 else 50.0 if b <= 1e-12 else 100 - 100 / (1 + a / b))) for a, b in zip(au, ad)]
+    tp = [(H[i] + L[i] + C[i]) / 3.0 for i in range(n)]
     cci = [None] * n
     for i in range(19, n):
-        md = sum(abs(x - tps[i]) for x in tp[i - 19:i + 1]) / 20
-        cci[i] = (tp[i] - tps[i]) / (0.015 * md) if md > 0 else 0.0
-    mp = [(h + l) / 2 for h, l in zip(H, L)]
-    s5, s34 = _fc_sma(mp, 5), _fc_sma(mp, 34)
-    ao = [(a - b) if (a is not None and b is not None) else None for a, b in zip(s5, s34)]
-    mom = [None] * 10 + [C[i] - C[i - 10] for i in range(10, n)]
-    rv = [x if x is not None else 50.0 for x in rsi]
-    srk = [None] * n
-    for i in range(27, n):
-        w = rv[i - 13:i + 1]
-        hi, lo = max(w), min(w)
-        srk[i] = 100 * (rv[i] - lo) / (hi - lo) if hi > lo else 50.0
-    sv_ = [x for x in srk if x is not None]
-    srk3 = [None] * (n - len(sv_)) + _fc_sma(sv_, 3)
-    s3v = [x for x in srk3 if x is not None]
-    srd3 = [None] * (n - len(s3v)) + _fc_sma(s3v, 3)
-    wr = [None] * n
-    for i in range(13, n):
-        hh, ll = _fc_hl(H, L, 14, i)
-        wr[i] = -100 * (hh - C[i]) / (hh - ll) if hh > ll else -50.0
-    bull = [(h - e) if e is not None else None for h, e in zip(H, e13)]
-    bear = [(l - e) if e is not None else None for l, e in zip(L, e13)]
-    bp = [0.0] + [C[i] - min(L[i], C[i - 1]) for i in range(1, n)]
-    trr = [H[0] - L[0]] + [max(H[i], C[i - 1]) - min(L[i], C[i - 1]) for i in range(1, n)]
-    uo = [None] * n
-    for i in range(28, n):
-        a = [sum(bp[i - k + 1:i + 1]) / max(1e-12, sum(trr[i - k + 1:i + 1])) for k in (7, 14, 28)]
-        uo[i] = 100 * (4 * a[0] + 2 * a[1] + a[2]) / 7
-    conv = [None] * n
-    base_ = [None] * n
+        w = tp[i - 19:i + 1]
+        m = sum(w) / 20.0
+        md = sum(abs(x - m) for x in w) / 20.0
+        cci[i] = (tp[i] - m) / (0.015 * md) if md > 0 else 0.0
+    esa = _fc_ema(tp, 10)
+    dd = _fc_ema([abs(a - b) for a, b in zip(tp, esa)], 10)
+    ci = [((a - b) / (0.015 * c)) if c else 0.0 for a, b, c in zip(tp, esa, dd)]
+    wt = _fc_ema(ci, 11)
+    rs, ax = S["rsi"], S["adx"]
+    out = []
     for i in range(n):
-        if i >= 8:
-            hh, ll = _fc_hl(H, L, 9, i)
-            conv[i] = (hh + ll) / 2
-        if i >= 25:
-            hh, ll = _fc_hl(H, L, 26, i)
-            base_[i] = (hh + ll) / 2
-    spanb = [None] * n
-    for i in range(51, n):
-        hh, ll = _fc_hl(H, L, 52, i)
-        spanb[i] = (hh + ll) / 2
-    out = [None] * n
-    for i in range(1, n):
-        c = C[i]
-        mr = []
-        for m in mas + [vwma, hma]:
-            if m[i] is not None:
-                mr.append(1 if m[i] < c else -1 if m[i] > c else 0)
-        j = i - 25                                          # 🌥️ Ichimoku: السحابة المرسومة اليوم (محسوبة قبل 26 شمعة) — فوقها والتحويل فوق الأساس = شراء
-        if base_[i] is not None and conv[i] is not None and j >= 51 and spanb[j] is not None and conv[j] is not None and base_[j] is not None:
-            la, lb = (conv[j] + base_[j]) / 2, spanb[j]
-            mr.append(1 if (c > max(la, lb) and conv[i] > base_[i]) else -1 if (c < min(la, lb) and conv[i] < base_[i]) else 0)
-        orr = []
-        if rsi[i] is not None and rsi[i - 1] is not None:
-            orr.append(1 if rsi[i] < 30 and rsi[i] > rsi[i - 1] else -1 if rsi[i] > 70 and rsi[i] < rsi[i - 1] else 0)
-        if k3[i] is not None and d3[i] is not None and k3[i - 1] is not None and d3[i - 1] is not None:
-            orr.append(1 if (k3[i] < 20 and d3[i] < 20 and k3[i] > d3[i] and k3[i - 1] <= d3[i - 1]) else
-                       -1 if (k3[i] > 80 and d3[i] > 80 and k3[i] < d3[i] and k3[i - 1] >= d3[i - 1]) else 0)
-        if cci[i] is not None and cci[i - 1] is not None:
-            orr.append(1 if cci[i] < -100 and cci[i] > cci[i - 1] else -1 if cci[i] > 100 and cci[i] < cci[i - 1] else 0)
-        if adx[i] is not None and adx[i - 1] is not None and pdi[i] is not None and ndi[i] is not None:
-            up_ = adx[i] > 20 and adx[i] > adx[i - 1]
-            orr.append(1 if (pdi[i] > ndi[i] and up_) else -1 if (pdi[i] < ndi[i] and up_) else 0)
-        if ao[i] is not None and ao[i - 1] is not None:
-            a2 = ao[i - 2] if i >= 2 else None
-            sauc_b = a2 is not None and ao[i] > 0 and ao[i - 1] < a2 and ao[i] > ao[i - 1]
-            sauc_s = a2 is not None and ao[i] < 0 and ao[i - 1] > a2 and ao[i] < ao[i - 1]
-            orr.append(1 if (sauc_b or (ao[i - 1] < 0 <= ao[i])) else -1 if (sauc_s or (ao[i - 1] > 0 >= ao[i])) else 0)
-        if mom[i] is not None and mom[i - 1] is not None:
-            orr.append(1 if mom[i] > mom[i - 1] else -1 if mom[i] < mom[i - 1] else 0)
-        if macd[i] is not None and msig[i] is not None:
-            orr.append(1 if macd[i] > msig[i] else -1 if macd[i] < msig[i] else 0)
-        if srk3[i] is not None and srd3[i] is not None and srk3[i - 1] is not None and srd3[i - 1] is not None and e50[i] is not None:
-            dn_, upt = c < e50[i], c > e50[i]
-            orr.append(1 if (dn_ and srk3[i] < 20 and srd3[i] < 20 and srk3[i] > srd3[i] and srk3[i - 1] <= srd3[i - 1]) else
-                       -1 if (upt and srk3[i] > 80 and srd3[i] > 80 and srk3[i] < srd3[i] and srk3[i - 1] >= srd3[i - 1]) else 0)
-        if wr[i] is not None and wr[i - 1] is not None:
-            orr.append(1 if wr[i] < -80 and wr[i] > wr[i - 1] else -1 if wr[i] > -20 and wr[i] < wr[i - 1] else 0)
-        if bear[i] is not None and bear[i - 1] is not None and e50[i] is not None:
-            orr.append(1 if (c > e50[i] and bear[i] < 0 and bear[i] > bear[i - 1]) else
-                       -1 if (c < e50[i] and bull[i] > 0 and bull[i] < bull[i - 1]) else 0)
-        if uo[i] is not None:
-            orr.append(1 if uo[i] > 70 else -1 if uo[i] < 30 else 0)
-        if len(mr) < 4 or len(orr) < 4:
+        if i < 40 or rs[i] is None or r9[i] is None or cci[i] is None or ax[i] is None:
+            out.append(None)
             continue
-        ma, osc = sum(mr) / len(mr), sum(orr) / len(orr)
-        out[i] = ((ma + osc) / 2, ma, osc, [mr.count(1), mr.count(-1), mr.count(0)], [orr.count(1), orr.count(-1), orr.count(0)])
+        out.append((rs[i] / 100.0, r9[i] / 100.0, (math.tanh(cci[i] / 150.0) + 1) / 2, (math.tanh((wt[i] or 0.0) / 60.0) + 1) / 2, ax[i] / 100.0))
     return out
 
 
-def _fc_tvtxt(v):
-    for th, tx, k in _FC_TVL:
-        if v > th:
-            return tx, k
-    return "بيع قوي", "ss"
+def _fc_lc(P, t, H, k=8, step=4, back=2000):
+    """🧠 Lorentzian: أقرب 8 حالات بالماضي (كل 4 شموع · نتيجتها معروفة وقت t) ⇒ كم منها صعدت بعد H شمعة (−1..+1)"""
+    F, C = P["lcf"], P["D"]["c"]
+    ft = F[t] if t < len(F) else None
+    if ft is None:
+        return None
+    j0 = max(0, t - back)
+    j0 += (-j0) % step
+    best = []
+    lg = math.log1p
+    for j in range(j0, t - H + 1, step):
+        fj = F[j]
+        if fj is None:
+            continue
+        d = lg(abs(ft[0] - fj[0])) + lg(abs(ft[1] - fj[1])) + lg(abs(ft[2] - fj[2])) + lg(abs(ft[3] - fj[3])) + lg(abs(ft[4] - fj[4]))
+        lab = 1 if C[j + H] > C[j] else -1
+        if len(best) < k:
+            heapq.heappush(best, (-d, lab))
+        elif d < -best[0][0]:
+            heapq.heapreplace(best, (-d, lab))
+    if len(best) < k:
+        return None
+    return sum(x[1] for x in best) / float(k)
 
 
-def _fc_group(rows, kind):
-    """شموع أسبوعية (الاثنين UTC مثل TradingView) أو شهرية من اليومي — الأقدم أول: (ts, o, h, l, c, v, آخر فهرس يومي)"""
-    out, key = [], None
-    for i, r in enumerate(rows):
-        d = _FC_EPOCH + timedelta(seconds=r[0])
-        k = (d.isocalendar()[0], d.isocalendar()[1]) if kind == "w" else (d.year, d.month)
-        if k != key:
-            out.append([r[0], r[1], r[2], r[3], r[4], r[5], i])
-            key = k
-        else:
-            g = out[-1]
-            g[2], g[3], g[4], g[5], g[6] = max(g[2], r[2]), min(g[3], r[3]), r[4], g[5] + r[5], i
+def _fc_nw(C):
+    """〰️ Nadaraya-Watson (Rational Quadratic) لكل شمعة — من الشموع اللي قبلها بس (ما يعيد الرسم)"""
+    out = [None] * len(C)
+    sw = sum(_FC_NWW)
+    for t in range(25, len(C)):
+        out[t] = sum(w * C[t - i] for i, w in enumerate(_FC_NWW)) / sw
     return out
 
 
-def _fc_features(rows, btc=None):
-    """صفات كل يوم (من شموعه لحد ذاك اليوم بس): TradingView يومي/أسبوعي/شهري · الاتجاه · تقاطع 50/200 · الزخم · RSI · التذبذب · البعد عن القمة · بيتكوين"""
-    O, H, L, C, V = ([r[j] for r in rows] for j in range(1, 6))
-    n = len(C)
-    tvd = _fc_tv_series(O, H, L, C, V)
-    res = {"tvd": tvd}
-    for kind in ("w", "m"):
-        g = _fc_group(rows, kind)
-        tvg = _fc_tv_series([x[1] for x in g], [x[2] for x in g], [x[3] for x in g], [x[4] for x in g], [x[5] for x in g])
-        idx = [None] * n                                     # لكل يوم: آخر شمعة أسبوعية/شهرية «مسكّرة» لحد ذاك اليوم (الحالية ناقصة ⇒ اللي قبلها)
-        for gi, x in enumerate(g):
-            s0 = g[gi - 1][6] + 1 if gi else 0
-            e0 = x[6]
-            for i in range(s0, e0 + 1):
-                idx[i] = gi - 1 if gi else None
-            de = _FC_EPOCH + timedelta(seconds=rows[e0][0])
-            if (kind == "w" and de.weekday() == 6) or (kind == "m" and (de + timedelta(days=1)).month != de.month):
-                idx[e0] = gi                                 # آخر يوم بالأسبوع/الشهر ⇒ تسكّرت بنهايته
-        res["tv" + kind] = [(tvg[j] if j is not None else None) for j in idx]
-        res["g" + kind] = g
-        res["tvg" + kind] = tvg
-    e50 = _i2_ema(C, 50) if n >= 50 else [None] * n
-    e200 = _i2_ema(C, 200) if n >= 200 else ([None] * n)
-    lr = [0.0] + [math.log(C[i] / C[i - 1]) if C[i - 1] > 0 else 0.0 for i in range(1, n)]
-    vol = [None] * n
-    for i in range(30, n):
-        w = lr[i - 29:i + 1]
-        mu = sum(w) / 30
-        vol[i] = math.sqrt(sum((x - mu) ** 2 for x in w) / 29) or 1e-6
-    S = _i2_series(O, H, L, C, V)
-    bt = {}
-    if btc:
-        bm = {r[0]: r[4] for r in btc}
-        bc = [bm.get(r[0]) for r in rows]
-        last = None
-        for i in range(n):                                  # يوم ناقص ببيتكوين ⇒ آخر سعر معروف
-            if bc[i] is None:
-                bc[i] = last
-            last = bc[i]
-        if all(x is not None for x in bc[200:]):
-            be = _i2_ema([x or 0.0 for x in bc], 200)
-            bt = {"c": bc, "e200": be}
-    X = [None] * n
-    for i in range(n):
-        if i < 220 or tvd[i] is None or e200[i] is None or vol[i] is None:
+def _fc_sq(D, S):
+    """⚡ انضغاط التذبذب: Bollinger (20 · 2) داخل Keltner (20 · 1.5×ATR) ⇒ هدوء قبل حركة كبيرة"""
+    C, atr = D["c"], S["atr"]
+    out = [False] * len(C)
+    for i in range(19, len(C)):
+        w = C[i - 19:i + 1]
+        m = sum(w) / 20.0
+        sd = math.sqrt(sum((x - m) ** 2 for x in w) / 20.0)
+        out[i] = bool(atr[i]) and 2.0 * sd < 1.5 * atr[i]
+    return out
+
+
+def _fc_pack(rows, trows, dx, dtr):
+    """كل السلاسل لشموع مدى واحد (مرة وحدة): 📊 _i2_series + الاتجاه (من شموع الاتجاه المسكّرة وقتها) + Lorentzian + NW + الانضغاط"""
+    D = {"t": [int(r[0]) for r in rows], "o": [r[1] for r in rows], "h": [r[2] for r in rows], "l": [r[3] for r in rows],
+         "c": [r[4] for r in rows], "v": [r[5] for r in rows]}
+    S = _i2_series(D["o"], D["h"], D["l"], D["c"], D["v"])
+    tt = [int(r[0]) for r in trows]
+    tc = [r[4] for r in trows]
+    e200 = _i2_ema(tc, 200) if len(tc) >= 200 else (_i2_ema(tc, 100) if len(tc) >= 100 else [None] * len(tc))   # فترة ثابتة ⇒ ولا نظرة للمستقبل
+
+    def _idx(ts, tt=tt, sh=dx - dtr):
+        j = bisect.bisect_right(tt, ts + sh) - 1          # آخر شمعة اتجاه مسكّرة لما تتسكّر شمعة ts
+        return j if j >= 0 else None
+    T = {"e50": _i2_ema(tc, 50) if len(tc) >= 50 else [None] * len(tc), "e200": e200, "idx": _idx}
+    return {"D": D, "S": S, "T": T, "lcf": _fc_lcf(D, S), "nw": _fc_nw(D["c"]), "sq": _fc_sq(D, S), "dx": dx}
+
+
+def _fc_at(ts_list, vals, t_close):
+    """آخر قيمة منشورة قبل ما تتسكّر الشمعة"""
+    j = bisect.bisect_right(ts_list, t_close - 1) - 1
+    return vals[j] if j >= 0 else None
+
+
+def _fc_read(P, t, k, X):
+    """📋 قراءة كل المؤشرات عند الشمعة t لمدى k ⇒ ({مفتاح: (إشارة −1..+1, سطر)}, المستويات) — نفس الدالة للحاضر وللفحص على الماضي"""
+    D, S = P["D"], P["S"]
+    sig, lv = _i2_signals(D, S, t, P["T"], None, None, None)    # 📊 نفسها (بلا صفقات لحظية ولا دفتر أوامر)
+    if k != "d":
+        sig.pop("of", None)                                  # 🌊 صفقات الساعات — ما تعني شي لأسبوع وشهر
+    elif "of" in sig:
+        sig["of"] = (sig["of"][0], "تقدير من الشموع: " + ("الشراء" if sig["of"][0] >= 0 else "البيع") + " أقوى آخر 4 أيام")
+    if S["st"][t] is not None:                               # 🟩 مدة Supertrend بالأيام (نص 📊 مكتوب للساعات)
+        kk = 0
+        while t - kk - 1 >= 0 and S["st"][t - kk - 1] == S["st"][t]:
+            kk += 1
+        dd = (kk + 1) * P["dx"] / 86400.0
+        sig["st"] = (sig["st"][0], f"{'أخضر (صعود)' if S['st'][t] > 0 else 'أحمر (نزول)'} من {('%.0f' % dd) if dd >= 1 else '<1'} يوم · خطّه {_i2_f(S['stl'][t])}")
+    H = X["H"]
+    lc = _fc_lc(P, t, H)
+    if lc is not None:
+        sig["lc"] = (lc, f"أقرب 8 حالات: {round((lc + 1) * 4)} صعدت · {8 - round((lc + 1) * 4)} نزلت بعد {X['hn']}")
+    nw = P["nw"]
+    if t >= 1 and nw[t] is not None and nw[t - 1] is not None:
+        s = 1.0 if nw[t] > nw[t - 1] else -1.0
+        atr = S["atr"][t] or 0.0
+        px = D["c"][t]
+        ex = " · السعر ممطوط فوق الخط (ممكن يرجع)" if atr and px > nw[t] + 2.5 * atr else (" · السعر ممطوط جوه الخط (ممكن يرتد)" if atr and px < nw[t] - 2.5 * atr else "")
+        sig["nw"] = (s, f"الخط الناعم {'طالع' if s > 0 else 'نازل'} ({_i2_f(nw[t])}){ex}")
+    tcl = D["t"][t] + P["dx"]
+    if X.get("fng"):
+        v = _fc_at(X["fng"][0], X["fng"][1], tcl)
+        if v is not None:
+            s = 1.0 if v <= 20 else 0.4 if v <= 30 else -1.0 if v >= 80 else -0.4 if v >= 70 else 0.0
+            sig["fng"] = (s, f"{v} — " + ("خوف شديد (عادةً قريب من قاع)" if v <= 20 else "خوف" if v <= 30 else "طمع شديد (عادةً قريب من قمة)" if v >= 80 else "طمع" if v >= 70 else "بالوسط (ما يميل)"))
+    if k in ("d", "w") and X.get("fund"):
+        ft, fv = X["fund"]
+        j = bisect.bisect_right(ft, tcl - 1)
+        if j >= 3 and tcl - ft[j - 1] < 2 * 86400:
+            r = sum(fv[j - 3:j]) / 3.0
+            s = -1.0 if r >= 0.0003 else -0.4 if r >= 0.00015 else 1.0 if r <= -0.0001 else 0.4 if r < 0 else 0.0
+            sig["fund"] = (s, f"{r * 100:+.3f}% كل 8 ساعات — " + ("الشراء مزدحم" if s < 0 else "البيع مزدحم" if s > 0 else "عادي"))
+    return sig, lv
+
+
+def _fc_vote(sig):
+    """🗳️ كم مؤشر صاعد · نازل · محايد ⇒ الحكم"""
+    up = sum(1 for s, _ in sig.values() if s >= 0.15)
+    dn = sum(1 for s, _ in sig.values() if s <= -0.15)
+    n = len(sig)
+    fr = (up - dn) / n if n else 0.0
+    vk, vt = (("su", "⬆️ صعود قوي") if fr >= 0.5 else ("u", "↗️ يميل للصعود") if fr >= 0.2 else
+              ("sd", "⬇️ نزول قوي") if fr <= -0.5 else ("d", "↘️ يميل للنزول") if fr <= -0.2 else ("f", "↔️ محايد"))
+    return up, dn, n, vk, vt
+
+
+def _fc_grade(a, u, H, sec):
+    """🎯 صدق القراءة مقابل الصدفة (نفس خلطة صعود/نزول) · الفترات المستقلة من مدة فحصها هي (التمويل تاريخه 3 أشهر بس): 🟢 · 🟡 · ⚪ · 🔴 · ⏳"""
+    a = a or [0, 0, 0, 0, 0, 0]
+    cu, cd, hu, hd = a[:4]
+    calls = cu + cd
+    if calls < 20:
+        return {"g": "short", "n": calls}
+    indep = max(1, int((a[5] - a[4]) / sec / H)) if len(a) > 5 and a[4] else 1
+    hit = (hu + hd) / calls * 100.0
+    ch = (cu * u + cd * (1.0 - u)) / calls * 100.0
+    edge = hit - ch
+    neff = max(1, min(calls, indep))
+    se = 50.0 / math.sqrt(neff)
+    g = ("short" if neff < 8 else "g" if (edge >= max(5.0, 2 * se) and hit >= 55) else "y" if edge >= max(2.0, 1.5 * se)
+         else "r" if edge <= -max(2.0, 1.5 * se) else "n")       # 🟡/🔴 بس لو الفرق أكبر من الصدفة بوضوح (1.5 انحراف) · 🟢 انحرافين و55%+
+    return {"g": g, "hit": round(hit), "n": calls, "ch": round(ch), "edge": round(edge, 1), "neff": int(neff)}
+
+
+def _fc_bt(db, sym, k, tf, P, X, nc):
+    """🎯 فحص الماضي (بلا نظر للمستقبل): كل شمعة مسكّرة ⇒ قراءة المؤشرات وقتها ⇒ صح لو السعر بعد H شمعة راح باتجاهها.
+    ينحفظ ويكمّل من آخر شمعة انفحصت ⇒ أول مرة بس ثقيل شوية، بعدها بس الشموع الجديدة."""
+    B = db.setdefault("bt", {}).setdefault(sym, {})
+    e = B.get(k)
+    if not e or e.get("v") != FC_VER:
+        e = {"v": FC_VER, "last": 0, "first": 0, "a": {}, "N": 0, "U": 0, "sq": [0.0, 0, 0.0, 0]}
+    D = P["D"]
+    C, T = D["c"], D["t"]
+    H = X["H"]
+    mx, step = FC_BT[tf]
+    sec = FC_TFS[tf]
+    t_lo = max(FC_WARM[tf], nc - mx)
+    cnt = 0
+    for t in range(t_lo, nc - H):                           # نتيجتها (بعد H شمعة) شمعة مسكّرة
+        if T[t] <= e["last"] or (T[t] // sec) % step:
             continue
-        tw, tm = res["tvw"][i], res["tvm"][i]
-        vh = [v for v in vol[max(30, i - 364):i + 1] if v]
-        vmed = sorted(vh)[len(vh) // 2] if vh else vol[i]
-        hi = max(C[max(0, i - 364):i + 1])
-        f = [tvd[i][0], tw[0] if tw else 0.0, tm[0] if tm else 0.0,
-             max(-1.0, min(1.0, math.log(C[i] / e200[i]))), max(-0.5, min(0.5, (e50[i] - e200[i]) / e200[i])),
-             max(-1.0, min(1.0, math.log(C[i] / C[i - 30]))), ((S["rsi"][i] or 50.0) - 50) / 50,
-             max(-1.5, min(1.5, math.log(vol[i] / vmed))) if vmed else 0.0, C[i] / hi - 1 if hi else 0.0]
-        if bt and bt["e200"][i] and bt["c"][i] and bt["c"][i - 30]:
-            f += [max(-1.0, min(1.0, math.log(bt["c"][i] / bt["e200"][i]))), max(-1.0, min(1.0, math.log(bt["c"][i] / bt["c"][i - 30])))]
-        else:
-            f += [0.0, 0.0]
-        X[i] = f
-    res.update(X=X, vol=vol, e50=e50, e200=e200, rsi=S["rsi"], C=C)
-    return res
-
-
-def _fc_scale(X, upto):
-    """توحيد المقياس (كل صفة ÷ تشتتها) — من الأيام لحد upto بس"""
-    cols = [x for x in X[:upto + 1] if x]
-    if len(cols) < 30:
-        return None
-    m = len(cols[0])
-    sd = []
-    for j in range(m):
-        v = [x[j] for x in cols]
-        mu = sum(v) / len(v)
-        s = math.sqrt(sum((a - mu) ** 2 for a in v) / len(v))
-        sd.append(s if s > 1e-9 else 1.0)
-    return sd
-
-
-def _fc_wq(pairs, q):
-    """كمّية موزونة: pairs = [(قيمة, وزن)]"""
-    pairs = sorted(pairs)
-    tot = sum(w for _, w in pairs) or 1.0
-    acc = 0.0
-    for v, w in pairs:
-        acc += w
-        if acc >= q * tot:
-            return v
-    return pairs[-1][0] if pairs else 0.0
-
-
-def _fc_predict(F, t, k, h, sd=None, btc=True):
-    """🔁 أحداث سابقة: أكثر الأيام شبهاً بيوم t (من الأيام اللي نتيجتها معروفة وقت t بس) ⇒ احتمال الصعود + نطاق الحركة"""
-    X, C, vol = F["X"], F["C"], F["vol"]
-    if X[t] is None:
-        return None
-    sd = sd or _fc_scale(X, t)
-    if not sd:
-        return None
-    wts = _FC_W[k]
-    if not btc:
-        wts = wts[:9] + (0.0, 0.0)
-    wv = [w / s for w, s in zip(wts, sd)]
-    xt = X[t]
-    cand = []
-    last_ok = t - h                                          # نتيجته (بعد h أيام) معروفة لحد يوم t
-    for i in range(0, last_ok + 1):
-        xi = X[i]
-        if xi is None or i + h >= len(C):
+        e["last"] = T[t]
+        if not C[t]:
             continue
-        d = 0.0
-        for a, b, w in zip(xt, xi, wv):
-            z = (a - b) * w
-            d += z * z
-        cand.append((d, i))
-    if len(cand) < 40:
-        return None
-    cand.sort()
-    K = _FC_K[k]
-    gap = max(2, h // 3)
-    pick = []
-    taken = []
-    for d, i in cand:
-        if all(abs(i - j) >= gap for j in taken):
-            pick.append((d, i))
-            taken.append(i)
-            if len(pick) >= K:
-                break
-    if len(pick) < 12:
-        return None
-    dmax = pick[-1][0] or 1e-9
-    base = [math.log(C[i + h] / C[i]) for _, i in cand if C[i] > 0]
-    base_up = sum(1 for r in base if r > 0) / len(base)
-    sw = up = 0.0
-    rets = []
-    wh = (1.0 - math.exp(-h / 30.0)) / (h / 30.0)          # 📏 التذبذب يرجع لمعدله خلال أسابيع ⇒ أثر «تذبذب اليوم» يخف للمدى البعيد (يوم ≈ كامل · 3 أشهر ≈ الثلث)
-    for d, i in pick:
-        w = 1.0 - 0.6 * (d / dmax)                          # الأشبه وزنه أكبر
-        r = math.log(C[i + h] / C[i])
-        sc = max(0.5, min(2.0, (vol[t] / vol[i]) if (vol[i] and vol[t]) else 1.0)) ** wh
-        rets.append((r * sc, w))
-        sw += w
-        up += w if r > 0 else 0.0
-    a = len(pick) / 4.0                                      # يقرّب الاحتمال من «النسبة العامة» لو الشبيهات قليلة
-    p = (up + a * base_up) / (sw + a)
-    bg = cand[::max(1, len(cand) // 240)]                    # 📏 النطاق: الشبيهات + كل تاريخ العملة (بتذبذب اليوم) — الشبيهات وحدها تطلع نطاق ضيّق للمدى البعيد
-    bw = 0.45 * sw / len(bg)
-    for _, i in bg:
-        r = math.log(C[i + h] / C[i])
-        sc = max(0.5, min(2.0, (vol[t] / vol[i]) if (vol[i] and vol[t]) else 1.0)) ** wh
-        rets.append((r * sc, bw))
-    q = [_fc_wq(rets, x) for x in (0.10, 0.25, 0.50, 0.75, 0.90)]
-    nb_up = sum(1 for _, i in pick if C[i + h] > C[i])
-    nb_avg = sum(math.exp(math.log(C[i + h] / C[i])) - 1 for _, i in pick) / len(pick)
-    return {"p": p, "q": q, "n": len(pick), "up": nb_up, "avg": nb_avg, "base": base_up}
-
-
-_FC_M = (("knn", "🔁 أحداث سابقة تشبه اليوم"), ("mom", "⚡ الزخم (اتجاه آخر الفترة)"), ("tv", "📺 تقييم TradingView"),
-         ("trend", "📈 الاتجاه العام (فوق/تحت 200 يوم)"), ("trend_mom", "📈⚡ الاتجاه والزخم سوا"))
-_FC_ML = dict(_FC_M, base="ماكو طريقة أحسن من التخمين")
-
-
-def _fc_bucket(model, F, i, k, h):
-    """خانة اليوم i لكل طريقة بسيطة (الزخم · تقييم TradingView · الاتجاه · الاتجاه+الزخم) — من ماضيه بس"""
-    x, C = F["X"][i], F["C"]
-    if x is None:
-        return None
-    L = max(7, h)
-    mom = (C[i] / C[i - L] - 1) if i >= L and C[i - L] else 0.0
-    if model == "mom":
-        return 1 if mom > 0 else 0
-    if model == "tv":
-        v = x[{"d": 0, "w": 1, "m": 2, "q": 2}[k]]
-        return 0 if v < -0.5 else 1 if v < -0.1 else 2 if v <= 0.1 else 3 if v <= 0.5 else 4
-    if model == "trend":
-        return 1 if x[3] > 0 else 0
-    return (1 if x[3] > 0 else 0) * 2 + (1 if mom > 0 else 0)
-
-
-def _fc_cond(F, t, k, h, model):
-    """احتمال الصعود بالطريقة البسيطة: من كل الأيام اللي بنفس خانة اليوم t (ونتيجتها معروفة وقت t) — يتقرب من النسبة العامة لو قليلة"""
-    X, C = F["X"], F["C"]
-    b = _fc_bucket(model, F, t, k, h)
-    tot = up = cnt = cu = 0
-    for i in range(0, t - h + 1):
-        if X[i] is None:
+        ret = C[t + H] / C[t] - 1.0
+        if abs(ret) < FC_MOVE:
             continue
-        u = 1 if C[i + h] > C[i] else 0
-        tot += 1; up += u
-        if _fc_bucket(model, F, i, k, h) == b:
-            cnt += 1; cu += u
-    if tot < 60:
+        sig, _ = _fc_read(P, t, k, X)
+        e["first"] = e["first"] or T[t]
+        e["N"] += 1
+        upm = ret > 0
+        e["U"] += 1 if upm else 0
+        sq = e["sq"]
+        sq[2] += abs(ret); sq[3] += 1
+        if P["sq"][t]:
+            sq[0] += abs(ret); sq[1] += 1
+        _, _, _, vk, _ = _fc_vote(sig)
+        items = [(kk, s) for kk, (s, _) in sig.items()] + [("vote", 1.0 if vk in ("su", "u") else -1.0 if vk in ("sd", "d") else 0.0)]
+        for kk, s in items:
+            if abs(s) < 0.15:
+                continue
+            x = e["a"].setdefault(kk, [0, 0, 0, 0, 0, 0])
+            x[4] = x[4] or T[t]
+            x[5] = T[t]
+            if s > 0:
+                x[0] += 1; x[2] += 1 if upm else 0
+            else:
+                x[1] += 1; x[3] += 0 if upm else 1
+        cnt += 1
+        if cnt % 20 == 0:
+            time.sleep(0.01)                                # يفسح للوحة (ما يحبس طلباتها وهو يحسب)
+    B[k] = e
+    return e
+
+
+def _fc_rq(P, t, H, w, cap=400):
+    """📏 كمّيات حركات الماضي (بعد H شمعة) — كل حركة بتذبذب هسه (أثره يخف للمدى البعيد) ⇒ 10 · 25 · 50 · 75 · 90%"""
+    C, atr = P["D"]["c"], P["S"]["atr"]
+    vt = (atr[t] / C[t]) if (atr[t] and C[t]) else None
+    j1 = t - H
+    if j1 < 30 or not vt:
         return None
-    base = up / tot
-    return (cu + 20 * base) / (cnt + 20), base
+    st = max(1, (j1 - 20) // cap)
+    vals = []
+    for j in range(20, j1 + 1, st):
+        if atr[j] and C[j] and C[j + H]:
+            vj = atr[j] / C[j]
+            vals.append(math.log(C[j + H] / C[j]) * max(0.5, min(2.0, vt / vj)) ** w)
+    if len(vals) < 25:
+        return None
+    vals.sort()
+    m = len(vals) - 1
+    return [vals[int(round(q * m))] for q in (0.10, 0.25, 0.50, 0.75, 0.90)]
 
 
-def _fc_eval(F, k, h, btc=True):
-    """🎯 مقياس الصدق + اختيار الطريقة: كل يوم بماضي العملة يتوقع بكل الطرق (وهو ما يشوف المستقبل) ⇒
-    النص الأول من الماضي: أي طريقة كانت أحسن من التخمين على هالعملة بهالمدى (لو ولا وحدة ⇒ «ماكو أفضلية») ·
-    النص الثاني (اللي الاختيار ما شافه): كم صدقت الطريقة المختارة · مقارنة بالنسبة العامة · والنطاق (يتعيّر على الأول وينقاس على الثاني)"""
-    X, C = F["X"], F["C"]
-    n = len(C)
-    first = next((i for i, x in enumerate(X) if x), None)
-    if first is None:
-        return {"n": 0}
-    t0 = max(first + 260, int(n * 0.45))
-    step = {"d": 2, "w": 3, "m": 6, "q": 12}[k]
-    sd = _fc_scale(X, t0)
-    simple = [m_ for m_, _ in _FC_M if m_ != "knn"]
-    B = {m_: [_fc_bucket(m_, F, i, k, h) for i in range(n)] for m_ in simple}
-    up_i = [1 if (i + h < n and C[i + h] > C[i]) else 0 for i in range(n)]
-    cnt = {m_: {} for m_ in simple}
-    tb = [0, 0]
-    nxt = first
+def _fc_rcal(db, sym, k, P, H, days, nc):
+    """📏 عرض النطاق يتعيّر على النص الأول من ماضي العملة (يضيق أو يتوسع لحد ما يصدق 80%) وينقاس على النص الثاني — مرة باليوم"""
+    R = db.setdefault("rg", {}).setdefault(sym, {})
+    C, T = P["D"]["c"], P["D"]["t"]
+    day = int(T[nc - 1]) // 86400 if nc else 0
+    e = R.get(k)
+    if e and e.get("v") == FC_VER and e.get("day") == day:
+        return e
+    w = (1.0 - math.exp(-days / 30.0)) / (days / 30.0)
     pts = []
-    for t in range(t0, n - h, step):
-        while nxt <= t - h:                                  # أيام صارت نتيجتها معروفة لحد يوم t
-            if X[nxt] is not None:
-                tb[0] += 1; tb[1] += up_i[nxt]
-                for m_ in simple:
-                    c = cnt[m_].setdefault(B[m_][nxt], [0, 0]); c[0] += 1; c[1] += up_i[nxt]
-            nxt += 1
-        pr = _fc_predict(F, t, k, h, sd, btc)
-        if not pr or tb[0] < 60:
-            continue
-        base = tb[1] / tb[0]
-        P = {"knn": pr["p"], "base": base}
-        for m_ in simple:
-            c = cnt[m_].get(B[m_][t], [0, 0])
-            P[m_] = (c[1] + 20 * base) / (c[0] + 20)
-        pts.append((math.log(C[t + h] / C[t]), P, pr["q"]))
-        if len(pts) % 25 == 0:
-            time.sleep(0.01)                                # يفسح المجال لطلبات اللوحة (ما يحبسها وهو يحسب)
-    if len(pts) < 20:
-        return {"n": 0}
-    half = len(pts) // 2
-    A, Z = pts[:half], pts[half:]
-    brier = lambda L, m_: sum((P[m_] - (1.0 if r > 0 else 0.0)) ** 2 for r, P, _ in L)
-    bA = brier(A, "base")
-    sk = {m_: (1 - brier(A, m_) / bA if bA > 0 else 0.0) for m_, _ in _FC_M}
-    best = max(sk, key=sk.get)
-    model = best if sk[best] > 0.005 else "base"            # ولا طريقة أحسن من التخمين بالنص الأول ⇒ «ماكو أفضلية»
-    bZ = brier(Z, "base")
-    skill = (1 - brier(Z, model) / bZ) if (bZ > 0 and model != "base") else 0.0
-    calls = [(P[model], r) for r, P, _ in Z if abs(P[model] - 0.5) >= 0.05]
-    hit = sum(1 for p_, r in calls if (p_ > 0.5) == (r > 0))
-    tot = len(calls)
-    hp = round(hit / tot * 100) if tot else None
-    upz = sum(1 for r, _, _ in Z if r > 0)
-    basep = round(max(upz, len(Z) - upz) / len(Z) * 100)
-    inside = lambda f, L: sum(1 for r, _, q in L if q[2] - f * (q[2] - q[0]) <= r <= q[2] + f * (q[4] - q[2])) / max(1, len(L))
-    fct = 0.5                                                # 📏 عرض النطاق يتعيّر على النص الأول (يضيق أو يتوسع لحد ما يصدق 80%) · والصدق ينقاس على النص الثاني
-    while fct < 3.0 and inside(fct, A) < 0.80:
-        fct += 0.05
-    cov = inside(fct, Z)
-    indep = max(1, (n - h - (t0 + (n - h - t0) // 2)) // max(1, h))
-    if model == "base":
-        g = "none"
-    elif tot < 20 or indep < 6:
-        g = "short"
-    elif hp is not None and hp >= 55 and skill > 0.01 and indep >= 10:
-        g = "g"
-    elif skill > 0:
-        g = "y"
-    else:
-        g = "r"
-    return {"hit": hp, "n": tot, "cov": round(cov * 100), "skill": round(skill, 3), "base": basep, "indep": indep, "grade": g, "tests": len(Z),
-            "f": round(fct, 2), "model": model, "sel": {m_: round(v, 3) for m_, v in sk.items()}}
+    for t in range(max(40 + H, nc - 160 * H), nc - H, H):     # نقاط ما تتداخل (كل H شمعة · نتيجتها مسكّرة)
+        q = _fc_rq(P, t, H, w, cap=250)
+        if q and C[t]:
+            pts.append((math.log(C[t + H] / C[t]), q))
+    e = {"v": FC_VER, "day": day, "f": 1.0, "cov": None, "n": 0}
+    if len(pts) >= 12:
+        hf = len(pts) // 2
+        A, Z = pts[:hf], pts[hf:]
+        ins = lambda f, L: sum(1 for r, q in L if q[2] - f * (q[2] - q[0]) <= r <= q[2] + f * (q[4] - q[2])) / max(1, len(L))
+        f = 0.5
+        while f < 3.0 and ins(f, A) < 0.80:
+            f += 0.05
+        e.update(f=round(f, 2), cov=round(ins(f, Z) * 100), n=len(Z))
+    R[k] = e
+    return e
 
 
-def _fc_track(db, sym, out, rows):
-    """📒 سجل حي: كل توقع ينحفظ مرة باليوم ⇒ لما يجي وقته ينحكم بسعر ذاك اليوم (صح/غلط · داخل النطاق؟)"""
-    T = db.setdefault("t", {}).setdefault(sym, {})
+def _fc_levels(lv, px):
+    """🧱 الدعم والمقاومة: منطقة القيمة (Volume Profile) · VWAP من آخر قاع/قمة · آخر قاع/قمة · خط Supertrend"""
+    c = []
+    for key, nm in (("val", "أسفل منطقة القيمة"), ("poc", "نقطة التحكم POC"), ("vah", "أعلى منطقة القيمة"), ("avwap_lo", "VWAP من آخر قاع"),
+                    ("avwap_hi", "VWAP من آخر قمة"), ("sw_lo", "آخر قاع"), ("sw_hi", "آخر قمة"), ("st", "خط Supertrend")):
+        v = lv.get(key)
+        if v:
+            c.append((float(v), nm))
+    sup = sorted([x for x in c if x[0] < px], key=lambda x: -x[0])[:2]
+    res = sorted([x for x in c if x[0] > px], key=lambda x: x[0])[:2]
+    f8 = lambda v: float(f"{v:.8g}")
+    return {"sup": [[nm, f8(v)] for v, nm in sup], "res": [[nm, f8(v)] for v, nm in res]}
+
+
+def _fc_fng(db):
+    """😨 تاريخ الخوف والطمع (alternative.me — مجاني بلا مفتاح) — مرة كل 12 ساعة"""
+    e = db.setdefault("fng", {})
+    if time.time() - float(e.get("ts") or 0) > 12 * 3600 or not e.get("d"):
+        j = _http_json("https://api.alternative.me/fng/?limit=0&format=json", timeout=15) or {}
+        d = {}
+        for x in (j.get("data") or []) if isinstance(j, dict) else []:
+            try:
+                d[str(int(x["timestamp"]) // 86400 * 86400)] = int(x["value"])
+            except Exception:
+                continue
+        if d:
+            e["d"] = d
+            e["ts"] = time.time()
+        else:
+            e["ts"] = time.time() - 11 * 3600                 # ما وصل ⇒ يحاول بعد ساعة
+    ks = sorted(int(x) for x in (e.get("d") or {}))
+    return (ks, [e["d"][str(x)] for x in ks]) if ks else None
+
+
+def _fc_fund(sym, db):
+    """💸 تاريخ التمويل لعقد العملة الدائم (OKX العام — آخر 3 أشهر بس) — مرة كل 8 ساعات"""
+    e = db.setdefault("fund", {}).setdefault(sym, {})
     now = time.time()
-    closes = {r[0]: r[4] for r in rows}
+    if now - float(e.get("ts") or 0) >= 8 * 3600 or "r" not in e:
+        inst = sym.split("-")[0].upper() + "-USDT-SWAP"
+        rows = {int(r[0]): float(r[1]) for r in e.get("r") or []}
+        after = None
+        for _ in range(4):
+            r = _okx_pub(f"/api/v5/public/funding-rate-history?instId={inst}&limit=100" + (f"&after={after}" if after else ""))
+            data = (r.get("data") or []) if (r and str(r.get("code")) == "0") else []
+            if not data:
+                break
+            new = 0
+            for x in data:
+                try:
+                    t_ = int(x["fundingTime"]) // 1000
+                    new += 0 if t_ in rows else 1
+                    rows[t_] = float(x.get("realizedRate") or x.get("fundingRate") or 0)
+                except Exception:
+                    continue
+            if not new:
+                break                                       # وصلنا للمحفوظ
+            after = data[-1].get("fundingTime")
+            time.sleep(0.2)
+        e["r"] = sorted([t_, v] for t_, v in rows.items() if t_ >= now - 95 * 86400)
+        e["ts"] = now
+    r = e.get("r") or []
+    return ([x[0] for x in r], [x[1] for x in r]) if r else None
+
+
+def _fc_track(db, sym, out, closes):
+    """📒 سجل حي: قراءة كل مدى تنحفظ مرة باليوم ⇒ لما يجي وقتها تنحكم بسعر ذاك اليوم (صح/غلط · داخل النطاق؟)"""
+    T = db.setdefault("lr", {}).setdefault(sym, {})
+    now = time.time()
     days = sorted(closes)
-    for k, _, h in FC_H:
+    for k, _, _, _, dd in FC_H:
         L = T.setdefault(k, [])
-        hz = out.get(k)
-        if hz and hz.get("p") is not None and (not L or now - L[-1]["ts"] >= 20 * 3600):
-            L.append({"ts": round(now), "px": out["px"], "p": round(hz["p"], 3), "lo": hz["lo"], "hi": hz["hi"]})
+        hz = out["h"].get(k)
+        if hz and not hz.get("short") and (not L or now - L[-1]["ts"] >= 20 * 3600):
+            L.append({"ts": round(now), "px": out["px"], "v": hz["vk"], "lo": hz.get("lo"), "hi": hz.get("hi")})
         for e in L:
-            if e.get("r") is None and now - e["ts"] >= h * 86400 + 3600:
-                due = e["ts"] + h * 86400
+            if e.get("r") is None and now - e["ts"] >= dd * 86400 + 3600:
+                due = e["ts"] + dd * 86400
                 d = next((x for x in days if x >= due - 86400), None)
                 e["r"] = round(closes[d] / e["px"] - 1, 5) if d and e["px"] else "x"
-        T[k] = [e for e in L if now - e["ts"] < max(120, h * 4) * 86400][-500:]
+        T[k] = [e for e in L if now - e["ts"] < max(120, dd * 4) * 86400][-400:]
         hit = tot = cov = cn = 0
         for e in T[k]:
             r = e.get("r")
             if not isinstance(r, (int, float)):
                 continue
-            px1 = e["px"] * (1 + r)
-            cn += 1
-            cov += 1 if e["lo"] <= px1 <= e["hi"] else 0
-            if abs(e["p"] - 0.5) >= 0.06:
+            if e.get("lo") and e.get("hi"):
+                cn += 1
+                cov += 1 if e["lo"] <= e["px"] * (1 + r) <= e["hi"] else 0
+            if e["v"] in ("su", "u", "sd", "d") and abs(r) >= FC_MOVE:
                 tot += 1
-                hit += 1 if ((e["p"] > 0.5) == (r > 0)) else 0
+                hit += 1 if ((e["v"] in ("su", "u")) == (r > 0)) else 0
         if hz is not None:
-            hz["live"] = {"hit": round(hit / tot * 100) if tot else None, "n": tot, "cov": round(cov / cn * 100) if cn else None, "done": cn,
+            hz["live"] = {"hit": hit, "n": tot, "cov": round(cov / cn * 100) if cn else None, "done": cn,
                           "wait": sum(1 for e in T[k] if e.get("r") is None)}
 
 
-def _fc_word(v, a=0.15):
-    return ("صعود", "p") if v >= a else ("نزول", "n") if v <= -a else ("محايد", "z")
-
-
-def fc_coin(sym, db, btc_rows=None):
-    """🔮 عملة وحدة: الشموع ⇒ الصفات ⇒ لكل مدى: TradingView + أحداث سابقة + الصدق"""
-    rows, live = fc_candles(sym, db)
-    if len(rows) < 120:
-        return {"sym": sym, "base": sym.split("-")[0], "short": True, "days": len(rows), "ts": time.time()} if rows else None
-    is_btc = sym.upper().startswith("BTC-")
-    full = rows + ([live] if live else [])
-    F = _fc_features(full, None if is_btc else btc_rows)
-    t = len(full) - 1
-    px = full[-1][4]
-    last_day = rows[-1][0]
-    ev = _FC_EVAL.get(sym)
-    if not ev or ev[0] != last_day:                          # فحص الصدق مرة لكل شمعة يوم جديدة
-        Fc = _fc_features(rows, None if is_btc else btc_rows)
-        acc = {}
-        for k, _, h in FC_H:
-            acc[k] = _fc_eval(Fc, k, h, not is_btc)
-            time.sleep(0.05)
-        ev = (last_day, acc)
-        _FC_EVAL[sym] = ev
-    tvd, tvw, tvm = F["tvd"][t], F["tvgw"][-1], F["tvgm"][-1]   # 📺 للعرض: الشمعة الحالية ويّاها (مثل TradingView الحي)
-    out = {"sym": sym, "base": sym.split("-")[0], "px": px, "days": len(rows), "src": (db.get("c", {}).get(sym) or {}).get("src", "okx"),
-           "chg1": round((px / full[-2][4] - 1) * 100, 2) if len(full) > 1 and full[-2][4] else 0.0, "ts": time.time(), "h": {}}
-    tvs = {"d": (tvd, "1D"), "w": (tvw or tvd, "1W"), "m": (tvm or tvw, "1M"), "q": (tvm or tvw, "1M")}
-    momd = {"d": 7, "w": 30, "m": 90, "q": 180}
-    C = F["C"]
-    for k, nm, h in FC_H:
-        pr = _fc_predict(F, t, k, h, None, not is_btc)
-        tv, tf = tvs[k]
-        md = momd[k]
-        mom = (C[t] / C[t - md] - 1) if t >= md and C[t - md] else None
-        hz = {"k": k, "name": nm, "h": h, "acc": ev[1].get(k) or {"n": 0}, "tf": tf}
-        if tv:
-            tx, tk = _fc_tvtxt(tv[0])
-            hz["tv"] = {"v": round(tv[0], 3), "txt": tx, "k": tk, "ma": tv[3], "osc": tv[4]}
-        if mom is not None:
-            hz["mom"] = round(mom * 100, 1)
-        if pr:
-            acc_ = hz["acc"] or {}
-            md, gd = acc_.get("model") or "knn", acc_.get("grade")
-            p, base_now = pr["p"], pr["base"]
-            if md in ("mom", "tv", "trend", "trend_mom"):
-                cd = _fc_cond(F, t, k, h, md)
-                if cd:
-                    p, base_now = cd
-            raw_p = p
-            if gd == "y":
-                p = base_now + 0.5 * (p - base_now)              # 🟡 أفضلية صغيرة ⇒ الاحتمال يتقرب من النسبة العامة
-            elif gd != "g":
-                p = base_now                                     # ⚪/🔴 ماكو أفضلية مثبتة ⇒ النسبة العامة بس (والنطاق يبقى)
-            hz["model"], hz["model_txt"], hz["raw_p"] = md, _FC_ML.get(md, md), round(raw_p, 3)
-            f_ = (hz["acc"] or {}).get("f") or 1.0              # 📏 عرض النطاق المعيّر على ماضي العملة
-            q0, q1, q2, q3, q4 = pr["q"]
-            pr["q"] = [q2 - f_ * (q2 - q0), q2 - f_ * (q2 - q1), q2, q2 + f_ * (q3 - q2), q2 + f_ * (q4 - q2)]
-            if gd not in ("g", "y"):
-                vk, vt = "f", "↔️ ماكو أفضلية"
-            else:
-                vk, vt = (("su", "⬆️ صعود قوي") if p >= 0.65 else ("u", "↗️ يميل للصعود") if p >= 0.55 else
-                          ("sd", "⬇️ نزول قوي") if p <= 0.35 else ("d", "↘️ يميل للنزول") if p <= 0.45 else ("f", "↔️ محايد"))
-            hz.update(p=round(p, 3), verdict=vk, txt=vt, lo=float(f"{px * math.exp(pr['q'][0]):.8g}"), hi=float(f"{px * math.exp(pr['q'][4]):.8g}"),
-                      lo50=float(f"{px * math.exp(pr['q'][1]):.8g}"), hi50=float(f"{px * math.exp(pr['q'][3]):.8g}"),
-                      mid=float(f"{px * math.exp(pr['q'][2]):.8g}"), nb={"n": pr["n"], "up": pr["up"], "avg": round(pr["avg"] * 100, 1)}, base=round(base_now * 100))
-        else:
-            hz["short"] = True
+def fc_coin(sym, db, fng=None):
+    """🔮 عملة وحدة: الشموع ⇒ لكل مدى: المؤشرات (نفس 📊 + الإضافات) + صدقها + النطاق + الدعم والمقاومة"""
+    d1, l1 = fc_candles(sym, db)
+    if len(d1) < 120:
+        return {"sym": sym, "base": sym.split("-")[0], "short": True, "days": len(d1), "ts": time.time()} if d1 else None
+    h4, l4 = fc_candles4(sym, db)
+    fund = _safe(_fc_fund, sym, db, default=None)
+    g3, c3 = _fc_group(d1, l1, 3, 0)
+    gw, cw = _fc_group(d1, l1, 7, 3)
+    tfr = {"4H": (h4, l4), "1D": (d1, l1), "3D": (g3, c3), "1W": (gw, cw)}
+    full1 = d1 + ([l1] if l1 else [])
+    px = full1[-1][4]
+    out = {"sym": sym, "base": sym.split("-")[0], "px": px, "days": len(d1), "src": (db.get("c", {}).get(sym) or {}).get("src", "okx"),
+           "chg": round((px / d1[-1][4] - 1) * 100, 2) if l1 and d1[-1][4] else 0.0, "ts": time.time(), "h": {}}
+    meta = _fc_meta()
+    for k, nm, tf, H, dd in FC_H:
+        rows, cur = tfr[tf]
+        hz = {"k": k, "name": nm, "tf": tf, "tfn": FC_TFN[tf], "H": H, "days": dd}
+        if len(rows) < FC_MIN[tf]:
+            hz.update(short=True, have=len(rows), need=FC_MIN[tf])
+            out["h"][k] = hz
+            continue
+        trf, trc = tfr[FC_TRD[k]]
+        X = {"H": H, "hn": nm, "fng": fng, "fund": fund}
+        allr = rows + ([cur] if cur else [])
+        Pn = _fc_pack(allr, trf + ([trc] if trc else []), FC_TFS[tf], FC_TFS[FC_TRD[k]])   # 📍 ويّا الشمعة اللي لسه تتكوّن (مثل 📊)
+        nc = len(rows)                                       # 🎯 السلاسل من الماضي بس ⇒ الفحص يستعمل نفس الحزمة بالشموع المسكّرة
+        e = _fc_bt(db, sym, k, tf, Pn, X, nc)
+        rc = _fc_rcal(db, sym, k, Pn, H, dd, nc)
+        t = len(allr) - 1
+        sig, lv = _fc_read(Pn, t, k, X)
+        up, dn, n_, vk, vt = _fc_vote(sig)
+        u = (e["U"] / e["N"]) if e["N"] else 0.5
+        rel = _fc_grade(e["a"].get("vote"), u, H, FC_TFS[tf])
+        parts = []
+        for kk in [x[0] for x in _IND2_K] + [x[0] for x in _FC_X]:
+            if kk not in sig:
+                continue
+            s, tx = sig[kk]
+            nm_, ico, wh = meta[kk]
+            parts.append({"k": kk, "name": nm_, "ico": ico, "s": round(s, 2), "w": "p" if s >= 0.15 else "n" if s <= -0.15 else "z",
+                          "txt": tx, "what": wh, "acc": _fc_grade(e["a"].get(kk), u, H, FC_TFS[tf])})
+        w_ = (1.0 - math.exp(-dd / 30.0)) / (dd / 30.0)
+        q = _fc_rq(Pn, t, H, w_)
+        if q:
+            f_ = rc.get("f") or 1.0
+            q = [q[2] - f_ * (q[2] - q[0]), q[2] - f_ * (q[2] - q[1]), q[2], q[2] + f_ * (q[3] - q[2]), q[2] + f_ * (q[4] - q[2])]
+            pnow = Pn["D"]["c"][t]
+            hz.update(lo=float(f"{pnow * math.exp(q[0]):.8g}"), lo50=float(f"{pnow * math.exp(q[1]):.8g}"), mid=float(f"{pnow * math.exp(q[2]):.8g}"),
+                      hi50=float(f"{pnow * math.exp(q[3]):.8g}"), hi=float(f"{pnow * math.exp(q[4]):.8g}"))
+        sqs = e["sq"]
+        sq_x = round((sqs[0] / sqs[1]) / (sqs[2] / sqs[3]), 2) if sqs[1] >= 10 and sqs[3] and sqs[2] else None
+        hz.update(up=up, dn=dn, n=n_, fl=n_ - up - dn, vk=vk, vt=vt, rel=rel, rng={"cov": rc.get("cov"), "n": rc.get("n"), "f": rc.get("f")},
+                  sig=parts, lv=_fc_levels(lv, Pn["D"]["c"][t]), sq={"on": bool(Pn["sq"][t]), "x": sq_x}, tested=e["N"],
+                  since=e["first"] or None)
         out["h"][k] = hz
-    e200, e50, vol, rsi = F["e200"][t], F["e50"][t], F["vol"], F["rsi"][t]
-    ctx = []
-    if e200:
-        d200 = (px / e200 - 1) * 100
-        cr = "🟢 تقاطع ذهبي (50 فوق 200)" if (e50 or 0) > e200 else "🔴 تقاطع مميت (50 تحت 200)"
-        ctx.append({"ico": "📈", "name": "الاتجاه العام", "w": _fc_word(d200 / 10)[1],
-                    "txt": f"السعر {'فوق' if d200 >= 0 else 'تحت'} متوسط 200 يوم بـ{abs(d200):.1f}% · {cr}"})
-    if vol[t]:
-        vh = sorted(v for v in vol[max(30, t - 364):t + 1] if v)
-        rk = sum(1 for v in vh if v <= vol[t]) / len(vh) if vh else 0.5
-        ctx.append({"ico": "🌪️", "name": "التذبذب", "w": "z", "txt": (f"هادي جداً (أهدى من {round((1 - rk) * 100)}% من أيام السنة) — بعد الهدوء تجي حركة كبيرة عادةً" if rk < 0.2 else
-                                                                   f"عالي (أعلى من {round(rk * 100)}% من أيام السنة) — الحركات كبيرة والنطاق أوسع" if rk > 0.8 else "طبيعي")})
-    hi = max(C[max(0, t - 364):t + 1])
-    if hi:
-        dd = (px / hi - 1) * 100
-        ctx.append({"ico": "🏔️", "name": "من أعلى سعر بالسنة", "w": "z" if dd > -10 else "n", "txt": f"{dd:.1f}% {'— قريب من القمة' if dd > -5 else ''}"})
-    if rsi is not None:
-        ctx.append({"ico": "💪", "name": "RSI يومي", "w": "n" if rsi > 70 else "p" if rsi < 30 else "z",
-                    "txt": f"{rsi:.0f} — {'تشبّع شراء (ممكن يرتاح)' if rsi > 70 else 'تشبّع بيع (ممكن يرتد)' if rsi < 30 else 'عادي'}"})
-    if not is_btc and btc_rows and len(btc_rows) > 200:
-        bc = [r[4] for r in btc_rows]
-        be = _i2_ema(bc, 200)[-1]
-        if be:
-            bd = (bc[-1] / be - 1) * 100
-            ctx.append({"ico": "₿", "name": "بيتكوين", "w": _fc_word(bd / 10)[1], "txt": f"{'فوق' if bd >= 0 else 'تحت'} متوسط 200 يوم بـ{abs(bd):.1f}% — أغلب العملات تمشي وياه"})
-    out["ctx"] = ctx
-    _safe(_fc_track, db, sym, dict(out["h"], px=px), rows, default=None)
+        time.sleep(0.02)
+    _safe(_fc_track, db, sym, out, {int(r[0]): r[4] for r in d1}, default=None)
     return out
 
 
 def fc_fetch():
-    """⏱️ كل العملات المختارة (⚙️ «📈 شريط الأسعار») — عملة عملة بفاصل (حد OKX العام · والسيرفر ما يثقل)"""
+    """⏱️ كل العملات المختارة (⚙️ «📈 شريط الأسعار») — عملة عملة بفاصل (حد OKX العام · والمعالج ما يثقل) · النافذة تتعبّى وحدة وحدة"""
     coins = list(ticker_cfg()["coins"])
     db = _fc_db()
-    btc = None
-    if any(not c.upper().startswith("BTC-") for c in coins):
-        btc = _safe(lambda: fc_candles("BTC-USDT", db)[0], default=None)
-    rows, bad = [], []
+    fng = _safe(_fc_fng, db, default=None)
+    done, bad = [], []
     for sym in coins:
-        r = _safe(fc_coin, sym, db, btc if not sym.upper().startswith("BTC-") else None, default=None)
+        r = _safe(fc_coin, sym, db, fng, default=None)
         if r:
-            rows.append(r)
+            done.append(sym)
+            FC["coins"][sym] = r
+            FC["order"] = [s for s in coins if s in FC["coins"]]
         else:
             bad.append(sym)
         time.sleep(0.4)
-    keep = set(coins) | {"BTC-USDT"}
-    for sec in ("c", "t"):
+    keep = set(coins)
+    for sec in ("c", "c4", "bt", "rg", "lr", "fund"):
         for s in list((db.get(sec) or {}).keys()):
             if s not in keep:
                 db[sec].pop(s, None)
+    for old in ("t",):                                       # سجل v3.28 (شكله غير)
+        db.pop(old, None)
     try:
         save_json_atomic(FC_FILE, db)
     except Exception:
         pass
-    FC.update(ts=time.time(), coins={r["sym"]: r for r in rows}, order=[r["sym"] for r in rows],
+    FC.update(ts=time.time(), coins={s: FC["coins"][s] for s in done}, order=[s for s in coins if s in done],
               err=("ما وصلت بيانات: " + "، ".join(bad[:4])) if bad else "")
     return FC
 
@@ -11270,9 +11182,11 @@ def _fc_run():
 
 
 def fc_view():
+    meta = _fc_meta()
     return {"ok": True, "on": indic_cfg()["on"], "ts": FC["ts"], "every": FC_EVERY, "err": FC["err"],
-            "rows": [FC["coins"][s] for s in FC["order"] if s in FC["coins"]], "fng": INDIC.get("fng") or {},
-            "hz": [{"k": k, "name": nm, "h": h} for k, nm, h in FC_H]}
+            "rows": [FC["coins"][s] for s in FC["order"] if s in FC["coins"]],
+            "hz": [{"k": k, "name": nm, "tf": tf, "tfn": FC_TFN[tf], "H": H, "days": dd} for k, nm, tf, H, dd in FC_H],
+            "kinds": [{"k": k, "name": meta[k][0], "ico": meta[k][1], "what": meta[k][2]} for k in [x[0] for x in _IND2_K] + [x[0] for x in _FC_X]]}
 
 
 def fc_api():
@@ -11285,7 +11199,7 @@ def fc_api():
 
 
 def fc_loop():
-    """⏱️ التوقعات كل نص ساعة (شموع يوم — ما تحتاج أسرع) · يبدي بعد المؤشرات بشوية حتى ما يزاحمها"""
+    """⏱️ التوقعات كل نص ساعة · يبدي بعد المؤشرات بشوية حتى ما يزاحمها · بس لما المؤشرات شغّالة"""
     time.sleep(90)
     while True:
         try:
@@ -15160,7 +15074,7 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                                "rel": _safe(released_log, default={})})
         if u.path == "/api/guard":
             return self._json(_safe(guard_view, default={"ok": False, "msg": "تعذّر تحميل الرقابة"}))
-        if u.path == "/api/forecast":                     # 🔮 v3.28.0: التوقعات (قراءة عامة من المنصة · عرض بس · ولا إشعار)
+        if u.path == "/api/forecast":                     # 🔮 v3.29.0: التوقعات (نفس مؤشرات 📊 على شموع أطول · قراءة عامة · عرض بس · ولا إشعار)
             return self._json(_safe(fc_api, default={"ok": False, "rows": [], "msg": "تعذّر حساب التوقعات"}))
         if u.path == "/api/indicators":                   # 📊 v3.26.5: المؤشرات (قراءة عامة من المنصة · عرض بس)
             return self._json(_safe(ind2_api, default={"ok": False, "rows": [], "msg": "تعذّر حساب المؤشرات"}))
@@ -16670,32 +16584,30 @@ button.warn{border-color:rgb(var(--amber-rgb)/.55);color:var(--amber);box-shadow
 .indbtn{flex:none;margin:0 8px;padding:3px 11px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap;direction:rtl;
   border:1px solid rgb(var(--cyan-rgb)/.5);color:var(--cyan);background:rgb(var(--cyan-rgb)/.08);cursor:pointer;line-height:1.5}
 .indbtn:hover{background:rgb(var(--cyan-rgb)/.16)}
-/* 🔮 v3.28.0: التوقعات فوق المؤشرات (نفس العمود) */
-.indbtns{flex:none;display:flex;flex-direction:column;gap:3px;margin:0 8px}
-.indbtns .indbtn{margin:0;text-align:center}
-.indbtn.fcbtn{border-color:rgb(var(--vio-rgb)/.55);color:var(--vio);background:rgb(var(--vio-rgb)/.08)}
+/* 🔮 v3.29.0: التوقعات — زر بالشريط الأول فوق 📊 (نفس الجهة والعرض) · نافذة مختصرة */
+.tape1{display:flex;align-items:center;gap:0}
+#indBtn,#fcBtn{text-align:center}
+.indbtn.fcbtn{border-color:rgb(var(--vio-rgb)/.55);color:var(--vio);background:rgb(var(--vio-rgb)/.08);padding-top:1px;padding-bottom:1px}
 .indbtn.fcbtn:hover{background:rgb(var(--vio-rgb)/.16)}
-.fc-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:9px}
-@media(max-width:560px){.fc-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-.fc-t{border:1px solid var(--line2);border-radius:11px;padding:7px 8px;background:rgb(var(--ov-rgb)/.025);display:grid;gap:2px;min-width:0}
-.fc-t .hn{font-size:11px;color:var(--mut2);font-weight:700}
-.fc-t .vv{font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.fc-t .pp{font-size:11.5px;color:var(--mut)}.fc-t .pp b{color:var(--tx);direction:ltr;unicode-bidi:isolate}
-.fc-t .rg{font-size:11px;color:var(--mut);direction:ltr;text-align:start;font-variant-numeric:tabular-nums;unicode-bidi:isolate;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.fc-t .gd{font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.fc-t.su,.fc-t.u{border-color:rgb(var(--green-rgb)/.42)}.fc-t.sd,.fc-t.d{border-color:rgb(var(--red-rgb)/.42)}
-.fc-t.su .vv,.fc-t.u .vv{color:var(--green)}.fc-t.sd .vv,.fc-t.d .vv{color:var(--red)}.fc-t.f .vv{color:var(--mut)}
-.fc-t.weak{opacity:.78}
-.fc-gd.g{color:var(--green)}.fc-gd.y{color:var(--amber)}.fc-gd.r{color:var(--red)}.fc-gd.short{color:var(--mut2)}
-.fc-hz{border:1px solid var(--line2);border-radius:11px;padding:8px 10px;margin-top:8px;background:rgb(var(--ov-rgb)/.02)}
-.fc-hz h4{margin:0 0 4px;font-size:12.5px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
-.fc-hz h4 .vv{margin-inline-start:auto}
-.fc-rbar{position:relative;height:8px;border-radius:99px;margin:8px 2px 2px;direction:ltr;background:linear-gradient(90deg,rgb(var(--red-rgb)/.35),rgb(var(--ov-rgb)/.10) 50%,rgb(var(--green-rgb)/.35))}
-.fc-rbar .b50{position:absolute;top:0;bottom:0;background:rgb(var(--vio-rgb)/.45);border-radius:99px}
-.fc-rbar i{position:absolute;top:-4px;width:3px;height:16px;border-radius:2px;background:var(--tx);box-shadow:0 0 0 2px var(--bg1);transform:translateX(-50%)}
-.fc-rl{display:flex;justify-content:space-between;font-size:10.5px;color:var(--mut2);direction:ltr;font-variant-numeric:tabular-nums}
-.fc-tv{margin-top:8px}.fc-tv iframe{width:100%;height:430px;border:0;border-radius:11px;background:transparent}
-.fc-tv button{font-size:12px;padding:5px 12px;border-radius:999px}
+.fc-rows{display:grid;gap:3px;margin-top:8px}
+.fc-r{display:grid;grid-template-columns:42px minmax(0,1.15fr) minmax(0,1.35fr) 52px;gap:6px;align-items:center;font-size:12.5px;padding:5px 7px;border-radius:9px;background:rgb(var(--ov-rgb)/.03)}
+.fc-r .fh{color:var(--mut2);font-weight:700;font-size:11.5px;white-space:nowrap}
+.fc-r .fv{font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fc-r .fg{direction:ltr;text-align:start;unicode-bidi:isolate;font-variant-numeric:tabular-nums;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
+.fc-r .fb{text-align:end;white-space:nowrap;font-size:11.5px;overflow:hidden;direction:ltr;unicode-bidi:isolate}
+.fc-r.v-su .fv,.fc-r.v-u .fv{color:var(--green)}.fc-r.v-sd .fv,.fc-r.v-d .fv{color:var(--red)}.fc-r.v-f .fv{color:var(--mut)}
+.fc-r.short{opacity:.7}
+.fc-r.fc-hd{background:none;padding-top:0;padding-bottom:0;font-size:10.5px;color:var(--mut2);font-weight:600}
+.fc-r.fc-hd span{font-weight:600;font-size:10.5px;color:var(--mut2)}
+.fb.g{color:var(--green)}.fb.y{color:var(--amber)}.fb.n{color:var(--mut)}.fb.r{color:var(--red)}.fb.short{color:var(--mut2)}
+i.fb{font-style:normal;font-weight:600;margin:0 7px;font-size:11px;direction:ltr;unicode-bidi:isolate;display:inline-block}
+.fc-sq{font-size:12px;color:var(--amber)}
+.fc-tabs{display:flex;gap:5px;flex-wrap:wrap;margin:2px 0 8px}
+.fc-tabs button{font-size:12px;padding:4px 12px;border-radius:999px}
+.fc-tabs button.on{border-color:var(--vio);color:var(--vio);background:rgb(var(--vio-rgb)/.12)}
+.fc-sum{display:grid;gap:5px;font-size:12.5px;line-height:1.7;padding:2px 0 8px;border-bottom:1px dashed var(--line2);margin-bottom:4px}
+.fc-sum small{color:var(--mut2)}
+.fc-sum .rg{direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums}.fc-tv button{font-size:12px;padding:5px 12px;border-radius:999px}
 .ind-top{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px}
 .ind-chip{font-size:11.5px;padding:3px 10px;border-radius:999px;border:1px solid var(--line);background:rgb(var(--ov-rgb)/.04);color:var(--mut);white-space:nowrap}
 .ind-chip b{color:var(--tx)}
@@ -16957,8 +16869,8 @@ html.lite .card:hover,html.lite button:hover{transform:none}
   <span class="navhint r" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><svg viewBox="0 0 24 24"><path d="M10 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
   </div>
 </header>
-<div id="tape" class="tape" style="display:none" title="أسعار حية — من الإعدادات ⚙️ ← 📈 شريط الأسعار"><div id="tapein" class="tapein"></div></div>
-<div id="tape2" class="tape tape2" style="display:none" title="مؤشرات العملات المختارة — من ⚙️ الإعدادات ← 📈 شريط الأسعار"><div class="indbtns"><button id="fcBtn" class="indbtn fcbtn" onclick="openFc()" title="🔮 التوقعات: يوم · أسبوع · شهر · 3 أشهر — تقييم TradingView + أحداث سابقة تشبه اليوم + كم مرة صدقت (بلا إشعارات)">🔮 التوقعات</button><button id="indBtn" class="indbtn" onclick="openInd()" title="📊 المؤشرات: العملة راح تصعد لو تنزل؟ — كل عملة بالشريط بعشر مؤشرات ومعدلها · الخوف والطمع · 🔔 إشعارات الأسعار">📊 المؤشرات</button></div><div class="tapewrap"><div id="tape2in" class="tapein"></div></div></div>
+<div id="tape" class="tape tape1" style="display:none" title="أسعار حية — من الإعدادات ⚙️ ← 📈 شريط الأسعار"><button id="fcBtn" class="indbtn fcbtn" style="display:none" onclick="openFc()" title="🔮 التوقعات: يوم · أسبوع · شهر · 3 أشهر — نفس مؤشرات 📊 على شموع أطول + كم مرة صدقت (بلا إشعارات)">🔮 التوقعات</button><div class="tapewrap"><div id="tapein" class="tapein"></div></div></div>
+<div id="tape2" class="tape tape2" style="display:none" title="مؤشرات العملات المختارة — من ⚙️ الإعدادات ← 📈 شريط الأسعار"><button id="indBtn" class="indbtn" onclick="openInd()" title="📊 المؤشرات: العملة راح تصعد لو تنزل؟ — كل عملة بالشريط بعشر مؤشرات ومعدلها · الخوف والطمع · 🔔 إشعارات الأسعار">📊 المؤشرات</button><div class="tapewrap"><div id="tape2in" class="tapein"></div></div></div>
 <div id="mbar" onclick="goTop()" title="ارجع للأعلى"><span id="mPulse" class="pulse off"></span><span title="ربح التداول اليوم">🔄 <b id="mTrade" class="num">0.00</b></span><span title="إجمالي الربح المحرر">💵 <b id="mTotal" class="num">0.00</b></span><span title="الربح المحرر اليوم">📅 <b id="mToday" class="num">0.00</b></span><span id="mGuard"></span></div>
 <div class="toolbar">
   <div class="srch">
@@ -18483,7 +18395,7 @@ function tapeSync(d){
     inn.innerHTML=one+one; inn.dataset.sig=sig;
     Object.entries(LIVE.last).forEach(([k,v])=>{if(Date.now()-v.ts<20000)livePx(k,v.px,v.chg)});
   }
-  if(!TAPES.p)TAPES.p=new Tape(el,inn);
+  if(!TAPES.p)TAPES.p=new Tape($('#tape .tapewrap')||el,inn);     // 🔮 v3.29.0: الزر بأول الشريط ⇒ السحب على الأسعار بس
   TAPES.p.setLoop(Math.max(20,+T.speed||45));
   liveWS(wsCoins(coins));                           // ⚡ لحظي من المنصة مباشرة (الشريط + البوتات)
   for(const r of rows){
@@ -18499,7 +18411,8 @@ function indBtnSync(d){const S=(((d||DATA||{}).indic)||{}).sum||{};             
   if(H.dataset.mood!==md)H.dataset.mood=md;
   const b=$('#indBtn');if(!b)return;
   const h='📊 المؤشرات'+((S.up||S.down)?` <small><b style="color:var(--green)">⬆️${S.up||0}</b> <b style="color:var(--red)">⬇️${S.down||0}</b></small>`:'');
-  if(b._h!==h){b.innerHTML=h;b._h=h}}
+  if(b._h!==h){b.innerHTML=h;b._h=h}
+  fcAlign()}
 let PXAO=false, PXAV=null, GLT=0;
 /* ✨ v3.26.7: لمعة الشعار — شريط الضوء (SMIL على تدرّج الكتابة) + الخط الصاعد يضوي بنفس اللحظة · كل 7 ثواني · يوقف بالتبويب المخفي و«الوضع الخفيف» و«تقليل الحركة» */
 function glintOk(){try{return !matchMedia('(prefers-reduced-motion: reduce)').matches&&!document.documentElement.classList.contains('lite')}catch(e){return false}}
@@ -18579,77 +18492,73 @@ function indRender(){
     <div style="color:var(--amber);margin-top:6px">⚠️ المؤشرات احتمالات مو ضمان — حتى 60% دقة تعتبر زينة بالأسواق. ما تفتح ولا تسكّر أي أمر — قراءة بس. ${V.err?'<br>'+gEsc(V.err):''}</div></details>`;
   el.innerHTML=h}
 
-/* 🔮 v3.28.0: التوقعات — يوم · أسبوع · شهر · 3 أشهر · تقييم TradingView + «أحداث سابقة» (خوارزمية على تاريخ العملة) + كم مرة صدقت · بلا إشعارات */
-let FCV=null,FCT=null;const FCO={};
+/* 🔮 v3.29.0: التوقعات — نفس مؤشرات 📊 على شموع أطول (يوم ← 4 ساعات · أسبوع ← يوم · شهر ← 3 أيام · 3 أشهر ← أسبوع) + 4 إضافات ·
+   دائماً «شنو تكول المؤشرات» ويمها شارة صدقها على نفس العملة · النطاق 80% · الدعم والمقاومة · بلا إشعارات */
+let FCV=null,FCT=null;const FCO={},FCS={};
+const FCI={su:'⬆️',u:'↗️',f:'↔️',d:'↘️',sd:'⬇️'};
+function fcShow(on){const b=$('#fcBtn');if(!b)return;const v=on?'':'none';if(b.style.display!==v)b.style.display=v;fcAlign()}
+function fcAlign(){const a=$('#fcBtn'),b=$('#indBtn');if(!a||!b||!a.offsetParent||!b.offsetParent)return;   // 🔮 نفس عرض 📊 (فوقه بالضبط)
+  const k=(b._h||'')+'|'+innerWidth;if(a._al===k)return;a._al=k;
+  a.style.minWidth=b.style.minWidth='';const w=Math.ceil(Math.max(a.getBoundingClientRect().width,b.getBoundingClientRect().width));
+  a.style.minWidth=b.style.minWidth=w+'px'}
+addEventListener('resize',()=>{const a=$('#fcBtn');if(a){a._al='';fcAlign()}});
 async function openFc(){
-  showModal(`<h2>🔮 التوقعات — يوم · أسبوع · شهر · 3 أشهر</h2><div id="fc_body" style="color:var(--mut);font-size:12.5px;padding:16px;text-align:center">${LDR('جاري الحساب…')}</div>
+  showModal(`<h2>🔮 التوقعات</h2><div id="fc_body" style="color:var(--mut);font-size:12.5px;padding:16px;text-align:center">${LDR('جاري الحساب…')}</div>
     <div class="mbtns"><button onclick="openTicker()">⚙️ العملات</button><button onclick="hideModal()">إغلاق</button></div>`);
   await fcLoad()}
 async function fcLoad(){clearTimeout(FCT);try{FCV=await api('/api/forecast')}catch(e){FCV=null}fcRender();
-  if(FCV&&FCV.busy&&!(FCV.rows||[]).length&&$('#fc_body'))FCT=setTimeout(fcLoad,4000)}
+  if(FCV&&FCV.busy&&$('#fc_body'))FCT=setTimeout(fcLoad,4000)}
 function fcTog(s){FCO[s]=!FCO[s];fcRender()}
-function fcGrade(a){a=a||{};
-  if(!a.n&&!a.tests)return['short','⏳ ما انفحصت بعد'];
-  if(a.grade==='short')return['short',`⏳ تاريخ قليل (${a.n||0} مرة)`];
-  if(a.grade==='g')return['g',`🟢 صدقت ${a.hit}% (${a.n})`];
-  if(a.grade==='y')return['y',`🟡 أفضلية صغيرة ${a.hit!=null?a.hit+'%':''}`];
-  if(a.grade==='none')return['short',`⚪ النطاق صدق ${a.cov}%`];
-  return['r',`🔴 ما صدقت · النطاق ${a.cov}%`]}
-function fcTvBox(sym){const box=$('#fctv_'+CSS.escape(sym));if(!box)return;
-  const cfg={interval:'1D',width:'100%',isTransparent:true,height:'100%',symbol:'OKX:'+String(sym).replace('-',''),showIntervalTabs:true,displayMode:'single',locale:'ar',colorTheme:tvTheme()};
-  box.innerHTML=`<iframe loading="lazy" title="TradingView" src="https://www.tradingview-widget.com/embed-widget/technical-analysis/?locale=ar#${encodeURIComponent(JSON.stringify(cfg))}"></iframe>
-    <div class="ind-sub">📺 ساعة TradingView نفسها (من موقعهم) — بدّل اليوم/الأسبوع/الشهر من فوقها وقارن ويّا التوقع.</div>`}
+function fcSel(s,k){FCS[s]=k;fcRender()}
+function fcN(v){v=+v||0;const a=Math.abs(v);            // رقم قصير للنطاق: 81.6k · 2,421 · 398.6 · 1.31 · 0.0802
+  if(a>=10000)return (v/1000).toFixed(a>=100000?0:1)+'k';if(a>=1000)return Math.round(v).toLocaleString('en-US');if(a>=100)return v.toFixed(1);
+  if(a>=1)return v.toFixed(2).replace(/0+$/,'').replace(/\.$/,'');return v.toPrecision(3).replace(/0+$/,'').replace(/\.$/,'')}
+function fcB(a){a=a||{};const g=a.g||'short';return{g,t:g==='short'?'⏳':`${{g:'🟢',y:'🟡',n:'⚪\uFE0F',r:'🔴'}[g]||'⚪\uFE0F'} ${a.hit}%`}}
+function fcBW(a){a=a||{};if(!a.g||a.g==='short')return `⏳ تاريخ قليل للفحص (${a.n||0} مرة)`;
+  return `${{g:'🟢 أحسن من الصدفة بوضوح',y:'🟡 أحسن من الصدفة شوية',n:'⚪\uFE0F مثل الصدفة',r:'🔴 أسوأ من الصدفة'}[a.g]} — صدقت ${a.hit}% من ${a.n} مرة (الصدفة ${a.ch}%)`}
+function fcVote(z){if(['su','u'].includes(z.vk))return `${z.up} من ${z.n}`;if(['sd','d'].includes(z.vk))return `${z.dn} من ${z.n}`;return 'محايد'}
 function fcRender(){
   const el=$('#fc_body');if(!el)return;const V=FCV;
   if(!V||V.ok===false){el.innerHTML='⚠️ تعذّر حساب التوقعات';return}
   if(!V.on){el.innerHTML='المؤشرات مطفية — شغّلها من ⚙️ الإعدادات ← 📈 شريط الأسعار (التوقعات تمشي ويّاها)';return}
-  const R=V.rows||[];
-  if(!R.length){el.innerHTML=V.busy?LDR('⏳ أول حساب: يجيب تاريخ كل عملة (لحد 5 سنين) ويفحصه — دقيقة أو دقيقتين أول مرة بس…'):('ماكو عملات بالشريط — ضيفها من ⚙️ ← 📈 شريط الأسعار'+(V.err?'<br><small>'+gEsc(V.err)+'</small>':''));return}
+  const R=V.rows||[],HZ=V.hz||[];
+  if(!R.length){el.innerHTML=V.busy?LDR('⏳ أول حساب: يجيب تاريخ كل عملة ويفحص مؤشراتها على ماضيها — مرة وحدة بس (بعدها خفيف)…'):('ماكو عملات بالشريط — ضيفها من ⚙️ ← 📈 شريط الأسعار'+(V.err?'<br><small>'+gEsc(V.err)+'</small>':''));return}
   el.style.cssText='text-align:right';
-  const pct=v=>Math.round((+v||0)*100);
-  let h=`<div class="ind-top"><span class="ind-chip">📺 تقييم TradingView + 🔁 أحداث سابقة تشبه اليوم</span>
-    <span class="ind-chip">🔄 ${V.ts?gAgo(V.ts):'—'} · كل ${Math.round((V.every||1800)/60)} د</span><span class="ind-chip">🔕 بلا إشعارات — للاستفادة بس</span></div>`;
+  let h=`<div class="ind-top"><span class="ind-chip">📊 نفس مؤشرات «المؤشرات» + 4 إضافات</span><span class="ind-chip">🔄 ${V.ts?gAgo(V.ts):'—'} · كل ${Math.round((V.every||1800)/60)} د</span>
+    <span class="ind-chip">🔕 بلا إشعارات</span></div>${V.busy?`<div class="ind-sub">⏳ يكمّل حساب باقي العملات…</div>`:''}`;
   h+=`<div class="ind-list">${R.map(r=>{
     if(r.short)return `<div class="ind-c"><div class="ind-h"><span class="cn">${gEsc(r.base)}</span><span class="ind-v flat">⏳ تاريخها قصير (${r.days||0} يوم)</span></div>
-      <div class="ind-sub">التوقع يحتاج 120 يوم شموع على الأقل.</div></div>`;
-    const op=!!FCO[r.sym],H=r.h||{};
-    const tiles=(V.hz||[]).map(z=>{const x=H[z.k]||{},g=fcGrade(x.acc),weak=(g[0]==='r'||g[0]==='short');
-      if(x.short||x.p==null)return `<div class="fc-t weak"><span class="hn">${gEsc(z.name)}</span><span class="vv">⏳</span><span class="pp">تاريخ قليل</span></div>`;
-      const edge=['g','y'].includes((x.acc||{}).grade);
-      return `<div class="fc-t ${gEsc(x.verdict)}${weak?' weak':''}"><span class="hn">${gEsc(z.name)}</span><span class="vv">${gEsc(x.txt)}</span>
-        <span class="pp">${edge?'صعود':'عادةً يصعد'} <b>${pct(x.p)}%</b></span><span class="rg">${fmtPx(x.lo)} – ${fmtPx(x.hi)}</span><span class="gd fc-gd ${g[0]}">${g[1]}</span></div>`}).join('');
+      <div class="ind-sub">تحتاج 120 يوم شموع على الأقل.</div></div>`;
+    const op=!!FCO[r.sym],H=r.h||{},sq=Object.values(H).some(z=>z&&z.sq&&z.sq.on);
+    const rows=HZ.map(z=>{const x=H[z.k]||{};
+      if(x.short||!x.vk)return `<div class="fc-r short"><span class="fh">${gEsc(z.name)}</span><span class="fv">⏳ تاريخ قليل</span><span class="fg">—</span><span class="fb short">⏳</span></div>`;
+      const b=fcB(x.rel);
+      return `<div class="fc-r v-${gEsc(x.vk)}"><span class="fh">${gEsc(z.name)}</span><span class="fv">${FCI[x.vk]||''} ${gEsc(fcVote(x))}</span>
+        <span class="fg">${x.lo!=null?fcN(x.lo)+' – '+fcN(x.hi):'—'}</span><span class="fb ${b.g}">${b.t}</span></div>`}).join('');
     let det='';
-    if(op){
-      det=`<div class="ind-det" onclick="event.stopPropagation()">${(r.ctx||[]).map(c=>`<div class="ind-row"><span>${c.ico} <b>${gEsc(c.name)}</b></span><span class="w ${gEsc(c.w)}">${{p:'🟢 إيجابي',n:'🔴 سلبي'}[c.w]||''}</span><small>${gEsc(c.txt)}</small></div>`).join('')}
-        ${(V.hz||[]).map(z=>{const x=H[z.k]||{},a=x.acc||{},g=fcGrade(a),tv=x.tv,nb=x.nb,lv=x.live;
-          if(x.short||x.p==null)return `<div class="fc-hz"><h4>🗓️ ${gEsc(z.name)}<span class="vv" style="color:var(--mut)">⏳ تاريخ قليل</span></h4></div>`;
-          const lo=+x.lo,hi=+x.hi,span=Math.max(1e-12,hi-lo),pos=v=>Math.max(0,Math.min(100,(v-lo)/span*100)).toFixed(1);
-          return `<div class="fc-hz"><h4>🗓️ ${gEsc(z.name)} <small style="color:var(--mut2)">(بعد ${z.h} يوم)</small><span class="vv fc-gd ${['su','u'].includes(x.verdict)?'g':['sd','d'].includes(x.verdict)?'r':'short'}">${gEsc(x.txt)} · صعود ${pct(x.p)}%</span></h4>
-            <div class="fc-rbar" title="النطاق المتوقع (80%) — البنفسجي 50%"><span class="b50" style="left:${pos(x.lo50)}%;right:${(100-pos(x.hi50)).toFixed(1)}%"></span><i style="left:${pos(r.px)}%" title="السعر هسه"></i></div>
-            <div class="fc-rl"><span>${fmtPx(lo)}</span><span>الأرجح ${fmtPx(x.mid)}</span><span>${fmtPx(hi)}</span></div>
-            ${tv?`<div class="ind-row"><span>📺 <b>TradingView (${gEsc(x.tf)})</b></span><span class="w ${tv.k==='sb'||tv.k==='b'?'p':tv.k==='ss'||tv.k==='s'?'n':'z'}">${gEsc(tv.txt)}</span>
-              <small>المتوسطات: ${tv.ma[0]} شراء · ${tv.ma[1]} بيع · ${tv.ma[2]} محايد — المذبذبات: ${tv.osc[0]} شراء · ${tv.osc[1]} بيع · ${tv.osc[2]} محايد</small></div>`:''}
-            ${x.mom!=null?`<div class="ind-row"><span>⚡ <b>الزخم</b></span><span class="w ${x.mom>=3?'p':x.mom<=-3?'n':'z'}">${x.mom>0?'+':''}${x.mom}%</span><small>حركة السعر بآخر ${{d:7,w:30,m:90,q:180}[z.k]} يوم</small></div>`:''}
-            ${nb?`<div class="ind-row"><span>🔁 <b>أحداث سابقة تشبه اليوم</b></span><span class="w ${nb.up/nb.n>=0.56?'p':nb.up/nb.n<=0.44?'n':'z'}">${nb.up}/${nb.n} صعدت</span>
-              <small>أشبه ${nb.n} يوم بتاريخ ${gEsc(r.base)} (نفس تقييم TradingView والاتجاه والزخم والتذبذب${r.base!=='BTC'?' وبيتكوين':''}) — بعد ${z.h} يوم: ${nb.up} صعدت · ${nb.n-nb.up} نزلت · متوسطها ${nb.avg>0?'+':''}${nb.avg}%</small></div>`:''}
-            <div class="ind-row"><span>🧠 <b>الطريقة</b></span><span class="w ${['g','y'].includes(a.grade)?'p':'z'}">${gEsc(x.model_txt||'')}</span>
-              <small>${a.model==='base'?`ولا طريقة كانت أحسن من التخمين على ماضي ${gEsc(r.base)} بهالمدى ⇒ ما نعطيك سهم وهمي: «عادةً يصعد ${pct(x.p)}%» والنطاق بس`:`الخوارزمية جرّبت 5 طرق على النص الأول من تاريخ ${gEsc(r.base)} واختارت هاي لأنها كانت الأحسن — وانفحصت على النص الثاني اللي ما شافته (الرقم الجاي)`}</small></div>
-            <div class="ind-row"><span>🎯 <b>كم مرة صدقت</b></span><span class="w fc-gd ${g[0]}">${g[1]}</span>
-              <small>${a.tests?`على النص الثاني من ماضي ${gEsc(r.base)} (كل يوم يشوف اللي قبله بس)${a.n?`: أصابت الاتجاه ${a.hit}% من ${a.n} مرة · «صعود/نزول دائماً» كان يصيب ${a.base}%`:''} · <b>النطاق صدق ${a.cov}%</b> (الهدف 80%)${a.indep<20?` · ⚠️ فترات مستقلة قليلة (${a.indep})`:''}`:'لسه ما انفحصت'}${lv&&lv.done?` · 📒 حيّة: ${lv.hit!=null?lv.hit+'% من '+lv.n:'—'} · النطاق ${lv.cov}% (${lv.done} توقع انحكم)`:lv&&lv.wait?` · 📒 ${lv.wait} توقع ينتظر وقته`:''}</small></div></div>`}).join('')}
-        <div class="fc-tv" id="fctv_${gEsc(r.sym)}"><button onclick="fcTvBox('${gEsc(r.sym)}')">📺 افتح تحليل TradingView لـ${gEsc(r.base)}</button></div></div>`}
-    const v0=(H.w&&H.w.verdict)||'f';
-    return `<div class="ind-c ${['su','u'].includes(v0)?'up':['sd','d'].includes(v0)?'down':''}${op?' open':''}" onclick="fcTog('${gEsc(r.sym)}')">
-      <div class="ind-h"><span class="cn">${gEsc(r.base)}</span><span class="px">${fmtPx(r.px)}</span><span class="chg ${(+r.chg1||0)>=0?'up':'dn'}">${(+r.chg1||0)>=0?'▲':'▼'}${Math.abs(+r.chg1||0).toFixed(2)}%</span>
-        <span class="ind-sub" style="margin-inline-start:auto">${r.days} يوم تاريخ</span></div>
-      <div class="fc-grid">${tiles}</div>${det||'<div class="ind-sub" style="margin-top:5px">اضغط للتفاصيل ←</div>'}</div>`}).join('')}</div>`;
+    if(op){const k=FCS[r.sym]||(HZ[0]||{}).k,x=H[k]||{};
+      const tabs=`<div class="fc-tabs">${HZ.map(z=>`<button class="${z.k===k?'on':''}" onclick="fcSel('${gEsc(r.sym)}','${gEsc(z.k)}')">${gEsc(z.name)}</button>`).join('')}</div>`;
+      if(x.short||!x.vk)det=`<div class="ind-det" onclick="event.stopPropagation()">${tabs}<div class="ind-sub">⏳ تاريخ قليل لهالمدى (${x.have||0} شمعة من ${x.need||'—'}).</div></div>`;
+      else{const lv=x.lv||{},lvT=a=>(a||[]).map(q=>`<b class="rg">${fcN(q[1])}</b> <small>(${gEsc(q[0])})</small>`).join(' · ')||'—',L=x.live||{};
+        det=`<div class="ind-det" onclick="event.stopPropagation()">${tabs}<div class="fc-sum">
+          <div><b style="color:var(${['su','u'].includes(x.vk)?'--green':['sd','d'].includes(x.vk)?'--red':'--mut'})">${gEsc(x.vt)}</b> — ${x.up} صاعدة · ${x.dn} نازلة · ${x.fl} محايدة <small>(على شموع ${gEsc(x.tfn)} · بعد ${gEsc(x.name)})</small></div>
+          <div>🎯 ${fcBW(x.rel)}</div>
+          ${x.lo!=null?`<div>📏 النطاق 80%: <b class="rg">${fcN(x.lo)} – ${fcN(x.hi)}</b> <small>(الأرجح ${fcN(x.mid)}${(x.rng||{}).cov!=null?` · صدق ${x.rng.cov}% على الماضي`:''})</small></div>`:''}
+          <div>🧱 دعم: ${lvT(lv.sup)}<br>🧱 مقاومة: ${lvT(lv.res)}</div>
+          ${x.sq&&x.sq.on?`<div style="color:var(--amber)">⚡ السوق هادي (انضغاط) — عادةً تجي بعده حركة كبيرة واتجاهها ما ينعرف${x.sq.x?` · بتاريخ ${gEsc(r.base)}: بعد الهدوء الحركة كانت ×${x.sq.x} من العادة`:''}</div>`:''}
+          <div><small>📒 ${L.n||L.done?`من بدأ التسجيل: صدقت ${L.hit||0} من ${L.n||0}${L.cov!=null?` · داخل النطاق ${L.cov}%`:''}${L.wait?` · ${L.wait} تنتظر وقتها`:''}`:'السجل الحي يبدي هسه — كل قراءة تنحكم لما يجي وقتها'}</small></div></div>
+          ${(x.sig||[]).map(p=>{const b=fcB(p.acc);return `<div class="ind-row"><span>${p.ico} <b>${gEsc(p.name)}</b></span><span class="w ${p.w}">${{p:'⬆️ صاعد',n:'⬇️ نازل',z:'↔️ محايد'}[p.w]}<i class="fb ${b.g}" title="${gEsc(fcBW(p.acc))}">${b.t}</i></span><small>${gEsc(p.txt)}</small></div>`}).join('')}</div>`}}
+    const v0=(H.w&&H.w.vk)||(H.d&&H.d.vk)||'f';
+    return `<div class="ind-c fc-c ${['su','u'].includes(v0)?'up':['sd','d'].includes(v0)?'down':''}${op?' open':''}" onclick="fcTog('${gEsc(r.sym)}')">
+      <div class="ind-h"><span class="cn">${gEsc(r.base)}</span><span class="px">${fmtPx(r.px)}</span><span class="chg ${(+r.chg||0)>=0?'up':'dn'}">${(+r.chg||0)>=0?'▲':'▼'}${Math.abs(+r.chg||0).toFixed(2)}%</span>
+        ${sq?`<span class="fc-sq" title="السوق هادي على مدى أو أكثر — حركة كبيرة جاية (اتجاهها ما ينعرف)">⚡</span>`:''}<span class="ind-sub" style="margin-inline-start:auto">${op?'':'اضغط للتفاصيل ←'}</span></div>
+      <div class="fc-rows"><div class="fc-r fc-hd"><span>المدى</span><span>المؤشرات</span><span>النطاق المتوقع</span><span>صدقها</span></div>${rows}</div>${det}</div>`}).join('')}</div>`;
   h+=`<details class="ind-help"><summary>شلون أقرا هذا؟</summary>
-    <div>• <b>كل خانة</b> = مدى (يوم · أسبوع · شهر · 3 أشهر): السهم (⬆️ ↗️ ↔️ ↘️ ⬇️) · <b>احتمال الصعود</b> · و<b>النطاق المتوقع</b> (السعر بنهاية المدة بين هالرقمين بنسبة 80% — البنفسجي بالتفاصيل 50%).</div>
-    <div>• <b>📺 TradingView</b> = تقييمهم الفني «Technical Ratings» بنفس طريقتهم المنشورة (15 متوسط متحرك + 11 مذبذب ⇒ شراء قوي … بيع قوي) على شموع اليوم والأسبوع والشهر.</div>
-    <div>• <b>🔁 أحداث سابقة</b> = خوارزمية تدوّر بتاريخ نفس العملة (لحد 5 سنين) على أكثر الأيام اللي تشبه اليوم وتشوف شنو صار بعدها — منها الاحتمال والنطاق. بلا اشتراك ولا API — كلها على سيرفرك.</div>
-    <div>• <b>🧠 الطريقة</b> = لكل عملة ولكل مدى الخوارزمية تجرّب 5 طرق (أحداث سابقة · الزخم · تقييم TradingView · الاتجاه · الاتجاه+الزخم) على النص الأول من تاريخها وتختار الأحسن — وتفحصها على النص الثاني اللي ما شافته.</div>
-    <div>• <b>🎯 كم مرة صدقت</b>: 🟢 أحسن من التخمين بوضوح · 🟡 أفضلية صغيرة · ⚪ <b>ماكو أفضلية</b> (ولا طريقة أحسن من التخمين ⇒ ما نعطيك سهم — «عادةً يصعد» والنطاق بس) · 🔴 الطريقة المختارة ما صدقت على الجزء اللي ما شافته · و📒 حيّة = توقعاتها من لما شغّلت.</div>
-    <div>• <b>📏 النطاق</b> هو الأوثق: على أسعار حقيقية لـ10 عملات بـ5 سنين، السعر طلع داخل نطاق الـ80% بحدود 80–90% من المرات.</div>
-    <div style="color:var(--amber);margin-top:6px">⚠️ توقعات واحتمالات مو ضمان — حتى 55–60% بالأسواق تعتبر زينة · كل ما المدى أبعد كل ما الفترات المستقلة أقل والثقة أقل. ما تفتح ولا تسكّر أي أمر ولا تبعث إشعار. ${V.err?'<br>'+gEsc(V.err):''}</div></details>`;
+    <div>• كل سطر = مدى: <b>شنو تكول المؤشرات</b> (كم مؤشر صاعد أو نازل من كم — نفس عشرة 📊 + 4 إضافات) · <b>النطاق المتوقع</b> (السعر بنهاية المدة بين الرقمين بنسبة 80%) · <b>صدقها</b>.</div>
+    <div>• المؤشرات تنحسب على شموع أطول حسب المدى: يوم ← شموع 4 ساعات · أسبوع ← يوم · شهر ← 3 أيام · 3 أشهر ← أسبوع.</div>
+    <div>• <b>صدقها</b> = نفس القراءة انفحصت على ماضي نفس العملة (كل مرة تشوف اللي قبلها بس): كم مرة السهم طلع صح مقابل الصدفة — 🟢 أحسن من الصدفة بوضوح · 🟡 أحسن شوية · ⚪\uFE0F مثل الصدفة · 🔴 أسوأ من الصدفة · ⏳ تاريخ قليل. وكل مؤشر بالتفاصيل يمه صدقه هو.</div>
+    <div>• الإضافات (حسابات بس): 🧠 Lorentzian · 〰️ Nadaraya-Watson (النسخة اللي ما تعيد رسم الماضي) · 😨 الخوف والطمع بأطرافه · 💸 التمويل (يوم وأسبوع). ⚡ = السوق هادي ⇒ حركة كبيرة جاية (اتجاهها ما ينعرف).</div>
+    <div style="color:var(--amber);margin-top:6px">⚠️ قراءة واحتمالات مو ضمان — على الأسعار الحقيقية اتجاه أغلب المؤشرات قريب من الصدفة، والنطاق هو الأوثق. ما تفتح ولا تسكّر أي أمر ولا تبعث إشعار.</div></details>`;
   el.innerHTML=h}
 
 /* 🧾 سجل ربح اليوم — ضغطة على 🔄 ربح التداول أو 📅 الربح المحرر */
@@ -18781,8 +18690,8 @@ function indicSync(d){
   const I=d.indic||{}, el=$('#tape2'), inn=$('#tape2in'), fg=$('#fng');
   if(!el||!inn)return;
   const rows=I.rows||[], f=I.fng||{};
-  if(!I.on||(!rows.length&&f.v==null)){el.style.display='none';indBtnSync(d);return}
-  el.style.display='flex';
+  if(!I.on||(!rows.length&&f.v==null)){el.style.display='none';fcShow(false);indBtnSync(d);return}
+  el.style.display='flex';fcShow(true);
   if(fg){
     if(f.v!=null){
       const v=Math.max(0,Math.min(100,Math.round(+f.v))), c=v<25?'var(--red)':v<45?'var(--amber)':v<56?'var(--mut)':v<75?'var(--green)':'var(--cyan)';
