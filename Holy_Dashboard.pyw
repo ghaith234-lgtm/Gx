@@ -17371,6 +17371,8 @@ nav.actions .gsep{width:1px;height:24px;background:var(--line);margin:0 4px;flex
 .st .spk{position:absolute;left:0;right:0;bottom:0;width:100%;height:22px;opacity:.32;pointer-events:none}
 .st.pos .sv>span{background:linear-gradient(92deg,var(--green),var(--cyan));-webkit-background-clip:text;background-clip:text}
 .pc-kpi.stats{grid-template-columns:repeat(6,minmax(0,1fr));margin:4px 0 14px}
+@media (min-width:1280px){.pc-kpi.stats .st .sl[data-s]{font-size:0}.pc-kpi.stats .st .sl[data-s]::before{content:attr(data-s);font-size:11px}}   /* 📊 v3.31.0: اللوحة عرضها ~1000px حتى على الشاشة الكبيرة ⇒ 6 بالصف = الاسم المختصر (الكامل بالـtitle) */
+@media (max-width:430px){.pc-kpi.stats .st .sl[data-x]::before{content:attr(data-x)}}   /* 📱 «🪙 تداول ع كلي» ما يلزم جنب كمية العملة ⇒ «🪙 كلي ع» (مثل الشريط تحت 380) */
 @media (min-width:761px) and (max-width:1279px){.st .sl[data-s]{font-size:0}.st .sl[data-s]::before{content:attr(data-s);font-size:11px}}   /* 6 بالصف ⇒ الاسم المختصر */
 @media (max-width:760px){
   /* 📱 v3.23.2: كلها تبين بلا سحب — عمودين · كل خانة يمّ إجماليها (اليوم ⇐ الكلي) · شريط بسطر واحد: الاسم المختصر ⇐ الرقم · بلا خط الحركة
@@ -20492,7 +20494,7 @@ function pcKpi(v){
   // 📊 v3.22.2: نفس العشر خانات — الفترة فوق · الإجمالي تحت (بلا سطور صغيرة حتى المربعات متساوية)
   const T=v.tot||{},B=T.best,D=DATA||{},TP=D.trade||{},el=$('#pcKpi');
   $('#pcSub').textContent=`${v.span} يوم · من ${pcD(v.from)} إلى ${pcD(v.to)}`;
-  const c=(id,l,val,unit,tt,sh)=>`<div class="st${id?' rot':''}" title="${tt||''}"><span class="sl"${sh?` data-s="${sh}"`:''}>${l}</span><b class="sv"${id?` id="${id}"`:''}>${id?'':`<span class="num">${val}</span>${unit?`<small>${unit}</small>`:''}`}</b></div>`;
+  const c=(id,l,val,unit,tt,sh,x)=>`<div class="st${id?' rot':''}" title="${tt||''}"><span class="sl"${sh?` data-s="${sh}"`:''}${x?` data-x="${x}"`:''}>${l}</span><b class="sv"${id?` id="${id}"`:''}>${id?'':`<span class="num">${val}</span>${unit?`<small>${unit}</small>`:''}`}</b></div>`;
   const all=(TP.trade_all!=null)?(+TP.trade_all||0):((+D.total_profit||0)+(+TP.held||0)+(+TP.handoff||0)),ST=D.stats||{},SB=ST.best;
   const bfull=SB?(()=>{const p=String(SB.d).split('-');return `${+p[2]}/${+p[1]}/${p[0]}`})():'';
   el.className='pc-kpi stats';
@@ -20505,7 +20507,7 @@ function pcKpi(v){
     +c('','📈 ربح التداول الإجمالي',pcN(all),'$','مجموع كل الأيام (مباشر + معاد) — ويّا المحذوفة','📈 تداول كلي')
     +c('','💵 ربح المحرر الإجمالي',pcN(D.total_profit),'$','مجموع الدفتر اليومي بكل الأيام — ويّا المحذوفة','💵 محرر كلي')
     +c('pcCoinA','🪙 ربح إجمالي العملات','','','حتى الآن','🪙 الكلي')
-    +c('pcCtA','🪙 ربح تداول العملات الإجمالي','','','حتى الآن · DCA البيعي + الدوري البيعي (ويّا المحذوف)','🪙 تداول ع كلي')
+    +c('pcCtA','🪙 ربح تداول العملات الإجمالي','','','حتى الآن · DCA البيعي + الدوري البيعي (ويّا المحذوف)','🪙 تداول ع كلي','🪙 كلي ع')
     +c('','🏆 أفضل يوم',SB?pcN(SB.v):'—','$',SB?'كل التاريخ (نفس الشريط) · '+bfull:'','🏆 أفضل يوم')
     +`<div class="st" title="أوامرك المفتوحة بالمنصة"><span class="sl" data-s="📋 الأوامر">📋 الأوامر المنشورة على المنصة</span><b class="sv">${typeof D.ex_b==='number'?`<span>${D.ex_s}↑ · ${D.ex_b}↓</span><small>${D.ex_b+D.ex_s}</small>`:'<span>—</span>'}</b></div>`;
   rotSet($('#pcCoinP'),T.coins||{});rotSet($('#pcCoinA'),D.coins_all||{});rotSet($('#pcCtP'),T.ctrade||{});rotSet($('#pcCtA'),D.ctrade_all||{})}
