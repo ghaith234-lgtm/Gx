@@ -11076,7 +11076,7 @@ def _fc_eval(F, k, h, btc=True):
     upz = sum(1 for r, _, _ in Z if r > 0)
     basep = round(max(upz, len(Z) - upz) / len(Z) * 100)
     inside = lambda f, L: sum(1 for r, _, q in L if q[2] - f * (q[2] - q[0]) <= r <= q[2] + f * (q[4] - q[2])) / max(1, len(L))
-    fct = 1.0                                                # 📏 عرض النطاق يتعيّر على النص الأول · والصدق ينقاس على النص الثاني
+    fct = 0.5                                                # 📏 عرض النطاق يتعيّر على النص الأول (يضيق أو يتوسع لحد ما يصدق 80%) · والصدق ينقاس على النص الثاني
     while fct < 3.0 and inside(fct, A) < 0.80:
         fct += 0.05
     cov = inside(fct, Z)
