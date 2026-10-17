@@ -5,13 +5,13 @@ name: Holy forecast check
 on:
   push:
     branches: [claude/eager-brown-jf08ur]
-    paths: ['ci/fc_check.py', 'ci/RUN_FC', '.github/workflows/holy-fc-check.yml']
+    paths: ['ci/fc_check.py', 'ci/fc_research.py', 'ci/RUN_FC', '.github/workflows/holy-fc-check.yml']
 permissions:
   contents: read
 jobs:
   real-prices:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -21,3 +21,5 @@ jobs:
         run: |
           pip install -q requests
           python3 ci/fc_check.py Holy_Dashboard.pyw
+      - name: Which direction signal beats guessing? (20 coins · same no-look-ahead test)
+        run: python3 ci/fc_research.py Holy_Dashboard.pyw
