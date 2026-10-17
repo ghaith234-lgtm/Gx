@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.31.0"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.31.1"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -3707,7 +3707,9 @@ def history_of(d, limit=200):
 
 # 🔕 v3.21.10 (ب٣٠): أسطر المحرك وقت الإيقاف اللي تكرر إشعار اللوحة بمركز 🔔 (درجة انحسبت بالخفاء · مستوى انحجز بالمخزن).
 #    تبقى بسجل البوت كما هي — بس ما تطلع إشعار ثاني (كل عبور كان يطلع مرتين ويّا نغمتين، والضغط على الإيقاف 4 أسطر).
-_FEED_SKIP = ("انحسبت بالخفاء", "] حُجز مستوى")
+# 🔕 v3.31.1: «⏸️ [انتظار مؤقت]» — المحرك يشيل أبعد أمر منشور (فوق 4 بكل جهة) للذاكرة بعد كل شراء/بيع ⇒ كان يطلع إشعار ثاني ويّا كل صفقة
+#    (المالك: «يأتي شعارين ابقي بس الشراء والبيع») · يبقى بسجل البوت 📜 والسجلات المفصّلة
+_FEED_SKIP = ("انحسبت بالخفاء", "] حُجز مستوى", "[انتظار مؤقت]")
 
 def feed_all(limit=60):
     """يدمج آخر الأحداث عبر كل البوتات، مرتّبة بالأحدث — لمركز الإشعارات الداخلي"""
@@ -17649,6 +17651,16 @@ html.lite .card:hover,html.lite button:hover{transform:none}
 /* ═══ 🩹 إصلاحات فحص الواجهة ═══ */
 .modal{max-width:100%}
 @media (max-width:520px){.mbg{padding:10px}.modal{padding:18px 15px;border-radius:18px}}
+/* 💰 v3.31.1: صفوف «محفظتي في المنصة» — أعمدة ثابتة حتى الأرقام تصطف تحت بعض */
+.fxr{display:grid;grid-template-columns:22px 64px minmax(0,1fr) 56px 84px 92px;grid-template-areas:"i n q p c v";align-items:center;column-gap:9px;font-size:12.5px;line-height:20px}
+.fxr>.coin{grid-area:i}.fxr .fxn{grid-area:n;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fxr .fxq{grid-area:q;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:0 9px;color:var(--mut)}.fxr .fxq>span{line-height:18px;height:18px}.fxr .fxl{color:var(--mut2);font-size:10.5px}
+.fxr .fxp{grid-area:p;justify-self:end;font-size:10.5px;white-space:nowrap}.fxr .fxc{grid-area:c;justify-self:start;display:flex;line-height:16px}
+.fxr .fxv{grid-area:v;justify-self:end;white-space:nowrap}
+@media (max-width:600px){.fxr{grid-template-columns:22px minmax(0,1fr) auto 80px;grid-template-rows:20px minmax(18px,auto);grid-template-areas:"i n p v" "i q q c";row-gap:2px;padding:3px 0;line-height:18px}
+  .fxr>.coin{align-self:center}.fxr .fxn{font-size:13px;line-height:20px}.fxr .fxv{line-height:20px}.fxr .fxq{font-size:11px;gap:0 6px}.fxr .fxl{font-size:10px}
+  .fxr .fxc{justify-self:end}.fxr.nofx{grid-template-areas:"i n p v" "i q q q"}.fxr.nofx .fxc{display:none}}   /* USDT (بلا أثر سعر): الكمية تاخذ السطر كله */
+@media (max-width:380px){.fxr{grid-template-columns:22px minmax(0,1fr) auto 72px;column-gap:8px}.fxr .fxq{font-size:10.5px}.fxr .fxl{font-size:9.5px}}
 .bench{min-width:0}
 .dline .dlbl{font-size:9.5px}
 .bigprice.long{font-size:17px}
@@ -22159,13 +22171,16 @@ async function pxLoop(){try{if(!document.hidden)for(const b of ((DATA&&DATA.bots
 setTimeout(pxLoop,6000);
 function coinTag(c){const l=(c||'?').toLowerCase();return `<img class="coin" src="https://assets.coincap.io/assets/icons/${l}@2x.png" data-alt="https://static.okx.com/cdn/oksupport/asset/currency/icon/${l}.png" onerror="cfb(this,'${c}')">`}
 /* 📉 v3.21.7: أثر السعر — شارة ملوّنة (أخضر صعود · أحمر نزول) */
-function fxChip(v,big){v=+v||0;const up=v>=0;
+function fxChip(v,big){v=+v||0;const up=v>=0,z=Math.abs(v)<0.005;         // 💰 v3.31.1: صفر = رمادي (كان «+$0.00» أخضر جنب نسبة حمرة)
   return `<span style="display:inline-flex;align-items:center;gap:6px;padding:${big?'3px 10px':'1px 7px'};border-radius:8px;font-size:${big?12:10.5}px;white-space:nowrap;
-   background:${up?'rgb(var(--green2-rgb)/.12)':'rgb(var(--red2-rgb)/.12)'};color:${up?'var(--green)':'var(--red)'}">${big?'<span>📉 أثر السعر اليوم</span>':''}<span class="num" dir="ltr">${up?'+':'−'}$${Math.abs(v).toFixed(2)}</span></span>`}
+   background:${z?'rgb(var(--ov-rgb)/.06)':up?'rgb(var(--green2-rgb)/.12)':'rgb(var(--red2-rgb)/.12)'};color:${z?'var(--mut2)':up?'var(--green)':'var(--red)'}">${big?'<span>📉 أثر السعر اليوم</span>':''}<span class="num" dir="ltr">${z?'':up?'+':'−'}$${Math.abs(v).toFixed(2)}</span></span>`}
+/* 💰 v3.31.1: صف العملة بنفس الشكل دائماً — الحاسوب سطر واحد بأعمدة ثابتة (الاسم · الكمية 🔒 · النسبة · أثر السعر · القيمة) ·
+   الموبايل سطرين: الاسم ⇐ النسبة · القيمة / الكمية 🔒 ⇐ أثر السعر (كان الصف ينكسر حسب طول الكمية ⇒ القيمة تنزل سطر بعملة وتبقى بعملة) */
 function fxRow(c){const tot=(c.tot!=null?c.tot:c.bal), lk=+c.lock||0;
-  return `<div style="display:flex;align-items:center;gap:9px;font-size:12.5px;flex-wrap:wrap">${coinTag(c.ccy)}<b style="min-width:64px">${c.ccy}</b>
-   <span class="num" style="color:var(--mut)" title="الكمية الكلية (حر + محجوز بأوامر)">${tot}</span>${lk>0?`<span class="num" style="color:var(--mut2);font-size:10.5px" title="محجوز بأوامر مفتوحة">🔒 ${lk}</span>`:''}
-   <span style="margin-inline-start:auto;display:flex;align-items:center;gap:7px">${c.fx!=null?`<span class="num" dir="ltr" style="font-size:10.5px;color:${c.pct>=0?'var(--green)':'var(--red)'}" title="تغيّر سعرها من أول اليوم">${c.pct>=0?'+':''}${c.pct}%</span>${fxChip(c.fx)}`:''}<b class="num">$${c.usd}</b></span></div>`}
+  return `<div class="fxr${c.fx!=null?'':' nofx'}">${coinTag(c.ccy)}<b class="fxn">${c.ccy}</b>
+   <span class="fxq"><span class="num" title="الكمية الكلية (حر + محجوز بأوامر)">${tot}</span>${lk>0?`<span class="num fxl" title="محجوز بأوامر مفتوحة">🔒 ${lk}</span>`:''}</span>
+   <span class="fxp">${c.fx!=null?`<span class="num" dir="ltr" style="color:${c.pct>=0?'var(--green)':'var(--red)'}" title="تغيّر سعرها من أول اليوم">${c.pct>=0?'+':''}${c.pct}%</span>`:''}</span><span class="fxc">${c.fx!=null?fxChip(c.fx):''}</span>
+   <b class="num fxv" dir="ltr">$${c.usd}</b></div>`}
 async function openWalletView(){let s={wallets:[]};try{s=await api('/api/settings')}catch(e){}
  const ws=s.wallets||[], bf=s.bot_fx||[];let h='';
  h+=`<p style="color:var(--mut2);font-size:11px;line-height:1.75;margin:-6px 0 12px">📉 <b>أثر السعر اليوم</b> = كمية كل عملة عندك هسه (الحرة + المحجوزة بأوامر) × (سعرها هسه − سعرها بأول اليوم${s.fx_day?' '+s.fx_day:''}).
