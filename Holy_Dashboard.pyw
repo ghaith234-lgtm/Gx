@@ -10960,10 +10960,11 @@ def _fc_predict(F, t, k, h, sd=None, btc=True):
     base_up = sum(1 for r in base if r > 0) / len(base)
     sw = up = 0.0
     rets = []
+    wh = (1.0 - math.exp(-h / 30.0)) / (h / 30.0)          # 📏 التذبذب يرجع لمعدله خلال أسابيع ⇒ أثر «تذبذب اليوم» يخف للمدى البعيد (يوم ≈ كامل · 3 أشهر ≈ الثلث)
     for d, i in pick:
         w = 1.0 - 0.6 * (d / dmax)                          # الأشبه وزنه أكبر
         r = math.log(C[i + h] / C[i])
-        sc = max(0.5, min(2.0, (vol[t] / vol[i]) if (vol[i] and vol[t]) else 1.0))
+        sc = max(0.5, min(2.0, (vol[t] / vol[i]) if (vol[i] and vol[t]) else 1.0)) ** wh
         rets.append((r * sc, w))
         sw += w
         up += w if r > 0 else 0.0
@@ -10973,7 +10974,7 @@ def _fc_predict(F, t, k, h, sd=None, btc=True):
     bw = 0.45 * sw / len(bg)
     for _, i in bg:
         r = math.log(C[i + h] / C[i])
-        sc = max(0.5, min(2.0, (vol[t] / vol[i]) if (vol[i] and vol[t]) else 1.0))
+        sc = max(0.5, min(2.0, (vol[t] / vol[i]) if (vol[i] and vol[t]) else 1.0)) ** wh
         rets.append((r * sc, bw))
     q = [_fc_wq(rets, x) for x in (0.10, 0.25, 0.50, 0.75, 0.90)]
     nb_up = sum(1 for _, i in pick if C[i + h] > C[i])
