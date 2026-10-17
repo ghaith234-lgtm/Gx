@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.31.1"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.32.0"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -2427,8 +2427,120 @@ def _dca_handoffs_of(b, bst):
 #     الدفتر اليومي (المحرر بالدولار) = الجزء المحرر من ربح كل صفقة شرائي (الخسارة تنقص) + دولار «سحب المعاد استثماره» (الاثنين)
 #     ربح التداول = المحرر n + المعاد استثماره r لكل صفقة (السحب تحويل — مو ربح جديد)
 #     العملة المحرّرة = الجزء المحرر من ربح كل صفقة بيعي + عملة السحب ⇒ دفتر العملات + المُراكِم (نفس طريق DCA البيعي)
-_REC_T = ("rec_buy", "rec_sell")
-_NONGRID = ("dca", "dca_buy") + _REC_T      # بوتات بلا سلّم شبكة (ولا غلاف إعادة استثمار الشبكة ولا تدقيق سلّم)
+# 📐 v3.32.0: **قاعدة البوتات** — السجل الوحيد لكل نوع بوت (المالك: «اريد تحفض القاعدة الي عليها البوت ، يعني عندما نضيف بوت جديد ارباحه
+#    عملات او دولار يعرف اين طريقه وكيف يوزع الارباح»). كل نوع = سطر: الاسم · الأيقونة · **عملة الربح** (دولار/عملة) · مصدر صفقاته ·
+#    العائلة (شبكة · DCA · دوري) · ملف حالته · محركه · **طريقه** (الدفاتر اللي يدخلها بالترتيب). القوائم بالكود تنشتق من هنا (`_kinds`)
+#    والرقابة («📐 قاعدة البوتات» بـ🔗 الترابط) تطلّع ❌ لو نوع ناقص أو طريقه يخالف عملته أو دفتر يقرا قائمة غير الجدول.
+#    نوع جديد ⇒ سطر هنا (وطريقه) + محركه + سطوره ببيانات اليوم ⇒ ينربط لحاله بكل الأرقام (الخطوات بالـHANDOFF §١ القاعدة 12).
+_BOOKS = {      # 📚 الدفاتر = محطات الطريق (المفتاح ⇒ اسمه · الدالة اللي تكتبه/تقراه)
+    "events":      ("🧾 سجل اليوم (كل صفقة بسطر)", "bot_day_events"),
+    "ledger":      ("📒 الدفتر (دولار يوم بيوم)", "ledger_tick"),
+    "trade":       ("🔄 ربح التداول", "trade_period"),
+    "released":    ("💵 الربح المحرر", "released_log"),
+    "box":         ("📥 صندوق الربح المحرر ⇒ المُراكِمات ⇒ 💰 الصندوق النهائي", "profit_tick"),
+    "reinvest":    ("💠 إعادة الاستثمار (يبقى بالبوت لحد التحرير)", "reinvest_tick"),
+    "coin_ledger": ("🪙 دفتر العملات (الربح المحرر بالعملة)", "coin_ledger_tick"),
+    "coin_trade":  ("🪙 ربح تداول العملات (يوم بيوم)", "coin_trade_tick"),
+    "loss":        ("📉 الخسائر (حساب بس)", "loss_tick"),
+    "report":      ("🖨️ التقارير (الصفحة · تيليغرام · المطبوع)", "profit_view"),
+}
+_BOT_KINDS = {
+    "grid":       {"lbl": "لانهائية",   "ico": "♾️", "cur": "usd",  "src": "hist",   "unit": "بيعة", "fam": "grid", "state": "grid_state_", "eng": "ENGINE_SRC",
+                   "route": ("events", "ledger", "trade", "released", "box", "reinvest", "report")},
+    "grid_range": {"lbl": "مدى",        "ico": "🎚️", "cur": "usd",  "src": "hist",   "unit": "بيعة", "fam": "grid", "state": "grid_state_", "eng": "GRIDR_SRC",
+                   "route": ("events", "ledger", "trade", "released", "box", "reinvest", "report")},
+    "grid_plus":  {"lbl": "بلس",        "ico": "➕", "cur": "usd",  "src": "hist",   "unit": "بيعة", "fam": "grid", "state": "grid_state_", "eng": "GRIDP_SRC",
+                   "route": ("events", "ledger", "trade", "released", "box", "reinvest", "report")},
+    "dca_buy":    {"lbl": "DCA شرائي",  "ico": "📈", "cur": "usd",  "src": "cycles", "unit": "دورة", "fam": "dca", "state": "dca_state_", "eng": "DCAB_SRC",
+                   "route": ("events", "ledger", "trade", "released", "box", "loss", "report")},
+    "rec_buy":    {"lbl": "دوري شرائي", "ico": "🔁", "cur": "usd",  "src": "cycles", "unit": "صفقة", "fam": "rec", "state": "rec_state_", "eng": "REC_SRC",
+                   "route": ("events", "ledger", "trade", "released", "box", "coin_ledger", "loss", "report")},
+    "dca":        {"lbl": "DCA بيعي",   "ico": "📉", "cur": "coin", "src": "cycles", "unit": "دورة", "fam": "dca", "state": "dca_state_", "eng": "DCA_SRC",
+                   "route": ("events", "coin_ledger", "coin_trade", "loss", "report")},
+    "rec_sell":   {"lbl": "دوري بيعي",  "ico": "🔂", "cur": "coin", "src": "cycles", "unit": "صفقة", "fam": "rec", "state": "rec_state_", "eng": "REC_SRC",
+                   "route": ("events", "coin_ledger", "coin_trade", "ledger", "released", "box", "loss", "report")},
+}
+
+
+def _kinds(cur=None, fam=None, book=None):
+    """📐 أنواع البوتات من الجدول: حسب عملة الربح · العائلة (وحدة أو أكثر) · دفتر بطريقها"""
+    fs = (fam,) if isinstance(fam, str) else fam
+    return tuple(k for k, v in _BOT_KINDS.items()
+                 if (cur is None or v["cur"] == cur) and (fs is None or v["fam"] in fs) and (book is None or book in v["route"]))
+
+
+def kind_route(t):
+    """📐 طريق ربح النوع بكلام — من الجدول نفسه (نفس اللي تمشي عليه الدفاتر)"""
+    K = _BOT_KINDS.get(t)
+    if not K:
+        return "❌ نوع مو بالجدول — ما يدخل ولا رقم"
+    R = K["route"]
+    usd = ("📒 الدفتر يوم بيوم ⇐ 🔄 ربح التداول + 💵 الربح المحرر ⇐ 📥 صندوق ربح محفظته ⇐ نهاية اليوم ينقسم على مُراكِمات المحفظة بنسبهم"
+           " ⇐ الباقي 💰 الصندوق النهائي (ماكو مُراكِم ⇒ النهائي مباشرة · اليوم الخسران ما يتوزّع)")
+    s = ("💵 ربحه دولار: " + usd) if K["cur"] == "usd" else \
+        "🪙 ربحه عملة: 🪙 دفتر العملات + 🪙 ربح تداول العملات يوم بيوم ⇐ يبقى عملة بمحفظتك (ما يتحوّل دولار ولا يتوزّع على المُراكِمات)"
+    if K["cur"] == "coin" and "ledger" in R:
+        s += " · 💵 سحب الدولار منه ⇐ نفس طريق الدولار"
+    if "reinvest" in R:
+        s += " · 💠 المعاد استثماره يبقى بالبوت لحد ما ينحرر ⇐ العملة المحررة ⇐ 🪙 دفتر العملات ⇐ المُراكِم أو 💰 النهائي"
+    if K["cur"] == "usd" and "coin_ledger" in R:
+        s += " · 🪙 عملة سحب المعاد استثماره ⇐ دفتر العملات"
+    if "loss" in R:
+        s += " · الخروج بخسارة ⇐ 📉 الخسائر"
+    return s + " · 🧾 كل صفقة بسطر بسجل اليوم والتقارير"
+
+
+def kinds_audit():
+    """📐 الرقابة: الجدول كامل؟ طريق كل نوع يوافق عملته؟ الكود يقرا نفس الجدول؟ ⇒ [(العنوان, صح؟, التفاصيل)]"""
+    out = []
+    need = {"lbl", "ico", "cur", "src", "unit", "fam", "state", "eng", "route"}
+    for k, K in _BOT_KINDS.items():
+        bad = []
+        miss = need - set(K)
+        if miss:
+            bad.append("ناقص: " + "، ".join(sorted(miss)))
+        else:
+            if K["cur"] not in ("usd", "coin"):
+                bad.append(f"عملة الربح «{K['cur']}» لازم usd أو coin")
+            if K["src"] not in ("hist", "cycles"):
+                bad.append(f"مصدر الصفقات «{K['src']}» ما يعرفه سجل اليوم")
+            unk = [r for r in K["route"] if r not in _BOOKS]
+            if unk:
+                bad.append("دفتر مو معروف: " + "، ".join(unk))
+            must = ("events", "ledger", "trade", "released", "box", "report") if K["cur"] == "usd" else ("events", "coin_ledger", "coin_trade", "report")
+            lack = [r for r in must if r not in K["route"]]
+            if lack:
+                bad.append("طريقه ناقص («" + ("دولار" if K["cur"] == "usd" else "عملة") + "» لازم يمر بـ): " + "، ".join(_BOOKS[r][0] for r in lack))
+            if K["cur"] == "usd" and "coin_trade" in K["route"]:
+                bad.append("بوت ربحه دولار ما يدخل «ربح تداول العملات»")
+            try:
+                sp = os.path.basename(paths_of({"symbol": "X-USDT", "dir": ROOT, "cfg": {"bot_type": k}})[0])
+                if not sp.startswith(K["state"]):
+                    bad.append(f"ملف حالته بالكود {sp} ≠ الجدول {K['state']}…")
+            except Exception as ex:
+                bad.append(f"ملف الحالة: {type(ex).__name__}")
+            if not str(globals().get(K["eng"]) or "").strip():
+                bad.append(f"محركه ({K['eng']}) مو مدموج باللوحة")
+            miss_f = [r for r in K["route"] if not callable(globals().get(_BOOKS[r][1]))]
+            if miss_f:
+                bad.append("دالة دفتر مفقودة: " + "، ".join(_BOOKS[r][1] for r in miss_f))
+        out.append((f"{K.get('ico', '🤖')} {K.get('lbl', k)} ({k})", not bad, " · ".join(bad) if bad else kind_route(k)))
+    der = [("_REC_T", set(globals().get("_REC_T") or ()), set(_kinds(fam="rec"))),
+           ("_NONGRID", set(globals().get("_NONGRID") or ()), set(_kinds(fam=("dca", "rec")))),
+           ("_CT_T", set(globals().get("_CT_T") or ()), set(_kinds(book="coin_trade"))),
+           ("_LOSS_T", set(globals().get("_LOSS_T") or ()), set(_kinds(book="loss")))]
+    rs = globals().get("_rep_src_of")
+    if callable(rs):
+        der.append(("_rep_src_of", {k for k in _BOT_KINDS if rs(k) not in ("other",)}, set(_kinds(cur="usd"))))
+    off = [f"{n}: {sorted(a)} ≠ الجدول {sorted(b)}" for n, a, b in der if a != b]
+    out.append(("الدفاتر تقرا نفس الجدول (الدوري · بلا سلّم · تداول العملات · الخسائر · مصادر الدولار بالتقرير)", not off,
+                " · ".join(off) if off else f"{len(der)} قائمة كلها من الجدول"))
+    return out
+
+
+_REC_T = _kinds(fam="rec")                   # 📐 v3.32.0: من الجدول (كان مكتوب باليد)
+_NONGRID = _kinds(fam=("dca", "rec"))        # بوتات بلا سلّم شبكة (ولا غلاف إعادة استثمار الشبكة ولا تدقيق سلّم) · 📐 من الجدول
+_LOSS_T = _kinds(book="loss")                # 📉 البوتات اللي خروجها بخسارة ينحسب (📐 من الجدول)
 REC_FEE = 0.001                              # نفس المحرك: عمولة الآخذ (أوامره كلها فورية)
 REC_TG_FILE = os.path.join(ROOT, "Holy_RecNotify.json")
 _REC_TG = {"d": None}
@@ -3012,7 +3124,7 @@ def loss_tick():
         for b in bot_dirs().values():
             cfg = b.get("cfg") or {}
             bt = str(cfg.get("bot_type") or "")
-            if cfg.get("is_demo") or bt not in ("dca", "dca_buy") + _REC_T:
+            if cfg.get("is_demo") or bt not in _LOSS_T:          # 📐 v3.32.0: من الجدول
                 continue
             st = _safe(load_json, paths_of(b)[0], default=None)
             if not isinstance(st, dict):
@@ -6464,6 +6576,8 @@ _LA_BA = {"t": 0.0, "v": None}
 
 def link_audit(force=False):
     """🔗 v3.26.4: يكشف أي رقم ما انربط — لكل بوت حي ومحذوف · لكل نوع · اليوم + الدفاتر كلها (قراءة بس · ولا شي يتحرك):
+      📐 قاعدة البوتات (v3.32.0): كل نوع بالجدول كامل (عملة الربح · العائلة · ملف الحالة · المحرك · الطريق) · طريقه يوافق عملته ·
+         القوائم بالكود (الدوري · بلا سلّم · تداول العملات · الخسائر · مصادر الدولار) = الجدول
       🔗 الأنواع: كل بوت نوعه بـ`_BOT_KINDS` (نوع جديد بلا ربط ⇒ ❌)
       🧾 سجل التداول اليوم: لكل بوت — رقمه (الشريط) = مجموع سطوره (صفقاته) · ولا بوت ربحه بالرقم بلا سطور · ولا سطور برّه الرقم
       🔄 التداول: بطاقة الشريط = سجل اليوم = تقرير الأرباح (نفس المحرك)
@@ -6490,6 +6604,12 @@ def link_audit(force=False):
         led = {}
     nm = lambda b, k: f"{(_BOT_KINDS.get(str((b.get('cfg') or {}).get('bot_type') or 'grid')) or {}).get('ico', '🤖')} {str(b['symbol']).split('-')[0]} · " \
                       f"{(_BOT_KINDS.get(str((b.get('cfg') or {}).get('bot_type') or 'grid')) or {}).get('lbl', '?')} ({k})"
+    S0 = "📐 قاعدة البوتات"                            # 📐 v3.32.0: الجدول كامل · طريق كل نوع يوافق عملته · الدفاتر تقرا نفس الجدول
+    try:
+        for t_, ok_, d_ in kinds_audit():
+            add(S0, t_, ok_, d_)
+    except Exception as ex:
+        add(S0, "تعذّر الفحص", False, f"{type(ex).__name__}: {ex}", "warn")
     S1 = "🔗 الأنواع"
     try:
         cnt, unk = {}, []
@@ -7674,7 +7794,7 @@ _REP_SRC = (("grid", "🧱 الجرد (لانهائية · مدى · بلس)", "
 
 
 def _rep_src_of(t):
-    return "grid" if t in ("grid", "grid_range", "grid_plus") else (t if t in ("dca_buy", "rec_buy") else "other")
+    return "grid" if t in _kinds(fam="grid") else (t if t in _kinds(cur="usd") else "other")      # 📐 v3.32.0: من الجدول
 
 
 def _rep_src_donut(parts, S=230):
@@ -8474,8 +8594,8 @@ def coins_period(start, end):
 import calendar as _cal
 COINTR_FILE = os.path.join(ROOT, "Holy_CoinTrade.json")
 ACCPL_FILE = os.path.join(ROOT, "Holy_AccProfit.json")
-_CT_T = ("dca", "rec_sell")
-_CT_TL = {"dca": "DCA بيعي", "rec_sell": "دوري بيعي"}
+_CT_T = _kinds(book="coin_trade")            # 📐 v3.32.0: من الجدول
+_CT_TL = {k: _BOT_KINDS[k]["lbl"] for k in _CT_T}
 
 
 def _ct_day(ts):
@@ -10147,17 +10267,7 @@ _TL_QTY = re.compile(r"الكمية:\s*([\d.]+)")
 _TL_SPLIT = re.compile(r"\((\d+)%\s*من\s*([\d.]+)\$\)")
 
 
-# 🔗 v3.26.4: سجل أنواع البوتات — مصدر صفقات كل نوع وعملة ربحه. **قاعدة الترابط**: نوع بوت جديد ⇒ ينضاف هنا وبكل رقم
-#    (الدفتر · التداول · سجل اليوم · العملات · الخريطة · الخسائر · التقارير) — و`link_audit` (الرقابة) يكشف أي نوع/رقم ما انربط.
-_BOT_KINDS = {
-    "grid":       {"lbl": "لانهائية",   "ico": "♾️", "cur": "usd",  "src": "hist",   "unit": "بيعة"},
-    "grid_range": {"lbl": "مدى",        "ico": "🎚️", "cur": "usd",  "src": "hist",   "unit": "بيعة"},
-    "grid_plus":  {"lbl": "بلس",        "ico": "➕", "cur": "usd",  "src": "hist",   "unit": "بيعة"},
-    "dca_buy":    {"lbl": "DCA شرائي",  "ico": "📈", "cur": "usd",  "src": "cycles", "unit": "دورة"},
-    "rec_buy":    {"lbl": "دوري شرائي", "ico": "🔁", "cur": "usd",  "src": "cycles", "unit": "صفقة"},
-    "dca":        {"lbl": "DCA بيعي",   "ico": "📉", "cur": "coin", "src": "cycles", "unit": "دورة"},
-    "rec_sell":   {"lbl": "دوري بيعي",  "ico": "🔂", "cur": "coin", "src": "cycles", "unit": "صفقة"},
-}
+# 🔗 v3.26.4: سجل أنواع البوتات ⇒ 📐 v3.32.0: صار «قاعدة البوتات» فوق (`_BOT_KINDS` · `_BOOKS` · `_kinds` · `kind_route` · `kinds_audit`)
 
 
 def _key_type(k, live=None, led=None, gone=None):
@@ -10625,6 +10735,8 @@ def indic_loop():
                 indic_fetch()
                 _ind2_run()
                 _safe(ina_tick, default=None)          # 📊 تنبيهات المؤشرات — كل تحديث (5 دقائق)
+                if indic_cfg()["on"]:
+                    _safe(mkt_tick, default=None)      # 🌐 v3.32.0: مؤشرات السوق كله (كل مصدر بوقته)
         except Exception:
             pass
         time.sleep(_IND_EVERY)
@@ -11124,7 +11236,8 @@ def ind2_fetch():
 
 def ind2_view():
     return {"ok": True, "on": indic_cfg()["on"], "ts": IND2["ts"], "age": round(time.time() - (IND2["ts"] or 0), 1), "every": _IND_EVERY,
-            "h": IND2_H, "rows": [IND2["coins"][s] for s in IND2["order"] if s in IND2["coins"]], "summary": IND2["summary"],
+            "h": IND2_H, "rows": [dict(IND2["coins"][s], x=((FC["coins"].get(s) or {}).get("x"))) for s in IND2["order"] if s in IND2["coins"]],
+            "summary": IND2["summary"], "mkt": _safe(mkt_view, default=None),     # 🌐🧲💪 v3.32.0
             "err": IND2["err"], "fng": INDIC.get("fng") or {}, "kinds": [{"k": k, "name": nm, "ico": ico, "what": wh} for k, nm, ico, _, wh in _IND2_K]}
 
 
@@ -11151,6 +11264,372 @@ def ind2_api():
     return v
 
 
+# ═══════════════ 🌐 v3.32.0: مؤشرات السوق كله (جنب الخوف والطمع) + 🧲💪 مؤشرات العملة الإضافية — قراءة عامة بلا مفاتيح · عرض بس ═══════
+#   (المالك: «اريد انضيف مؤشرات عامة للسوق … مثل دخول السيولة … وبشكل خاص للعملة اريدها قوية غير الي ضفناها … وهل هناك مؤشر للتجميع والتصريف»)
+#   🌐 السوق: 💵 السيولة = عرض العملات المستقرة كلها (DefiLlama) — زيادته = فلوس جديدة داخلة للكريبتو · 🇺🇸 علاوة كوينبيس = سعر BTC
+#      بكوينبيس (دولار) مقابل OKX (USDT × سعر USDT) — موجبة = طلب أمريكي · 🌐 حجم السوق وسيطرة البيتكوين وUSDT (CoinGecko — الاتجاه من
+#      لقطة يومية تنحفظ) · 🧭 الجو العام = كم منها إيجابي/سلبي.
+#   🪙 العملة (برّه معدل 📊 وتصويت 🔮 — ما يغيّرون ولا تنبيه): 🧲 تجميع/تصريف (خط A/D + OBV مقابل حركة السعر — أسلوب وايكوف) ·
+#      💪 القوة مقابل البيتكوين (العملة ÷ BTC — 7 و30 يوم + متوسطها).
+#   🎯 كل واحد بيه صدقه: نفس القراءة على ماضي العملة (أو البيتكوين للسوق) — كم مرة صدقت مقابل الصدفة (`_fc_grade` نفسه).
+#   🔕 ولا إشعار · ولا أمر · ولا مفتاح — مثل 📊 و🔮.
+MKT_FILE = os.path.join(ROOT, "Holy_Market.json")
+MKT = {"view": None, "rel": {}, "lock": threading.Lock()}
+MKT_EVERY = {"st": 6 * 3600, "cg": 15 * 60, "cb": 5 * 60, "cbd": 12 * 3600}   # كل مصدر بوقته (حدود المواقع المجانية)
+MKT_H = 7                        # 🎯 السيولة والعلاوة تنحكم بسعر البيتكوين بعد 7 أيام
+XC_W, XC_H = 20, 14              # 🧲 نافذة التجميع/التصريف (يوم) · الحكم بعد كم يوم (التجميع يبين بالأسابيع)
+XC_FLOW = 0.12                   # 🧲 أقل صافي سيولة (من الحجم) حتى تنحسب قراءة
+MKT_ST = (0.003, 0.010)          # 💵 تغيّر 7 أيام: سيولة داخلة/طالعة · بقوة
+MKT_CB = (0.02, 0.07)            # 🇺🇸 العلاوة %: طلب/بيع · قوي
+
+
+def _mkt_db():
+    db = _safe(load_json, MKT_FILE, default={}) or {}
+    return db if isinstance(db, dict) else {}
+
+
+def _mkt_stable(db, now):
+    """💵 عرض العملات المستقرة كلها يوم بيوم (DefiLlama — مجاني بلا مفتاح) — مرة كل 6 ساعات"""
+    e = db.setdefault("st", {})
+    if now - float(e.get("ts") or 0) < MKT_EVERY["st"] and e.get("d"):
+        return False
+    j = _http_json("https://stablecoins.llama.fi/stablecoincharts/all", timeout=20)
+    d = {}
+    for x in j if isinstance(j, list) else []:
+        try:
+            v = float(((x.get("totalCirculatingUSD") or {}).get("peggedUSD")) or 0)
+            if v > 0:
+                d[str(int(x["date"]) // 86400 * 86400)] = round(v)
+        except Exception:
+            continue
+    if len(d) > 40:
+        e["d"], e["ts"] = d, now
+    else:
+        e["ts"] = now - MKT_EVERY["st"] + 1800              # ما وصل ⇒ يحاول بعد نص ساعة (ويبقى آخر المحفوظ)
+    return True
+
+
+def _mkt_cb(db, now):
+    """🇺🇸 علاوة كوينبيس: BTC-USD بكوينبيس ÷ (BTC-USDT بـOKX × USDT-USD) − 1 · كل 5 دقائق (آخر 48 ساعة) + إغلاقات يومية للفحص"""
+    e = db.setdefault("cb", {})
+    ch = False
+    if now - float(e.get("ts") or 0) >= MKT_EVERY["cb"]:
+        e["ts"] = now
+        ch = True
+        try:
+            cb = float((_http_json("https://api.exchange.coinbase.com/products/BTC-USD/ticker", timeout=8) or {}).get("price") or 0)
+            ut = float((_http_json("https://api.exchange.coinbase.com/products/USDT-USD/ticker", timeout=8) or {}).get("price") or 0) or 1.0
+            r = _okx_pub("/api/v5/market/ticker?instId=BTC-USDT") or {}
+            ok = float(((r.get("data") or [{}])[0]).get("last") or 0) if str(r.get("code")) == "0" else 0.0
+            if cb > 0 and ok > 0 and 0.9 < ut < 1.1:
+                p = round((cb / (ok * ut) - 1.0) * 100.0, 4)
+                h = [x for x in (e.get("h") or []) if now - x[0] < 48 * 3600]
+                h.append([round(now), p])
+                e["h"], e["now"] = h[-600:], p
+        except Exception:
+            pass
+    if now - float(e.get("dts") or 0) >= MKT_EVERY["cbd"]:
+        e["dts"] = now
+        ch = True
+        for prod, key in (("BTC-USD", "d"), ("USDT-USD", "u")):
+            rows = _http_json(f"https://api.exchange.coinbase.com/products/{prod}/candles?granularity=86400", timeout=15)
+            dd = e.setdefault(key, {})
+            for x in rows if isinstance(rows, list) else []:
+                try:
+                    if float(x[4]) > 0:
+                        dd[str(int(x[0]) // 86400 * 86400)] = float(x[4])
+                except Exception:
+                    continue
+            for k in sorted(dd, key=int)[:-420]:
+                dd.pop(k, None)
+    return ch
+
+
+def _mkt_cg(db, now):
+    """🌐 CoinGecko العام (مجاني بلا مفتاح): حجم السوق · تغيّر 24 ساعة · سيطرة BTC/ETH/USDT — كل 15 دقيقة + لقطة يومية (للاتجاه)"""
+    e = db.setdefault("cg", {})
+    if now - float(e.get("ts") or 0) < MKT_EVERY["cg"]:
+        return False
+    e["ts"] = now
+    d = ((_http_json("https://api.coingecko.com/api/v3/global", timeout=10) or {}).get("data") or {})
+    try:
+        mc = float((d.get("total_market_cap") or {}).get("usd") or 0)
+        if mc > 0:
+            pc = d.get("market_cap_percentage") or {}
+            e["now"] = {"mc": mc, "chg": round(float(d.get("market_cap_change_percentage_24h_usd") or 0), 2),
+                        "btc": round(float(pc.get("btc") or 0), 2), "eth": round(float(pc.get("eth") or 0), 2), "usdt": round(float(pc.get("usdt") or 0), 2)}
+            dd = e.setdefault("d", {})
+            dd[str(int(now) // 86400 * 86400)] = [round(mc), e["now"]["btc"], e["now"]["usdt"]]   # آخر قراءة باليوم
+            for k in sorted(dd, key=int)[:-400]:
+                dd.pop(k, None)
+    except Exception:
+        pass
+    return True
+
+
+def _mkt_back(dd, t, days):
+    """أقرب قيمة محفوظة قبل `days` يوم من t (يقبل يومين فرق)"""
+    for k in range(3):
+        v = dd.get(str(t - (days + k) * 86400))
+        if v is not None:
+            return v
+    return None
+
+
+def _mkt_build(db, now=None):
+    """🧭 صفوف 🌐 السوق للنافذة — من المحفوظ (ولا طلب)"""
+    now = now or time.time()
+    rows, sc = [], []
+    R = MKT.get("rel") or {}
+    st = (db.get("st") or {}).get("d") or {}
+    if st:
+        t = max(int(k) for k in st)
+        cur = st[str(t)]
+        v7, v30 = _mkt_back(st, t, 7), _mkt_back(st, t, 30)
+        c7 = (cur / v7 - 1.0) if v7 else None
+        c30 = (cur / v30 - 1.0) if v30 else None
+        s = 0 if c7 is None else (2 if c7 >= MKT_ST[1] else 1 if c7 >= MKT_ST[0] else -2 if c7 <= -MKT_ST[1] else -1 if c7 <= -MKT_ST[0] else 0)
+        sc.append(s)
+        rows.append({"k": "st", "ico": "💵", "name": "السيولة الداخلة (العملات المستقرة)", "s": s,
+                     "val": f"${cur / 1e9:,.1f}B", "txt": ("سيولة داخلة بقوة" if s == 2 else "سيولة داخلة" if s == 1 else "سيولة طالعة بقوة" if s == -2
+                                                            else "سيولة طالعة" if s == -1 else "ثابتة"),
+                     "sub": (f"أسبوع {'+' if c7 >= 0 else '−'}${abs(cur - v7) / 1e9:,.2f}B ({c7 * 100:+.2f}%)" if c7 is not None else "أسبوع —")
+                            + (f" · 30 يوم {c30 * 100:+.2f}%" if c30 is not None else ""),
+                     "what": "USDT + USDC + غيرها: لما يزيد عرضها يعني فلوس جديدة دخلت الكريبتو وجاهزة تشتري — لما يقل الفلوس طالعة",
+                     "acc": R.get("st")})
+    cb = db.get("cb") or {}
+    if cb.get("now") is not None:
+        h = [x[1] for x in (cb.get("h") or []) if now - x[0] < 24 * 3600]
+        avg = sum(h) / len(h) if h else cb["now"]
+        s = 2 if avg >= MKT_CB[1] else 1 if avg >= MKT_CB[0] else -2 if avg <= -MKT_CB[1] else -1 if avg <= -MKT_CB[0] else 0
+        sc.append(s)
+        rows.append({"k": "cb", "ico": "🇺🇸", "name": "علاوة كوينبيس (طلب أمريكا)", "s": s, "val": f"{cb['now']:+.3f}%",
+                     "txt": ("طلب أمريكي قوي" if s == 2 else "طلب أمريكي" if s == 1 else "بيع أمريكي قوي" if s == -2 else "بيع أمريكي" if s == -1 else "محايدة"),
+                     "sub": f"معدل 24 ساعة {avg:+.3f}% ({len(h)} قراءة)",
+                     "what": "سعر البيتكوين بكوينبيس (المؤسسات والأمريكان) مقابل OKX — موجبة = يشترون أغلى من باقي العالم (طلب قوي) · سالبة = يبيعون",
+                     "acc": R.get("cb")})
+    cg = db.get("cg") or {}
+    n = cg.get("now")
+    if n:
+        dd = cg.get("d") or {}
+        t = max(int(k) for k in dd) if dd else 0
+        p7 = _mkt_back(dd, t, 7) if dd else None
+        s = 1 if n["chg"] >= 2 else -1 if n["chg"] <= -2 else 0
+        sc.append(s)
+        rows.append({"k": "mc", "ico": "🌐", "name": "حجم السوق كله", "s": s, "val": (f"${n['mc'] / 1e12:,.2f}T" if n["mc"] >= 1e12 else f"${n['mc'] / 1e9:,.0f}B"),
+                     "txt": ("يصعد" if s > 0 else "ينزل" if s < 0 else "مستقر"), "sub": f"24 ساعة {n['chg']:+.2f}%"
+                     + (f" · أسبوع {(n['mc'] / p7[0] - 1) * 100:+.1f}%" if p7 and p7[0] else ""),
+                     "what": "قيمة كل العملات الرقمية سوا بالدولار", "acc": None})
+        db_ = round(n["btc"] - p7[1], 2) if p7 else None
+        rows.append({"k": "btcd", "ico": "₿", "name": "سيطرة البيتكوين", "s": 0, "val": f"{n['btc']:.1f}%",
+                     "txt": ("⏳ يسجّل" if db_ is None else "تزيد — البديلة أضعف" if db_ >= 0.5 else "تقل — الفلوس تروح للبديلة" if db_ <= -0.5 else "ثابتة"),
+                     "sub": (f"أسبوع {db_:+.2f}" if db_ is not None else "الاتجاه يبين بعد 7 أيام تسجيل"),
+                     "what": "حصة البيتكوين من السوق — تزيد ⇒ العملات البديلة تتأخر عنه · تقل ⇒ موسم العملات البديلة يقرب", "acc": None})
+        du = round(n["usdt"] - p7[2], 2) if p7 else None
+        s = 0 if du is None else (-1 if du >= 0.15 else 1 if du <= -0.15 else 0)
+        if du is not None:
+            sc.append(s)
+        rows.append({"k": "usdtd", "ico": "💲", "name": "سيطرة USDT", "s": s, "val": f"{n['usdt']:.2f}%",
+                     "txt": ("⏳ يسجّل" if du is None else "تزيد — الفلوس تهرب للدولار" if s < 0 else "تقل — الفلوس تطلع للعملات" if s > 0 else "ثابتة"),
+                     "sub": (f"أسبوع {du:+.2f}" if du is not None else "الاتجاه يبين بعد 7 أيام تسجيل"),
+                     "what": "حصة USDT من السوق — تزيد ⇒ الناس باعت وقعدت بالدولار (خوف) · تقل ⇒ رجعت تشتري", "acc": None})
+    up, dn = sum(1 for s in sc if s > 0), sum(1 for s in sc if s < 0)
+    mood = ("p", "🟢 الجو العام إيجابي") if up - dn >= 2 else ("n", "🔴 الجو العام سلبي") if dn - up >= 2 else ("z", "↔️ الجو العام مختلط")
+    return {"rows": rows, "up": up, "dn": dn, "n": len(sc), "mood": mood[0], "mood_t": mood[1],
+            "ts": max([float((db.get(k) or {}).get("ts") or 0) for k in ("st", "cb", "cg")] or [0]) or None}
+
+
+def mkt_tick(now=None):
+    """⏱️ ويّا المؤشرات (كل 5 دقائق) — كل مصدر بوقته · قراءة عامة بس"""
+    now = now or time.time()
+    with MKT["lock"]:
+        db = _mkt_db()
+        ch = False
+        for f in (_mkt_stable, _mkt_cb, _mkt_cg):
+            ch = bool(_safe(f, db, now, default=False)) or ch
+        if ch:
+            try:
+                save_json_atomic(MKT_FILE, db)
+            except Exception:
+                pass
+        MKT["view"] = _mkt_build(db, now)
+    return MKT["view"]
+
+
+def mkt_view():
+    if MKT["view"] is None:
+        with MKT["lock"]:
+            MKT["view"] = _mkt_build(_mkt_db())
+    return MKT["view"]
+
+
+def _mkt_rel(fdb):
+    """🎯 صدق 💵 السيولة و🇺🇸 العلاوة على البيتكوين: كل يوم بالماضي ⇒ قراءتهم وقتها ⇒ صح لو البيتكوين بعد 7 أيام راح باتجاهها (مقابل الصدفة)"""
+    B = {int(r[0]): float(r[4]) for r in (((fdb.get("c") or {}).get("BTC-USDT") or {}).get("d") or [])}
+    if len(B) < 60:
+        return {}
+    md = _mkt_db()
+    st = (md.get("st") or {}).get("d") or {}
+    cbd, utd = (md.get("cb") or {}).get("d") or {}, (md.get("cb") or {}).get("u") or {}
+    out = {}
+    for key in ("st", "cb"):
+        a, N, U = [0, 0, 0, 0, 0, 0], 0, 0
+        for t in sorted(B):
+            t2 = t + MKT_H * 86400
+            if t2 not in B or not B[t]:
+                continue
+            if key == "st":
+                v, v7 = st.get(str(t)), _mkt_back(st, t, 7)
+                if not v or not v7:
+                    continue
+                c = v / v7 - 1.0
+                s = 1 if c >= MKT_ST[0] else -1 if c <= -MKT_ST[0] else 0
+            else:
+                p = cbd.get(str(t))
+                if not p:
+                    continue
+                c = (p / (B[t] * float(utd.get(str(t)) or 1.0)) - 1.0) * 100.0
+                s = 1 if c >= MKT_CB[0] else -1 if c <= -MKT_CB[0] else 0
+            r = B[t2] / B[t] - 1.0
+            if abs(r) < FC_MOVE:
+                continue
+            N += 1
+            U += 1 if r > 0 else 0
+            if not s:
+                continue
+            a[4] = a[4] or t
+            a[5] = t
+            if s > 0:
+                a[0] += 1; a[2] += 1 if r > 0 else 0
+            else:
+                a[1] += 1; a[3] += 1 if r < 0 else 0
+        out[key] = _fc_grade(a, (U / N) if N else 0.5, MKT_H, 86400)
+    MKT["rel"] = out
+    with MKT["lock"]:
+        MKT["view"] = _mkt_build(md)
+    return out
+
+
+def _xc_ad(T, H, L, C, V):
+    """🧲 خط A/D (تايكن) + OBV + الحجم التراكمي + عوائد اللوغ"""
+    n = len(C)
+    adl, obv, cv, lr = [0.0] * n, [0.0] * n, [0.0] * (n + 1), [0.0] * n
+    for i in range(n):
+        rg = H[i] - L[i]
+        mfm = ((C[i] - L[i]) - (H[i] - C[i])) / rg if rg > 0 else 0.0
+        adl[i] = (adl[i - 1] if i else 0.0) + mfm * V[i]
+        obv[i] = (obv[i - 1] if i else 0.0) + ((V[i] if C[i] > C[i - 1] else -V[i] if C[i] < C[i - 1] else 0.0) if i else 0.0)
+        cv[i + 1] = cv[i] + V[i]
+        lr[i] = math.log(C[i] / C[i - 1]) if i and C[i] > 0 and C[i - 1] > 0 else 0.0
+    return adl, obv, cv, lr
+
+
+def _xc_ad_at(t, S, C, W=XC_W):
+    """🧲 قراءة يوم t: صافي السيولة (A/D + OBV ÷ الحجم) مقابل حركة السعر (بمقياس تذبذبه) ⇒ تجميع · تصريف · صعود/نزول مدعوم · محايد"""
+    adl, obv, cv, lr = S
+    if t < max(W, 60) or not C[t] or not C[t - W]:
+        return None
+    vs = cv[t + 1] - cv[t + 1 - W]
+    if vs <= 0:
+        return None
+    flow = ((adl[t] - adl[t - W]) + (obv[t] - obv[t - W])) / 2.0 / vs
+    seg = lr[t - 59:t + 1]
+    m = sum(seg) / 60.0
+    sd = math.sqrt(sum((x - m) ** 2 for x in seg) / 59.0) or 1e-9
+    pz = math.log(C[t] / C[t - W]) / (sd * math.sqrt(W))
+    if flow >= XC_FLOW:
+        k = "acc" if pz <= 0.5 else "up"
+    elif flow <= -XC_FLOW:
+        k = "dist" if pz >= -0.5 else "down"
+    else:
+        k = "flat"
+    return k, flow, C[t] / C[t - W] - 1.0, pz
+
+
+def _xc_rs_at(t, R, E):
+    """💪 قراءة يوم t: العملة ÷ البيتكوين — 7 و30 يوم + فوق/تحت متوسطه (20)"""
+    if t < 30 or R[t] is None or R[t - 7] is None or R[t - 30] is None or E[t] is None:
+        return None
+    r7, r30 = R[t] / R[t - 7] - 1.0, R[t] / R[t - 30] - 1.0
+    k = "strong" if (r7 > 0 and r30 > 0 and R[t] > E[t]) else "weak" if (r7 < 0 and r30 < 0 and R[t] < E[t]) else "mixed"
+    return k, r7, r30
+
+
+def _xc_acc(rows):
+    a, N, U = [0, 0, 0, 0, 0, 0], 0, 0
+    for t, s, up in rows:
+        N += 1
+        U += 1 if up else 0
+        if not s:
+            continue
+        a[4] = a[4] or t
+        a[5] = t
+        if s > 0:
+            a[0] += 1; a[2] += 1 if up else 0
+        else:
+            a[1] += 1; a[3] += 0 if up else 1
+    return _fc_grade(a, (U / N) if N else 0.5, XC_H, 86400)
+
+
+def xc_coin(sym, d1, l1, btc):
+    """🧲💪 مؤشرات العملة الإضافية (برّه معدل 📊 وتصويت 🔮) على شموع اليوم — القراءة هسه + صدقها على ماضي نفس العملة"""
+    full = [list(r) for r in d1] + ([list(l1)] if l1 else [])
+    if len(full) < 90:
+        return None
+    T = [int(r[0]) for r in full]
+    H_, L_, C_, V_ = [r[2] for r in full], [r[3] for r in full], [r[4] for r in full], [r[5] for r in full]
+    nc = len(d1)
+    t = len(full) - 1
+    S = _xc_ad(T, H_, L_, C_, V_)
+    out = {"W": XC_W, "H": XC_H}
+    # 🧲 التجميع والتصريف
+    now_ = _xc_ad_at(t, S, C_)
+    if now_:
+        k, flow, pc, pz = now_
+        div, trn = [], []
+        for i in range(60, nc - XC_H):
+            q = _xc_ad_at(i, S, C_)
+            r = C_[i + XC_H] / C_[i] - 1.0 if C_[i] else 0.0
+            if not q or abs(r) < FC_MOVE:
+                continue
+            kk = q[0]
+            div.append((T[i], 1 if kk == "acc" else -1 if kk == "dist" else 0, r > 0))
+            trn.append((T[i], 1 if kk == "up" else -1 if kk == "down" else 0, r > 0))
+        txt = {"acc": "🟢 تجميع — السيولة داخلة والسعر ما تحرّك", "dist": "🔴 تصريف — السيولة طالعة والسعر ما نزل",
+               "up": "📈 صعود مدعوم بالسيولة", "down": "📉 نزول مدعوم بالبيع", "flat": "↔️ محايد — ماكو تجميع ولا تصريف واضح"}[k]
+        out["ad"] = {"k": k, "txt": txt, "flow": round(flow * 100, 1), "pc": round(pc * 100, 1), "pz": round(pz, 2),
+                     "acc": _xc_acc(div if k in ("acc", "dist", "flat") else trn), "acc_div": _xc_acc(div), "acc_trn": _xc_acc(trn)}
+    # 💪 القوة مقابل البيتكوين
+    if sym.upper().startswith("BTC-"):
+        out["rs"] = {"ref": True, "k": "ref", "txt": "هو المرجع"}
+    elif btc:
+        R = [(C_[i] / btc[T[i]]) if (btc.get(T[i]) and C_[i]) else None for i in range(len(full))]
+        if t not in range(len(R)) or R[t] is None:                 # شمعة اليوم: البيتكوين يمكن ما انحسبت ⇒ آخر مسكّرة
+            t = nc - 1
+        E, e = [None] * len(R), None
+        for i, x in enumerate(R):
+            if x is None:
+                e = None
+                continue
+            e = x if e is None else e + (x - e) * (2.0 / 21.0)
+            E[i] = e
+        q = _xc_rs_at(t, R, E)
+        if q:
+            k, r7, r30 = q
+            rr = []
+            for i in range(30, nc - XC_H):
+                qq = _xc_rs_at(i, R, E)
+                if not qq or R[i + XC_H] is None:
+                    continue
+                g = R[i + XC_H] / R[i] - 1.0
+                if abs(g) < FC_MOVE:
+                    continue
+                rr.append((T[i], 1 if qq[0] == "strong" else -1 if qq[0] == "weak" else 0, g > 0))
+            out["rs"] = {"k": k, "txt": {"strong": "💪 أقوى من البيتكوين", "weak": "🐢 أضعف من البيتكوين", "mixed": "↔️ مثل البيتكوين (مختلط)"}[k],
+                         "r7": round(r7 * 100, 1), "r30": round(r30 * 100, 1), "acc": _xc_acc(rr)}
+    return out
+
+
 # ═══════════════ 🔮 v3.29.0: التوقعات — يوم · أسبوع · شهر · 3 أشهر (عرض بس · ولا إشعار · ولا أمر بالمنصة) ═══════════════
 #   نفس مؤشرات 📊 (_i2_series · _i2_signals — بلا أي تغيير بيها) بس على شموع أطول: يوم ← 4 ساعات · أسبوع ← يوم · شهر ← 3 أيام · 3 أشهر ← أسبوع
 #   + إضافات (حسابات بس — ولا برنامج ولا مكتبة): 🧠 Lorentzian (أقرب 8 حالات بمسافة لورنتز) · 〰️ Nadaraya-Watson (النسخة اللي ما تعيد رسم الماضي) ·
@@ -11160,6 +11639,7 @@ def ind2_api():
 #   🪶 خفيف: فحص الماضي ينحفظ (Holy_Forecast.json) ⇒ أول مرة بس يفحص التاريخ، وبعدها كل مرة الشموع الجديدة بس.
 import bisect, heapq
 FC = {"ts": 0.0, "coins": {}, "order": [], "err": ""}
+_XC_BTC = {"m": {}}              # 💪 v3.32.0: إغلاقات البيتكوين اليومية (مرجع «القوة مقابل البيتكوين»)
 FC_FILE = os.path.join(ROOT, "Holy_Forecast.json")
 FC_VER = 4                       # 🧮 نسخة الحساب — لو تتغيّر ينعاد فحص الماضي مرة وحدة
 FC_H = (("d", "يوم", "4H", 6, 1), ("w", "أسبوع", "1D", 7, 7), ("m", "شهر", "3D", 10, 30), ("q", "3 أشهر", "1W", 13, 91))   # (مفتاح · اسم · الشموع · كم شمعة قدّام · كم يوم)
@@ -11735,6 +12215,7 @@ def fc_coin(sym, db, fng=None):
         out["h"][k] = hz
         time.sleep(0.02)
     _safe(_fc_track, db, sym, out, {int(r[0]): r[4] for r in d1}, default=None)
+    out["x"] = _safe(xc_coin, sym, d1, l1, _XC_BTC.get("m") or {}, default=None)      # 🧲💪 v3.32.0: برّه التصويت
     return out
 
 
@@ -11743,6 +12224,8 @@ def fc_fetch():
     coins = list(ticker_cfg()["coins"])
     db = _fc_db()
     fng = _safe(_fc_fng, db, default=None)
+    bd, bl = _safe(fc_candles, "BTC-USDT", db, default=([], None)) or ([], None)       # 💪 v3.32.0: المرجع دائماً (حتى لو مو بالشريط)
+    _XC_BTC["m"] = {int(r[0]): float(r[4]) for r in list(bd) + ([bl] if bl else [])}
     done, bad = [], []
     for sym in coins:
         r = _safe(fc_coin, sym, db, fng, default=None)
@@ -11753,7 +12236,8 @@ def fc_fetch():
         else:
             bad.append(sym)
         time.sleep(0.4)
-    keep = set(coins)
+    keep = set(coins) | {"BTC-USDT"}                        # 💪 شموع البيتكوين تبقى (مرجع القوة · صدق السيولة/العلاوة)
+    _safe(_mkt_rel, db, default=None)                       # 🎯 v3.32.0: صدق 💵 السيولة و🇺🇸 العلاوة على البيتكوين
     for sec in ("c", "c4", "bt", "rg", "lr", "fund"):
         for s in list((db.get(sec) or {}).keys()):
             if s not in keep:
@@ -17470,6 +17954,15 @@ i.fb{font-style:normal;font-weight:600;margin:0 7px;font-size:11px;direction:ltr
 .ind-sub{font-size:11px;color:var(--mut2);line-height:1.7}
 .ind-dots{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
 .ind-dot{font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);white-space:nowrap;color:var(--mut)}
+.ind-x{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}                    /* 🧲💪 v3.32.0 */
+.ind-mkt{border:1px solid var(--line2);border-radius:13px;padding:10px 12px;background:var(--bg1);margin-top:8px;display:grid;gap:7px}
+.ind-mkt-h{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12.5px}
+.ind-mkt-h .ind-chip.p{color:var(--green);border-color:rgb(var(--green-rgb)/.45)}.ind-mkt-h .ind-chip.n{color:var(--red);border-color:rgb(var(--red-rgb)/.45)}
+.ind-mkt-r{display:grid;grid-template-columns:22px minmax(0,250px) 92px auto auto minmax(0,1fr);grid-template-areas:"i n v t b s";column-gap:10px;row-gap:1px;align-items:center;font-size:12px}
+.ind-mkt-r .mi{grid-area:i}.ind-mkt-r .mn{grid-area:n;min-width:0}.ind-mkt-r .mv{grid-area:v;white-space:nowrap}.ind-mkt-r .mt{grid-area:t;font-weight:700;white-space:nowrap}
+.ind-mkt-r .fb{grid-area:b;font-style:normal;font-size:11px;white-space:nowrap}.ind-mkt-r .ms{grid-area:s;color:var(--mut2);font-size:10.5px;min-width:0}
+.ind-mkt-f{color:var(--mut2);font-size:10.5px;line-height:1.6}
+@media (max-width:760px){.ind-mkt-r{grid-template-columns:22px minmax(0,1fr) auto;grid-template-areas:"i n v" "i t b" "i s s";column-gap:8px}.ind-mkt-r .mt{justify-self:start}}
 .ind-dot.p{color:var(--green);border-color:rgb(var(--green-rgb)/.45)}.ind-dot.n{color:var(--red);border-color:rgb(var(--red-rgb)/.45)}
 .ind-det{margin-top:9px;border-top:1px dashed var(--line2);padding-top:6px}
 .ind-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:6px 0;border-bottom:1px dashed rgb(var(--ov-rgb)/.07);font-size:12px}
@@ -19303,6 +19796,23 @@ function indFng(f){if(!f||f.v==null)return '';const v=Math.max(0,Math.min(100,Ma
     <text class="fgn" x="15" y="18.3" text-anchor="middle" fill="${c}">${v}</text></svg>
     <div class="ind-fng-t"><b>😨 الخوف والطمع — السوق كله</b><span style="color:${c}">${v} · ${gEsc(f.txt||'')}</span><div class="ind-fng-bar"><i style="left:${v}%"></i></div>
     <small>0 خوف شديد ← 100 طمع شديد · الخوف الشديد غالباً فرصة، والطمع الشديد وقت حذر</small></div></div>`}
+/* 🌐 v3.32.0: السوق كله — جنب الخوف والطمع (السيولة · علاوة كوينبيس · حجم السوق · السيطرة) · 🎯 صدقها على البيتكوين */
+function indMkt(M){if(!M||!(M.rows||[]).length)return '';
+  const col=s=>s>0?'var(--green)':s<0?'var(--red)':'var(--mut)';
+  return `<div class="ind-mkt"><div class="ind-mkt-h"><b>🌐 السوق كله — السيولة والطلب</b><span class="ind-chip ${gEsc(M.mood||'z')}">${gEsc(M.mood_t||'')} <small>(${M.up||0} إيجابي · ${M.dn||0} سلبي من ${M.n||0})</small></span></div>
+    ${M.rows.map(r=>{const b=r.acc?fcB(r.acc):null;return `<div class="ind-mkt-r" title="${gEsc(r.what||'')}"><span class="mi">${r.ico}</span><span class="mn">${gEsc(r.name)}</span>
+      <b class="mv num" dir="ltr">${gEsc(r.val)}</b><span class="mt" style="color:${col(+r.s||0)}">${gEsc(r.txt)}</span>${b?`<i class="fb ${b.g}" title="${gEsc(fcBW(r.acc))} — حكمها سعر البيتكوين بعد 7 أيام">🎯 ${b.t}</i>`:''}
+      <small class="ms">${gEsc(r.sub||'')}</small></div>`}).join('')}
+    <small class="ind-mkt-f">قراءة عامة بلا مفاتيح (DefiLlama · Coinbase · CoinGecko · OKX) — مو ضمان · 🎯 = كم مرة صدقت على البيتكوين بالماضي مقابل الصدفة · ضغطة على أي سطر تشرح شنو يعني</small></div>`}
+/* 🧲💪 v3.32.0: مؤشرات العملة الإضافية — برّه المعدل (ما تغيّر الحكم ولا التنبيهات) */
+function indX(r){const X=r.x||{},a=X.ad,s=X.rs;if(!a&&!(s&&!s.ref))return '';
+  const ca=a?({acc:'p',up:'p',dist:'n',down:'n'}[a.k]||'z'):'z',cs=s?({strong:'p',weak:'n'}[s.k]||'z'):'z';
+  return `<div class="ind-x">${a?`<span class="ind-dot ${ca}" title="🧲 التجميع والتصريف (آخر ${X.W||20} يوم)">🧲 ${gEsc({acc:'تجميع',dist:'تصريف',up:'صعود مدعوم',down:'نزول مدعوم',flat:'لا تجميع ولا تصريف'}[a.k]||'')}</span>`:''}${s&&!s.ref?`<span class="ind-dot ${cs}" title="💪 مقابل البيتكوين">${s.k==='strong'?'💪 أقوى من BTC':s.k==='weak'?'🐢 أضعف من BTC':'↔️ مثل BTC'}</span>`:''}</div>`}
+function indXDet(r){const X=r.x||{},a=X.ad,s=X.rs;if(!a&&!s)return '';
+  const row=(ico,nm,w,txt,acc,what)=>{const b=acc?fcB(acc):null;return `<div class="ind-row"><span>${ico} <b>${gEsc(nm)}</b></span><span class="w ${w}">${gEsc(txt)}${b?` <i class="fb ${b.g}" style="font-style:normal">${b.t}</i>`:''}</span><small>${what}${acc?' · 🎯 '+gEsc(fcBW(acc))+` (حكمها بعد ${X.H||14} يوم)`:''}</small></div>`};
+  return `<div class="ind-xd"><div class="ind-sub" style="margin:6px 0 2px"><b>➕ مؤشرات إضافية للعملة</b> — برّه المعدل (ما تغيّر الحكم ولا التنبيهات)</div>
+   ${a?row('🧲','التجميع والتصريف',{acc:'p',up:'p',dist:'n',down:'n'}[a.k]||'z',{acc:'🟢 تجميع',dist:'🔴 تصريف',up:'📈 صعود مدعوم',down:'📉 نزول مدعوم',flat:'↔️ محايد'}[a.k]||'',a.acc,`${gEsc(a.txt)} · آخر ${X.W||20} يوم: صافي السيولة ${a.flow>0?'+':''}${a.flow}% من الحجم · السعر ${a.pc>0?'+':''}${a.pc}% — خط A/D + OBV مقابل حركة السعر (أسلوب وايكوف)`):''}
+   ${s?(s.ref?row('💪','القوة مقابل البيتكوين','z','هو المرجع',null,'البيتكوين نفسه — باقي العملات تنقاس عليه'):row('💪','القوة مقابل البيتكوين',{strong:'p',weak:'n'}[s.k]||'z',{strong:'💪 أقوى',weak:'🐢 أضعف',mixed:'↔️ مثله'}[s.k]||'',s.acc,`${gEsc(s.txt)} · ` +`العملة ÷ البيتكوين: أسبوع ${s.r7>0?'+':''}${s.r7}% · شهر ${s.r30>0?'+':''}${s.r30}% — الصدق = هل بقت أقوى/أضعف منه بعدها`)):''}</div>`}
 function pxaPanel(P){if(!P||P.on==null)return '';                                    // 🔔 إشعارات الأسعار — v3.26.7: بـ⚙️ «📈 شريط الأسعار»
   const o=(m,k,cur)=>Object.entries(m||{}).map(([a,l])=>`<button class="${cur===a?'on':''}" onclick="pxaSet({${k}:'${a}'})">${gEsc(l)}</button>`).join('');
   return `<div class="ind-al${P.on?'':' off'}"><div class="ind-al-h"><b>🔔 إشعارات الأسعار — صعود ونزول <small style="color:var(--mut2);font-weight:400">${P.on?gEsc(P.sens_lbl)+' · '+gEsc(P.ch_lbl):'مطفية'}</small></b>
@@ -19342,14 +19852,14 @@ function indRender(){
   if(!V.on){el.innerHTML='المؤشرات مطفية — شغّلها من ⚙️ الإعدادات ← 📈 شريط الأسعار';return}
   const R=V.rows||[];
   if(!R.length){el.innerHTML=(V.busy?LDR('⏳ أول حساب للمؤشرات — ثواني…'):('ماكو عملات بالشريط — ضيفها من ⚙️ ← 📈 شريط الأسعار'+(V.err?'<br><small>'+gEsc(V.err)+'</small>':'')))
-    +`<div style="text-align:right">${indFng(V.fng)}</div>`;return}
+    +`<div style="text-align:right">${indFng(V.fng)}${indMkt(V.mkt)}</div>`;return}
   el.style.cssText='text-align:right';
   const S=V.summary||{}, f=V.fng||{}, H=V.h||4;
   const word=s=>s>=0.15?['صعود','p']:s<=-0.15?['نزول','n']:['محايد','z'];
   const pc=a=>a&&a.pct!=null?`${a.pct}% <small>(${a.n})</small>`:'—';
   let h=`<div class="ind-top"><span class="ind-chip">⏱ للساعات الجاية (~${H} ساعات)</span>
     <span class="ind-chip">السوق: <b style="color:var(--green)">⬆️ ${S.up||0}</b> · <b style="color:var(--red)">⬇️ ${S.down||0}</b> · <b>↔️ ${S.flat||0}</b></span>
-    <span class="ind-chip">🔄 ${V.ts?gAgo(V.ts):'—'} · كل ${Math.round((V.every||300)/60)} د</span></div>${indFng(f)}`;
+    <span class="ind-chip">🔄 ${V.ts?gAgo(V.ts):'—'} · كل ${Math.round((V.every||300)/60)} د</span></div>${indFng(f)}${indMkt(V.mkt)}`;
   h+=`<div class="ind-list">${R.map(r=>{const op=!!INDO[r.sym],sc=Math.max(-100,Math.min(100,+r.score||0));
     const parts=r.parts||[], acc=r.acc_bt||{}, live=r.acc_live||{};
     const dots=parts.map(p=>{const w=word(+p.s);return `<span class="ind-dot ${w[1]}" title="${gEsc(p.name)}: ${w[0]}">${p.ico} ${w[0]}</span>`}).join('');
@@ -19361,17 +19871,19 @@ function indRender(){
       det=`<div class="ind-det" onclick="event.stopPropagation()">${parts.map(p=>{const w=word(+p.s);return `<div class="ind-row"><span>${p.ico} <b>${gEsc(p.name)}</b></span><span class="w ${w[1]}">${w[0]}</span>
         <small>${gEsc(p.txt)}${p.acc!=null?` · 🎯 دقته على ${gEsc(r.base)}: ${p.acc}% (${p.n})`:''}${p.live&&p.live.pct!=null?` · حيّة ${p.live.pct}% (${p.live.n})`:''}</small></div>`}).join('')}
         <div class="ind-lv">🛡️ دعم تحت السعر: ${sup.slice(0,3).map(x=>`${x[0]} <b>${fmtPx(x[1])}</b>`).join(' · ')||'—'}<br>🚧 مقاومة فوقه: ${res.slice(0,3).map(x=>`${x[0]} <b>${fmtPx(x[1])}</b>`).join(' · ')||'—'}</div>
-        ${r.of_src!=='okx'?'<div class="ind-sub">🌊 Order Flow: OKX ما عطت حجم الشراء/البيع لهالعملة ⇒ تقدير من الشموع</div>':''}</div>`}
+        ${r.of_src!=='okx'?'<div class="ind-sub">🌊 Order Flow: OKX ما عطت حجم الشراء/البيع لهالعملة ⇒ تقدير من الشموع</div>':''}${indXDet(r)}</div>`}
     return `<div class="ind-c ${gEsc(r.verdict)}${op?' open':''}" onclick="indTog('${gEsc(r.sym)}')">
       <div class="ind-h"><span class="cn">${gEsc(r.base)}</span><span class="px">${fmtPx(r.px)}</span><span class="chg ${(+r.chg24||0)>=0?'up':'dn'}">${(+r.chg24||0)>=0?'▲':'▼'}${Math.abs(+r.chg24||0).toFixed(2)}%</span>
         <span class="ind-v ${gEsc(r.verdict)}">${gEsc(r.txt)}</span></div>
       <div class="ind-bar" title="المعدل ${sc} من −100 (نزول) لـ+100 (صعود)"><i style="left:${((sc+100)/2).toFixed(1)}%"></i></div>
       <div class="ind-sub">المعدل <b style="color:var(--tx)">${sc>0?'+':''}${sc}</b>${r.conf!=null?` · ثقة <b style="color:var(--tx)">${r.conf}%</b>`:' · المؤشرات مختلفة'} · 🎯 دقة المعدل على ${gEsc(r.base)}: <b style="color:var(--tx)">${pc(acc)}</b>${live&&live.n?` · حيّة ${pc(live)}`:''}</div>
-      <div class="ind-dots">${dots}</div>${det||'<div class="ind-sub" style="margin-top:5px">اضغط للتفاصيل ←</div>'}</div>`}).join('')}</div>`;
+      <div class="ind-dots">${dots}</div>${indX(r)}${det||'<div class="ind-sub" style="margin-top:5px">اضغط للتفاصيل ←</div>'}</div>`}).join('')}</div>`;
   h+=`<details class="ind-help"><summary>شلون أقرا هذا؟</summary>
     <div>• <b>الحكم</b> (⬆️ ↗️ ↔️ ↘️ ⬇️) = <b>معدل</b> المؤشرات العشرة (من −100 نزول لـ+100 صعود) — كل مؤشر وزنه حسب دقّته على نفس العملة.</div>
     <div>• <b>الثقة</b> = كم من المؤشرات متّفقة ويّا الحكم · <b>🎯 الدقة</b> = كم مرة أصاب: إشارة كل ساعة بآخر ~12 يوم وتنحكم بعد ${H} ساعات (على فترة ما انحسبت منها الأوزان) · <b>حيّة</b> = من لما شغّلت اللوحة.</div>
     ${(V.kinds||[]).map(k=>`<div>${k.ico} <b>${gEsc(k.name)}</b>: ${gEsc(k.what)}</div>`).join('')}
+    <div style="margin-top:6px">• <b>🌐 السوق كله</b> (فوق ويّا الخوف والطمع): 💵 السيولة = عرض العملات المستقرة (زيادته فلوس جديدة داخلة) · 🇺🇸 علاوة كوينبيس (موجبة = طلب أمريكي) · 🌐 حجم السوق · ₿ سيطرة البيتكوين · 💲 سيطرة USDT (تزيد = الناس هربت للدولار) — 🧭 الجو العام = كم منها إيجابي/سلبي.</div>
+    <div>• <b>➕ مؤشرات العملة الإضافية</b> (برّه المعدل): 🧲 <b>التجميع/التصريف</b> — آخر ${20} يوم: السيولة داخلة والسعر ما تحرّك = تجميع (الكبار يشترون بهدوء) · طالعة والسعر ما نزل = تصريف · 💪 <b>القوة مقابل البيتكوين</b> — أسبوع وشهر. كل واحد بيه 🎯 صدقه على ماضي نفس العملة بعد ${14} يوم.</div>
     <div style="color:var(--amber);margin-top:6px">⚠️ المؤشرات احتمالات مو ضمان — حتى 60% دقة تعتبر زينة بالأسواق. ما تفتح ولا تسكّر أي أمر — قراءة بس. ${V.err?'<br>'+gEsc(V.err):''}</div></details>`;
   el.innerHTML=h}
 
@@ -25618,7 +26130,7 @@ def _loss_audit():
     now = time.time()
     for b in bot_dirs().values():
         bt = str((b.get("cfg") or {}).get("bot_type") or "")
-        if (b.get("cfg") or {}).get("is_demo") or bt not in ("dca", "dca_buy") + _REC_T:
+        if (b.get("cfg") or {}).get("is_demo") or bt not in _LOSS_T:   # 📐 v3.32.0: من الجدول
             continue
         st = _safe(load_json, paths_of(b)[0], default={}) or {}
         for c in (st.get("cycles_log") or []):

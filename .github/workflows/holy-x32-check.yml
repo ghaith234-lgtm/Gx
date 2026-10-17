@@ -1,0 +1,24 @@
+# 🧲💪🌐 Holy v3.32 indicators check on REAL prices: runs the dashboard's own code for 🧲 accumulation/distribution and 💪 strength vs BTC
+#    on public OKX daily candles for 20 coins, plus the 🌐 market-wide readings (DefiLlama · Coinbase · CoinGecko) checked on BTC.
+#    Prints how often each was right vs chance and the CPU time. Results: lines HOLYX in the job log.
+# Runs only when ci/x32_check.py, ci/RUN_X or this file changes (bump ci/RUN_X to measure the code embedded in Holy_Dashboard.pyw).
+name: Holy indicators x32 check
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/x32_check.py', 'ci/RUN_X', '.github/workflows/holy-x32-check.yml']
+permissions:
+  contents: read
+jobs:
+  real-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: New indicators on real prices (public data · no keys · no orders · no notifications)
+        run: |
+          pip install -q requests
+          python3 ci/x32_check.py Holy_Dashboard.pyw
