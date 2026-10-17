@@ -29,7 +29,7 @@ for sym in COINS:
     print(f"HOLYFC {sym} px {r['px']:.6g} · {r['days']} days · {dt:.1f}s")
     for k, nm, h in m.FC_H:
         z = r["h"][k]; a = z.get("acc") or {}
-        print(f"HOLYFC    {k} {nm:7} now: {z.get('txt', 'short')} up {round((z.get('p') or 0) * 100)}% range {z.get('lo')}–{z.get('hi')} · TV {(z.get('tv') or {}).get('txt')} "
+        print(f"HOLYFC    {k} {nm:7} now: {z.get('txt', 'short')} [{(z.get('acc') or {}).get('model')}] up {round((z.get('p') or 0) * 100)}% range {z.get('lo')}–{z.get('hi')} · TV {(z.get('tv') or {}).get('txt')} "
               f"| past: right {a.get('hit')}% of {a.get('n')} · always-up/down {a.get('base')}% · skill {a.get('skill')} · range held {a.get('cov')}% · indep {a.get('indep')} · grade {a.get('grade')}")
         if a.get("n"):
             summ[k][0] += round(a["hit"] * a["n"] / 100); summ[k][1] += a["n"]; summ[k][2] += 1 if a.get("grade") == "g" else 0

@@ -10980,8 +10980,50 @@ def _fc_predict(F, t, k, h, sd=None, btc=True):
     return {"p": p, "q": q, "n": len(pick), "up": nb_up, "avg": nb_avg, "base": base_up}
 
 
+_FC_M = (("knn", "🔁 أحداث سابقة تشبه اليوم"), ("mom", "⚡ الزخم (اتجاه آخر الفترة)"), ("tv", "📺 تقييم TradingView"),
+         ("trend", "📈 الاتجاه العام (فوق/تحت 200 يوم)"), ("trend_mom", "📈⚡ الاتجاه والزخم سوا"))
+_FC_ML = dict(_FC_M, base="ماكو طريقة أحسن من التخمين")
+
+
+def _fc_bucket(model, F, i, k, h):
+    """خانة اليوم i لكل طريقة بسيطة (الزخم · تقييم TradingView · الاتجاه · الاتجاه+الزخم) — من ماضيه بس"""
+    x, C = F["X"][i], F["C"]
+    if x is None:
+        return None
+    L = max(7, h)
+    mom = (C[i] / C[i - L] - 1) if i >= L and C[i - L] else 0.0
+    if model == "mom":
+        return 1 if mom > 0 else 0
+    if model == "tv":
+        v = x[{"d": 0, "w": 1, "m": 2, "q": 2}[k]]
+        return 0 if v < -0.5 else 1 if v < -0.1 else 2 if v <= 0.1 else 3 if v <= 0.5 else 4
+    if model == "trend":
+        return 1 if x[3] > 0 else 0
+    return (1 if x[3] > 0 else 0) * 2 + (1 if mom > 0 else 0)
+
+
+def _fc_cond(F, t, k, h, model):
+    """احتمال الصعود بالطريقة البسيطة: من كل الأيام اللي بنفس خانة اليوم t (ونتيجتها معروفة وقت t) — يتقرب من النسبة العامة لو قليلة"""
+    X, C = F["X"], F["C"]
+    b = _fc_bucket(model, F, t, k, h)
+    tot = up = cnt = cu = 0
+    for i in range(0, t - h + 1):
+        if X[i] is None:
+            continue
+        u = 1 if C[i + h] > C[i] else 0
+        tot += 1; up += u
+        if _fc_bucket(model, F, i, k, h) == b:
+            cnt += 1; cu += u
+    if tot < 60:
+        return None
+    base = up / tot
+    return (cu + 20 * base) / (cnt + 20), base
+
+
 def _fc_eval(F, k, h, btc=True):
-    """🎯 مقياس الصدق: الخوارزمية نفسها على ماضي العملة يوم بيوم (كل يوم يشوف اللي قبله بس) ⇒ الإصابة · النطاق · مقارنة بـ«صعود دائماً»"""
+    """🎯 مقياس الصدق + اختيار الطريقة: كل يوم بماضي العملة يتوقع بكل الطرق (وهو ما يشوف المستقبل) ⇒
+    النص الأول من الماضي: أي طريقة كانت أحسن من التخمين على هالعملة بهالمدى (لو ولا وحدة ⇒ «ماكو أفضلية») ·
+    النص الثاني (اللي الاختيار ما شافه): كم صدقت الطريقة المختارة · مقارنة بالنسبة العامة · والنطاق (يتعيّر على الأول وينقاس على الثاني)"""
     X, C = F["X"], F["C"]
     n = len(C)
     first = next((i for i, x in enumerate(X) if x), None)
@@ -10990,43 +11032,66 @@ def _fc_eval(F, k, h, btc=True):
     t0 = max(first + 260, int(n * 0.45))
     step = {"d": 2, "w": 3, "m": 6, "q": 12}[k]
     sd = _fc_scale(X, t0)
-    hit = tot = cn = 0
-    br = bb = 0.0
-    up_all = up_n = 0
-    qs = []
+    simple = [m_ for m_, _ in _FC_M if m_ != "knn"]
+    B = {m_: [_fc_bucket(m_, F, i, k, h) for i in range(n)] for m_ in simple}
+    up_i = [1 if (i + h < n and C[i + h] > C[i]) else 0 for i in range(n)]
+    cnt = {m_: {} for m_ in simple}
+    tb = [0, 0]
+    nxt = first
+    pts = []
     for t in range(t0, n - h, step):
+        while nxt <= t - h:                                  # أيام صارت نتيجتها معروفة لحد يوم t
+            if X[nxt] is not None:
+                tb[0] += 1; tb[1] += up_i[nxt]
+                for m_ in simple:
+                    c = cnt[m_].setdefault(B[m_][nxt], [0, 0]); c[0] += 1; c[1] += up_i[nxt]
+            nxt += 1
         pr = _fc_predict(F, t, k, h, sd, btc)
-        if not pr:
+        if not pr or tb[0] < 60:
             continue
-        r = math.log(C[t + h] / C[t])
-        y = 1.0 if r > 0 else 0.0
-        br += (pr["p"] - y) ** 2
-        bb += (pr["base"] - y) ** 2
-        cn += 1
-        qs.append((r, pr["q"]))
-        up_all += 1 if r > 0 else 0
-        up_n += 1
-        if abs(pr["p"] - 0.5) >= 0.06:
-            tot += 1
-            hit += 1 if ((pr["p"] > 0.5) == (r > 0)) else 0
-        if cn % 25 == 0:
+        base = tb[1] / tb[0]
+        P = {"knn": pr["p"], "base": base}
+        for m_ in simple:
+            c = cnt[m_].get(B[m_][t], [0, 0])
+            P[m_] = (c[1] + 20 * base) / (c[0] + 20)
+        pts.append((math.log(C[t + h] / C[t]), P, pr["q"]))
+        if len(pts) % 25 == 0:
             time.sleep(0.01)                                # يفسح المجال لطلبات اللوحة (ما يحبسها وهو يحسب)
-    if not cn:
+    if len(pts) < 20:
         return {"n": 0}
-    half = len(qs) // 2                                     # 📏 عرض النطاق يتعيّر على النص الأول · والصدق ينقاس على النص الثاني (ما شافه)
-    inside = lambda f, L: sum(1 for r, q in L if q[2] - f * (q[2] - q[0]) <= r <= q[2] + f * (q[4] - q[2])) / max(1, len(L))
-    fct = 1.0
-    while fct < 3.0 and inside(fct, qs[:half]) < 0.80:
-        fct += 0.05
-    cov = inside(fct, qs[half:] or qs)
-    span = (n - h - t0)
-    indep = max(1, span // max(1, h))
-    skill = 1 - br / bb if bb > 0 else 0.0
+    half = len(pts) // 2
+    A, Z = pts[:half], pts[half:]
+    brier = lambda L, m_: sum((P[m_] - (1.0 if r > 0 else 0.0)) ** 2 for r, P, _ in L)
+    bA = brier(A, "base")
+    sk = {m_: (1 - brier(A, m_) / bA if bA > 0 else 0.0) for m_, _ in _FC_M}
+    best = max(sk, key=sk.get)
+    model = best if sk[best] > 0.005 else "base"            # ولا طريقة أحسن من التخمين بالنص الأول ⇒ «ماكو أفضلية»
+    bZ = brier(Z, "base")
+    skill = (1 - brier(Z, model) / bZ) if (bZ > 0 and model != "base") else 0.0
+    calls = [(P[model], r) for r, P, _ in Z if abs(P[model] - 0.5) >= 0.05]
+    hit = sum(1 for p_, r in calls if (p_ > 0.5) == (r > 0))
+    tot = len(calls)
     hp = round(hit / tot * 100) if tot else None
-    basep = round(max(up_all, up_n - up_all) / up_n * 100) if up_n else None
-    g = "short" if (tot < 25 or indep < 8) else ("g" if (hp is not None and hp >= 55 and skill > 0.01 and indep >= 15) else
-                                                ("y" if ((hp or 0) >= 52 or skill > 0) else "r"))
-    return {"hit": hp, "n": tot, "cov": round(cov * 100), "skill": round(skill, 3), "base": basep, "indep": indep, "grade": g, "tests": cn, "f": round(fct, 2)}
+    upz = sum(1 for r, _, _ in Z if r > 0)
+    basep = round(max(upz, len(Z) - upz) / len(Z) * 100)
+    inside = lambda f, L: sum(1 for r, _, q in L if q[2] - f * (q[2] - q[0]) <= r <= q[2] + f * (q[4] - q[2])) / max(1, len(L))
+    fct = 1.0                                                # 📏 عرض النطاق يتعيّر على النص الأول · والصدق ينقاس على النص الثاني
+    while fct < 3.0 and inside(fct, A) < 0.80:
+        fct += 0.05
+    cov = inside(fct, Z)
+    indep = max(1, (n - h - (t0 + (n - h - t0) // 2)) // max(1, h))
+    if model == "base":
+        g = "none"
+    elif tot < 20 or indep < 6:
+        g = "short"
+    elif hp is not None and hp >= 55 and skill > 0.01 and indep >= 10:
+        g = "g"
+    elif skill > 0:
+        g = "y"
+    else:
+        g = "r"
+    return {"hit": hp, "n": tot, "cov": round(cov * 100), "skill": round(skill, 3), "base": basep, "indep": indep, "grade": g, "tests": len(Z),
+            "f": round(fct, 2), "model": model, "sel": {m_: round(v, 3) for m_, v in sk.items()}}
 
 
 def _fc_track(db, sym, out, rows):
@@ -11104,15 +11169,30 @@ def fc_coin(sym, db, btc_rows=None):
         if mom is not None:
             hz["mom"] = round(mom * 100, 1)
         if pr:
-            p = pr["p"]
+            acc_ = hz["acc"] or {}
+            md, gd = acc_.get("model") or "knn", acc_.get("grade")
+            p, base_now = pr["p"], pr["base"]
+            if md in ("mom", "tv", "trend", "trend_mom"):
+                cd = _fc_cond(F, t, k, h, md)
+                if cd:
+                    p, base_now = cd
+            raw_p = p
+            if gd == "y":
+                p = base_now + 0.5 * (p - base_now)              # 🟡 أفضلية صغيرة ⇒ الاحتمال يتقرب من النسبة العامة
+            elif gd != "g":
+                p = base_now                                     # ⚪/🔴 ماكو أفضلية مثبتة ⇒ النسبة العامة بس (والنطاق يبقى)
+            hz["model"], hz["model_txt"], hz["raw_p"] = md, _FC_ML.get(md, md), round(raw_p, 3)
             f_ = (hz["acc"] or {}).get("f") or 1.0              # 📏 عرض النطاق المعيّر على ماضي العملة
             q0, q1, q2, q3, q4 = pr["q"]
             pr["q"] = [q2 - f_ * (q2 - q0), q2 - f_ * (q2 - q1), q2, q2 + f_ * (q3 - q2), q2 + f_ * (q4 - q2)]
-            vk, vt = (("su", "⬆️ صعود قوي") if p >= 0.65 else ("u", "↗️ يميل للصعود") if p >= 0.56 else
-                      ("sd", "⬇️ نزول قوي") if p <= 0.35 else ("d", "↘️ يميل للنزول") if p <= 0.44 else ("f", "↔️ محايد"))
+            if gd not in ("g", "y"):
+                vk, vt = "f", "↔️ ماكو أفضلية"
+            else:
+                vk, vt = (("su", "⬆️ صعود قوي") if p >= 0.65 else ("u", "↗️ يميل للصعود") if p >= 0.55 else
+                          ("sd", "⬇️ نزول قوي") if p <= 0.35 else ("d", "↘️ يميل للنزول") if p <= 0.45 else ("f", "↔️ محايد"))
             hz.update(p=round(p, 3), verdict=vk, txt=vt, lo=float(f"{px * math.exp(pr['q'][0]):.8g}"), hi=float(f"{px * math.exp(pr['q'][4]):.8g}"),
                       lo50=float(f"{px * math.exp(pr['q'][1]):.8g}"), hi50=float(f"{px * math.exp(pr['q'][3]):.8g}"),
-                      mid=float(f"{px * math.exp(pr['q'][2]):.8g}"), nb={"n": pr["n"], "up": pr["up"], "avg": round(pr["avg"] * 100, 1)}, base=round(pr["base"] * 100))
+                      mid=float(f"{px * math.exp(pr['q'][2]):.8g}"), nb={"n": pr["n"], "up": pr["up"], "avg": round(pr["avg"] * 100, 1)}, base=round(base_now * 100))
         else:
             hz["short"] = True
         out["h"][k] = hz
@@ -16601,7 +16681,7 @@ button.warn{border-color:rgb(var(--amber-rgb)/.55);color:var(--amber);box-shadow
 .fc-t .gd{font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fc-t.su,.fc-t.u{border-color:rgb(var(--green-rgb)/.42)}.fc-t.sd,.fc-t.d{border-color:rgb(var(--red-rgb)/.42)}
 .fc-t.su .vv,.fc-t.u .vv{color:var(--green)}.fc-t.sd .vv,.fc-t.d .vv{color:var(--red)}.fc-t.f .vv{color:var(--mut)}
-.fc-t.weak{opacity:.62}
+.fc-t.weak{opacity:.78}
 .fc-gd.g{color:var(--green)}.fc-gd.y{color:var(--amber)}.fc-gd.r{color:var(--red)}.fc-gd.short{color:var(--mut2)}
 .fc-hz{border:1px solid var(--line2);border-radius:11px;padding:8px 10px;margin-top:8px;background:rgb(var(--ov-rgb)/.02)}
 .fc-hz h4{margin:0 0 4px;font-size:12.5px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
@@ -18508,8 +18588,9 @@ function fcGrade(a){a=a||{};
   if(!a.n&&!a.tests)return['short','⏳ ما انفحصت بعد'];
   if(a.grade==='short')return['short',`⏳ تاريخ قليل (${a.n||0} مرة)`];
   if(a.grade==='g')return['g',`🟢 صدقت ${a.hit}% (${a.n})`];
-  if(a.grade==='y')return['y',`🟡 ضعيفة ${a.hit!=null?a.hit+'%':''}`];
-  return['r',`🔴 لا تعتمد ${a.hit!=null?'('+a.hit+'%)':''}`]}
+  if(a.grade==='y')return['y',`🟡 أفضلية صغيرة ${a.hit!=null?a.hit+'%':''}`];
+  if(a.grade==='none')return['short',`⚪ النطاق صدق ${a.cov}%`];
+  return['r',`🔴 ما صدقت · النطاق ${a.cov}%`]}
 function fcTvBox(sym){const box=$('#fctv_'+CSS.escape(sym));if(!box)return;
   const cfg={interval:'1D',width:'100%',isTransparent:true,height:'100%',symbol:'OKX:'+String(sym).replace('-',''),showIntervalTabs:true,displayMode:'single',locale:'ar',colorTheme:tvTheme()};
   box.innerHTML=`<iframe loading="lazy" title="TradingView" src="https://www.tradingview-widget.com/embed-widget/technical-analysis/?locale=ar#${encodeURIComponent(JSON.stringify(cfg))}"></iframe>
@@ -18530,8 +18611,9 @@ function fcRender(){
     const op=!!FCO[r.sym],H=r.h||{};
     const tiles=(V.hz||[]).map(z=>{const x=H[z.k]||{},g=fcGrade(x.acc),weak=(g[0]==='r'||g[0]==='short');
       if(x.short||x.p==null)return `<div class="fc-t weak"><span class="hn">${gEsc(z.name)}</span><span class="vv">⏳</span><span class="pp">تاريخ قليل</span></div>`;
+      const edge=['g','y'].includes((x.acc||{}).grade);
       return `<div class="fc-t ${gEsc(x.verdict)}${weak?' weak':''}"><span class="hn">${gEsc(z.name)}</span><span class="vv">${gEsc(x.txt)}</span>
-        <span class="pp">صعود <b>${pct(x.p)}%</b></span><span class="rg">${fmtPx(x.lo)} – ${fmtPx(x.hi)}</span><span class="gd fc-gd ${g[0]}">${g[1]}</span></div>`}).join('');
+        <span class="pp">${edge?'صعود':'عادةً يصعد'} <b>${pct(x.p)}%</b></span><span class="rg">${fmtPx(x.lo)} – ${fmtPx(x.hi)}</span><span class="gd fc-gd ${g[0]}">${g[1]}</span></div>`}).join('');
     let det='';
     if(op){
       det=`<div class="ind-det" onclick="event.stopPropagation()">${(r.ctx||[]).map(c=>`<div class="ind-row"><span>${c.ico} <b>${gEsc(c.name)}</b></span><span class="w ${gEsc(c.w)}">${{p:'🟢 إيجابي',n:'🔴 سلبي'}[c.w]||''}</span><small>${gEsc(c.txt)}</small></div>`).join('')}
@@ -18546,8 +18628,10 @@ function fcRender(){
             ${x.mom!=null?`<div class="ind-row"><span>⚡ <b>الزخم</b></span><span class="w ${x.mom>=3?'p':x.mom<=-3?'n':'z'}">${x.mom>0?'+':''}${x.mom}%</span><small>حركة السعر بآخر ${{d:7,w:30,m:90,q:180}[z.k]} يوم</small></div>`:''}
             ${nb?`<div class="ind-row"><span>🔁 <b>أحداث سابقة تشبه اليوم</b></span><span class="w ${nb.up/nb.n>=0.56?'p':nb.up/nb.n<=0.44?'n':'z'}">${nb.up}/${nb.n} صعدت</span>
               <small>أشبه ${nb.n} يوم بتاريخ ${gEsc(r.base)} (نفس تقييم TradingView والاتجاه والزخم والتذبذب${r.base!=='BTC'?' وبيتكوين':''}) — بعد ${z.h} يوم: ${nb.up} صعدت · ${nb.n-nb.up} نزلت · متوسطها ${nb.avg>0?'+':''}${nb.avg}%</small></div>`:''}
+            <div class="ind-row"><span>🧠 <b>الطريقة</b></span><span class="w ${['g','y'].includes(a.grade)?'p':'z'}">${gEsc(x.model_txt||'')}</span>
+              <small>${a.model==='base'?`ولا طريقة كانت أحسن من التخمين على ماضي ${gEsc(r.base)} بهالمدى ⇒ ما نعطيك سهم وهمي: «عادةً يصعد ${pct(x.p)}%» والنطاق بس`:`الخوارزمية جرّبت 5 طرق على النص الأول من تاريخ ${gEsc(r.base)} واختارت هاي لأنها كانت الأحسن — وانفحصت على النص الثاني اللي ما شافته (الرقم الجاي)`}</small></div>
             <div class="ind-row"><span>🎯 <b>كم مرة صدقت</b></span><span class="w fc-gd ${g[0]}">${g[1]}</span>
-              <small>${a.n?`نفس الخوارزمية على ماضي ${gEsc(r.base)} (كل يوم يشوف اللي قبله بس): أصابت الاتجاه ${a.hit}% من ${a.n} مرة · «صعود/نزول دائماً» كان يصيب ${a.base}% · النطاق صدق ${a.cov}% (الهدف 80%)${a.indep<20?` · ⚠️ فترات مستقلة قليلة (${a.indep})`:''}`:'لسه ما انفحصت'}${lv&&lv.done?` · 📒 حيّة: ${lv.hit!=null?lv.hit+'% من '+lv.n:'—'} · النطاق ${lv.cov}% (${lv.done} توقع انحكم)`:lv&&lv.wait?` · 📒 ${lv.wait} توقع ينتظر وقته`:''}</small></div></div>`}).join('')}
+              <small>${a.tests?`على النص الثاني من ماضي ${gEsc(r.base)} (كل يوم يشوف اللي قبله بس)${a.n?`: أصابت الاتجاه ${a.hit}% من ${a.n} مرة · «صعود/نزول دائماً» كان يصيب ${a.base}%`:''} · <b>النطاق صدق ${a.cov}%</b> (الهدف 80%)${a.indep<20?` · ⚠️ فترات مستقلة قليلة (${a.indep})`:''}`:'لسه ما انفحصت'}${lv&&lv.done?` · 📒 حيّة: ${lv.hit!=null?lv.hit+'% من '+lv.n:'—'} · النطاق ${lv.cov}% (${lv.done} توقع انحكم)`:lv&&lv.wait?` · 📒 ${lv.wait} توقع ينتظر وقته`:''}</small></div></div>`}).join('')}
         <div class="fc-tv" id="fctv_${gEsc(r.sym)}"><button onclick="fcTvBox('${gEsc(r.sym)}')">📺 افتح تحليل TradingView لـ${gEsc(r.base)}</button></div></div>`}
     const v0=(H.w&&H.w.verdict)||'f';
     return `<div class="ind-c ${['su','u'].includes(v0)?'up':['sd','d'].includes(v0)?'down':''}${op?' open':''}" onclick="fcTog('${gEsc(r.sym)}')">
@@ -18558,7 +18642,9 @@ function fcRender(){
     <div>• <b>كل خانة</b> = مدى (يوم · أسبوع · شهر · 3 أشهر): السهم (⬆️ ↗️ ↔️ ↘️ ⬇️) · <b>احتمال الصعود</b> · و<b>النطاق المتوقع</b> (السعر بنهاية المدة بين هالرقمين بنسبة 80% — البنفسجي بالتفاصيل 50%).</div>
     <div>• <b>📺 TradingView</b> = تقييمهم الفني «Technical Ratings» بنفس طريقتهم المنشورة (15 متوسط متحرك + 11 مذبذب ⇒ شراء قوي … بيع قوي) على شموع اليوم والأسبوع والشهر.</div>
     <div>• <b>🔁 أحداث سابقة</b> = خوارزمية تدوّر بتاريخ نفس العملة (لحد 5 سنين) على أكثر الأيام اللي تشبه اليوم وتشوف شنو صار بعدها — منها الاحتمال والنطاق. بلا اشتراك ولا API — كلها على سيرفرك.</div>
-    <div>• <b>🎯 كم مرة صدقت</b> = نفس الخوارزمية انفحصت على ماضي العملة يوم بيوم وهي ما تشوف المستقبل: 🟢 مفيدة (أحسن من التخمين) · 🟡 ضعيفة · 🔴 لا تعتمد عليها بهالمدى · و📒 حيّة = توقعاتها من لما شغّلت تنحكم لما يجي وقتها.</div>
+    <div>• <b>🧠 الطريقة</b> = لكل عملة ولكل مدى الخوارزمية تجرّب 5 طرق (أحداث سابقة · الزخم · تقييم TradingView · الاتجاه · الاتجاه+الزخم) على النص الأول من تاريخها وتختار الأحسن — وتفحصها على النص الثاني اللي ما شافته.</div>
+    <div>• <b>🎯 كم مرة صدقت</b>: 🟢 أحسن من التخمين بوضوح · 🟡 أفضلية صغيرة · ⚪ <b>ماكو أفضلية</b> (ولا طريقة أحسن من التخمين ⇒ ما نعطيك سهم — «عادةً يصعد» والنطاق بس) · 🔴 الطريقة المختارة ما صدقت على الجزء اللي ما شافته · و📒 حيّة = توقعاتها من لما شغّلت.</div>
+    <div>• <b>📏 النطاق</b> هو الأوثق: على أسعار حقيقية لـ10 عملات بـ5 سنين، السعر طلع داخل نطاق الـ80% بحدود 80–90% من المرات.</div>
     <div style="color:var(--amber);margin-top:6px">⚠️ توقعات واحتمالات مو ضمان — حتى 55–60% بالأسواق تعتبر زينة · كل ما المدى أبعد كل ما الفترات المستقلة أقل والثقة أقل. ما تفتح ولا تسكّر أي أمر ولا تبعث إشعار. ${V.err?'<br>'+gEsc(V.err):''}</div></details>`;
   el.innerHTML=h}
 
