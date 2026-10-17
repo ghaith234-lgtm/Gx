@@ -10563,6 +10563,7 @@ FC_FILE = os.path.join(ROOT, "Holy_Forecast.json")
 FC_H = (("d", "يوم", 1), ("w", "أسبوع", 7), ("m", "شهر", 30), ("q", "3 أشهر", 91))
 FC_MAX_DAYS = 2000               # ~5.5 سنين شموع يوم لكل عملة
 FC_EVERY = 1800                  # ⏱️ التوقع الحي كل نص ساعة · فحص الصدق مرة باليوم (لما تتسكّر شمعة يوم جديدة)
+_FC_EPOCH = datetime(1970, 1, 1)     # يوم UTC بلا utcfromtimestamp (مهجورة من بايثون 3.12 وتطبع تحذير)
 _FC_RUN = {"busy": False}
 _FC_EVAL = {}                    # {sym: (آخر يوم مسكّر, {k: accuracy})}
 _FC_W = {   # وزن كل صفة بكل مدى: (tv_d, tv_w, tv_m, trend, cross, mom, rsi, vol, dd, btc, btcm)
@@ -10814,7 +10815,7 @@ def _fc_group(rows, kind):
     """شموع أسبوعية (الاثنين UTC مثل TradingView) أو شهرية من اليومي — الأقدم أول: (ts, o, h, l, c, v, آخر فهرس يومي)"""
     out, key = [], None
     for i, r in enumerate(rows):
-        d = datetime.utcfromtimestamp(r[0])
+        d = _FC_EPOCH + timedelta(seconds=r[0])
         k = (d.isocalendar()[0], d.isocalendar()[1]) if kind == "w" else (d.year, d.month)
         if k != key:
             out.append([r[0], r[1], r[2], r[3], r[4], r[5], i])
@@ -10840,7 +10841,7 @@ def _fc_features(rows, btc=None):
             e0 = x[6]
             for i in range(s0, e0 + 1):
                 idx[i] = gi - 1 if gi else None
-            de = datetime.utcfromtimestamp(rows[e0][0])
+            de = _FC_EPOCH + timedelta(seconds=rows[e0][0])
             if (kind == "w" and de.weekday() == 6) or (kind == "m" and (de + timedelta(days=1)).month != de.month):
                 idx[e0] = gi                                 # آخر يوم بالأسبوع/الشهر ⇒ تسكّرت بنهايته
         res["tv" + kind] = [(tvg[j] if j is not None else None) for j in idx]
