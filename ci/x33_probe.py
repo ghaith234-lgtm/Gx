@@ -1,90 +1,91 @@
-# 🔎 v3.33.0: probe #2 — alternatives for the sources that failed (FRED blocked from GitHub · GDELT rate limit · GPR only xls)
-#   and how deep the paginated OKX/Deribit history goes. Public GETs only · no keys · no orders · no notifications. ⇒ lines HOLYP
-import json, time, requests
-NOW = int(time.time() * 1000); DAY = 86400000
-H = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"}
-def get(url, t=40):
-    return requests.get(url, headers=H, timeout=t)
-def show(tag, url, n=300):
+# 🔎 v3.33.0: probe #3 — DXY from ECB rates (Frankfurter) · GPR daily via the dashboard's own Stata reader · MVRV per coin (CoinMetrics)
+#   Public GETs only · no keys · no orders · no notifications. ⇒ lines HOLYP
+import json, time, math, requests, datetime as dt
+H = {"User-Agent": "Mozilla/5.0 (HolyDashboard probe)"}
+def _dta_read(b, want=None):
+    """📦 قارئ ملفات Stata 118/119 (dta) بلا مكتبات — يرجع {اسم المتغير: [القيم]} للأرقام فقط (المفقود None)"""
+    import struct
+    if not b.startswith(b"<stata_dta><header><release>"):
+        return None
+    rel = int(b[28:31])
+    if rel not in (118, 119):
+        return None
+    le = b"<byteorder>LSF" in b[:80]
+    E = "<" if le else ">"
+    p = b.index(b"<K>") + 3
+    K = struct.unpack(E + ("I" if rel == 119 else "H"), b[p:p + (4 if rel == 119 else 2)])[0]
+    p = b.index(b"<N>") + 3
+    N = struct.unpack(E + "Q", b[p:p + 8])[0]
+    p = b.index(b"<map>") + 5
+    mp = struct.unpack(E + "14Q", b[p:p + 112])
+    p = mp[2] + len(b"<variable_types>")
+    ty = struct.unpack(E + f"{K}H", b[p:p + 2 * K])
+    p = mp[3] + len(b"<varnames>")
+    names = [b[p + 129 * i:p + 129 * (i + 1)].split(b"\x00")[0].decode("utf-8", "replace") for i in range(K)]
+    fmt = {65526: ("d", 8), 65527: ("f", 4), 65528: ("i", 4), 65529: ("h", 2), 65530: ("b", 1), 32768: (None, 8)}
+    lay, off = [], 0
+    for t in ty:
+        f, w = fmt.get(t, (None, t if t <= 2045 else 8))
+        lay.append((f, w, off))
+        off += w
+    miss = {"d": 8.988465674311579e307, "f": 1.7014117e38, "i": 2147483620, "h": 32740, "b": 100}
+    out = {}
+    base = mp[9] + len(b"<data>")
+    for j, nm in enumerate(names):
+        f, w, o = lay[j]
+        if f is None or (want and nm not in want):
+            continue
+        col = []
+        st = struct.Struct(E + f)
+        for r in range(N):
+            v = st.unpack_from(b, base + r * off + o)[0]
+            col.append(None if v >= miss[f] else v)
+        out[nm] = col
+    return out
+
+
+def j(url, t=40):
+    r = requests.get(url, headers=H, timeout=t)
+    return r.status_code, r
+for url in ("https://api.frankfurter.app/2026-09-01..?from=USD&to=EUR,JPY,GBP,CAD,SEK,CHF",
+            "https://api.frankfurter.dev/v1/2026-09-01..?base=USD&symbols=EUR,JPY,GBP,CAD,SEK,CHF",
+            "https://api.frankfurter.app/2015-01-01..2015-03-01?from=USD&to=EUR,JPY,GBP,CAD,SEK,CHF"):
     try:
-        r = get(url); b = r.text
-        lines = b.strip().splitlines()
-        print(f"HOLYP {tag}: {r.status_code} {r.headers.get('content-type','')[:40]} {len(b)}B lines={len(lines)}", flush=True)
-        print(f"HOLYP {tag} head: {b[:n]!r}", flush=True)
-        if len(lines) > 3:
-            print(f"HOLYP {tag} tail: {lines[-1][:200]!r}", flush=True)
+        c, r = j(url); d = r.json(); rt = d.get("rates") or {}
+        ks = sorted(rt)
+        last = rt[ks[-1]] if ks else {}
+        dxy = None
+        if last:
+            dxy = 50.14348112 * (1 / last["EUR"]) ** -0.576 * last["JPY"] ** 0.136 * (1 / last["GBP"]) ** -0.119 * last["CAD"] ** 0.091 * last["SEK"] ** 0.042 * last["CHF"] ** 0.036
+        print(f"HOLYP frankfurter {url[8:40]}: {c} days={len(ks)} first={ks[0] if ks else '-'} last={ks[-1] if ks else '-'} {last} DXY≈{dxy}", flush=True)
     except Exception as e:
-        print(f"HOLYP {tag}: ERROR {type(e).__name__}: {e}", flush=True)
-    time.sleep(1.5)
-# GDELT first (fresh, one call, then a long gap)
-GD = "https://api.gdeltproject.org/api/v2/doc/doc?format=json&query=%28bitcoin%20OR%20cryptocurrency%29"
-show("gdelt tone 3months", GD + "&mode=timelinetone&timespan=3months", 500)
-time.sleep(25)
-show("gdelt volraw 3months", GD + "&mode=timelinevolraw&timespan=3months", 300)
-time.sleep(25)
-show("gdelt tone 2020", GD + "&mode=timelinetone&startdatetime=20200101000000&enddatetime=20200301000000", 300)
-show("cboe VIX history", "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv", 200)
-show("treasury yields 2026", "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all?type=daily_treasury_yield_curve&field_tdr_date_value=2026&page&_format=csv", 400)
-show("treasury yields 2020", "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2020/all?type=daily_treasury_yield_curve&field_tdr_date_value=2020&page&_format=csv", 200)
-show("epu daily", "https://www.policyuncertainty.com/media/All_Daily_Policy_Data.csv", 200)
-for f in ("data_gpr_daily_recent.xlsx", "data_gpr_export.xlsx"):
-    show(f"gpr {f}", "https://www.matteoiacoviello.com/gpr_files/" + f, 80)
-show("fred VIXCLS txt", "https://fred.stlouisfed.org/data/VIXCLS.txt", 200)
-show("fred VIXCLS csv cosd", "https://fred.stlouisfed.org/graph/fredgraph.csv?id=VIXCLS&cosd=2025-01-01", 200)
-Y = "https://query1.finance.yahoo.com/v8/finance/chart/"
-for s in ("%5EVIX", "DX-Y.NYB", "%5ETNX"):
+        print(f"HOLYP frankfurter {url[8:40]}: ERROR {type(e).__name__}: {e}", flush=True)
+    time.sleep(1)
+try:
+    c, r = j("https://www.matteoiacoviello.com/gpr_files/data_gpr_daily_recent.dta", 60)
+    d = _dta_read(r.content)
+    print(f"HOLYP gpr dta: {c} {len(r.content)}B vars={list(d.keys()) if d else None}", flush=True)
+    if d:
+        dk = "date" if "date" in d else list(d.keys())[0]
+        n = len(d[dk])
+        for i in (0, n - 3, n - 2, n - 1):
+            row = {k: d[k][i] for k in d}
+            dd = row.get(dk)
+            print(f"HOLYP gpr row {i}: {row} ⇒ {dt.date(1960,1,1) + dt.timedelta(days=int(dd)) if dd is not None and dd < 40000 else dd}", flush=True)
+except Exception as e:
+    print(f"HOLYP gpr dta: ERROR {type(e).__name__}: {e}", flush=True)
+for a in ("btc", "eth", "sol", "xrp", "doge", "ada", "bnb", "ltc", "link", "trx", "avax", "dot", "bch", "etc", "xlm", "atom", "fil", "uni", "near", "aave"):
     try:
-        r = get(Y + s + "?range=10y&interval=1d"); j = r.json()["chart"]["result"][0]
-        ts, cl = j["timestamp"], j["indicators"]["quote"][0]["close"]
-        print(f"HOLYP yahoo {s}: {r.status_code} rows={len(ts)} first={ts[0]},{cl[0]} last={ts[-1]},{cl[-1]}", flush=True)
+        c, r = j(f"https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets={a}&metrics=CapMVRVCur&frequency=1d&page_size=10000&start_time=2019-01-01")
+        d = (r.json().get("data") or []) if c == 200 else []
+        print(f"HOLYP mvrv {a}: {c} rows={len(d)} first={d[0]['time'][:10] if d else '-'} last={(d[-1]['time'][:10] + ' ' + d[-1]['CapMVRVCur'][:5]) if d else '-'}", flush=True)
     except Exception as e:
-        print(f"HOLYP yahoo {s}: ERROR {type(e).__name__}: {e}", flush=True)
-    time.sleep(1.5)
-# OKX: how deep does the paginated contract long/short ratio go?
-O = "https://www.okx.com/api/v5/rubik/stat"
-for inst in ("BTC-USDT-SWAP", "XRP-USDT-SWAP"):
-    for ep in ("long-short-account-ratio-contract", "long-short-account-ratio-contract-top-trader", "long-short-position-ratio-contract-top-trader"):
-        end, rows, pages = None, 0, 0
-        oldest = None
-        while pages < 30:
-            u = f"{O}/contracts/{ep}?instId={inst}&period=1D&limit=100" + (f"&end={end}" if end else "")
-            try:
-                d = get(u).json().get("data") or []
-            except Exception as e:
-                print(f"HOLYP okx {ep} {inst}: ERROR {e}", flush=True); break
-            d = [x for x in d if float(x[1] or 0) > 0]
-            if not d:
-                break
-            rows += len(d); pages += 1
-            oldest = int(d[-1][0]); end = oldest - 1
-            time.sleep(0.25)
-        print(f"HOLYP okx {ep} {inst} 1D: rows={rows} pages={pages} oldest={time.strftime('%Y-%m-%d', time.gmtime((oldest or 0) / 1000))}", flush=True)
-    # taker contract: depth
-    end, rows, pages, oldest = None, 0, 0, None
-    while pages < 30:
-        u = f"{O}/taker-volume-contract?instId={inst}&period=1D&limit=100" + (f"&end={end}" if end else "")
-        d = [x for x in (get(u).json().get("data") or []) if float(x[1] or 0) + float(x[2] or 0) > 0]
-        if not d:
-            break
-        rows += len(d); pages += 1; oldest = int(d[-1][0]); end = oldest - 1
-        time.sleep(0.25)
-    print(f"HOLYP okx taker-volume-contract {inst} 1D: rows={rows} oldest={time.strftime('%Y-%m-%d', time.gmtime((oldest or 0) / 1000))}", flush=True)
-# OKX options: put/call open interest + volume by expiry/strike? (for history: only the 72-day endpoint)
-show("okx option taker-block-volume BTC", f"{O}/option/taker-block-volume?ccy=BTC&period=1D", 200)
-# Deribit DVOL: paginate with continuation to the start
-end, rows, first = NOW, 0, None
-for _ in range(10):
-    j = get(f"https://www.deribit.com/api/v2/public/get_volatility_index_data?currency=BTC&start_timestamp=1577836800000&end_timestamp={end}&resolution=1D").json()["result"]
-    d = j.get("data") or []
-    if not d:
-        break
-    rows += len(d); first = d[0][0]
-    c = j.get("continuation")
-    if not c:
-        break
-    end = int(c)
-    time.sleep(0.5)
-print(f"HOLYP deribit dvol BTC 1D total rows={rows} first={time.strftime('%Y-%m-%d', time.gmtime((first or 0) / 1000))}", flush=True)
-show("coinmetrics MVRV xrp,ltc,doge,ada,link,bnb", "https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=xrp,ltc,doge,ada,link&metrics=CapMVRVCur&frequency=1d&page_size=3", 300)
-show("coinmetrics catalog btc", "https://community-api.coinmetrics.io/v4/catalog-v2/asset-metrics?assets=btc&page_size=200", 200)
+        print(f"HOLYP mvrv {a}: ERROR {e}", flush=True)
+    time.sleep(0.7)
+time.sleep(30)
+try:
+    c, r = j("https://api.gdeltproject.org/api/v2/doc/doc?format=json&mode=timelinetone&timespan=3months&query=bitcoin")
+    print(f"HOLYP gdelt single after 30s: {c} {r.text[:300]!r}", flush=True)
+except Exception as e:
+    print(f"HOLYP gdelt: ERROR {e}", flush=True)
 print("HOLYP done", flush=True)
