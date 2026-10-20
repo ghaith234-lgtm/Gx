@@ -11640,7 +11640,7 @@ def xc_coin(sym, d1, l1, btc):
 #   🎯 كل قراءة لها تاريخ تُقاس عليه: نفس القراءة على كل يوم ماضٍ (دون رؤية ما بعده) ⇒ هل تحرّك السعر باتجاهها بعد المدة؟ (`_fc_grade`).
 #   🔕 لا إشعار · لا أمر · لا مفتاح — مثل 📊 و🔮 و🌐. كل مصدر بوقته، وإن لم يرد تبقى آخر قراءة محفوظة.
 PRO_FILE = os.path.join(ROOT, "Holy_Pro.json")
-PRO = {"view": None, "rel": {}, "coins": {}, "lock": threading.Lock()}
+PRO = {"view": None, "rel": {}, "coins": {}, "lock": threading.Lock(), "busy": False}   # 🔒 القفل للملف فقط (ثوانٍ) — الجلب من الإنترنت خارجه
 PRO_EVERY = {"ls": 6 * 3600, "tk": 6 * 3600, "dv": 3600, "pc": 6 * 3600, "mv": 12 * 3600, "cal": 6 * 3600,
              "vix": 6 * 3600, "dxy": 6 * 3600, "us10": 6 * 3600, "epu": 12 * 3600, "gpr": 24 * 3600, "tone": 6 * 3600}
 PRO_KEEP = 800                   # كم يوماً يُحفظ من كل سلسلة (التاريخ يكبر مع الوقت فوق ما تعطيه المنصة)
@@ -12446,19 +12446,28 @@ def _pro_move(pro, mac, rel):
 def pro_tick(now=None):
     """⏱️ مع المؤشرات (كل 5 دقائق) — كل مصدر بوقته · قراءة عامة فقط"""
     now = now or time.time()
-    coins = [s_.split("-")[0].upper() for s_ in ticker_cfg()["coins"]]
-    with PRO["lock"]:
-        db = _pro_db()
+    if PRO["busy"]:
+        return PRO["view"]
+    PRO["busy"] = True
+    try:
+        coins = [s_.split("-")[0].upper() for s_ in ticker_cfg()["coins"]]
+        db = _pro_db()                                       # 🌐 الجلب على نسخة — بلا قفل (أول مرة يجيب التاريخ ~دقيقة)
         ch = False
         for f, a in ((_pro_ls, (coins,)), (_pro_tk, (coins,)), (_pro_pc, ()), (_pro_dv, ()), (_pro_mv, (coins,)), (_pro_cal, ()),
                      (_pro_vix, ()), (_pro_us10, ()), (_pro_dxy, ()), (_pro_epu, ()), (_pro_gpr, ()), (_pro_tone, ())):
             ch = bool(_safe(f, db, now, *a, default=False)) or ch
-        if ch:
-            try:
-                save_json_atomic(PRO_FILE, db)
-            except Exception:
-                pass
-        PRO["view"] = _pro_build(db, now)
+        with PRO["lock"]:                                    # 🔒 الحفظ فقط: المصادر من هنا · «rel» يبقى اللي كتبه `_pro_rel`
+            cur = _pro_db()
+            if ch:
+                db["rel"] = cur.get("rel") or db.get("rel") or {}
+                try:
+                    save_json_atomic(PRO_FILE, db)
+                except Exception:
+                    pass
+                cur = db
+            PRO["view"] = _pro_build(cur, now)
+    finally:
+        PRO["busy"] = False
     return PRO["view"]
 
 
@@ -12466,24 +12475,25 @@ def _pro_build(db, now=None):
     now = now or time.time()
     rel = dict(db.get("rel") or {})
     rel.update(PRO.get("rel") or {})
-    btc = {int(k): v for k, v in (rel.get("_btc") or {}).items()} if isinstance(rel.get("_btc"), dict) else None
     pro = _pro_rows(db, rel)
-    mac = _mac_rows(db, rel, now, btc or PRO.get("btc"))
+    mac = _mac_rows(db, rel, now, PRO.get("btc"))
     mv = _pro_move(pro, mac, rel)
     return {"pro": pro, "mac": mac, "move": mv, "ts": now}
 
 
 def pro_view():
-    if PRO["view"] is None:
-        with PRO["lock"]:
+    """من الذاكرة · أول مرة من الملف — لا تنتظر الجلب أبداً (النافذة ما تعلق)"""
+    if PRO["view"] is None and PRO["lock"].acquire(timeout=0.5):
+        try:
             PRO["view"] = _pro_build(_pro_db())
+        finally:
+            PRO["lock"].release()
     return PRO["view"]
 
 
 def _pro_rel(fdb):
     """🎯 صدق كل قراءة على ماضيها (يعمل مع 🔮 كل نصف ساعة لأن الإغلاقات اليومية هناك) + قراءات العملات للشارات"""
-    with PRO["lock"]:
-        db = _pro_db()
+    db = _pro_db()
     btc = _pro_closes(fdb, "BTC-USDT")
     PRO["btc"] = btc
     rel = {}
