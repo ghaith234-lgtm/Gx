@@ -178,6 +178,50 @@ try:
 except Exception as e:
     print(f"HOLYX 📅 FOMC: error {type(e).__name__}: {e}", flush=True)
 
+# ── 🌋 what really precedes BIG moves (size, not direction): squeeze · VIX jump · DVOL level ──
+def volx(ts, flags, closes, H):
+    return m._pro_volx(ts, flags, closes, H)
+for tf, H, lab in (("1D", 7, "daily · next 7 days"),):
+    pool_on, pool_al = [], []
+    for c in COINS:
+        rows = m.fc_candles(c + "-USDT", db)[0]
+        if len(rows) < 300:
+            continue
+        D = {"t": [int(r[0]) for r in rows], "o": [r[1] for r in rows], "h": [r[2] for r in rows], "l": [r[3] for r in rows], "c": [r[4] for r in rows], "v": [r[5] for r in rows]}
+        S = m._i2_series(D["o"], D["h"], D["l"], D["c"], D["v"])
+        sq = m._fc_sq(D, S)
+        C = D["c"]
+        for t in range(30, len(C) - H):
+            mv = abs(C[t + H] / C[t] - 1)
+            pool_al.append(mv)
+            if sq[t]:
+                pool_on.append(mv)
+    print(f"HOLYX ⚡ squeeze ({lab}, 20 coins): move after squeeze ×{(sum(pool_on) / len(pool_on)) / (sum(pool_al) / len(pool_al)):.2f} of normal ({len(pool_on)} squeeze days)", flush=True)
+vks = [a for a, _ in MAC["vix"] if a >= calendar.timegm((2019, 1, 1, 0, 0, 0))]
+vvs = [b for a, b in MAC["vix"] if a >= calendar.timegm((2019, 1, 1, 0, 0, 0))]
+jump = [i >= 5 and vvs[i] / vvs[i - 5] - 1 >= 0.25 for i in range(len(vvs))]
+print(f"HOLYX 😱 VIX jump ≥25% in 5 days ⇒ BTC 7-day move ×{volx(vks, jump, BTC, 7)}", flush=True)
+for c in ("BTC",):
+    end, rows = int(time.time() * 1000), []
+    for _ in range(10):
+        j = G(f"https://www.deribit.com/api/v2/public/get_volatility_index_data?currency={c}&start_timestamp=1609459200000&end_timestamp={end}&resolution=1D").json()["result"]
+        rows += j.get("data") or []
+        if not j.get("continuation") or not j.get("data"):
+            break
+        end = int(j["continuation"]); time.sleep(0.4)
+    ser = sorted({int(x[0]) // 1000 // DAY * DAY: float(x[4]) for x in rows}.items())
+    ks, vs = [k for k, _ in ser], [v for _, v in ser]
+    q = sorted(vs)
+    lo, hi = q[len(q) // 5], q[4 * len(q) // 5]
+    print(f"HOLYX 🌡️ DVOL {c} absolute level: top-fifth days ⇒ 7-day move ×{volx(ks, [v >= hi for v in vs], CL[c], 7)} · bottom-fifth ×{volx(ks, [v <= lo for v in vs], CL[c], 7)} (implied vol as a SIZE forecast)", flush=True)
+    real = []
+    for k, v in zip(ks, vs):
+        c0, c1 = CL[c].get(k), CL[c].get(k + 30 * DAY)
+        if c0 and c1:
+            real.append((v / math.sqrt(365 / 30), abs(math.log(c1 / c0)) * 100))
+    inside = sum(1 for a, b in real if b <= a) / len(real) * 100 if real else None
+    print(f"HOLYX 🌡️ DVOL {c}: the 30-day move stayed inside ±DVOL·√(30/365) in {inside:.0f}% of {len(real)} days (a 1-σ band ≈ 68% if DVOL is right)", flush=True)
+
 # ── 📐 formulas vs TA-Lib on REAL candles (BTC daily) ──
 try:
     import numpy as np, talib
