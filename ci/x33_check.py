@@ -181,7 +181,7 @@ except Exception as e:
 # ── 🌋 what really precedes BIG moves (size, not direction): squeeze · VIX jump · DVOL level ──
 def volx(ts, flags, closes, H):
     return m._pro_volx(ts, flags, closes, H)
-for tf, H, lab in (("1D", 7, "daily · next 7 days"),):
+for tf, HZ, lab in (("1D", 7, "daily · next 7 days"),):
     pool_on, pool_al = [], []
     for c in COINS:
         rows = m.fc_candles(c + "-USDT", db)[0]
@@ -191,8 +191,8 @@ for tf, H, lab in (("1D", 7, "daily · next 7 days"),):
         S = m._i2_series(D["o"], D["h"], D["l"], D["c"], D["v"])
         sq = m._fc_sq(D, S)
         C = D["c"]
-        for t in range(30, len(C) - H):
-            mv = abs(C[t + H] / C[t] - 1)
+        for t in range(30, len(C) - HZ):
+            mv = abs(C[t + HZ] / C[t] - 1)
             pool_al.append(mv)
             if sq[t]:
                 pool_on.append(mv)
