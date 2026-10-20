@@ -1,0 +1,23 @@
+# 🏦🗞️📐 Holy v3.33.0 check on REAL history: the dashboard's own code for the pro indicators (long/short · taker · put/call · DVOL · MVRV)
+#    and the macro numbers (VIX · DXY · 10y · EPU · GPR) graded vs chance on later prices · FOMC days · formulas vs TA-Lib. Lines HOLYX.
+# Public GETs only — no keys, no orders, no notifications. Runs only when the check, ci/RUN_X33 or this file changes.
+name: Holy indicators x33 check
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/x33_check.py', 'ci/RUN_X33', '.github/workflows/holy-x33-check.yml']
+permissions:
+  contents: read
+jobs:
+  real-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: New indicators on real history (public data · no keys · no orders · no notifications)
+        run: |
+          pip install -q requests numpy TA-Lib
+          python3 ci/x33_check.py Holy_Dashboard.pyw

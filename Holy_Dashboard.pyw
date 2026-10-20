@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.32.0"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.33.0"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -11236,8 +11236,9 @@ def ind2_fetch():
 
 def ind2_view():
     return {"ok": True, "on": indic_cfg()["on"], "ts": IND2["ts"], "age": round(time.time() - (IND2["ts"] or 0), 1), "every": _IND_EVERY,
-            "h": IND2_H, "rows": [dict(IND2["coins"][s], x=((FC["coins"].get(s) or {}).get("x"))) for s in IND2["order"] if s in IND2["coins"]],
+            "h": IND2_H, "rows": [dict(IND2["coins"][s], x=((FC["coins"].get(s) or {}).get("x")), p=(PRO.get("coins") or {}).get(s)) for s in IND2["order"] if s in IND2["coins"]],
             "summary": IND2["summary"], "mkt": _safe(mkt_view, default=None),     # 🌐🧲💪 v3.32.0
+            "pro": _safe(pro_view, default=None),                                 # 🏦🗞️🌋 v3.33.0
             "err": IND2["err"], "fng": INDIC.get("fng") or {}, "kinds": [{"k": k, "name": nm, "ico": ico, "what": wh} for k, nm, ico, _, wh in _IND2_K]}
 
 
@@ -11628,6 +11629,1187 @@ def xc_coin(sym, d1, l1, btc):
             out["rs"] = {"k": k, "txt": {"strong": "💪 أقوى من البيتكوين", "weak": "🐢 أضعف من البيتكوين", "mixed": "↔️ مثل البيتكوين (مختلط)"}[k],
                          "r7": round(r7 * 100, 1), "r30": round(r30 * 100, 1), "acc": _xc_acc(rr)}
     return out
+
+
+# ═══════════════ 🏦🗞️ v3.33.0: مؤشرات المحترفين + الاقتصاد والأخبار — قراءة عامة بلا مفاتيح · عرض فقط ═══════════════
+#   (المالك: «اريد مؤشرات يستخدمها المتداولين المحترفين … هل هناك مؤشرات للاخبار السياسية والاقتصادية … فقط مؤشر بدون الاخبار»)
+#   🏦 المحترفون: ⚖️ نسبة الحسابات الطويلة إلى القصيرة (لكل عملة) · 🐂 الشراء العدواني في العقود (لكل عملة) · 🌡️ التقلب الضمني DVOL ·
+#      🎲 نسبة البيع إلى الشراء في الخيارات · 🔗 MVRV (للبيتكوين والإيثيريوم) — OKX وDeribit وCoinMetrics.
+#   🗞️ الاقتصاد والأخبار (أرقام بلا أخبار): 📅 تقويم الأحداث · 😱 VIX · 💱 الدولار · 📜 عائد 10 سنوات · 🏛️ عدم اليقين الاقتصادي ·
+#      🌍 المخاطر الجيوسياسية · 📰 نبرة الأخبار عن الكريبتو · 🌋 الحركة القادمة (ما يسبق الحركات الكبيرة عادةً، بلا اتجاه).
+#   🎯 كل قراءة لها تاريخ تُقاس عليه: نفس القراءة على كل يوم ماضٍ (دون رؤية ما بعده) ⇒ هل تحرّك السعر باتجاهها بعد المدة؟ (`_fc_grade`).
+#   🔕 لا إشعار · لا أمر · لا مفتاح — مثل 📊 و🔮 و🌐. كل مصدر بوقته، وإن لم يرد تبقى آخر قراءة محفوظة.
+PRO_FILE = os.path.join(ROOT, "Holy_Pro.json")
+PRO = {"view": None, "rel": {}, "coins": {}, "lock": threading.Lock()}
+PRO_EVERY = {"ls": 6 * 3600, "tk": 6 * 3600, "dv": 3600, "pc": 6 * 3600, "mv": 12 * 3600, "cal": 6 * 3600,
+             "vix": 6 * 3600, "dxy": 6 * 3600, "us10": 6 * 3600, "epu": 12 * 3600, "gpr": 24 * 3600, "tone": 6 * 3600}
+PRO_KEEP = 800                   # كم يوماً يُحفظ من كل سلسلة (التاريخ يكبر مع الوقت فوق ما تعطيه المنصة)
+PRO_BIG = ("BTC", "ETH")         # 🌡️🎲🔗 متاحة لهما فقط
+PRO_H = {"ls": 3, "tk": 3, "pc": 7, "mv": 30, "vix": 7, "dxy": 7, "us10": 7, "epu": 7, "gpr": 7, "tone": 7}   # 🎯 الحكم بعد كم يوم
+_PRO_DAY = 86400
+
+
+def _pro_db():
+    db = _safe(load_json, PRO_FILE, default={}) or {}
+    return db if isinstance(db, dict) else {}
+
+
+def _pro_dk(ts):
+    """مفتاح اليوم (UTC) من ثوانٍ أو ملّي ثانية"""
+    ts = float(ts)
+    if ts > 1e11:
+        ts /= 1000.0
+    return str(int(ts) // _PRO_DAY * _PRO_DAY)
+
+
+def _pro_merge(e, pairs):
+    """يدمج [(اليوم, القيمة)] في السلسلة المحفوظة ويقصّها لآخر PRO_KEEP يوماً"""
+    d = e.setdefault("d", {})
+    for k, v in pairs:
+        d[k] = v
+    for k in sorted(d, key=int)[:-PRO_KEEP]:
+        d.pop(k, None)
+    return len(pairs)
+
+
+def _pro_okx(path):
+    r = _okx_pub(path)
+    return (r.get("data") or []) if (r and str(r.get("code")) == "0") else None
+
+
+def _pro_due(e, key, now):
+    return now - float(e.get("ts") or 0) >= PRO_EVERY[key]
+
+
+def _pro_ls(db, now, coins):
+    """⚖️ نسبة حسابات العقود الطويلة إلى القصيرة لكل عملة (OKX العام · يومي · 180 يوماً) — كل 6 ساعات"""
+    ch = False
+    for ccy in coins:
+        e = db.setdefault("ls", {}).setdefault(ccy, {})
+        if not _pro_due(e, "ls", now):
+            continue
+        e["ts"] = now
+        ch = True
+        rows = _pro_okx(f"/api/v5/rubik/stat/contracts/long-short-account-ratio?ccy={ccy}&period=1D")
+        if rows is None:
+            e["ts"] = now - PRO_EVERY["ls"] + 1800             # ما وصل ⇒ يحاول بعد نصف ساعة
+            continue
+        pr = []
+        for x in rows:
+            try:
+                if float(x[1]) > 0:
+                    pr.append((_pro_dk(x[0]), round(float(x[1]), 4)))
+            except Exception:
+                continue
+        _pro_merge(e, pr)
+        e["na"] = not pr                                       # العملة بلا عقود في OKX
+        time.sleep(0.25)
+    return ch
+
+
+def _pro_tk(db, now, coins):
+    """🐂 حجم الشراء مقابل البيع بسعر السوق في العقود لكل عملة (OKX العام · يومي · بالدولار) — كل 6 ساعات"""
+    ch = False
+    for ccy in coins:
+        e = db.setdefault("tk", {}).setdefault(ccy, {})
+        if not _pro_due(e, "tk", now):
+            continue
+        e["ts"] = now
+        ch = True
+        rows = _pro_okx(f"/api/v5/rubik/stat/taker-volume?ccy={ccy}&instType=CONTRACTS&period=1D")
+        if rows is None:
+            e["ts"] = now - PRO_EVERY["tk"] + 1800
+            continue
+        pr = []
+        for x in rows:
+            try:
+                s_, b_ = float(x[1]), float(x[2])
+                if s_ + b_ > 0:
+                    pr.append((_pro_dk(x[0]), [round(s_), round(b_)]))
+            except Exception:
+                continue
+        _pro_merge(e, pr)
+        e["na"] = not pr
+        time.sleep(0.25)
+    return ch
+
+
+def _pro_pc(db, now):
+    """🎲 نسبة البيع إلى الشراء (Put/Call) في خيارات OKX: العقود المفتوحة والحجم (يومي · 72 يوماً) — كل 6 ساعات"""
+    ch = False
+    for ccy in PRO_BIG:
+        e = db.setdefault("pc", {}).setdefault(ccy, {})
+        if not _pro_due(e, "pc", now):
+            continue
+        e["ts"] = now
+        ch = True
+        rows = _pro_okx(f"/api/v5/rubik/stat/option/open-interest-volume-ratio?ccy={ccy}&period=1D")
+        if rows is None:
+            e["ts"] = now - PRO_EVERY["pc"] + 1800
+            continue
+        pr = []
+        for x in rows:
+            try:
+                if float(x[1]) > 0:
+                    pr.append((_pro_dk(x[0]), [round(float(x[1]), 4), round(float(x[2] or 0), 4)]))
+            except Exception:
+                continue
+        _pro_merge(e, pr)
+        time.sleep(0.25)
+    return ch
+
+
+def _pro_dv(db, now):
+    """🌡️ مؤشر التقلب الضمني DVOL من Deribit (يومي منذ 2021 أول مرة ثم الجديد فقط) — كل ساعة"""
+    ch = False
+    for ccy in PRO_BIG:
+        e = db.setdefault("dv", {}).setdefault(ccy, {})
+        if not _pro_due(e, "dv", now):
+            continue
+        e["ts"] = now
+        ch = True
+        d = e.get("d") or {}
+        start = (max(int(k) for k in d) - 3 * _PRO_DAY) if d else 1609459200          # أول مرة: من 2021
+        end = int(now * 1000)
+        got = 0
+        for _ in range(8):
+            j = _http_json(f"https://www.deribit.com/api/v2/public/get_volatility_index_data?currency={ccy}"
+                           f"&start_timestamp={int(start) * 1000}&end_timestamp={end}&resolution=1D", timeout=15) or {}
+            res = j.get("result") if isinstance(j, dict) else None
+            rows = (res or {}).get("data") or []
+            pr = []
+            for x in rows:
+                try:
+                    if float(x[4]) > 0:
+                        pr.append((_pro_dk(x[0]), round(float(x[4]), 2)))
+                except Exception:
+                    continue
+            got += _pro_merge(e, pr)
+            c = (res or {}).get("continuation")
+            if not rows or not c or int(c) <= start * 1000:
+                break
+            end = int(c)
+            time.sleep(0.3)
+        if not got:
+            e["ts"] = now - PRO_EVERY["dv"] + 900
+    return ch
+
+
+def _pro_mv(db, now, coins=()):
+    """🔗 MVRV = القيمة السوقية ÷ القيمة المحققة (كلفة المالكين) — CoinMetrics المجاني · يومي منذ 2018 · لكل عملة يدعمها — كل 12 ساعة"""
+    ch = False
+    for ccy in list(dict.fromkeys(list(PRO_BIG) + [c for c in coins])):
+        e = db.setdefault("mv", {}).setdefault(ccy, {})
+        if not _pro_due(e, "mv", now) or (e.get("na") and now - float(e.get("ts") or 0) < 7 * _PRO_DAY):
+            continue
+        e["ts"] = now
+        ch = True
+        d = e.get("d") or {}
+        start = time.strftime("%Y-%m-%d", time.gmtime(max(int(k) for k in d) - 5 * _PRO_DAY)) if d else "2018-01-01"
+        j = _http_json("https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=" + ccy.lower()
+                       + f"&metrics=CapMVRVCur&frequency=1d&page_size=10000&start_time={start}", timeout=25)
+        if not isinstance(j, dict):
+            e["ts"] = now - PRO_EVERY["mv"] + 3600
+            continue
+        if j.get("error"):
+            e["na"] = True                                  # العملة غير مدعومة ⇒ نعيد السؤال بعد أسبوع
+            continue
+        pr = []
+        for x in j.get("data") or []:
+            try:
+                v = float(x["CapMVRVCur"])
+                if v > 0:
+                    pr.append((_pro_dk(_cal.timegm(time.strptime(str(x["time"])[:10], "%Y-%m-%d"))), round(v, 4)))
+            except Exception:
+                continue
+        _pro_merge(e, pr)
+        e["na"] = False
+        time.sleep(0.4)
+    return ch
+
+
+def _pro_pct(vals, x):
+    """موقع x بين القيم (0..1)"""
+    if not vals:
+        return None
+    return sum(1 for v in vals if v <= x) / float(len(vals))
+
+
+def _pro_pctxt(p, n, unit="أيامها"):
+    """موقع القراءة من تاريخها بكلام: الأعلى/الأدنى أو «أعلى من x%»"""
+    if p is None:
+        return ""
+    if p >= 0.995:
+        return f"الأعلى في {n} يوماً"
+    if p <= 0.01:
+        return f"الأدنى في {n} يوماً"
+    return f"أعلى من {round(p * 100)}% من {unit}"
+
+
+def _pro_sorted(e, fresh=None):
+    """السلسلة مرتبة (الأيام · القيم) — fresh: إن كانت آخر قراءة أقدم من هذا العدد من الأيام تُعدّ متوقفة (فارغة)"""
+    d = (e or {}).get("d") or {}
+    ks = sorted(int(k) for k in d)
+    if fresh and ks and time.time() - ks[-1] > fresh * _PRO_DAY:
+        return [], []
+    return ks, [d[str(k)] for k in ks]
+
+
+def _pro_ls_sig(vals, i):
+    """⚖️ الإشارة عند اليوم i من تاريخه هو فقط: ازدحام في جهة ⇒ قراءة عكسية (−1..+1)"""
+    w = vals[max(0, i - 179):i + 1]
+    if len(w) < 30:
+        return None, None
+    p = _pro_pct(w, vals[i])
+    s = -1.0 if p >= 0.9 else -0.5 if p >= 0.75 else 1.0 if p <= 0.1 else 0.5 if p <= 0.25 else 0.0
+    return s, p
+
+
+def _pro_tk_sig(vals, i):
+    """🐂 نصيب الشراء العدواني من حجم العقود خلال 7 أيام (−1..+1)"""
+    w = vals[max(0, i - 6):i + 1]
+    if len(w) < 5:
+        return None, None
+    b = sum(x[1] for x in w)
+    s_ = sum(x[0] for x in w)
+    sh = b / (b + s_) if b + s_ > 0 else 0.5
+    return max(-1.0, min(1.0, (sh - 0.5) * 20)), sh
+
+
+def _pro_pc_sig(vals, i):
+    """🎲 نسبة البيع إلى الشراء في العقود المفتوحة: مرتفعة جداً = تحوّط وخوف ⇒ قراءة عكسية"""
+    w = [x[0] for x in vals[max(0, i - 179):i + 1]]
+    if len(w) < 30:
+        return None, None
+    p = _pro_pct(w, vals[i][0])
+    return (0.5 if p >= 0.85 else -0.5 if p <= 0.15 else 0.0), p
+
+
+def _pro_mv_sig(v):
+    """🔗 مناطق MVRV التاريخية"""
+    return 1.0 if v < 1.0 else 0.5 if v < 1.3 else 0.0 if v <= 2.4 else -0.5 if v <= 3.2 else -1.0
+
+
+def _pro_grade(ks, sigs, closes, H):
+    """🎯 صدق إشارات يومية مقابل الصدفة على إغلاقات يومية {يوم: سعر} بعد H يوماً (`_fc_grade`)"""
+    a = [0, 0, 0, 0, 0, 0]
+    up = n = 0
+    for k, s in zip(ks, sigs):
+        if s is None:
+            continue
+        c0, c1 = closes.get(k), closes.get(k + H * _PRO_DAY)
+        if not c0 or not c1:
+            continue
+        r = c1 / c0 - 1.0
+        if abs(r) < FC_MOVE:
+            continue
+        n += 1
+        up += 1 if r > 0 else 0
+        if abs(s) < 0.15:
+            continue
+        a[4] = a[4] or k
+        a[5] = k
+        if s > 0:
+            a[0] += 1; a[2] += 1 if r > 0 else 0
+        else:
+            a[1] += 1; a[3] += 0 if r > 0 else 1
+    return _fc_grade(a, (up / n) if n else 0.5, H, _PRO_DAY)
+
+
+def _pro_closes(fdb, sym):
+    return {int(r[0]) // _PRO_DAY * _PRO_DAY: float(r[4]) for r in (((fdb.get("c") or {}).get(sym) or {}).get("d") or [])}
+
+
+def _pro_volx(ks, flags, closes, H=7):
+    """🌋 حجم الحركة بعد العلامة مقسوماً على الحركة المعتادة (×) — بلا اتجاه"""
+    al, on = [], []
+    for k, f in zip(ks, flags):
+        c0, c1 = closes.get(k), closes.get(k + H * _PRO_DAY)
+        if not c0 or not c1:
+            continue
+        m = abs(c1 / c0 - 1.0)
+        al.append(m)
+        if f:
+            on.append(m)
+    if len(on) < 8 or not al or not sum(al):
+        return {"x": None, "n": len(on)}
+    return {"x": round((sum(on) / len(on)) / (sum(al) / len(al)), 2), "n": len(on)}
+
+
+def _pro_bytes(url, timeout=25):
+    """ملف خام (CSV أو dta) — requests أولاً ثم urllib · None إن فشل"""
+    hdr = {"User-Agent": "Mozilla/5.0 (HolyDashboard)"}
+    if _RQ is not None:
+        try:
+            r = _RQ.get(url, headers=hdr, timeout=timeout, verify=False)
+            return r.content if r.status_code == 200 else None
+        except Exception:
+            pass
+    try:
+        req = urllib.request.Request(url, headers=hdr)
+        with urllib.request.urlopen(req, timeout=timeout, context=_OKX_CTX) as rr:
+            return rr.read()
+    except Exception:
+        return None
+
+
+def _pro_text(url, timeout=25):
+    b = _pro_bytes(url, timeout)
+    return b.decode("utf-8", "replace") if b else None
+
+
+def _pro_coin(db, ccy, closes=None):
+    """⚖️🐂 قراءة العملة الآن (+ صدقها على ماضيها إن وُجدت إغلاقاتها) — للشارة والتفاصيل في 📊"""
+    out = {}
+    ks, vs = _pro_sorted((db.get("ls") or {}).get(ccy), 10)
+    if len(vs) >= 2:
+        s, p = _pro_ls_sig(vs, len(vs) - 1)
+        r = vs[-1]
+        lp = r / (1.0 + r) * 100.0
+        out["ls"] = {"r": r, "long": round(lp), "p": None if p is None else round(p * 100), "s": s, "days": len(vs),
+                     "pt": _pro_pctxt(p, min(len(vs), 180)),
+                     "txt": ("⏳ يسجّل" if s is None else "الشراء مزدحم" if s <= -1 else "البيع مزدحم" if s >= 1
+                             else "الشراء أكثر من المعتاد" if s < 0 else "البيع أكثر من المعتاد" if s > 0 else "متوازن"),
+                     "acc": _pro_grade(ks, [_pro_ls_sig(vs, i)[0] for i in range(len(vs))], closes, PRO_H["ls"]) if closes else None}
+    ks, vs = _pro_sorted((db.get("tk") or {}).get(ccy), 10)
+    if len(vs) >= 2:
+        s, sh = _pro_tk_sig(vs, len(vs) - 1)
+        b1, s1 = vs[-1][1], vs[-1][0]
+        out["tk"] = {"sh7": None if sh is None else round(sh * 100, 1), "sh1": round(b1 / (b1 + s1) * 100, 1) if b1 + s1 else None, "s": s,
+                     "usd": round(b1 + s1), "days": len(vs),
+                     "txt": ("⏳ يسجّل" if s is None else "المشترون أعنف" if s >= 0.2 else "البائعون أعنف" if s <= -0.2 else "متوازن"),
+                     "acc": _pro_grade(ks, [_pro_tk_sig(vs, i)[0] for i in range(len(vs))], closes, PRO_H["tk"]) if closes else None}
+    ks, vs = _pro_sorted((db.get("mv") or {}).get(ccy), 10)
+    if len(vs) >= 2:
+        out["mv"] = {"v": vs[-1], "s": _pro_mv_sig(vs[-1]), "days": len(vs),
+                     "txt": ("تحت كلفة المالكين" if vs[-1] < 1 else "قريب من كلفة المالكين" if vs[-1] < 1.3 else "عادي" if vs[-1] <= 2.4
+                             else "مرتفع" if vs[-1] <= 3.2 else "منطقة قمم تاريخية"),
+                     "acc": _pro_grade(ks, [_pro_mv_sig(v) for v in vs], closes, PRO_H["mv"]) if closes else None}
+    return out or None
+
+
+def _pro_rows(db, rel):
+    """🏦 صفوف «المحترفون» (BTC · ETH) للنافذة — من المحفوظ فقط"""
+    rows, sc = [], []
+    for ccy in PRO_BIG:
+        ks, vs = _pro_sorted((db.get("dv") or {}).get(ccy), 5)
+        if vs:
+            v = vs[-1]
+            w = vs[-365:]
+            p = _pro_pct(w, v) if len(w) >= 60 else None
+            st_ = "low" if p is not None and p <= 0.15 else "high" if p is not None and p >= 0.85 else "mid"
+            rows.append({"k": "dv", "c": ccy, "ico": "🌡️", "name": f"التقلب الضمني DVOL — {ccy}", "s": 0, "val": f"{v:.1f}",
+                         "txt": {"low": "هدوء غير معتاد", "high": "تقلب مرتفع (خوف)", "mid": "عادي"}[st_],
+                         "sub": f"حركة يومية متوقعة ±{v / math.sqrt(365):.1f}%" + (" · " + _pro_pctxt(p, len(w), "أيام السنة") if p is not None else ""),
+                         "flag": st_ == "low", "acc": rel.get("dv:" + ccy)})
+        ks, vs = _pro_sorted((db.get("pc") or {}).get(ccy), 10)
+        if vs:
+            s, p = _pro_pc_sig(vs, len(vs) - 1)
+            if s:
+                sc.append(s)
+            rows.append({"k": "pc", "c": ccy, "ico": "🎲", "name": f"نسبة البيع إلى الشراء في الخيارات — {ccy}", "s": s or 0,
+                         "val": f"{vs[-1][0]:.2f}", "txt": ("⏳ يسجّل" if s is None else "تحوّط مرتفع (خوف)" if s > 0 else "اطمئنان زائد" if s < 0 else "عادية"),
+                         "sub": f"العقود المفتوحة {vs[-1][0]:.2f} · الحجم {vs[-1][1]:.2f}" + (" · " + _pro_pctxt(p, min(len(vs), 180)) if p is not None else ""),
+                         "acc": rel.get("pc:" + ccy)})
+        ks, vs = _pro_sorted((db.get("mv") or {}).get(ccy), 10)
+        if len(vs) >= 2:
+            v = vs[-1]
+            s = _pro_mv_sig(v)
+            if s:
+                sc.append(s)
+            rows.append({"k": "mv", "c": ccy, "ico": "🔗", "name": f"MVRV — {ccy}", "s": s, "val": f"{v:.2f}",
+                         "txt": ("تحت كلفة المالكين (منطقة قيعان تاريخية)" if v < 1 else "قريب من كلفة المالكين" if v < 1.3 else "عادي" if v <= 2.4
+                                 else "مرتفع" if v <= 3.2 else "منطقة قمم تاريخية"),
+                         "sub": f"السعر = {v:.2f} × متوسط كلفة المالكين", "acc": rel.get("mv:" + ccy)})
+    for ccy in PRO_BIG:                                      # ⚖️🐂 للبيتكوين والإيثيريوم هنا أيضاً (السوق كله يتبعهما)
+        c = _pro_coin(db, ccy) or {}
+        if c.get("ls"):
+            x = c["ls"]
+            if x["s"]:
+                sc.append(x["s"])
+            rows.append({"k": "ls", "c": ccy, "ico": "⚖️", "name": f"الحسابات الطويلة إلى القصيرة — {ccy}", "s": x["s"] or 0, "val": f"{x['r']:.2f}",
+                         "txt": x["txt"], "sub": f"{x['long']}% من الحسابات تراهن على الصعود" + (" · " + x["pt"] if x.get("pt") else ""),
+                         "acc": rel.get("ls:" + ccy)})
+        if c.get("tk"):
+            x = c["tk"]
+            if x["s"] and abs(x["s"]) >= 0.2:
+                sc.append(x["s"])
+            rows.append({"k": "tk", "c": ccy, "ico": "🐂", "name": f"الشراء العدواني في العقود — {ccy}", "s": x["s"] or 0,
+                         "val": (f"{x['sh7']:.1f}%" if x["sh7"] is not None else "—"), "txt": x["txt"],
+                         "sub": f"نصيب الشراء بسعر السوق 7 أيام · أمس {x['sh1']}%", "acc": rel.get("tk:" + ccy)})
+    up, dn = sum(1 for s in sc if s > 0), sum(1 for s in sc if s < 0)
+    mood = ("p", "🟢 التمركز يميل للصعود") if up - dn >= 2 else ("n", "🔴 التمركز يميل للهبوط") if dn - up >= 2 else ("z", "↔️ التمركز متوازن")
+    return {"rows": rows, "up": up, "dn": dn, "n": len(sc), "mood": mood[0], "mood_t": mood[1]}
+
+
+_CAL_AR = [   # 📅 أسماء الأحداث الأمريكية الكبرى بالعربية (والباقي يبقى باسمه)
+    (r"FOMC|Federal Funds Rate", "قرار الفائدة الأمريكية"),
+    (r"Core PCE|PCE Price", "مؤشر أسعار الإنفاق الشخصي (PCE)"),
+    (r"\bCPI\b", "التضخم الأمريكي (CPI)"),
+    (r"\bPPI\b", "أسعار المنتجين (PPI)"),
+    (r"Non-Farm|NFP", "الوظائف الأمريكية (NFP)"),
+    (r"Unemployment Rate", "معدل البطالة"),
+    (r"Unemployment Claims", "طلبات إعانة البطالة"),
+    (r"\bGDP\b", "الناتج المحلي الإجمالي"),
+    (r"Retail Sales", "مبيعات التجزئة"),
+    (r"ISM", "مؤشر ISM للأعمال"),
+    (r"Powell|Fed Chair", "خطاب رئيس الاحتياطي الفيدرالي"),
+    (r"JOLTS", "الوظائف الشاغرة (JOLTS)"),
+    (r"Consumer Confidence|Consumer Sentiment", "ثقة المستهلك"),
+    (r"FOMC Meeting Minutes", "محضر اجتماع الفيدرالي"),
+]
+
+
+_AR_WD = ("الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد")
+
+
+def _cal_name(t):
+    for pat, ar in _CAL_AR[::-1]:                          # الأخص أولاً (المحضر قبل FOMC)
+        if re.search(pat, t or "", re.I):
+            return ar
+    return t or "—"
+
+
+def _pro_cal(db, now):
+    """📅 تقويم الأسبوع (ForexFactory العام · JSON) — الأحداث الأمريكية عالية التأثير تُحفظ وتتراكم لقياس تقلب أيامها — كل 6 ساعات"""
+    e = db.setdefault("cal", {})
+    if not _pro_due(e, "cal", now):
+        return False
+    e["ts"] = now
+    j = _http_json("https://nfs.faireconomy.media/ff_calendar_thisweek.json", timeout=15)
+    if not isinstance(j, list):
+        e["ts"] = now - PRO_EVERY["cal"] + 1800
+        return True
+    have = {(x["t"], x["ti"]) for x in e.get("ev") or []}
+    ev = list(e.get("ev") or [])
+    for x in j:
+        try:
+            if str(x.get("country")) != "USD" or str(x.get("impact")) not in ("High", "Medium"):
+                continue
+            t = int(datetime.fromisoformat(str(x["date"])).timestamp())
+            ti = str(x.get("title") or "")[:80]
+            if (t, ti) in have:
+                continue
+            ev.append({"t": t, "ti": ti, "im": "h" if x["impact"] == "High" else "m"})
+            have.add((t, ti))
+        except Exception:
+            continue
+    e["ev"] = sorted([x for x in ev if now - x["t"] < 400 * _PRO_DAY], key=lambda x: x["t"])
+    return True
+
+
+def _cal_row(db, now, closes):
+    """📅 أقرب حدث أمريكي عالي التأثير + «يوم ساخن» + تقلب أيام الأحداث (من السجل الحي)"""
+    ev = [x for x in ((db.get("cal") or {}).get("ev") or []) if x.get("im") == "h"]
+    if not ev:
+        return None
+    nxt = next((x for x in ev if x["t"] >= now - 2 * 3600), None)
+    hot = bool(nxt and nxt["t"] - now <= 24 * 3600)
+    days = {x["t"] // _PRO_DAY * _PRO_DAY for x in ev if x["t"] < now - _PRO_DAY}
+    vx = None
+    if closes and len(days) >= 6:
+        ks = sorted(closes)
+        al, on = [], []
+        for k in ks[-400:]:
+            c0, c1 = closes.get(k - _PRO_DAY), closes.get(k)
+            if c0 and c1:
+                m = abs(c1 / c0 - 1.0)
+                al.append(m)
+                if k in days:
+                    on.append(m)
+        if len(on) >= 6 and al and sum(al):
+            vx = {"x": round((sum(on) / len(on)) / (sum(al) / len(al)), 2), "n": len(on)}
+    wk = sum(1 for x in ev if now - 2 * 3600 <= x["t"] <= now + 7 * _PRO_DAY)
+    if nxt:
+        dt = nxt["t"] - now
+        when = "الآن" if dt <= 0 else (f"بعد {int(dt // 3600)} س {int(dt % 3600 // 60)} د" if dt < 86400 else f"بعد {dt / 86400:.1f} يوم")
+        val, txt = when, ("⚠️ يوم ساخن" if hot else "لا حدث قريب")
+        g = time.gmtime(nxt["t"])
+        sub = f"{_cal_name(nxt['ti'])} · {_AR_WD[g.tm_wday]} {g.tm_hour:02d}:{g.tm_min:02d} UTC · {wk} حدث قوي هذا الأسبوع"
+    else:
+        val, txt, sub = "—", "لا أحداث قوية متبقية هذا الأسبوع", ""
+    if vx and vx["x"]:
+        sub += f" · حركة البيتكوين في أيام الأحداث ×{vx['x']} من المعتاد ({vx['n']} يوم)"
+    return {"k": "cal", "ico": "📅", "name": "تقويم الأحداث الاقتصادية (أمريكا)", "s": 0, "val": val, "txt": txt, "sub": sub, "flag": hot, "acc": None}
+
+
+def _dta_read(b, want=None):
+    """📦 قارئ ملفات Stata 118/119 (dta) بلا مكتبات — يرجع {اسم المتغير: [القيم]} للأرقام فقط (المفقود None)"""
+    import struct
+    if not b.startswith(b"<stata_dta><header><release>"):
+        return None
+    rel = int(b[28:31])
+    if rel not in (118, 119):
+        return None
+    le = b"<byteorder>LSF" in b[:80]
+    E = "<" if le else ">"
+    p = b.index(b"<K>") + 3
+    K = struct.unpack(E + ("I" if rel == 119 else "H"), b[p:p + (4 if rel == 119 else 2)])[0]
+    p = b.index(b"<N>") + 3
+    N = struct.unpack(E + "Q", b[p:p + 8])[0]
+    p = b.index(b"<map>") + 5
+    mp = struct.unpack(E + "14Q", b[p:p + 112])
+    p = mp[2] + len(b"<variable_types>")
+    ty = struct.unpack(E + f"{K}H", b[p:p + 2 * K])
+    p = mp[3] + len(b"<varnames>")
+    names = [b[p + 129 * i:p + 129 * (i + 1)].split(b"\x00")[0].decode("utf-8", "replace") for i in range(K)]
+    fmt = {65526: ("d", 8), 65527: ("f", 4), 65528: ("i", 4), 65529: ("h", 2), 65530: ("b", 1), 32768: (None, 8)}
+    lay, off = [], 0
+    for t in ty:
+        f, w = fmt.get(t, (None, t if t <= 2045 else 8))
+        lay.append((f, w, off))
+        off += w
+    miss = {"d": 8.988465674311579e307, "f": 1.7014117e38, "i": 2147483620, "h": 32740, "b": 100}
+    out = {}
+    base = mp[9] + len(b"<data>")
+    for j, nm in enumerate(names):
+        f, w, o = lay[j]
+        if f is None or (want and nm not in want):
+            continue
+        col = []
+        st = struct.Struct(E + f)
+        for r in range(N):
+            v = st.unpack_from(b, base + r * off + o)[0]
+            col.append(None if v >= miss[f] else v)
+        out[nm] = col
+    return out
+
+
+# ── 🗞️ الاقتصاد والأخبار ──
+def _mdy(t):
+    """MM/DD/YYYY ⇒ مفتاح اليوم"""
+    m, d, y = t.strip().split("/")
+    return str(_cal.timegm((int(y), int(m), int(d), 0, 0, 0)))
+
+
+def _pro_vix(db, now):
+    """😱 VIX من CBOE (CSV رسمي مجاني منذ 1990) — كل 6 ساعات"""
+    e = db.setdefault("vix", {})
+    if not _pro_due(e, "vix", now):
+        return False
+    e["ts"] = now
+    t = _pro_text("https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv", timeout=30)
+    pr = []
+    for ln in (t or "").splitlines()[1:]:
+        try:
+            c = ln.split(",")
+            if float(c[4]) > 0:
+                pr.append((_mdy(c[0]), round(float(c[4]), 2)))
+        except Exception:
+            continue
+    if not _pro_merge(e, pr[-PRO_KEEP:]):
+        e["ts"] = now - PRO_EVERY["vix"] + 1800
+    return True
+
+
+def _pro_us10(db, now):
+    """📜 عائد السندات الأمريكية لعشر سنوات (وزارة الخزانة · CSV سنوي) — أول مرة السنوات الثلاث الأخيرة ثم السنة الحالية — كل 6 ساعات"""
+    e = db.setdefault("us10", {})
+    if not _pro_due(e, "us10", now):
+        return False
+    e["ts"] = now
+    y = time.gmtime(now).tm_year
+    years = [y] if len((e.get("d") or {})) > 300 else [y - 2, y - 1, y]
+    n = 0
+    for yy in years:
+        t = _pro_text("https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/"
+                      f"{yy}/all?type=daily_treasury_yield_curve&field_tdr_date_value={yy}&page&_format=csv", timeout=30)
+        L = (t or "").splitlines()
+        if not L:
+            continue
+        hd = [h.strip().strip('"') for h in L[0].split(",")]
+        if "10 Yr" not in hd:
+            continue
+        ix = hd.index("10 Yr")
+        pr = []
+        for ln in L[1:]:
+            try:
+                c = ln.split(",")
+                if c[ix].strip():
+                    pr.append((_mdy(c[0]), round(float(c[ix]), 3)))
+            except Exception:
+                continue
+        n += _pro_merge(e, pr)
+        time.sleep(0.5)
+    if not n:
+        e["ts"] = now - PRO_EVERY["us10"] + 1800
+    return True
+
+
+_DXY_W = (("EUR", -0.576), ("JPY", 0.136), ("GBP", -0.119), ("CAD", 0.091), ("SEK", 0.042), ("CHF", 0.036))
+
+
+def _dxy_of(r):
+    """💱 مؤشر الدولار بمعادلته الرسمية (ICE) من أسعار الصرف المرجعية: الدولار مقابل اليورو والين والإسترليني والكندي والكرونة والفرنك"""
+    v = 50.14348112
+    for c, w in _DXY_W:
+        x = float(r[c])                                     # كم وحدة لكل دولار
+        v *= ((1.0 / x) if c in ("EUR", "GBP") else x) ** w           # اليورو والإسترليني يُسعَّران بالدولار (EURUSD) والباقي مقابله
+    return v
+
+
+def _pro_dxy(db, now):
+    """💱 مؤشر الدولار من أسعار البنك المركزي الأوروبي (Frankfurter — مجاني بلا مفتاح) — كل 6 ساعات"""
+    e = db.setdefault("dxy", {})
+    if not _pro_due(e, "dxy", now):
+        return False
+    e["ts"] = now
+    d = e.get("d") or {}
+    start = time.strftime("%Y-%m-%d", time.gmtime((max(int(k) for k in d) - 10 * _PRO_DAY) if d else now - 3 * 365 * _PRO_DAY))
+    j = _http_json(f"https://api.frankfurter.app/{start}..?from=USD&to=EUR,JPY,GBP,CAD,SEK,CHF", timeout=25)
+    pr = []
+    for day, r in ((j or {}).get("rates") or {}).items() if isinstance(j, dict) else []:
+        try:
+            pr.append((str(_cal.timegm(time.strptime(day, "%Y-%m-%d"))), round(_dxy_of(r), 3)))
+        except Exception:
+            continue
+    if not _pro_merge(e, pr):
+        e["ts"] = now - PRO_EVERY["dxy"] + 1800
+    return True
+
+
+def _pro_epu(db, now):
+    """🏛️ مؤشر عدم اليقين في السياسة الاقتصادية الأمريكية اليومي (Baker · Bloom · Davis — من الصحف) — كل 12 ساعة"""
+    e = db.setdefault("epu", {})
+    if not _pro_due(e, "epu", now):
+        return False
+    e["ts"] = now
+    t = _pro_text("https://www.policyuncertainty.com/media/All_Daily_Policy_Data.csv", timeout=30)
+    pr = []
+    for ln in (t or "").splitlines()[-(PRO_KEEP + 5):]:
+        try:
+            d_, m_, y_, v = ln.split(",")[:4]
+            pr.append((str(_cal.timegm((int(y_), int(m_), int(d_), 0, 0, 0))), round(float(v), 2)))
+        except Exception:
+            continue
+    if not _pro_merge(e, pr):
+        e["ts"] = now - PRO_EVERY["epu"] + 3600
+    return True
+
+
+def _pro_gpr(db, now):
+    """🌍 مؤشر المخاطر الجيوسياسية اليومي (Caldara · Iacoviello — من الصحف) · ملف Stata نقرؤه بلا مكتبات — كل 24 ساعة"""
+    e = db.setdefault("gpr", {})
+    if not _pro_due(e, "gpr", now):
+        return False
+    e["ts"] = now
+    raw = _pro_bytes("https://www.matteoiacoviello.com/gpr_files/data_gpr_daily_recent.dta", timeout=60)
+    d = _safe(_dta_read, raw, ("date", "GPRD"), default=None) if raw else None
+    pr = []
+    if d and d.get("date") and d.get("GPRD"):
+        base = _cal.timegm((1960, 1, 1, 0, 0, 0))
+        for dd, v in list(zip(d["date"], d["GPRD"]))[-(PRO_KEEP + 5):]:
+            if dd is not None and v is not None and 0 < dd < 60000:
+                pr.append((str(base + int(dd) * _PRO_DAY), round(float(v), 2)))
+    if not _pro_merge(e, pr):
+        e["ts"] = now - PRO_EVERY["gpr"] + 3 * 3600
+    return True
+
+
+def _pro_tone(db, now):
+    """📰 نبرة الأخبار العالمية عن الكريبتو وحجم تغطيتها (GDELT — مجاني · طلب كل 5 ثوانٍ كحد أقصى) — كل 6 ساعات"""
+    e = db.setdefault("tone", {})
+    if not _pro_due(e, "tone", now):
+        return False
+    e["ts"] = now
+    q = "https://api.gdeltproject.org/api/v2/doc/doc?format=json&timespan=3months&query=%28bitcoin%20OR%20cryptocurrency%29"
+    n = 0
+    for mode, key in (("timelinetone", "d"), ("timelinevolraw", "v")):
+        j = _http_json(q + "&mode=" + mode, timeout=25)
+        tl = (j or {}).get("timeline") if isinstance(j, dict) else None
+        acc = {}
+        for x in ((tl or [{}])[0].get("data") or []):
+            try:
+                k = str(_cal.timegm(time.strptime(str(x["date"])[:8], "%Y%m%d")))
+                acc.setdefault(k, []).append(float(x["value"]))
+            except Exception:
+                continue
+        pr = [(k, round(sum(v) / len(v), 4) if key == "d" else round(sum(v), 1)) for k, v in acc.items()]
+        if key == "d":
+            n += _pro_merge(e, pr)
+        else:
+            n += _pro_merge(e.setdefault("vol", {}), pr)
+        time.sleep(6)
+    if not n:
+        e["ts"] = now - PRO_EVERY["tone"] + 3600
+    return True
+
+
+def _mac_sig(k, vals, i):
+    """🗞️ إشارة القراءة عند اليوم i من تاريخها هي فقط (−1..+1 · موجب = يشجع المخاطرة) + أرقام العرض"""
+    v = vals[i]
+    if k == "vix":
+        p5 = vals[i - 5] if i >= 5 else None
+        c5 = (v / p5 - 1.0) if p5 else 0.0
+        s = -1.0 if v >= 30 else -0.5 if (v >= 22 or c5 >= 0.25) else 0.5 if v <= 14 else 0.0
+        return s, {"c5": c5}
+    if k in ("dxy", "us10"):
+        if i < 20:
+            return None, {}
+        c = (v / vals[i - 20] - 1.0) * 100.0 if k == "dxy" else (v - vals[i - 20])
+        a, b = (0.7, 1.5) if k == "dxy" else (0.25, 0.40)
+        s = -1.0 if c >= b else -0.5 if c >= a else 1.0 if c <= -b else 0.5 if c <= -a else 0.0
+        return s, {"c20": c}
+    if k in ("epu", "gpr"):
+        w = vals[max(0, i - 364):i + 1]
+        if len(w) < 120:
+            return None, {}
+        m7 = sum(vals[max(0, i - 6):i + 1]) / len(vals[max(0, i - 6):i + 1])
+        avg7 = [sum(w[j - 6:j + 1]) / 7.0 for j in range(6, len(w))]
+        p = _pro_pct(avg7, m7)
+        s = -1.0 if p >= 0.9 else -0.5 if p >= 0.75 else 0.5 if p <= 0.2 else 0.0
+        return s, {"m7": m7, "p": p}
+    if k == "tone":
+        if i < 30:
+            return None, {}
+        m7 = sum(vals[i - 6:i + 1]) / 7.0
+        m90 = sum(vals[max(0, i - 89):i + 1]) / len(vals[max(0, i - 89):i + 1])
+        dlt = m7 - m90
+        s = 0.5 if dlt >= 0.5 else -0.5 if dlt <= -0.5 else 0.0
+        return s, {"m7": m7, "m90": m90, "d": dlt}
+    return None, {}
+
+
+_MAC_META = {   # (الأيقونة · الاسم)
+    "vix": ("😱", "مؤشر الخوف في الأسهم الأمريكية (VIX)"),
+    "dxy": ("💱", "مؤشر الدولار (DXY)"),
+    "us10": ("📜", "عائد السندات الأمريكية لعشر سنوات"),
+    "epu": ("🏛️", "عدم اليقين في السياسة الاقتصادية"),
+    "gpr": ("🌍", "المخاطر الجيوسياسية"),
+    "tone": ("📰", "نبرة الأخبار عن الكريبتو"),
+}
+
+
+def _mac_rows(db, rel, now, btc=None):
+    """🗞️ صفوف «الاقتصاد والأخبار» + 🧭 مزاج المخاطرة — من المحفوظ فقط"""
+    rows, sc = [], []
+    c = _cal_row(db, now, btc or {})
+    if c:
+        rows.append(c)
+    for k in ("vix", "dxy", "us10", "epu", "gpr", "tone"):
+        ks, vs = _pro_sorted(db.get(k), 21 if k == "gpr" else 14)
+        if len(vs) < 2:
+            continue
+        s, x = _mac_sig(k, vs, len(vs) - 1)
+        if s:
+            sc.append(s)
+        v = vs[-1]
+        ico, nm = _MAC_META[k]
+        if k == "vix":
+            val, txt = f"{v:.1f}", ("خوف شديد" if v >= 30 else "قلق" if s == -0.5 else "هدوء وشهية للمخاطرة" if v <= 14 else "عادي")
+            sub = f"خلال 5 أيام {x['c5'] * 100:+.0f}%"
+        elif k == "dxy":
+            val = f"{v:.2f}"
+            txt = "⏳ يسجّل" if s is None else "الدولار يقوى (ضغط على الكريبتو)" if s < 0 else "الدولار يضعف (يدعم الكريبتو)" if s > 0 else "مستقر"
+            sub = (f"خلال 20 يوم عمل {x['c20']:+.2f}%" if x else "") + " · محسوب بمعادلة DXY من أسعار البنك المركزي الأوروبي"
+        elif k == "us10":
+            val = f"{v:.2f}%"
+            txt = "⏳ يسجّل" if s is None else "العوائد ترتفع (السيولة تضيق)" if s < 0 else "العوائد تنخفض (السيولة تتسع)" if s > 0 else "مستقرة"
+            sub = f"خلال 20 يوم عمل {x['c20']:+.2f} نقطة" if x else ""
+        elif k in ("epu", "gpr"):
+            val = f"{x.get('m7', v):.0f}" if x else f"{v:.0f}"
+            txt = "⏳ يسجّل" if s is None else "مرتفع جداً" if s <= -1 else "مرتفع" if s < 0 else "هادئ" if s > 0 else "عادي"
+            sub = (f"متوسط 7 أيام · {_pro_pctxt(x['p'], 365, 'أيام السنة')}" if x else "") + (" · من الصحف الأمريكية" if k == "epu" else " · من الصحف العالمية")
+        else:
+            val = f"{x.get('m7', v):+.2f}" if x else f"{v:+.2f}"
+            txt = "⏳ يسجّل" if s is None else "النبرة تتحسن" if s > 0 else "النبرة تسوء" if s < 0 else "مستقرة"
+            vk, vv = _pro_sorted((db.get("tone") or {}).get("vol"))
+            att = (sum(vv[-3:]) / 3.0) / (sum(vv[-90:]) / len(vv[-90:])) if len(vv) >= 30 and sum(vv[-90:]) else None
+            sub = (f"متوسط 7 أيام مقابل 90 يوماً {x['d']:+.2f}" if x else "") + (f" · حجم التغطية ×{att:.1f} من المعتاد" if att else "")
+            x["att"] = att
+        rows.append({"k": k, "ico": ico, "name": nm, "s": s or 0, "val": val, "txt": txt, "sub": sub, "acc": rel.get(k),
+                     "flag": (k == "vix" and x.get("c5", 0) >= 0.25) or (k == "tone" and (x.get("att") or 0) >= 1.8)})
+    up, dn = sum(1 for s in sc if s > 0), sum(1 for s in sc if s < 0)
+    mood = ("p", "🟢 المزاج يشجع المخاطرة") if up - dn >= 2 else ("n", "🔴 المزاج ينفّر من المخاطرة") if dn - up >= 2 else ("z", "↔️ المزاج مختلط")
+    return {"rows": rows, "up": up, "dn": dn, "n": len(sc), "mood": mood[0], "mood_t": mood[1]}
+
+
+def _pro_move(pro, mac, rel):
+    """🌋 الحركة القادمة: ما يسبق الحركات الكبيرة عادةً (بلا اتجاه) — هدوء DVOL غير المعتاد · يوم أحداث ساخن · قفزة VIX · انتباه إعلامي مفاجئ · انضغاط العملات"""
+    fl = []
+    for r in (pro or {}).get("rows") or []:
+        if r.get("flag") and r["k"] == "dv":
+            fl.append(f"هدوء غير معتاد في DVOL {r['c']}")
+    for r in (mac or {}).get("rows") or []:
+        if r.get("flag"):
+            fl.append({"cal": "يوم أحداث اقتصادية ساخن", "vix": "قفزة في خوف الأسهم", "tone": "انتباه إعلامي مفاجئ"}.get(r["k"], r["name"]))
+    sq = [s_ for s_, c in (FC.get("coins") or {}).items() if any(((c.get("h") or {}).get(k) or {}).get("sq", {}).get("on") for k in ("d", "w"))]
+    if sq:
+        fl.append("انضغاط: " + "، ".join(x.split("-")[0] for x in sq[:4]))
+    vx = rel.get("dvx:BTC") or {}
+    return {"k": "move", "ico": "🌋", "name": "الحركة القادمة (بلا اتجاه)", "s": 0, "val": f"{len(fl)} علامة" if fl else "لا علامات",
+            "txt": ("⚠️ استعد لحركة أكبر من المعتاد" if len(fl) >= 2 else "علامة واحدة" if fl else "هادئ"),
+            "sub": " · ".join(fl) + (f" · تاريخياً بعد هدوء DVOL كانت حركة البيتكوين ×{vx['x']} من المعتاد ({vx['n']} يوم)" if vx.get("x") else ""),
+            "flag": bool(fl), "acc": None}
+
+
+def pro_tick(now=None):
+    """⏱️ مع المؤشرات (كل 5 دقائق) — كل مصدر بوقته · قراءة عامة فقط"""
+    now = now or time.time()
+    coins = [s_.split("-")[0].upper() for s_ in ticker_cfg()["coins"]]
+    with PRO["lock"]:
+        db = _pro_db()
+        ch = False
+        for f, a in ((_pro_ls, (coins,)), (_pro_tk, (coins,)), (_pro_pc, ()), (_pro_dv, ()), (_pro_mv, (coins,)), (_pro_cal, ()),
+                     (_pro_vix, ()), (_pro_us10, ()), (_pro_dxy, ()), (_pro_epu, ()), (_pro_gpr, ()), (_pro_tone, ())):
+            ch = bool(_safe(f, db, now, *a, default=False)) or ch
+        if ch:
+            try:
+                save_json_atomic(PRO_FILE, db)
+            except Exception:
+                pass
+        PRO["view"] = _pro_build(db, now)
+    return PRO["view"]
+
+
+def _pro_build(db, now=None):
+    now = now or time.time()
+    rel = dict(db.get("rel") or {})
+    rel.update(PRO.get("rel") or {})
+    btc = {int(k): v for k, v in (rel.get("_btc") or {}).items()} if isinstance(rel.get("_btc"), dict) else None
+    pro = _pro_rows(db, rel)
+    mac = _mac_rows(db, rel, now, btc or PRO.get("btc"))
+    mv = _pro_move(pro, mac, rel)
+    return {"pro": pro, "mac": mac, "move": mv, "ts": now}
+
+
+def pro_view():
+    if PRO["view"] is None:
+        with PRO["lock"]:
+            PRO["view"] = _pro_build(_pro_db())
+    return PRO["view"]
+
+
+def _pro_rel(fdb):
+    """🎯 صدق كل قراءة على ماضيها (يعمل مع 🔮 كل نصف ساعة لأن الإغلاقات اليومية هناك) + قراءات العملات للشارات"""
+    with PRO["lock"]:
+        db = _pro_db()
+    btc = _pro_closes(fdb, "BTC-USDT")
+    PRO["btc"] = btc
+    rel = {}
+    coins = {}
+    for sym in list((fdb.get("c") or {}).keys()):
+        ccy = sym.split("-")[0].upper()
+        cl = _pro_closes(fdb, sym)
+        c = _pro_coin(db, ccy, cl)
+        if c:
+            coins[sym] = c
+            for k in ("ls", "tk", "mv"):
+                if c.get(k) and c[k].get("acc"):
+                    rel[f"{k}:{ccy}"] = c[k]["acc"]
+    for ccy in PRO_BIG:
+        cl = _pro_closes(fdb, f"{ccy}-USDT")
+        if not cl:
+            continue
+        ks, vs = _pro_sorted((db.get("pc") or {}).get(ccy), 10)
+        if vs:
+            rel[f"pc:{ccy}"] = _pro_grade(ks, [_pro_pc_sig(vs, i)[0] for i in range(len(vs))], cl, PRO_H["pc"])
+        ks, vs = _pro_sorted((db.get("dv") or {}).get(ccy), 5)
+        if len(vs) >= 120:
+            fl = [(_pro_pct(vs[max(0, i - 364):i + 1], vs[i]) or 1) <= 0.15 if i >= 60 else False for i in range(len(vs))]
+            rel[f"dvx:{ccy}"] = _pro_volx(ks, fl, cl, 7)
+    if btc:
+        for k in ("vix", "dxy", "us10", "epu", "gpr", "tone"):
+            ks, vs = _pro_sorted(db.get(k))
+            if len(vs) >= 30:
+                rel[k] = _pro_grade(ks, [_mac_sig(k, vs, i)[0] for i in range(len(vs))], btc, PRO_H[k])
+    PRO["rel"], PRO["coins"] = rel, coins
+    with PRO["lock"]:
+        db = _pro_db()
+        db["rel"] = rel
+        try:
+            save_json_atomic(PRO_FILE, db)
+        except Exception:
+            pass
+        PRO["view"] = _pro_build(db)
+    return rel
+
+
+def pro_loop():
+    """⏱️ حلقة مستقلة (كل 5 دقائق) حتى لا تؤخر المؤشرات — تبدأ بعد المؤشرات بقليل · فقط والمؤشرات شغّالة"""
+    time.sleep(40)
+    while True:
+        try:
+            if indic_cfg()["on"] and ticker_cfg()["coins"]:
+                pro_tick()
+        except Exception:
+            pass
+        time.sleep(_IND_EVERY)
+
+
+# ═══════════════ 📖 v3.33.0: دليل المؤشرات والتوقعات — مرجع بالعربية الفصحى (عرض فقط) ═══════════════
+#   (المالك: «اريد شرح المؤشرات والتوقعات مفهوم وعربي فصيح وبعد طوره وحدثه واختبره بحيث يصير مرجعي»)
+#   مصدر واحد لكل شرح: كل مؤشر يظهر في 📊 أو 🔮 أو 🌐 أو 🏦 أو 🗞️ له هنا مدخل (الفكرة · طريقة الحساب · كيف تقرؤه · حدوده · توقيته).
+#   الرقابة تفحص أن لكل مؤشر مدخلاً (`guide_audit`) — مؤشر جديد بلا شرح ⇒ ❌. الموثوقية الحيّة تأتي من آخر قياس محفوظ.
+_GUIDE_LEAD = {
+    "s": "🔔 سابق — قد ينبّه قبل الحركة",
+    "m": "⏱️ متزامن — يصف ما يجري الآن",
+    "l": "🐢 لاحق — يؤكد الحركة بعد أن تبدأ",
+}
+_GUIDE_SECS = [
+    ("intro", "📖 قبل أن تبدأ", [
+        "المؤشر أداة تلخّص حركة السعر والحجم، أو سلوك المتداولين، في رقم أو إشارة واحدة. هو لا يرى المستقبل، بل يقيس ما حدث ويصف الحالة الراهنة؛ ومن هنا يأتي الاحتمال لا اليقين.",
+        "تنقسم المؤشرات بحسب توقيتها ثلاثة أقسام: <b>لاحقة</b> تؤكد اتجاهاً بدأ فعلاً (المتوسطات، سوبرترند، MACD)، و<b>متزامنة</b> تصف اللحظة (RSI، تدفق السيولة)، و<b>سابقة</b> ترصد أوضاعاً تسبق الحركة عادةً (الانضغاط، ازدحام المراكز، التمويل المتطرف، التقلب الضمني، مواعيد الأحداث الاقتصادية).",
+        "المؤشرات السابقة تنبّهك إلى أن <b>حركة كبيرة محتملة</b> أو أن جهة ما <b>مزدحمة</b>، لكنها نادراً ما تحدد الاتجاه بثقة. لا يوجد مؤشر يتنبأ باتجاه السعر بثبات، وما يُعرض غير ذلك تسويق لا علم.",
+        "لهذا نقيس كل شيء: يُعاد حساب المؤشر على كل شمعة من ماضي العملة نفسها دون أن يرى ما بعدها، ثم نرى هل تحرّك السعر في اتجاهه بعد المدة المحددة، ونقارن النتيجة بـ<b>الصدفة</b>، أي بما كان سيصيبه من يراهن بالنسبة نفسها من الصعود والهبوط دون أي مؤشر.",
+        "شارات الموثوقية 🎯: 🟢 أفضل من الصدفة بوضوح (الفرق 5 نقاط على الأقل، وضعف الخطأ الإحصائي، ونسبة إصابة 55% فأكثر) · 🟡 أفضل قليلاً · ⚪ مثل الصدفة · 🔴 أسوأ من الصدفة · ⏳ العينة صغيرة لا يُحكم عليها.",
+        "اللوحة تقرأ وتعرض فقط: لا تفتح أمراً ولا تغلقه، ولا تتدخل في عمل البوتات. وهذا الدليل ليس نصيحة مالية.",
+    ]),
+    ("ind", "📊 المؤشرات العشرة — للساعات القادمة", [
+        "تُحسب على شموع الساعة لآخر 300 ساعة تقريباً، وتُحكم كل إشارة بعد 4 ساعات (الحركة الأصغر من 0.15% لا تُعدّ صواباً ولا خطأً).",
+        "<b>المعدل</b>: متوسط موزون لإشارات المؤشرات (كل إشارة بين −1 و+1) مضروباً في 100. يبدأ كل مؤشر بوزن أساسي، ثم يُعدَّل وزنه بحسب دقته على أول 60% من الأيام الأخيرة للعملة نفسها، ويُقاس المعدل على الـ40% الباقية التي لم يرها. الحكم: +45 فأكثر صعود قوي · من +15 يميل للصعود · بين −15 و+15 محايد · حتى −45 يميل للنزول · دون ذلك نزول قوي.",
+        "<b>الثقة</b>: نصيب المؤشرات الموافقة للحكم من مجموع الأوزان، وتُخفَّض 15% إذا كان ADX دون 20 (سوق بلا اتجاه).",
+    ]),
+    ("fc", "🔮 التوقعات — يوم وأسبوع وشهر وثلاثة أشهر", [
+        "المؤشرات العشرة نفسها تُحسب على شموع أطول بحسب المدى: اليوم على شموع 4 ساعات (6 شموع للأمام) · الأسبوع على الشموع اليومية (7) · الشهر على شموع 3 أيام (10) · الأشهر الثلاثة على الشموع الأسبوعية (13)، ويُضاف إليها أربعة مؤشرات.",
+        "<b>التصويت</b>: يُعدّ المؤشر صاعداً إذا بلغت إشارته +0.15 ونازلاً إذا بلغت −0.15. الفرق بين الصاعد والنازل مقسوماً على العدد: نصف فأكثر صعود قوي، وخُمس فأكثر يميل، وكذلك في الاتجاه المعاكس.",
+        "<b>النطاق المتوقع 80%</b>: من توزيع حركات العملة نفسها في الماضي على المدة ذاتها، بعد تعديل كل حركة بنسبة التذبذب الحالي إلى تذبذبها يومئذٍ. ثم يُعايَر عرضه على النصف الأول من الماضي حتى يحتوي السعر في 80% من المرات، ويُقاس صدقه على النصف الثاني. هذا أوثق ما في النافذة.",
+        "<b>الدعم والمقاومة</b>: أقرب مستويين تحت السعر وفوقه من منطقة القيمة ونقطة التحكم، وVWAP المرتكز على آخر قاع وآخر قمة، وآخر قاع وقمة، وخط سوبرترند.",
+        "<b>📒 السجل الحي</b>: تُحفظ قراءة كل مدى مرة في اليوم، وتُحكم حين يحين وقتها بسعر ذلك اليوم، فترى صدق اللوحة منذ تشغيلها لا على الماضي فقط.",
+    ]),
+    ("mkt", "🌐 السوق كله", [
+        "قراءات عامة تخص السوق بأكمله لا عملة بعينها، وتظهر تحت مؤشر الخوف والطمع. <b>🧭 الجو العام</b> = عدد القراءات الإيجابية مقابل السلبية.",
+    ]),
+    ("coin", "➕ مؤشرات العملة الإضافية", [
+        "تظهر شارةً على كل عملة وفي تفاصيلها، ولا تدخل في المعدل ولا في التصويت ولا في التنبيهات. تُحسب على الشموع اليومية، وتُقاس موثوقيتها بعد 14 يوماً.",
+    ]),
+    ("pro", "🏦 مؤشرات المحترفين", [
+        "ما يراقبه المتداولون المحترفون غالباً ليس RSI وMACD، بل <b>تمركز السوق</b>: من يحمل العقود، وبأي رافعة، ومن يدفع لمن، وكم يتوقع سوق الخيارات أن يتحرك السعر. هذه القراءات تكشف الازدحام في جهة واحدة، والازدحام هو ما يسبق عادةً التصفيات والانعكاسات الحادة.",
+        "المصادر عامة ومجانية بلا مفاتيح: بيانات التداول في OKX، ومؤشر DVOL من Deribit، وMVRV من CoinMetrics. بعضها متاح للبيتكوين والإيثيريوم فقط.",
+    ]),
+    ("macro", "🗞️ الاقتصاد والأخبار — أرقام بلا أخبار", [
+        "مؤشرات تلخّص الأخبار السياسية والاقتصادية في أرقام دون عرض أي خبر: مواعيد الأحداث الكبرى، وخوف أسواق الأسهم، وقوة الدولار، وعوائد السندات، ومقاييس عدم اليقين والمخاطر الجيوسياسية المبنية على الصحف، ونبرة التغطية الإعلامية للعملات الرقمية.",
+        "<b>🧭 مزاج المخاطرة</b> = عدد القراءات المشجعة على المخاطرة مقابل المنفّرة منها. العملات الرقمية تتأثر عادةً بمزاج المخاطرة العالمي، خصوصاً في الأزمات.",
+    ]),
+    ("check", "🧪 كيف نتحقق من الأرقام", [
+        "<b>المعادلات</b>: تُقارن معادلات RSI وATR وMACD وADX و±DI وEMA وCCI وCMF وسوبرترند والانضغاط بالمكتبة المرجعية العالمية TA-Lib على الشموع نفسها؛ والفرق أقل من جزء من مليون (أي مطابقة تامة عملياً).",
+        "<b>الموثوقية</b>: تُقاس على أسعار حقيقية لعشرين عملة وسنوات من التاريخ، دون أن ترى أي قراءة ما بعدها، وتُنشر النتيجة كما هي حتى لو كانت مثل الصدفة.",
+        "<b>ما وجدناه بصدق</b>: اتجاه أغلب المؤشرات قريب من الصدفة على المدى القصير، والنطاق المتوقع يصدق قرابة 80% كما صُمّم، والانضغاط يسبق فعلاً حركات أكبر من المعتاد دون أن يحدد اتجاهها.",
+    ]),
+]
+_GUIDE = {
+    # ── 📊 العشرة ──
+    "vp": {"sec": "ind", "ico": "📊", "name": "ملف الحجم (Volume Profile)", "lead": "m",
+           "idea": "يوزّع حجم التداول على مستويات السعر بدلاً من الزمن، فيكشف الأسعار التي تبادل عندها الناس أكثر من غيرها؛ وهي مناطق يقبلها السوق ويعود إليها.",
+           "calc": "آخر 168 شمعة ساعة (7 أيام) تُقسَم على 40 مستوى سعرياً، ويُوزَّع حجم كل شمعة بالتساوي على المستويات التي غطّتها. <b>نقطة التحكم POC</b> هي المستوى الأعلى حجماً، و<b>منطقة القيمة</b> أضيق نطاق حولها يضم 70% من الحجم: VAL حدها الأدنى وVAH حدها الأعلى.",
+           "read": "السعر فوق VAH: قبل السوق سعراً أعلى (+0.8) · تحت VAL: ضغط بيع ورفض (−0.8) · داخل المنطقة: ميل خفيف بحسب موقعه من نقطة التحكم.",
+           "limit": "يصف التوازن لا الزخم؛ في الاتجاه القوي قد يبقى السعر خارج المنطقة طويلاً. مستوياته مفيدة دعماً ومقاومةً أكثر منها إشارة اتجاه."},
+    "avwap": {"sec": "ind", "ico": "⚓", "name": "VWAP المرتكز (Anchored VWAP)", "lead": "l",
+              "idea": "متوسط السعر المرجّح بالحجم منذ لحظة محددة، وهو عملياً متوسط كلفة من اشترى منذ تلك اللحظة. نرتكز على آخر قاع وآخر قمة في الأيام السبعة الأخيرة.",
+              "calc": "مجموع (السعر النموذجي (أعلى + أدنى + إغلاق) ÷ 3 × الحجم) ÷ مجموع الحجم، من شمعة المرتكز حتى الآن.",
+              "read": "فوق الخطين: من اشترى منذ القاع ومنذ القمة رابح، والمشترون مسيطرون (+1) · تحتهما: البائعون مسيطرون (−1) · بينهما: ميل خفيف نحو الحدث الأحدث (قاع أم قمة).",
+              "limit": "يتأخر بطبيعته، ويتبدل مرتكزه كلما ظهر قاع أو قمة جديدة."},
+    "of": {"sec": "ind", "ico": "🌊", "name": "تدفق الأوامر (Order Flow)", "lead": "m",
+           "idea": "يقيس من الأشد اندفاعاً: المشترون الذين ينفّذون بسعر السوق أم البائعون. الصفقة المنفذة بسعر السوق (Taker) تعبّر عن استعجال حقيقي.",
+           "calc": "حجم الشراء مقابل البيع بسعر السوق لكل ساعة من OKX: نسبة آخر 24 ساعة (40%) وآخر 4 ساعات (60%)، مضروبة في 4 ومقصوصة بين −1 و+1، ثم يُضاف 30% من ميل دفتر الأوامر ضمن ±1% من السعر. إن لم تعطِ المنصة بيانات العملة: تقدير من موقع الإغلاق داخل مدى الشمعة مضروباً في حجمها.",
+           "read": "موجب: المشترون أعنف · سالب: البائعون أعنف. في 🔮 لا يُستعمل إلا لمدى اليوم.",
+           "limit": "قصير الأجل جداً، ودفتر الأوامر يتغير في ثوانٍ وقد تكثر فيه الأوامر الوهمية."},
+    "pa": {"sec": "ind", "ico": "🕯️", "name": "حركة السعر (Price Action)", "lead": "m",
+           "idea": "قراءة بنية السوق مباشرة من القمم والقيعان دون معادلات: القمم والقيعان الأعلى تعني اتجاهاً صاعداً، والأدنى تعني هابطاً.",
+           "calc": "القمة (أو القاع) شمعة هي الأعلى (أو الأدنى) بين ثلاث شموع على كل جانب، ضمن آخر 120 شمعة. نقارن آخر قمتين وآخر قاعين، ونرصد كسر آخر قمة أو قاع (BOS)، والكسر عكس الاتجاه (CHoCH، أي بداية تغيّر الطابع).",
+           "read": "قمم وقيعان أعلى: +0.8، و+1 مع كسر القمة · أدنى: −0.8، و−1 مع كسر القاع · كسر عكس الاتجاه: ±0.6 · قمم وقيعان مختلطة: سوق متذبذب.",
+           "limit": "لا تتأكد القمة إلا بعد ثلاث شموع من تكوّنها، فيتأخر بعض الشيء، ويضطرب في الأسواق العرضية."},
+    "trend": {"sec": "ind", "ico": "📈", "name": "الاتجاه العام (EMA 50/200)", "lead": "l",
+              "idea": "المتوسط المتحرك الأسي لمئتي شمعة هو الخط الذي يفصل عند أغلب المتداولين بين سوق صاعدة وهابطة.",
+              "calc": "EMA 50 وEMA 200 على شموع 4 ساعات في 📊، وعلى اليومية أو الأسبوعية في 🔮 بحسب المدى. EMA يبدأ بمتوسط بسيط ثم يعطي الشمعة الأحدث وزناً قدره 2 ÷ (الفترة + 1).",
+              "read": "السعر فوق EMA 200 والـ50 فوقه: صاعد (+1) · العكس: هابط (−1) · غير متفقين: ±0.3.",
+              "limit": "بطيء جداً، يتأخر عن الانعكاسات أسابيع؛ قيمته في معرفة السياق لا التوقيت."},
+    "st": {"sec": "ind", "ico": "🟩", "name": "سوبرترند (Supertrend 10، 3)", "lead": "l",
+           "idea": "خط وقف متحرك يلاحق السعر: يبقى تحته في الصعود وفوقه في الهبوط، وينقلب حين يغلق السعر عبره.",
+           "calc": "منتصف الشمعة ± 3 × ATR لعشر شموع (بطريقة وايلدر). الحد السفلي لا ينزل والعلوي لا يصعد ما دام الاتجاه قائماً، وينقلب الاتجاه عند الإغلاق عبر الحد.",
+           "read": "أخضر: صعود (+1) · أحمر: هبوط (−1) · ويُذكر عمر الاتجاه ومكان الخط (يصلح وقفاً للخسارة).",
+           "limit": "يعطي انقلابات كاذبة كثيرة في السوق العرضي، ويتأخر في الانعكاسات الحادة."},
+    "macd": {"sec": "ind", "ico": "⚡", "name": "MACD (12، 26، 9)", "lead": "l",
+             "idea": "يقيس زخم الحركة: هل تتسارع أم تتباطأ.",
+             "calc": "الفرق بين EMA 12 وEMA 26 هو خط MACD، وEMA 9 لهذا الفرق هو خط الإشارة، والهيستوغرام هو الفرق بينهما. نستعمل الهيستوغرام وتغيّره عن الشمعة السابقة.",
+             "read": "موجب ويكبر: زخم صاعد يقوى (+1) · موجب ويصغر: يضعف (+0.4) · وكذلك في الجهة السالبة.",
+             "limit": "مبني على متوسطات فيتأخر، ويتذبذب كثيراً في الأسواق الهادئة."},
+    "rsi": {"sec": "ind", "ico": "💪", "name": "مؤشر القوة النسبية (RSI 14)", "lead": "m",
+            "idea": "يقارن متوسط الارتفاعات بمتوسط الانخفاضات ليقيس قوة الشراء مقابل البيع على مقياس من 0 إلى 100.",
+            "calc": "RSI = 100 − 100 ÷ (1 + متوسط الصعود ÷ متوسط الهبوط)، مع تنعيم وايلدر لأربع عشرة شمعة.",
+            "read": "فوق 50 زخم شراء وتحته زخم بيع (الإشارة = (RSI − 50) ÷ 20) · 70 فأكثر تشبّع شراء و30 فأقل تشبّع بيع، ونعدّهما محايدين لأن التشبع قد يستمر طويلاً في الاتجاه القوي.",
+            "limit": "في الاتجاهات القوية يبقى متشبعاً، فبيعه عند 70 أو شراؤه عند 30 قرار خاسر كثيراً."},
+    "adx": {"sec": "ind", "ico": "🧭", "name": "قوة الاتجاه (ADX 14)", "lead": "l",
+            "idea": "يقيس قوة الاتجاه لا جهته؛ والجهة يحددها ±DI (أي الحركتين أكبر: الصاعدة أم الهابطة).",
+            "calc": "‎+DM و−DM والمدى الحقيقي بتنعيم وايلدر لأربع عشرة شمعة، ثم DX = 100 × |+DI − −DI| ÷ (+DI + −DI)، وADX متوسط وايلدر لـDX.",
+            "read": "دون 20: لا اتجاه واضح، والإشارات أضعف (وتنخفض الثقة) · 20–25: اتجاه متوسط (±0.42) · 25 فأكثر: اتجاه قوي (±0.7) لصالح الأكبر من ±DI.",
+            "limit": "بطيء، ويبلغ ذروته غالباً بعد أن تكون الحركة قد قطعت معظم طريقها."},
+    "cmf": {"sec": "ind", "ico": "💧", "name": "تدفق أموال تشايكن (CMF 20)", "lead": "m",
+            "idea": "هل تُغلق الشموع قرب قممها بأحجام كبيرة (أموال داخلة) أم قرب قيعانها (أموال خارجة)؟",
+            "calc": "مجموع ((الإغلاق − الأدنى) − (الأعلى − الإغلاق)) ÷ (الأعلى − الأدنى) × الحجم، مقسوماً على مجموع الحجم، لعشرين شمعة.",
+            "read": "فوق +0.02: سيولة داخلة · دون −0.02: خارجة · الإشارة = CMF × 6 مقصوصة بين −1 و+1.",
+            "limit": "يتأثر بالفجوات وبالشموع ذات الحجم الشاذ، وأحجام العملات الصغيرة قد لا تمثل السوق."},
+    # ── 🔮 الإضافات ──
+    "lc": {"sec": "fc", "ico": "🧠", "name": "تصنيف لورنتز (أقرب الحالات)", "lead": "m",
+           "idea": "يبحث في ماضي العملة نفسها عن أكثر اللحظات شبهاً باللحظة الحالية، وينظر ماذا حدث بعدها. فكرته مأخوذة من مؤشر «Machine Learning: Lorentzian Classification» الشهير في TradingView.",
+           "calc": "خمس صفات لكل شمعة (RSI 14 وRSI 9 وCCI 20 وWaveTrend وADX، كلها بين 0 و1)، والمسافة = مجموع لوغاريتم (1 + فرق كل صفة)، وهي «مسافة لورنتز» الأقل تأثراً بالقيم الشاذة. نأخذ أقرب ثماني حالات (عينة كل أربع شموع، حتى ألفي شمعة للخلف) نعرف نتيجتها.",
+           "read": "عدد الحالات التي صعدت بعد المدة من الثماني: كلها صعدت +1، نصفها صفر، كلها هبطت −1.",
+           "limit": "التشابه في الصفات لا يعني تشابه الظروف (أخبار، سيولة)، والنتائج على أسعار حقيقية قريبة من الصدفة."},
+    "nw": {"sec": "fc", "ico": "〰️", "name": "خط نادارايا–واتسون", "lead": "l",
+           "idea": "خط ناعم يمر بالسعر بعد تنقيته من الضجيج، مثل متوسط متحرك ذكي يعطي الشموع القريبة وزناً أكبر بسلاسة.",
+           "calc": "انحدار نواتي من نوع Rational Quadratic (نافذة 8، وزن نسبي 8، على 25 شمعة) على الشموع السابقة فقط؛ لذلك لا يعيد رسم الماضي، بخلاف النسخ الشائعة التي تبدو مثالية لأنها ترى المستقبل.",
+           "read": "الخط صاعد +1 وهابط −1 · وإذا ابتعد السعر عنه أكثر من 2.5 × ATR فهو «ممطوط» وقد يرتد نحوه.",
+           "limit": "خط ناعم يتأخر عن الانعكاس، وقيمته الأساسية في رؤية الاتجاه بلا ضجيج."},
+    "fng": {"sec": "fc", "ico": "😨", "name": "الخوف والطمع (بأطرافه)", "lead": "s",
+            "idea": "مؤشر يومي من 0 إلى 100 يجمع التقلب والزخم وحجم التداول ووسائل التواصل وهيمنة البيتكوين في رقم واحد يعبّر عن نفسية السوق. يُقرأ عكسياً عند الأطراف.",
+            "calc": "من alternative.me مرة كل 12 ساعة، مع تاريخه كاملاً. في 🔮: 20 فأقل +1 · 30 فأقل +0.4 · 70 فأكثر −0.4 · 80 فأكثر −1 · ما بينها محايد.",
+            "read": "الخوف الشديد يكثر قرب القيعان والطمع الشديد قرب القمم، لكن الوسط لا يعني شيئاً.",
+            "limit": "قد يبقى السوق في خوف شديد أسابيع وهو يهبط؛ الطرف تحذير لا توقيت."},
+    "fund": {"sec": "fc", "ico": "💸", "name": "معدل التمويل (Funding)", "lead": "s",
+             "idea": "في العقود الدائمة يدفع أصحاب المراكز الطويلة للقصيرة (أو العكس) كل ثماني ساعات ليبقى سعر العقد قريباً من السعر الفوري. التمويل المرتفع يعني أن الشراء بالرافعة مزدحم.",
+             "calc": "متوسط آخر ثلاث دفعات (24 ساعة) لعقد العملة الدائم في OKX: 0.03% فأكثر كل ثماني ساعات −1 · 0.015% فأكثر −0.4 · سالب +0.4 · −0.01% فأقل +1. لمدى اليوم والأسبوع فقط.",
+             "read": "قراءة عكسية: الازدحام الشديد في جهة يسبق كثيراً تصفيات تدفع السعر عكسها.",
+             "limit": "تاريخه المتاح ثلاثة أشهر فقط، فشارة موثوقيته تحتاج وقتاً حتى تستقر."},
+    "sq": {"sec": "fc", "ico": "⚡", "name": "انضغاط التذبذب (Squeeze)", "lead": "s",
+           "idea": "حين يهدأ السوق إلى حد غير معتاد تأتي بعده غالباً حركة كبيرة. هذا من أوضح المؤشرات السابقة، لكنه لا يحدد الاتجاه.",
+           "calc": "نطاق بولنجر (20 شمعة، انحرافان معياريان) داخل قناة كيلتنر (20 شمعة، 1.5 × ATR 14). ونقيس على تاريخ العملة نفسها: حجم الحركة بعد الانضغاط مقسوماً على الحركة المعتادة (×).",
+           "read": "⚡ يعني: استعد لحركة أكبر من المعتاد في أي اتجاه. يظهر في 🔮 وفي تنبيهات المؤشرات.",
+           "limit": "قد يطول الهدوء، وقد تأتي حركة كاذبة أولى قبل الحركة الحقيقية."},
+    "range": {"sec": "fc", "ico": "📏", "name": "النطاق المتوقع 80%", "lead": "s",
+              "idea": "بدلاً من سهم صاعد أو هابط: بين أي سعرين يُرجَّح أن يكون السعر بنهاية المدة. هذا أصدق ما تقدمه التوقعات.",
+              "calc": "الكمّيات 10% و25% و50% و75% و90% لحركات العملة على المدة ذاتها في الماضي، بعد تعديل كل حركة بنسبة تذبذب اليوم إلى تذبذب يومها (بين نصف وضعف، ويخفّ أثره كلما طال المدى). يُعايَر العرض على النصف الأول من الماضي حتى يصدق 80%، ويُقاس على النصف الثاني.",
+              "read": "الرقمان الحدّان، و«الأرجح» هو الوسيط. وصدقه على الماضي مكتوب بجانبه.",
+              "limit": "الأحداث الاستثنائية (انهيار منصة، قرار مفاجئ) تخرج عن أي نطاق؛ 80% تعني أن مرة من كل خمس تقع خارجه."},
+    "lv": {"sec": "fc", "ico": "🧱", "name": "الدعم والمقاومة", "lead": "m",
+           "idea": "أسعار يُتوقع أن يتباطأ عندها السعر أو يرتد، لأن عندها تجمّع حجم أو متوسط كلفة أو قمة/قاع سابق.",
+           "calc": "أقرب مستويين تحت السعر وفوقه من: VAL ونقطة التحكم وVAH، وVWAP من آخر قاع ومن آخر قمة، وآخر قاع وآخر قمة، وخط سوبرترند.",
+           "read": "الدعم أسفل السعر والمقاومة أعلاه؛ كسر أحدهما بإغلاق واضح يجعل الحركة تمتد غالباً إلى المستوى التالي.",
+           "limit": "المستوى منطقة لا خط دقيق، وكثرة لمسه تضعفه."},
+    # ── 🌐 السوق ──
+    "fngm": {"sec": "mkt", "ico": "😨", "name": "مؤشر الخوف والطمع", "lead": "s",
+             "idea": "نفسية السوق في رقم يومي من 0 (خوف شديد) إلى 100 (طمع شديد).",
+             "calc": "من alternative.me: تقلب السعر وزخمه وحجم التداول ووسائل التواصل وهيمنة البيتكوين. التصنيف: دون 25 خوف شديد · دون 45 خوف · حتى 55 محايد · دون 75 طمع · 75 فأكثر طمع شديد.",
+             "read": "الأطراف تُقرأ عكسياً بحذر: «كن طمّاعاً حين يخاف الناس».",
+             "limit": "مؤشر يومي متأخر قليلاً، وقد يبقى في الطرف مدة طويلة."},
+    "st$": {"sec": "mkt", "ico": "💵", "name": "السيولة الداخلة (العملات المستقرة)", "lead": "s",
+            "idea": "العملات المستقرة (USDT وUSDC وغيرهما) هي «النقد» داخل سوق الكريبتو. زيادة عرضها تعني أموالاً جديدة دخلت وتنتظر الشراء.",
+            "calc": "إجمالي عرض العملات المستقرة يوماً بيوم من DefiLlama، وتغيّره خلال 7 و30 يوماً: +0.3% أسبوعياً داخلة · +1% بقوة · وكذلك الخروج.",
+            "read": "داخلة: وقود محتمل للصعود · خارجة: الأموال تغادر السوق.",
+            "limit": "قياسنا على البيتكوين بعد أسبوع: مثل الصدفة. يصف المناخ لا التوقيت."},
+    "cb": {"sec": "mkt", "ico": "🇺🇸", "name": "علاوة كوينبيس", "lead": "m",
+           "idea": "كوينبيس منصة المستثمرين والمؤسسات الأمريكية. إذا كان سعر البيتكوين فيها أعلى من بقية العالم فهم يشترون بإلحاح.",
+           "calc": "سعر BTC-USD في كوينبيس ÷ (سعر BTC-USDT في OKX × سعر USDT بالدولار) − 1، كل 5 دقائق، ونعتمد معدل 24 ساعة: +0.02% طلب · +0.07% طلب قوي · وكذلك البيع.",
+           "read": "موجبة: طلب أمريكي · سالبة: بيع أمريكي.",
+           "limit": "أفضل نتيجة بين مؤشرات السوق (62% مقابل 51%) لكن على عينة صغيرة لم تثبت بعد."},
+    "mc": {"sec": "mkt", "ico": "🌐", "name": "حجم السوق كله", "lead": "l",
+           "idea": "القيمة السوقية لكل العملات الرقمية معاً بالدولار.",
+           "calc": "من CoinGecko كل 15 دقيقة، مع لقطة يومية للمقارنة الأسبوعية. ±2% خلال 24 ساعة تُعدّ صعوداً أو هبوطاً.",
+           "read": "يصف حال السوق ككل.", "limit": "وصفي بحت، يتبع السعر ولا يسبقه."},
+    "btcd": {"sec": "mkt", "ico": "₿", "name": "هيمنة البيتكوين", "lead": "m",
+             "idea": "حصة البيتكوين من السوق. ارتفاعها يعني أن العملات البديلة أضعف منه، وانخفاضها يسبق عادةً ما يُسمّى «موسم العملات البديلة».",
+             "calc": "من CoinGecko، والاتجاه من الفرق الأسبوعي (±0.5 نقطة) بعد سبعة أيام من التسجيل.",
+             "read": "تزيد: البديلة متأخرة · تقل: الأموال تنتقل إلى البديلة.", "limit": "تتأثر بدخول عملات مستقرة جديدة وبتغيّر طريقة الحساب."},
+    "usdtd": {"sec": "mkt", "ico": "💲", "name": "هيمنة USDT", "lead": "m",
+              "idea": "حصة USDT من السوق. ارتفاعها يعني أن الناس باعت وجلست بالدولار (خوف)، وانخفاضها يعني عودة الشراء.",
+              "calc": "من CoinGecko، والاتجاه من الفرق الأسبوعي (±0.15 نقطة).",
+              "read": "تزيد: سلبي للسوق · تقل: إيجابي.", "limit": "ترتفع آلياً حين تهبط الأسعار حتى دون بيع فعلي."},
+    # ── ➕ العملة ──
+    "ad": {"sec": "coin", "ico": "🧲", "name": "التجميع والتصريف", "lead": "s",
+           "idea": "على طريقة وايكوف: حين تدخل السيولة إلى العملة والسعر لا يتحرك، فهناك من يشتري بهدوء (تجميع)؛ وحين تخرج والسعر لا يهبط، فهناك من يبيع بهدوء (تصريف).",
+           "calc": "على آخر 20 يوماً: تغيّر خط التراكم والتوزيع (A/D) ومؤشر OBV مقسوماً على الحجم = صافي السيولة، مقابل حركة السعر مقيسة بتذبذب العملة. صافي سيولة +0.12 والسعر هادئ = تجميع · −0.12 والسعر صامد = تصريف · وإلا حركة مدعومة أو محايد.",
+           "read": "🟢 تجميع · 🔴 تصريف · 📈/📉 حركة مدعومة بالسيولة · ↔️ محايد.",
+           "limit": "قياسنا على 20 عملة وخمس سنوات: مثل الصدفة (48% مقابل 49%). يصف أين تتجه الأموال، لا أين سيذهب السعر."},
+    "rs": {"sec": "coin", "ico": "💪", "name": "القوة مقابل البيتكوين", "lead": "l",
+           "idea": "هل تتفوق العملة على البيتكوين أم تتأخر عنه؟ المحترفون يفضلون العملة الأقوى من السوق.",
+           "calc": "سعر العملة ÷ سعر البيتكوين: التغيّر خلال 7 و30 يوماً، وموقعه من متوسطه لعشرين يوماً.",
+           "read": "أقوى من BTC · أضعف · مثله · والبيتكوين نفسه هو المرجع.",
+           "limit": "القوة النسبية تستمر أحياناً وتنعكس أحياناً؛ قياسنا قريب من الصدفة."},
+    # ── 🏦 المحترفون ──
+    "ls": {"sec": "pro", "ico": "⚖️", "name": "نسبة الحسابات الطويلة إلى القصيرة", "lead": "s",
+           "idea": "كم حساباً يراهن على الصعود مقابل كل حساب يراهن على الهبوط في العقود. حين يزدحم الجميع في جهة واحدة يصبح السوق هشاً: أي حركة عكسية تجبرهم على الخروج (التصفية) فتتسارع الحركة ضدهم.",
+           "calc": "من بيانات OKX العامة يومياً لكل عملة لها عقود. نقارن قراءة اليوم بتاريخ العملة نفسها (حتى 180 يوماً): في أعلى 10% من أيامها = الشراء مزدحم (−1) · أعلى 25% (−0.5) · أدنى 10% = البيع مزدحم (+1) · أدنى 25% (+0.5).",
+           "read": "قراءة عكسية: ازدحام الشراء تحذير من هبوط مفاجئ، وازدحام البيع تحذير من صعود مفاجئ (عصر المراكز القصيرة).",
+           "limit": "يعدّ الحسابات لا الأموال؛ حساب صغير وحوت كبير يُحسبان واحداً. والازدحام قد يستمر أياماً قبل أن ينفجر."},
+    "tk": {"sec": "pro", "ico": "🐂", "name": "الشراء العدواني في العقود", "lead": "m",
+           "idea": "من ينفّذ بسعر السوق مستعجل. إذا غلب الشراء العدواني في العقود فالمتداولون بالرافعة يدفعون السعر للأعلى، والعكس.",
+           "calc": "حجم الشراء والبيع بسعر السوق في عقود العملة يومياً بالدولار (OKX). نصيب الشراء خلال 7 أيام: الإشارة = (النصيب − 50%) × 20، مقصوصة بين −1 و+1.",
+           "read": "فوق 51% المشترون أعنف · دون 49% البائعون أعنف · قريب من 50% توازن.",
+           "limit": "يتبع الحركة أكثر مما يسبقها، والرافعة العالية تجعل الاندفاع ينقلب بسرعة."},
+    "dv": {"sec": "pro", "ico": "🌡️", "name": "التقلب الضمني DVOL", "lead": "s",
+           "idea": "«مؤشر الخوف» الخاص بالكريبتو: كم يتوقع سوق الخيارات أن يتحرك السعر خلال الشهر القادم، محسوباً من أسعار الخيارات نفسها في منصة Deribit.",
+           "calc": "قيمة DVOL سنوية؛ والحركة اليومية المتوقعة ≈ DVOL ÷ √365. نقارنها بأيام السنة الماضية: في أدنى 15% = هدوء غير معتاد، وفي أعلى 15% = تقلب مرتفع.",
+           "read": "الهدوء غير المعتاد يسبق كثيراً حركة كبيرة (مثل الانضغاط)، والتقلب المرتفع جداً يرافق الذعر وكثيراً ما يكون قرب القيعان. لا يحدد اتجاهاً.",
+           "limit": "متاح للبيتكوين والإيثيريوم فقط، ويعكس توقعات المتداولين لا الحقيقة."},
+    "pc": {"sec": "pro", "ico": "🎲", "name": "نسبة البيع إلى الشراء في الخيارات (Put/Call)", "lead": "s",
+           "idea": "عقود البيع (Put) يشتريها من يخاف الهبوط أو يتحوّط منه، وعقود الشراء (Call) يشتريها المتفائل. النسبة بينهما تكشف مزاج المحترفين.",
+           "calc": "نسبة العقود المفتوحة والحجم للبيع إلى الشراء في خيارات OKX يومياً. نقارنها بتاريخها: في أعلى 15% = تحوّط مرتفع (+0.5 عكسي) · في أدنى 15% = اطمئنان زائد (−0.5).",
+           "read": "قراءة عكسية عند الأطراف: الخوف الشديد يكثر قرب القيعان، والاطمئنان الزائد قرب القمم.",
+           "limit": "تاريخها المتاح قصير (نحو 72 يوماً ثم يتراكم)، وجزء كبير من الخيارات تحوّط لا رهان."},
+    "mv": {"sec": "pro", "ico": "🔗", "name": "MVRV — السعر مقابل كلفة المالكين", "lead": "s",
+           "idea": "القيمة السوقية مقسومة على «القيمة المحققة»، أي متوسط السعر الذي اشترى به كل المالكين عملاتهم على السلسلة. يقول هل السعر الحالي غالٍ أم رخيص قياساً بكلفة الناس.",
+           "calc": "من CoinMetrics المجاني يومياً منذ 2018. المناطق: دون 1 = تحت كلفة المالكين (+1، منطقة قيعان تاريخية) · دون 1.3 (+0.5) · حتى 2.4 عادي · حتى 3.2 مرتفع (−0.5) · فوقها منطقة قمم تاريخية (−1).",
+           "read": "مؤشر للمدى البعيد (أشهر)، لا للأيام. يُحكم بعد 30 يوماً.",
+           "limit": "للبيتكوين والإيثيريوم فقط، وقد يبقى في منطقته شهوراً."},
+    # ── 🗞️ الاقتصاد والأخبار ──
+    "cal": {"sec": "macro", "ico": "📅", "name": "تقويم الأحداث الاقتصادية", "lead": "s",
+            "idea": "قرارات الفائدة الأمريكية وأرقام التضخم والوظائف تحرّك كل الأسواق في دقائق. معرفة موعدها مسبقاً هي أبسط «تنبيه قبل الحركة» وأصدقه.",
+            "calc": "تقويم الأسبوع العام (ForexFactory) للأحداث الأمريكية عالية التأثير: أقرب حدث والوقت المتبقي، و«يوم ساخن» إذا كان خلال 24 ساعة. وتحفظ اللوحة الأحداث لتقيس حجم حركة البيتكوين في أيامها مقارنة بالأيام العادية.",
+            "read": "في اليوم الساخن توقّع حركة أكبر في أي اتجاه، وفكّر في الشبكات الضيقة والأوامر القريبة.",
+            "limit": "يخبرك بالموعد لا بالنتيجة؛ ورد فعل السوق يعتمد على الفرق بين الرقم والتوقعات."},
+    "vix": {"sec": "macro", "ico": "😱", "name": "مؤشر الخوف في الأسهم الأمريكية (VIX)", "lead": "m",
+            "idea": "التقلب الذي يتوقعه سوق الخيارات لمؤشر S&P 500 خلال الشهر القادم. يرتفع حين يخاف المستثمرون، والعملات الرقمية تتأثر عادةً بخوف أسواق الأسهم.",
+            "calc": "الإغلاق اليومي من الملف الرسمي لبورصة CBOE (منذ 1990). 30 فأكثر خوف شديد (−1) · 22 فأكثر أو قفزة 25% خلال خمسة أيام قلق (−0.5) · 14 فأقل هدوء وشهية للمخاطرة (+0.5).",
+            "read": "ارتفاعه المفاجئ يعني عزوفاً عن المخاطرة في العالم، وهو ضاغط على الكريبتو في الغالب.",
+            "limit": "مؤشر للأسهم الأمريكية لا للكريبتو، والعلاقة بينهما تقوى في الأزمات وتضعف في غيرها."},
+    "dxy": {"sec": "macro", "ico": "💱", "name": "مؤشر الدولار (DXY)", "lead": "m",
+            "idea": "قوة الدولار أمام ست عملات رئيسية. الدولار القوي يسحب السيولة من الأصول الخطرة، والضعيف يدعمها.",
+            "calc": "نحسبه بالمعادلة الرسمية لمؤشر ICE من أسعار الصرف المرجعية للبنك المركزي الأوروبي (اليورو 57.6% والين 13.6% والإسترليني 11.9% والدولار الكندي 9.1% والكرونة السويدية 4.2% والفرنك السويسري 3.6%). التغيّر خلال 20 يوم عمل: +0.7% (−0.5) · +1.5% (−1) · وكذلك الانخفاض.",
+            "read": "دولار يقوى: ضغط على الكريبتو · دولار يضعف: دعم له.",
+            "limit": "الأسعار المرجعية يومية تُنشر بعد الظهر بتوقيت أوروبا، فقد تتأخر عن الحركة اللحظية."},
+    "us10": {"sec": "macro", "ico": "📜", "name": "عائد السندات الأمريكية لعشر سنوات", "lead": "m",
+             "idea": "كلفة الاقتراض الأساسية في العالم. ارتفاعها يجعل الأصول الآمنة أكثر جاذبية ويضيّق السيولة على الأصول الخطرة.",
+             "calc": "عائد 10 سنوات اليومي من وزارة الخزانة الأمريكية. التغيّر خلال 20 يوم عمل بالنقاط المئوية: +0.25 (−0.5) · +0.40 (−1) · وكذلك الانخفاض (+).",
+             "read": "عوائد ترتفع بسرعة: سيولة تضيق · عوائد تنخفض: سيولة تتسع.",
+             "limit": "أثره على الكريبتو غير مباشر ويتغير بحسب سبب حركة العائد (تضخم أم نمو)."},
+    "epu": {"sec": "macro", "ico": "🏛️", "name": "عدم اليقين في السياسة الاقتصادية", "lead": "s",
+            "idea": "مقياس أكاديمي (بيكر وبلوم وديفيس) يعدّ يومياً المقالات في الصحف الأمريكية التي تتحدث عن الاقتصاد والسياسة وعدم اليقين معاً. يرتفع في الأزمات والانتخابات والحروب التجارية.",
+            "calc": "المؤشر اليومي من policyuncertainty.com، ونقارن متوسط آخر سبعة أيام بأيام السنة الماضية: أعلى 10% (−1) · أعلى 25% (−0.5) · أدنى 20% هدوء (+0.5).",
+            "read": "ارتفاعه الشديد يرافق التقلبات الحادة والعزوف عن المخاطرة.",
+            "limit": "مبني على الصحف الأمريكية، ويقيس الحديث عن عدم اليقين لا الحدث نفسه."},
+    "gpr": {"sec": "macro", "ico": "🌍", "name": "المخاطر الجيوسياسية", "lead": "s",
+            "idea": "مقياس أكاديمي (كالدارا وإياكوفييلو، مستعمل في الاحتياطي الفيدرالي) يعدّ يومياً المقالات عن الحروب والتهديدات العسكرية والإرهاب في الصحف العالمية الكبرى.",
+            "calc": "المؤشر اليومي GPRD من ملف الباحثين الرسمي (نقرؤه داخل اللوحة دون أي مكتبة). نقارن متوسط سبعة أيام بأيام السنة الماضية بالطريقة نفسها.",
+            "read": "قفزاته تعني توتراً عالمياً؛ رد فعل الكريبتو متفاوت: ضغط في البداية أحياناً، وملاذ أحياناً أخرى.",
+            "limit": "يُحدَّث بتأخير يوم أو أكثر، والعلاقة بالكريبتو ليست ثابتة."},
+    "tone": {"sec": "macro", "ico": "📰", "name": "نبرة الأخبار عن الكريبتو", "lead": "m",
+             "idea": "متوسط نبرة (إيجابية أو سلبية) كل المقالات حول العالم التي تذكر البيتكوين أو العملات الرقمية، وحجم تغطيتها، دون عرض أي خبر.",
+             "calc": "من مشروع GDELT العام: النبرة اليومية لآخر ثلاثة أشهر. متوسط سبعة أيام ناقص متوسط تسعين يوماً: +0.5 تتحسن · −0.5 تسوء. وحجم التغطية لآخر ثلاثة أيام مقارنة بالمعتاد: ×1.8 فأكثر = انتباه إعلامي مفاجئ.",
+             "read": "تحسّن النبرة يرافق موجات الصعود غالباً، والانتباه المفاجئ يسبق كثيراً حركة كبيرة.",
+             "limit": "الإعلام يتبع السعر كثيراً، والمصدر يحدّ من كثرة الطلبات فقد تتأخر القراءة."},
+    "move": {"sec": "macro", "ico": "🌋", "name": "الحركة القادمة (بلا اتجاه)", "lead": "s",
+             "idea": "جواب صريح عن سؤال «هل تنبّه المؤشرات قبل الحركة؟»: نعم، لحجم الحركة لا لاتجاهها. يجمع هذا السطر العلامات التي تسبق الحركات الكبيرة عادةً.",
+             "calc": "العلامات: هدوء غير معتاد في DVOL · يوم أحداث اقتصادية ساخن · قفزة في VIX · انتباه إعلامي مفاجئ · انضغاط تذبذب في عملات الشريط. ونقيس على التاريخ حجم حركة البيتكوين بعد هدوء DVOL مقارنة بالمعتاد (×).",
+             "read": "علامتان فأكثر: استعد لحركة أكبر من المعتاد. راجع وقف الخسارة وحجم المراكز، ولا تراهن على اتجاه بعينه.",
+             "limit": "قد تمر العلامات بلا حركة، وقد تأتي الحركة بلا علامات."},
+}
+
+
+_GUIDE_NEED = ("vp avwap of pa trend st macd rsi adx cmf lc nw fng fund sq range lv fngm st$ cb mc btcd usdtd ad rs "
+               "ls tk dv pc mv cal vix dxy us10 epu gpr tone move").split()
+
+
+def guide_audit():
+    """📖 كل مؤشر يظهر في النوافذ له شرح كامل في الدليل (يرجع الناقص) — مؤشر جديد بلا شرح ⇒ يظهر هنا"""
+    keys = set(_GUIDE_NEED) | {k for k, *_ in _IND2_K} | {k for k, *_ in _FC_X}
+    bad = [k for k in sorted(keys) if k not in _GUIDE or any(not (_GUIDE[k].get(f) or "").strip() for f in ("name", "idea", "calc", "read", "limit", "lead"))]
+    return bad
+
+
+def guide_view():
+    """📖 GET /api/guide — الأقسام والمداخل + آخر موثوقية محفوظة (إن وُجدت) لكل مؤشر"""
+    m = _safe(lambda: (globals().get("MKT") or {}).get("rel") or {}, default={}) or {}
+    p = _safe(lambda: (globals().get("PRO") or {}).get("rel") or {}, default={}) or {}
+    rel = {"st$": m.get("st"), "cb": m.get("cb")}                 # 💵🇺🇸 مقيسان على البيتكوين
+    for k in ("ls", "tk", "pc", "mv"):
+        rel[k] = p.get(k + ":BTC")                                   # 🏦 على البيتكوين (ولكل عملة في نافذتها)
+    rel["dv"] = p.get("dvx:BTC")
+    for k in ("vix", "dxy", "us10", "epu", "gpr", "tone"):
+        rel[k] = p.get(k)
+    secs = []
+    for k, title, intro in _GUIDE_SECS:
+        items = [dict(v, k=kk, lead_t=_GUIDE_LEAD.get(v.get("lead"), ""), acc=rel.get(kk)) for kk, v in _GUIDE.items() if v["sec"] == k]
+        secs.append({"k": k, "title": title, "intro": intro, "items": items})
+    return {"ok": True, "secs": secs, "lead": _GUIDE_LEAD}
 
 
 # ═══════════════ 🔮 v3.29.0: التوقعات — يوم · أسبوع · شهر · 3 أشهر (عرض بس · ولا إشعار · ولا أمر بالمنصة) ═══════════════
@@ -12238,6 +13420,7 @@ def fc_fetch():
         time.sleep(0.4)
     keep = set(coins) | {"BTC-USDT"}                        # 💪 شموع البيتكوين تبقى (مرجع القوة · صدق السيولة/العلاوة)
     _safe(_mkt_rel, db, default=None)                       # 🎯 v3.32.0: صدق 💵 السيولة و🇺🇸 العلاوة على البيتكوين
+    _safe(_pro_rel, db, default=None)                       # 🎯 v3.33.0: صدق مؤشرات المحترفين والاقتصاد + شارات العملات
     for sec in ("c", "c4", "bt", "rg", "lr", "fund"):
         for s in list((db.get(sec) or {}).keys()):
             if s not in keep:
@@ -16389,6 +17572,8 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
             return self._json(_safe(guard_view, default={"ok": False, "msg": "تعذّر تحميل الرقابة"}))
         if u.path == "/api/forecast":                     # 🔮 v3.29.0: التوقعات (نفس مؤشرات 📊 على شموع أطول · قراءة عامة · عرض بس · ولا إشعار)
             return self._json(_safe(fc_api, default={"ok": False, "rows": [], "msg": "تعذّر حساب التوقعات"}))
+        if u.path == "/api/guide":                        # 📖 v3.33.0: دليل المؤشرات والتوقعات (نص ثابت + آخر موثوقية)
+            return self._json(_safe(guide_view, default={"ok": False, "secs": []}))
         if u.path == "/api/indicators":                   # 📊 v3.26.5: المؤشرات (قراءة عامة من المنصة · عرض بس)
             return self._json(_safe(ind2_api, default={"ok": False, "rows": [], "msg": "تعذّر حساب المؤشرات"}))
         if u.path == "/api/link_audit":                   # 🔗 v3.26.4: «افحص الترابط هسه» (قراءة الأرقام بس — يحدّث نافذة الرقابة وأحداثها)
@@ -17972,6 +19157,27 @@ i.fb{font-style:normal;font-weight:600;margin:0 7px;font-size:11px;direction:ltr
 .ind-lv b{color:var(--tx);direction:ltr;unicode-bidi:isolate}
 .ind-help{margin-top:12px;font-size:12px;color:var(--mut);line-height:1.9}
 .ind-help summary{cursor:pointer;color:var(--cyan);font-weight:700}
+.ind-blk{display:block}                                                        /* 🏦🗞️ v3.33.0: كتلتا المحترفين والاقتصاد (تُطويان) */
+.ind-blk>summary{cursor:pointer;list-style:none}.ind-blk>summary::-webkit-details-marker{display:none}
+.ind-blk>summary b::after{content:' ▾';color:var(--mut2);font-weight:400}.ind-blk:not([open])>summary b::after{content:' ◂'}
+.ind-blk[open]>summary{margin-bottom:7px}.ind-blk .ind-mkt-r{margin-bottom:7px}
+.ind-mkt-r[onclick]{cursor:pointer}.ind-mkt-r.flag .mi{filter:drop-shadow(0 0 4px rgb(var(--amber-rgb)/.7))}
+.ind-row[onclick]{cursor:pointer}.gd-i{color:var(--cyan);font-size:10px}
+.gd-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 8px}
+.gd-top input{flex:1;min-width:160px;padding:7px 11px;border-radius:10px;border:1px solid var(--line);background:var(--bg1);color:var(--tx);font:inherit;font-size:13px}
+#gd_body{text-align:start;font-size:13px;line-height:1.85}
+.gd-sec{border:1px solid var(--line2);border-radius:13px;padding:9px 12px;background:var(--bg1);margin-bottom:8px}
+.gd-sec>summary{cursor:pointer;font-weight:800;font-size:14px;color:var(--tx)}.gd-sec>summary small{color:var(--mut2);font-weight:400}
+.gd-sec p{margin:7px 0;color:var(--mut)}.gd-sec p b{color:var(--tx)}
+.gd-it{border-top:1px dashed var(--line2);padding:9px 0 4px;scroll-margin-top:8px}
+.gd-it.sel{background:rgb(var(--vio-rgb)/.08);border-radius:10px;padding-inline:8px}
+.gd-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13.5px}.gd-h b{color:var(--tx)}
+.gd-lead{font-size:11px;padding:1px 8px;border-radius:999px;border:1px solid var(--line);color:var(--mut)}
+.gd-h .fb{font-style:normal;font-size:11px;margin-inline-start:auto}
+.gd-it dl{margin:5px 0 0;display:grid;grid-template-columns:max-content minmax(0,1fr);gap:3px 12px}
+.gd-it dt{color:var(--cyan);font-weight:700;font-size:12px;white-space:nowrap}.gd-it dd{margin:0;color:var(--mut);font-size:12.5px;overflow-wrap:anywhere}.gd-it dd b{color:var(--tx)}
+@media (max-width:520px){.gd-it dl{grid-template-columns:minmax(0,1fr)}.gd-it dt{margin-top:4px}}
+.ind-help a.gd-l{cursor:pointer;color:var(--tx);white-space:nowrap}.ind-help .gd-go{margin-top:8px;font-size:12px;padding:5px 14px;border-radius:999px}
 .indbtn small{font-weight:600;margin-inline-start:4px}.indbtn small b{font-weight:700}
 .ind-fng{display:flex;align-items:center;gap:12px;border:1px solid var(--line2);border-radius:13px;padding:10px 12px;background:var(--bg1);margin-top:4px}
 .ind-fng svg{flex:none}.ind-fng .fgn{font:700 9px 'IBM Plex Mono',monospace}
@@ -19800,14 +21006,64 @@ function indFng(f){if(!f||f.v==null)return '';const v=Math.max(0,Math.min(100,Ma
 function indMkt(M){if(!M||!(M.rows||[]).length)return '';
   const col=s=>s>0?'var(--green)':s<0?'var(--red)':'var(--mut)';
   return `<div class="ind-mkt"><div class="ind-mkt-h"><b>🌐 السوق كله — السيولة والطلب</b><span class="ind-chip ${gEsc(M.mood||'z')}">${gEsc(M.mood_t||'')} <small>(${M.up||0} إيجابي · ${M.dn||0} سلبي من ${M.n||0})</small></span></div>
-    ${M.rows.map(r=>{const b=r.acc?fcB(r.acc):null;return `<div class="ind-mkt-r" title="${gEsc(r.what||'')}"><span class="mi">${r.ico}</span><span class="mn">${gEsc(r.name)}</span>
+    ${M.rows.map(r=>{const b=r.acc?fcB(r.acc):null;return `<div class="ind-mkt-r" title="${gEsc(r.what||'')}" onclick="openGuide('${r.k==='st'?'st$':gEsc(r.k)}','ind')"><span class="mi">${r.ico}</span><span class="mn">${gEsc(r.name)}</span>
       <b class="mv num" dir="ltr">${gEsc(r.val)}</b><span class="mt" style="color:${col(+r.s||0)}">${gEsc(r.txt)}</span>${b?`<i class="fb ${b.g}" title="${gEsc(fcBW(r.acc))} — حكمها سعر البيتكوين بعد 7 أيام">🎯 ${b.t}</i>`:''}
       <small class="ms">${gEsc(r.sub||'')}</small></div>`}).join('')}
     <small class="ind-mkt-f">قراءة عامة بلا مفاتيح (DefiLlama · Coinbase · CoinGecko · OKX) — مو ضمان · 🎯 = كم مرة صدقت على البيتكوين بالماضي مقابل الصدفة · ضغطة على أي سطر تشرح شنو يعني</small></div>`}
+/* 🏦🗞️ v3.33.0: مؤشرات المحترفين + الاقتصاد والأخبار — كتلتان تُطويان (مفتوحتان على الحاسوب · مطويتان على الموبايل · تُحفظ حالتهما) */
+function blkOpen(k){try{const v=localStorage.getItem('ind_blk_'+k);if(v!=null)return v==='1'}catch(e){}return innerWidth>760}
+function blkTog(k,el){try{localStorage.setItem('ind_blk_'+k,el.open?'1':'0')}catch(e){}}
+function proAcc(r){const a=r.acc;if(!a)return '';
+  if(a.x!==undefined)return a.x?`<i class="fb y" title="حجم الحركة بعد هذه العلامة مقارنة بالمعتاد (${a.n} مرة)">🌋 ×${a.x}</i>`:'';
+  const b=fcB(a);return `<i class="fb ${b.g}" title="${gEsc(fcBW(a))}">🎯 ${b.t}</i>`}
+function indBlk(B,k,title,foot){if(!B||!(B.rows||[]).length)return '';
+  const col=s=>s>0?'var(--green)':s<0?'var(--red)':'var(--mut)';
+  return `<details class="ind-mkt ind-blk" data-k="${k}"${blkOpen(k)?' open':''} ontoggle="blkTog('${k}',this)"><summary class="ind-mkt-h"><b>${title}</b><span class="ind-chip ${gEsc(B.mood||'z')}">${gEsc(B.mood_t||'')} <small>(${B.up||0} موجبة · ${B.dn||0} سالبة من ${B.n||0})</small></span></summary>
+    ${B.rows.map(r=>`<div class="ind-mkt-r${r.flag?' flag':''}" onclick="openGuide('${gEsc(r.k)}','ind')" title="اضغط لشرح المؤشر"><span class="mi">${r.ico}</span><span class="mn">${gEsc(r.name)}</span>
+      <b class="mv num" dir="ltr">${gEsc(r.val)}</b><span class="mt" style="color:${r.flag?'var(--amber)':col(+r.s||0)}">${gEsc(r.txt)}</span>${proAcc(r)}
+      <small class="ms">${gEsc(r.sub||'')}</small></div>`).join('')}
+    <small class="ind-mkt-f">${foot}</small></details>`}
+function indPro(P){if(!P)return '';
+  const mv=P.move&&P.mac?{...P.mac,rows:[P.move].concat(P.mac.rows||[])}:P.mac;
+  return indBlk(P.pro,'pro','🏦 المحترفون — التمركز والرافعة والخيارات','قراءة عامة بلا مفاتيح (OKX · Deribit · CoinMetrics) · ليست ضماناً · 🎯 كم مرة صدقت على البيتكوين في الماضي مقارنة بالصدفة · اضغط أي سطر لشرحه')
+    +indBlk(mv,'mac','🗞️ الاقتصاد والأخبار — أرقام بلا أخبار','قراءة عامة بلا مفاتيح (ForexFactory · CBOE · وزارة الخزانة · البنك المركزي الأوروبي · policyuncertainty · GPR · GDELT) · موجبة = تشجع المخاطرة · اضغط أي سطر لشرحه')}
+/* ⚖️🐂🔗 v3.33.0: شارات المحترفين على كل عملة (خارج المعدل) */
+function indP(r){const P=r.p||{},o=[];
+  if(P.ls&&P.ls.s!=null)o.push(`<span class="ind-dot ${P.ls.s>0?'p':P.ls.s<0?'n':'z'}" title="⚖️ الحسابات الطويلة إلى القصيرة: ${P.ls.long}% شراء">⚖️ ${gEsc(P.ls.txt)}</span>`);
+  if(P.tk&&P.tk.s!=null&&Math.abs(P.tk.s)>=0.2)o.push(`<span class="ind-dot ${P.tk.s>0?'p':'n'}" title="🐂 الشراء العدواني في العقود 7 أيام: ${P.tk.sh7}%">🐂 ${gEsc(P.tk.txt)}</span>`);
+  if(P.mv&&P.mv.s)o.push(`<span class="ind-dot ${P.mv.s>0?'p':'n'}" title="🔗 MVRV ${P.mv.v}">🔗 ${gEsc(P.mv.txt)}</span>`);
+  return o.join('')}
+function indPDet(r){const P=r.p||{};if(!P.ls&&!P.tk&&!P.mv)return '';
+  const row=(k,ico,nm,w,txt,acc,what,H)=>{const b=acc?fcB(acc):null;return `<div class="ind-row" onclick="openGuide('${k}','ind')"><span>${ico} <b>${gEsc(nm)}</b> <small class="gd-i">ⓘ</small></span><span class="w ${w}">${gEsc(txt)}${b?` <i class="fb ${b.g}" style="font-style:normal">${b.t}</i>`:''}</span><small>${what}${acc?' · 🎯 '+gEsc(fcBW(acc))+` (يُحكم بعد ${H} أيام)`:''}</small></div>`};
+  const w=s=>s>0?'p':s<0?'n':'z';
+  return `<div class="ind-pd"><div class="ind-sub" style="margin:6px 0 2px"><b>🏦 مؤشرات المحترفين للعملة</b> — خارج المعدل</div>
+   ${P.ls?row('ls','⚖️','الحسابات الطويلة إلى القصيرة',w(P.ls.s),P.ls.txt,P.ls.acc,`${P.ls.long}% من حسابات العقود تراهن على الصعود (النسبة ${P.ls.r})${P.ls.pt?' · '+gEsc(P.ls.pt):''} — الازدحام يُقرأ عكسياً`,3):''}
+   ${P.tk?row('tk','🐂','الشراء العدواني في العقود',w(P.tk.s),P.tk.txt,P.tk.acc,`نصيب الشراء بسعر السوق 7 أيام ${P.tk.sh7??'—'}% · أمس ${P.tk.sh1??'—'}%`,3):''}
+   ${P.mv?row('mv','🔗','MVRV — السعر مقابل كلفة المالكين',w(P.mv.s),P.mv.txt,P.mv.acc,`السعر = ${P.mv.v} × متوسط كلفة المالكين على السلسلة`,30):''}</div>`}
+/* 📖 v3.33.0: دليل المؤشرات والتوقعات — مرجع بالفصحى (مصدر واحد في الخادم: /api/guide) */
+let GDV=null,GDF='';
+async function openGuide(k,from){GDF=from||'';
+  showModal(`<h2>📖 دليل المؤشرات والتوقعات</h2><div class="gd-top"><input id="gd_q" type="search" placeholder="ابحث عن مؤشر…" oninput="gdRender()" autocomplete="off">
+    <span class="ind-chip">🔔 سابق · ⏱️ متزامن · 🐢 لاحق</span></div><div id="gd_body">${LDR('جارٍ التحميل…')}</div>
+    <div class="mbtns">${GDF?'<button onclick="gdBack()">↩︎ رجوع</button>':''}<button onclick="hideModal()">إغلاق</button></div>`);
+  if(!GDV){try{GDV=await api('/api/guide')}catch(e){GDV=null}}
+  gdRender(k)}
+function gdBack(){if(GDF==='fc')openFc();else openInd()}
+function gdRender(k){const el=$('#gd_body');if(!el)return;
+  if(!GDV||!GDV.secs){el.innerHTML='⚠️ تعذّر تحميل الدليل';return}
+  const q=(($('#gd_q')||{}).value||'').trim();
+  const hit=it=>!q||[it.name,it.idea,it.calc,it.read,it.limit].join(' ').includes(q);
+  el.innerHTML=GDV.secs.map(S=>{const items=(S.items||[]).filter(hit);if(q&&!items.length)return '';
+    const op=q||S.k==='intro'||(k&&items.some(i=>i.k===k));
+    return `<details class="gd-sec" data-s="${gEsc(S.k)}"${op?' open':''}><summary>${gEsc(S.title)} ${items.length?`<small>(${items.length})</small>`:''}</summary>
+      ${q?'':(S.intro||[]).map(p=>`<p>${p}</p>`).join('')}
+      ${items.map(it=>`<div class="gd-it${it.k===k?' sel':''}" id="gd_${gEsc(it.k)}"><div class="gd-h"><span>${it.ico} <b>${gEsc(it.name)}</b></span><span class="gd-lead">${gEsc(it.lead_t||'')}</span>${it.acc?proAcc({acc:it.acc}):''}</div>
+        <dl><dt>الفكرة</dt><dd>${it.idea}</dd><dt>طريقة الحساب</dt><dd>${it.calc}</dd><dt>كيف تقرؤه</dt><dd>${it.read}</dd><dt>حدوده</dt><dd>${it.limit}</dd></dl></div>`).join('')}</details>`}).join('')||'<div class="ind-sub">لا نتائج</div>';
+  if(k){const t=$('#gd_'+k);if(t)setTimeout(()=>t.scrollIntoView({block:'start'}),30)}}
 /* 🧲💪 v3.32.0: مؤشرات العملة الإضافية — برّه المعدل (ما تغيّر الحكم ولا التنبيهات) */
-function indX(r){const X=r.x||{},a=X.ad,s=X.rs;if(!a&&!(s&&!s.ref))return '';
+function indX(r){const X=r.x||{},a=X.ad,s=X.rs,pp=indP(r);if(!a&&!(s&&!s.ref)&&!pp)return '';
   const ca=a?({acc:'p',up:'p',dist:'n',down:'n'}[a.k]||'z'):'z',cs=s?({strong:'p',weak:'n'}[s.k]||'z'):'z';
-  return `<div class="ind-x">${a?`<span class="ind-dot ${ca}" title="🧲 التجميع والتصريف (آخر ${X.W||20} يوم)">🧲 ${gEsc({acc:'تجميع',dist:'تصريف',up:'صعود مدعوم',down:'نزول مدعوم',flat:'لا تجميع ولا تصريف'}[a.k]||'')}</span>`:''}${s&&!s.ref?`<span class="ind-dot ${cs}" title="💪 مقابل البيتكوين">${s.k==='strong'?'💪 أقوى من BTC':s.k==='weak'?'🐢 أضعف من BTC':'↔️ مثل BTC'}</span>`:''}</div>`}
+  return `<div class="ind-x">${a?`<span class="ind-dot ${ca}" title="🧲 التجميع والتصريف (آخر ${X.W||20} يوم)">🧲 ${gEsc({acc:'تجميع',dist:'تصريف',up:'صعود مدعوم',down:'نزول مدعوم',flat:'لا تجميع ولا تصريف'}[a.k]||'')}</span>`:''}${s&&!s.ref?`<span class="ind-dot ${cs}" title="💪 مقابل البيتكوين">${s.k==='strong'?'💪 أقوى من BTC':s.k==='weak'?'🐢 أضعف من BTC':'↔️ مثل BTC'}</span>`:''}${pp}</div>`}
 function indXDet(r){const X=r.x||{},a=X.ad,s=X.rs;if(!a&&!s)return '';
   const row=(ico,nm,w,txt,acc,what)=>{const b=acc?fcB(acc):null;return `<div class="ind-row"><span>${ico} <b>${gEsc(nm)}</b></span><span class="w ${w}">${gEsc(txt)}${b?` <i class="fb ${b.g}" style="font-style:normal">${b.t}</i>`:''}</span><small>${what}${acc?' · 🎯 '+gEsc(fcBW(acc))+` (حكمها بعد ${X.H||14} يوم)`:''}</small></div>`};
   return `<div class="ind-xd"><div class="ind-sub" style="margin:6px 0 2px"><b>➕ مؤشرات إضافية للعملة</b> — برّه المعدل (ما تغيّر الحكم ولا التنبيهات)</div>
@@ -19841,7 +21097,7 @@ async function pxaSet(v){try{const r=await api('/api/control',{action:'pxa_set',
 async function pxaTest(){try{const r=await api('/api/control',{action:'pxa_test'});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok))}catch(e){toast('تعذر الاتصال',false)}pxaLoad()}
 async function openInd(){
   showModal(`<h2>📊 المؤشرات — العملة راح تصعد لو تنزل؟</h2><div id="ind_body" style="color:var(--mut);font-size:12.5px;padding:16px;text-align:center">${LDR('جاري الحساب…')}</div>
-    <div class="mbtns"><button onclick="openTicker()">⚙️ العملات</button><button onclick="hideModal()">إغلاق</button></div>`);
+    <div class="mbtns"><button onclick="openGuide('','ind')">📖 الدليل</button><button onclick="openTicker()">⚙️ العملات</button><button onclick="hideModal()">إغلاق</button></div>`);
   await indLoad()}
 async function indLoad(){clearTimeout(INDT);try{INDV=await api('/api/indicators')}catch(e){INDV=null}indRender();
   if(INDV&&INDV.busy&&!(INDV.rows||[]).length&&$('#ind_body'))INDT=setTimeout(indLoad,3000)}
@@ -19860,6 +21116,7 @@ function indRender(){
   let h=`<div class="ind-top"><span class="ind-chip">⏱ للساعات الجاية (~${H} ساعات)</span>
     <span class="ind-chip">السوق: <b style="color:var(--green)">⬆️ ${S.up||0}</b> · <b style="color:var(--red)">⬇️ ${S.down||0}</b> · <b>↔️ ${S.flat||0}</b></span>
     <span class="ind-chip">🔄 ${V.ts?gAgo(V.ts):'—'} · كل ${Math.round((V.every||300)/60)} د</span></div>${indFng(f)}${indMkt(V.mkt)}`;
+  h+=indPro(V.pro);                                  // 🏦🗞️🌋 v3.33.0
   h+=`<div class="ind-list">${R.map(r=>{const op=!!INDO[r.sym],sc=Math.max(-100,Math.min(100,+r.score||0));
     const parts=r.parts||[], acc=r.acc_bt||{}, live=r.acc_live||{};
     const dots=parts.map(p=>{const w=word(+p.s);return `<span class="ind-dot ${w[1]}" title="${gEsc(p.name)}: ${w[0]}">${p.ico} ${w[0]}</span>`}).join('');
@@ -19868,23 +21125,24 @@ function indRender(){
       [['VAL',L.val],['POC',L.poc],['VAH',L.vah],['VWAP القاع',L.avwap_lo],['VWAP القمة',L.avwap_hi],['سوبرترند',L.st],['آخر قاع',L.sw_lo],['آخر قمة',L.sw_hi]]
         .forEach(([n,v])=>{if(v==null||!isFinite(+v))return;(+v<=px?sup:res).push([n,+v])});
       sup.sort((a,b)=>b[1]-a[1]);res.sort((a,b)=>a[1]-b[1]);
-      det=`<div class="ind-det" onclick="event.stopPropagation()">${parts.map(p=>{const w=word(+p.s);return `<div class="ind-row"><span>${p.ico} <b>${gEsc(p.name)}</b></span><span class="w ${w[1]}">${w[0]}</span>
+      det=`<div class="ind-det" onclick="event.stopPropagation()">${parts.map(p=>{const w=word(+p.s);return `<div class="ind-row" onclick="openGuide('${gEsc(p.k)}','ind')"><span>${p.ico} <b>${gEsc(p.name)}</b> <small class="gd-i">ⓘ</small></span><span class="w ${w[1]}">${w[0]}</span>
         <small>${gEsc(p.txt)}${p.acc!=null?` · 🎯 دقته على ${gEsc(r.base)}: ${p.acc}% (${p.n})`:''}${p.live&&p.live.pct!=null?` · حيّة ${p.live.pct}% (${p.live.n})`:''}</small></div>`}).join('')}
         <div class="ind-lv">🛡️ دعم تحت السعر: ${sup.slice(0,3).map(x=>`${x[0]} <b>${fmtPx(x[1])}</b>`).join(' · ')||'—'}<br>🚧 مقاومة فوقه: ${res.slice(0,3).map(x=>`${x[0]} <b>${fmtPx(x[1])}</b>`).join(' · ')||'—'}</div>
-        ${r.of_src!=='okx'?'<div class="ind-sub">🌊 Order Flow: OKX ما عطت حجم الشراء/البيع لهالعملة ⇒ تقدير من الشموع</div>':''}${indXDet(r)}</div>`}
+        ${r.of_src!=='okx'?'<div class="ind-sub">🌊 Order Flow: OKX ما عطت حجم الشراء/البيع لهالعملة ⇒ تقدير من الشموع</div>':''}${indXDet(r)}${indPDet(r)}</div>`}
     return `<div class="ind-c ${gEsc(r.verdict)}${op?' open':''}" onclick="indTog('${gEsc(r.sym)}')">
       <div class="ind-h"><span class="cn">${gEsc(r.base)}</span><span class="px">${fmtPx(r.px)}</span><span class="chg ${(+r.chg24||0)>=0?'up':'dn'}">${(+r.chg24||0)>=0?'▲':'▼'}${Math.abs(+r.chg24||0).toFixed(2)}%</span>
         <span class="ind-v ${gEsc(r.verdict)}">${gEsc(r.txt)}</span></div>
       <div class="ind-bar" title="المعدل ${sc} من −100 (نزول) لـ+100 (صعود)"><i style="left:${((sc+100)/2).toFixed(1)}%"></i></div>
       <div class="ind-sub">المعدل <b style="color:var(--tx)">${sc>0?'+':''}${sc}</b>${r.conf!=null?` · ثقة <b style="color:var(--tx)">${r.conf}%</b>`:' · المؤشرات مختلفة'} · 🎯 دقة المعدل على ${gEsc(r.base)}: <b style="color:var(--tx)">${pc(acc)}</b>${live&&live.n?` · حيّة ${pc(live)}`:''}</div>
       <div class="ind-dots">${dots}</div>${indX(r)}${det||'<div class="ind-sub" style="margin-top:5px">اضغط للتفاصيل ←</div>'}</div>`}).join('')}</div>`;
-  h+=`<details class="ind-help"><summary>شلون أقرا هذا؟</summary>
-    <div>• <b>الحكم</b> (⬆️ ↗️ ↔️ ↘️ ⬇️) = <b>معدل</b> المؤشرات العشرة (من −100 نزول لـ+100 صعود) — كل مؤشر وزنه حسب دقّته على نفس العملة.</div>
-    <div>• <b>الثقة</b> = كم من المؤشرات متّفقة ويّا الحكم · <b>🎯 الدقة</b> = كم مرة أصاب: إشارة كل ساعة بآخر ~12 يوم وتنحكم بعد ${H} ساعات (على فترة ما انحسبت منها الأوزان) · <b>حيّة</b> = من لما شغّلت اللوحة.</div>
-    ${(V.kinds||[]).map(k=>`<div>${k.ico} <b>${gEsc(k.name)}</b>: ${gEsc(k.what)}</div>`).join('')}
-    <div style="margin-top:6px">• <b>🌐 السوق كله</b> (فوق ويّا الخوف والطمع): 💵 السيولة = عرض العملات المستقرة (زيادته فلوس جديدة داخلة) · 🇺🇸 علاوة كوينبيس (موجبة = طلب أمريكي) · 🌐 حجم السوق · ₿ سيطرة البيتكوين · 💲 سيطرة USDT (تزيد = الناس هربت للدولار) — 🧭 الجو العام = كم منها إيجابي/سلبي.</div>
-    <div>• <b>➕ مؤشرات العملة الإضافية</b> (برّه المعدل): 🧲 <b>التجميع/التصريف</b> — آخر ${20} يوم: السيولة داخلة والسعر ما تحرّك = تجميع (الكبار يشترون بهدوء) · طالعة والسعر ما نزل = تصريف · 💪 <b>القوة مقابل البيتكوين</b> — أسبوع وشهر. كل واحد بيه 🎯 صدقه على ماضي نفس العملة بعد ${14} يوم.</div>
-    <div style="color:var(--amber);margin-top:6px">⚠️ المؤشرات احتمالات مو ضمان — حتى 60% دقة تعتبر زينة بالأسواق. ما تفتح ولا تسكّر أي أمر — قراءة بس. ${V.err?'<br>'+gEsc(V.err):''}</div></details>`;
+  h+=`<details class="ind-help"><summary>كيف أقرأ هذه النافذة؟</summary>
+    <div>• <b>الحكم</b> (⬆️ ↗️ ↔️ ↘️ ⬇️) هو <b>معدل</b> المؤشرات العشرة من −100 (هبوط) إلى +100 (صعود)، ويُوزن كل مؤشر بحسب دقته على العملة نفسها.</div>
+    <div>• <b>الثقة</b>: نصيب المؤشرات الموافقة للحكم · <b>🎯 الدقة</b>: كم مرة أصاب المعدل، بإشارة كل ساعة في آخر 12 يوماً تقريباً تُحكم بعد ${H} ساعات (على فترة لم تُحسب منها الأوزان) · <b>الحيّة</b>: منذ تشغيل اللوحة.</div>
+    <div>• المؤشرات: ${(V.kinds||[]).map(k=>`<a class="gd-l" onclick="openGuide('${gEsc(k.k)}','ind')">${k.ico} ${gEsc(k.name)}</a>`).join(' · ')}</div>
+    <div style="margin-top:6px">• <b>🌐 السوق كله</b>: السيولة الداخلة وعلاوة كوينبيس وحجم السوق والهيمنة · <b>🏦 المحترفون</b>: التمركز والرافعة والخيارات وMVRV · <b>🗞️ الاقتصاد والأخبار</b>: الأحداث وVIX والدولار والسندات وعدم اليقين ونبرة الأخبار · <b>🌋 الحركة القادمة</b>: علامات تسبق الحركات الكبيرة دون أن تحدد اتجاهها.</div>
+    <div>• <b>➕ مؤشرات العملة الإضافية</b> (خارج المعدل): 🧲 <b>التجميع/التصريف</b> · 💪 <b>القوة مقابل البيتكوين</b> · ⚖️ ازدحام الحسابات · 🐂 الشراء العدواني · 🔗 MVRV — ولكل منها 🎯 صدقه على ماضي العملة نفسها.</div>
+    <div style="color:var(--amber);margin-top:6px">⚠️ المؤشرات احتمالات لا ضمانات، ودقة 60% تُعدّ جيدة في الأسواق. اللوحة تقرأ فقط: لا تفتح أمراً ولا تغلقه. ${V.err?'<br>'+gEsc(V.err):''}</div>
+    <button class="gd-go" onclick="openGuide('','ind')">📖 الدليل الكامل: الفكرة وطريقة الحساب وكيف تقرأ كل مؤشر وحدوده</button></details>`;
   el.innerHTML=h}
 
 /* 🔮 v3.29.0: التوقعات — نفس مؤشرات 📊 على شموع أطول (يوم ← 4 ساعات · أسبوع ← يوم · شهر ← 3 أيام · 3 أشهر ← أسبوع) + 4 إضافات ·
@@ -19899,7 +21157,7 @@ function fcAlign(){const a=$('#fcBtn'),b=$('#indBtn');if(!a||!b||!a.offsetParent
 addEventListener('resize',()=>{const a=$('#fcBtn');if(a){a._al='';fcAlign()}});
 async function openFc(){
   showModal(`<h2>🔮 التوقعات</h2><div id="fc_body" style="color:var(--mut);font-size:12.5px;padding:16px;text-align:center">${LDR('جاري الحساب…')}</div>
-    <div class="mbtns"><button onclick="openTicker()">⚙️ العملات</button><button onclick="hideModal()">إغلاق</button></div>`);
+    <div class="mbtns"><button onclick="openGuide('','fc')">📖 الدليل</button><button onclick="openTicker()">⚙️ العملات</button><button onclick="hideModal()">إغلاق</button></div>`);
   await fcLoad()}
 async function fcLoad(){clearTimeout(FCT);try{FCV=await api('/api/forecast')}catch(e){FCV=null}fcRender();
   if(FCV&&FCV.busy&&$('#fc_body'))FCT=setTimeout(fcLoad,4000)}
@@ -19942,18 +21200,19 @@ function fcRender(){
           <div>🧱 دعم: ${lvT(lv.sup)}<br>🧱 مقاومة: ${lvT(lv.res)}</div>
           ${x.sq&&x.sq.on?`<div style="color:var(--amber)">⚡ السوق هادي (انضغاط) — عادةً تجي بعده حركة كبيرة واتجاهها ما ينعرف${x.sq.x?` · بتاريخ ${gEsc(r.base)}: بعد الهدوء الحركة كانت ×${x.sq.x} من العادة`:''}</div>`:''}
           <div><small>📒 ${L.n||L.done?`من بدأ التسجيل: صدقت ${L.hit||0} من ${L.n||0}${L.cov!=null?` · داخل النطاق ${L.cov}%`:''}${L.wait?` · ${L.wait} تنتظر وقتها`:''}`:'السجل الحي يبدي هسه — كل قراءة تنحكم لما يجي وقتها'}</small></div></div>
-          ${(x.sig||[]).map(p=>{const b=fcB(p.acc);return `<div class="ind-row"><span>${p.ico} <b>${gEsc(p.name)}</b></span><span class="w ${p.w}">${{p:'⬆️ صاعد',n:'⬇️ نازل',z:'↔️ محايد'}[p.w]}<i class="fb ${b.g}" title="${gEsc(fcBW(p.acc))}">${b.t}</i></span><small>${gEsc(p.txt)}</small></div>`}).join('')}</div>`}}
+          ${(x.sig||[]).map(p=>{const b=fcB(p.acc);return `<div class="ind-row" onclick="openGuide('${gEsc(p.k)}','fc')"><span>${p.ico} <b>${gEsc(p.name)}</b> <small class="gd-i">ⓘ</small></span><span class="w ${p.w}">${{p:'⬆️ صاعد',n:'⬇️ نازل',z:'↔️ محايد'}[p.w]}<i class="fb ${b.g}" title="${gEsc(fcBW(p.acc))}">${b.t}</i></span><small>${gEsc(p.txt)}</small></div>`}).join('')}</div>`}}
     const v0=(H.w&&H.w.vk)||(H.d&&H.d.vk)||'f';
     return `<div class="ind-c fc-c ${['su','u'].includes(v0)?'up':['sd','d'].includes(v0)?'down':''}${op?' open':''}" onclick="fcTog('${gEsc(r.sym)}')">
       <div class="ind-h"><span class="cn">${gEsc(r.base)}</span><span class="px">${fmtPx(r.px)}</span><span class="chg ${(+r.chg||0)>=0?'up':'dn'}">${(+r.chg||0)>=0?'▲':'▼'}${Math.abs(+r.chg||0).toFixed(2)}%</span>
         ${sq?`<span class="fc-sq" title="السوق هادي على مدى أو أكثر — حركة كبيرة جاية (اتجاهها ما ينعرف)">⚡</span>`:''}<span class="ind-sub" style="margin-inline-start:auto">${op?'':'اضغط للتفاصيل ←'}</span></div>
       <div class="fc-rows"><div class="fc-r fc-hd"><span>المدى</span><span>المؤشرات</span><span>النطاق المتوقع</span><span>صدقها</span></div>${rows}</div>${det}</div>`}).join('')}</div>`;
-  h+=`<details class="ind-help"><summary>شلون أقرا هذا؟</summary>
-    <div>• كل سطر = مدى: <b>شنو تكول المؤشرات</b> (كم مؤشر صاعد أو نازل من كم — نفس عشرة 📊 + 4 إضافات) · <b>النطاق المتوقع</b> (السعر بنهاية المدة بين الرقمين بنسبة 80%) · <b>صدقها</b>.</div>
-    <div>• المؤشرات تنحسب على شموع أطول حسب المدى: يوم ← شموع 4 ساعات · أسبوع ← يوم · شهر ← 3 أيام · 3 أشهر ← أسبوع.</div>
-    <div>• <b>صدقها</b> = نفس القراءة انفحصت على ماضي نفس العملة (كل مرة تشوف اللي قبلها بس): كم مرة السهم طلع صح مقابل الصدفة — 🟢 أحسن من الصدفة بوضوح · 🟡 أحسن شوية · ⚪\uFE0F مثل الصدفة · 🔴 أسوأ من الصدفة · ⏳ تاريخ قليل. وكل مؤشر بالتفاصيل يمه صدقه هو.</div>
-    <div>• الإضافات (حسابات بس): 🧠 Lorentzian · 〰️ Nadaraya-Watson (النسخة اللي ما تعيد رسم الماضي) · 😨 الخوف والطمع بأطرافه · 💸 التمويل (يوم وأسبوع). ⚡ = السوق هادي ⇒ حركة كبيرة جاية (اتجاهها ما ينعرف).</div>
-    <div style="color:var(--amber);margin-top:6px">⚠️ قراءة واحتمالات مو ضمان — على الأسعار الحقيقية اتجاه أغلب المؤشرات قريب من الصدفة، والنطاق هو الأوثق. ما تفتح ولا تسكّر أي أمر ولا تبعث إشعار.</div></details>`;
+  h+=`<details class="ind-help"><summary>كيف أقرأ هذه النافذة؟</summary>
+    <div>• كل سطر مدى زمني: <b>ماذا تقول المؤشرات</b> (كم مؤشراً صاعداً أو هابطاً من العدد كله: المؤشرات العشرة نفسها وأربعة إضافية) · <b>النطاق المتوقع</b> (يقع السعر في نهاية المدة بين الرقمين بنسبة 80%) · <b>صدقها</b>.</div>
+    <div>• تُحسب المؤشرات على شموع أطول بحسب المدى: اليوم على شموع 4 ساعات · الأسبوع على اليومية · الشهر على شموع 3 أيام · الأشهر الثلاثة على الأسبوعية.</div>
+    <div>• <b>صدقها</b>: القراءة نفسها فُحصت على ماضي العملة (كل مرة ترى ما قبلها فقط): كم مرة أصاب السهم مقارنة بالصدفة — 🟢 أفضل من الصدفة بوضوح · 🟡 أفضل قليلاً · ⚪\uFE0F مثل الصدفة · 🔴 أسوأ من الصدفة · ⏳ عينة قليلة. ولكل مؤشر في التفاصيل صدقه الخاص.</div>
+    <div>• الإضافات: 🧠 تصنيف لورنتز · 〰️ نادارايا–واتسون (دون إعادة رسم الماضي) · 😨 الخوف والطمع بأطرافه · 💸 التمويل (اليوم والأسبوع). ⚡ = السوق هادئ على غير العادة ⇒ حركة كبيرة محتملة دون اتجاه معروف.</div>
+    <div style="color:var(--amber);margin-top:6px">⚠️ قراءة واحتمالات لا ضمانات: اتجاه أغلب المؤشرات على الأسعار الحقيقية قريب من الصدفة، والنطاق هو الأوثق. لا تفتح أمراً ولا تغلقه ولا ترسل إشعاراً.</div>
+    <button class="gd-go" onclick="openGuide('','fc')">📖 الدليل الكامل</button></details>`;
   el.innerHTML=h}
 
 /* 🧾 سجل ربح اليوم — ضغطة على 🔄 ربح التداول أو 📅 الربح المحرر */
@@ -25555,6 +26814,7 @@ def main():
         threading.Thread(target=ticker_loop, daemon=True).start()   # 📈 شريط الأسعار
         threading.Thread(target=indic_loop, daemon=True).start()    # 📊 شريط المؤشرات
         threading.Thread(target=fc_loop, daemon=True).start()       # 🔮 التوقعات (يوم · أسبوع · شهر · 3 أشهر)
+        threading.Thread(target=pro_loop, daemon=True).start()      # 🏦🗞️ v3.33.0: المحترفون والاقتصاد (حلقة مستقلة)
         threading.Thread(target=handoff_loop, daemon=True).start()  # 🪙 تسليم العملة خلال ثوانٍ
         srv = ThreadingHTTPServer(("0.0.0.0", port), Handler)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
