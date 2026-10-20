@@ -21082,7 +21082,7 @@ function indBlk(B,k,title,foot){if(!B||!(B.rows||[]).length)return '';
       <small class="ms">${numIso(r.sub)}</small></div>`).join('')}
     <small class="ind-mkt-f">${foot}</small></details>`}
 function indPro(P){if(!P)return '';
-  const mv=P.move&&P.mac?{...P.mac,rows:[P.move].concat(P.mac.rows||[])}:P.mac;
+  const mac=P.mac||{rows:[]},mv=P.move&&(P.move.flag||(mac.rows||[]).length)?{...mac,rows:[P.move].concat(mac.rows||[])}:mac;   // 🗞️ بلا بيانات ⇒ بلا كتلة (لا «🌋 هادئ» وحده)
   return indBlk(P.pro,'pro','🏦 المحترفون — التمركز والرافعة والخيارات','قراءة عامة بلا مفاتيح (OKX · Deribit · CoinMetrics) · ليست ضماناً · 🎯 كم مرة صدقت على البيتكوين في الماضي مقارنة بالصدفة · اضغط أي سطر لشرحه')
     +indBlk(mv,'mac','🗞️ الاقتصاد والأخبار — أرقام بلا أخبار','قراءة عامة بلا مفاتيح (ForexFactory · CBOE · وزارة الخزانة · البنك المركزي الأوروبي · policyuncertainty · GPR · GDELT) · موجبة = تشجع المخاطرة · اضغط أي سطر لشرحه')}
 /* ⚖️🐂🔗 v3.33.0: شارات المحترفين على كل عملة (خارج المعدل) */
