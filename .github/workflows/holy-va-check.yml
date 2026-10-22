@@ -1,0 +1,23 @@
+# 🛤️ Holy v3.34.0 check on REAL history: the value-path bot's rules (ci/va_sim.py — the same as the engine) on OKX hourly candles
+#    of 12 coins, 180-day windows ⇒ per setting vs plain DCA and buy-and-hold. Lines HOLYVA.
+# Public candles only — no keys, no orders, no notifications. Runs only when the check, ci/RUN_VA or this file changes.
+name: Holy value-path real-history check
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/va_check.py', 'ci/va_sim.py', 'ci/RUN_VA', '.github/workflows/holy-va-check.yml']
+permissions:
+  contents: read
+jobs:
+  real-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Value-path bot on real history (public candles · no keys · no orders · no notifications)
+        run: |
+          pip install -q requests
+          python3 ci/va_check.py
