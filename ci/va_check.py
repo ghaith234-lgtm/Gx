@@ -96,19 +96,24 @@ def run(p, label, per_coin=False):
     return {"va": md(va_r), "dca": md(dca_r), "beat": sum(beat) / n}
 
 
-print("HOLYVA ── default", BASE, flush=True)
-run(BASE, "DEFAULT", per_coin=True)
-print("HOLYVA ── one setting at a time", flush=True)
-for k, vals in (("every_h", [4, 12, 72, 168]), ("band", [0.5, 1, 4, 6]), ("floor", [False]), ("brake", [0, 10, 20, 30]),
-                ("max_order", [20, 50, 1e9]), ("cap", [150, 600, 1e9])):
-    for x in vals:
-        p = dict(BASE, **{k: x})
-        run(p, f"{k}={x}")
-print("HOLYVA ── fixed target (step 0): keep 100 $ of the coin", flush=True)
-for x in (2, 4, 8):
-    run(dict(BASE, start=100, step=0, band=x, max_order=60, cap=400), f"fixed100 band={x}")
-print("HOLYVA ── grid: steps × band (floor on, brake 15)", flush=True)
-for e in (12, 24, 72):
-    for b in (1, 2, 4):
-        run(dict(BASE, every_h=e, band=b), f"every_h={e} band={b}")
+# round 1 (run 1, 2026-10-22): growing target ≈ DCA ≈ hold · fixed target (step 0) best (median +6.3 vs hold −4.5, VA>hold 60 %) ·
+#   band, floor, brake, max order barely matter (brake slightly worse). Round 2: tune the fixed target · growing target with slow steps.
+FIX = dict(start=100, step=0, band=4, max_order=60, cap=400, floor=True, brake=0, every_h=24)
+print("HOLYVA ── round 2 · fixed target 100 $ (step 0)", FIX, flush=True)
+run(FIX, "FIXED default", per_coin=True)
+for e in (4, 12, 24, 72):
+    for b in (2, 4, 8):
+        for f in (True, False):
+            run(dict(FIX, every_h=e, band=b, floor=f), f"fixed every_h={e} band={b} floor={f}")
+for c in (200, 1e9):
+    run(dict(FIX, cap=c), f"fixed cap={c}")
+for mo in (30, 1e9):
+    run(dict(FIX, max_order=mo), f"fixed max_order={mo}")
+run(dict(FIX, brake=15), "fixed brake=15")
+G = dict(start=10, step=10, band=4, max_order=30, cap=300, floor=True, brake=0, every_h=168)
+print("HOLYVA ── round 2 · growing target, slow steps", G, flush=True)
+run(G, "GROW weekly", per_coin=True)
+for e in (72, 168):
+    for c in (300, 600, 1e9):
+        run(dict(G, every_h=e, cap=c), f"grow every_h={e} cap={c}")
 print("HOLYVA done", flush=True)
