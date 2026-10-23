@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.1"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.2"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -4410,6 +4410,54 @@ def _bt_run(kind, cfg, sym, px, dt, quote, base, spec, maker=0.0008, taker=0.001
         shutil.rmtree(folder, ignore_errors=True)
 
 
+def _bt_trade(kind, r, p0, result, base0):
+    """💰 ربح البيع والشراء للصفقات المكتملة — صافي العمولة المدفوعة فعلاً — و📦 المفتوح عند النهاية بسعر البداية.
+    المجموع = فرق المحفظة بالمليم (المفتوح = الفرق − ربح البيع والشراء).
+    · DCA والدوري ومسار القيمة: دفتر المحرك نفسه (صافٍ أصلاً) — والمفتوح من ملف حالته يطابق الباقي بالمليم (tie)
+    · الشبكات: المحرك يسجّل فرق السعر الخام ×0.999 ⇒ نطرح العمولة الحقيقية: دفتره÷0.999 − عمولات البيع − عمولات شراء العملات التي بيعت
+    · الشبكة بإعادة الاستثمار: الربح يبقى عملاتٍ داخل البوت ⇒ ربح البيع والشراء = فرق المحفظة بسعر البداية"""
+    ex, st, book = r["ex"], r["state"] or {}, float(r["realized"] or 0)
+    out = {"trade_coin": None, "od": {}, "tie": None}
+    f_ = lambda v: float(v or 0)
+    if kind in ("grid", "grid_range", "grid_plus"):
+        if (st.get("reinvest") or {}).get("on"):
+            trade = result
+            out["od"] = {"k": "ri"}
+        else:
+            held = [o for sd in ("limit_sells", "virtual_sells", "accum_sells") for o in (st.get(sd) or {}).values()]
+            buy_fee = sum(x[4] * x[2] for x in ex.fills if x[1] == "buy")
+            open_fee = sum(f_(o.get("fee_coin")) * f_(o.get("cost_px")) for o in held)
+            trade = book / 0.999 - ex.fees[ex.quote] - (buy_fee - open_fee)
+            out["od"] = {"k": "grid", "q": round(ex.bal[ex.base] - base0, 10)}
+    elif kind in ("dca", "dca_buy"):
+        if kind == "dca_buy":
+            trade = book
+            out["od"] = {"k": "held", "q": round(f_(st.get("total_net")), 10), "c": round(f_(st.get("total_usdt")), 8)}
+            y = f_(st.get("total_net")) * p0 - f_(st.get("total_usdt")) + f_(st.get("dust_coin")) * p0
+        else:
+            out["trade_coin"] = book
+            trade = book * p0
+            out["od"] = {"k": "sold", "q": round(f_(st.get("total_sold_qty")), 10), "u": round(f_(st.get("total_net")), 8)}
+            y = f_(st.get("total_net")) - f_(st.get("total_sold_qty")) * p0 + f_(st.get("dust_usdt"))
+        out["tie"] = round(result - trade - y, 8)
+    else:
+        lots = st.get("lots") or []
+        q, c = sum(f_(l.get("q")) for l in lots), sum(f_(l.get("c")) for l in lots)
+        if kind == "rec_sell":
+            out["trade_coin"] = book
+            trade = book * p0
+            out["od"] = {"k": "sold", "q": round(q, 10), "u": round(c, 8)}
+            y = c - q * p0
+        else:
+            trade = book
+            out["od"] = {"k": "held", "q": round(q, 10), "c": round(c, 8)}
+            y = q * p0 - c
+        out["tie"] = round(result - trade - y, 8)
+    out["trade"] = round(trade, 8)
+    out["open"] = round(result - trade, 8)
+    return out
+
+
 def _bt_summary(kind, r, quote0, base0, p0, dt):
     """أرقام المسار الواحد — كلها من المنصة التجريبية (المحفظة) ودفتر المحرك نفسه"""
     ex = r["ex"]
@@ -4426,7 +4474,10 @@ def _bt_summary(kind, r, quote0, base0, p0, dt):
     for _t, sc in ex.rejects:
         rej[sc] = rej.get(sc, 0) + 1
     fee_usd = ex.fees[ex.quote] + ex.fees[ex.base] * p0
-    return {"result": round(v1 - v0, 8), "pct": round((v1 - v0) / v0 * 100, 4) if v0 > 0 else 0.0, "v0": round(v0, 8), "v1": round(v1, 8),
+    tr = _bt_trade(kind, r, p0, v1 - v0, base0)
+    return {"trade": tr["trade"], "trade_coin": None if tr["trade_coin"] is None else round(tr["trade_coin"], 10), "open_usd": tr["open"],
+            "od": tr["od"], "tie": tr["tie"],
+            "result": round(v1 - v0, 8), "pct": round((v1 - v0) / v0 * 100, 4) if v0 > 0 else 0.0, "v0": round(v0, 8), "v1": round(v1, 8),
             "q0": quote0, "b0": base0, "q1": round(q1, 8), "b1": round(b1, 10), "p0": p0,
             "realized": round(r["realized"], 8), "coin": coin, "buys": sum(1 for f in ex.fills if f[1] == "buy"),
             "sells": sum(1 for f in ex.fills if f[1] == "sell"), "fee_usd": round(fee_usd, 8), "mdd": round(mdd, 8), "low": round(low, 8),
@@ -4440,13 +4491,24 @@ def _bt_summary(kind, r, quote0, base0, p0, dt):
             "days": round(r["i_end"] * dt / 86400.0, 2)}
 
 
-def _bt_detail(r, dt):
-    """ما تحتاجه الإعادة المتحرّكة: المسار (عيّنات) · المحفظة · الربح المحقق · الصفقات · علامات الربح"""
+def _bt_detail(r, dt, s=None):
+    """ما تحتاجه الإعادة المتحرّكة: المسار (عيّنات) · المحفظة · ربح البيع والشراء · الصفقات · علامات الربح
+    (الشبكة: دفترها خام قبل العمولة ⇒ يُضرب بنسبة الصافي إلى الخام فينتهي على رقم البطاقة نفسه ·
+     إعادة الاستثمار: المحفظة بسعر البداية لحظة بلحظة)"""
     fl = r["ex"].fills
     stp = max(1, len(fl) // 4000)
-    return {"dt": dt, "n": r["n"], "c": [[c[0], round(c[1], 12), c[2], c[3], c[4]] for c in r["curve"]],
+    curve, pops = r["curve"], r["pops"]
+    if s and s.get("od", {}).get("k") == "ri":
+        q0, b0, p0 = curve[0][2], curve[0][3], curve[0][1]
+        curve = [(c[0], c[1], c[2], c[3], round((c[2] - q0) + (c[3] - b0) * p0, 8)) for c in curve]
+        pops = []
+    elif s and s.get("od", {}).get("k") == "grid" and abs(float(r["realized"] or 0)) > 1e-12:
+        k = float(s["trade"]) / float(r["realized"])
+        curve = [(c[0], c[1], c[2], c[3], round(c[4] * k, 8)) for c in curve]
+        pops = [(i, round(v * k, 8)) for i, v in pops]
+    return {"dt": dt, "n": r["n"], "c": [[c[0], round(c[1], 12), c[2], c[3], c[4]] for c in curve],
             "f": [[int(round((f[0] - _BT_T0) / dt)), 1 if f[1] == "sell" else 0, round(f[2], 12), round(f[3], 10), round(f[4], 10), 1 if f[5] else 0]
-                  for f in fl[::stp]], "f_all": len(fl), "pops": r["pops"]}
+                  for f in fl[::stp]], "f_all": len(fl), "pops": pops}
 
 
 # ═══════════ 🧰 التحضير والتشغيل من اللوحة ═══════════
@@ -4712,8 +4774,10 @@ def bt_status(data):
     if paths:
         rs = sorted(p["sum"]["result"] for p in paths)
         pcs = sorted(p["sum"]["pct"] for p in paths)
+        ts = sorted(float(p["sum"].get("trade", p["sum"]["realized"])) for p in paths)
         agg = {"n": len(rs), "med": rs[len(rs) // 2] if len(rs) % 2 else (rs[len(rs) // 2 - 1] + rs[len(rs) // 2]) / 2, "min": rs[0], "max": rs[-1],
-               "mean": sum(rs) / len(rs), "pos": sum(1 for x in rs if x > 0), "pmed": pcs[len(pcs) // 2], "pmin": pcs[0], "pmax": pcs[-1]}
+               "mean": sum(rs) / len(rs), "pos": sum(1 for x in rs if x > 0), "pmed": pcs[len(pcs) // 2], "pmin": pcs[0], "pmax": pcs[-1],
+               "tmed": ts[len(ts) // 2] if len(ts) % 2 else (ts[len(ts) // 2 - 1] + ts[len(ts) // 2]) / 2, "tmin": ts[0], "tmax": ts[-1]}
     cfg_view = load_json(os.path.join(jd, "cfg.json"))
     return {"ok": True, "id": job.get("id"), "state": state, "err": err, "done": len(paths), "total": int(job.get("paths") or 0), "eta": eta,
             "paths": sorted(paths, key=lambda p: p["n"]), "agg": agg, "job": {k: job.get(k) for k in ("kind", "sym", "period", "mood", "paths", "seed", "p0", "quote",
@@ -4835,7 +4899,7 @@ def _bt_child(jd, k, w):
         if r["why"] == "stopped":
             break
         s = {"n": n, "seed": seed, "sum": _bt_summary(kind, r, float(job["quote"]), float(job["base"]), p0, dt)}
-        save_json_atomic(os.path.join(jd, f"p_{n}.json"), _bt_detail(r, dt))
+        save_json_atomic(os.path.join(jd, f"p_{n}.json"), _bt_detail(r, dt, s["sum"]))
         save_json_atomic(os.path.join(jd, f"s_{n}.json"), s)
     return 0
 
@@ -20542,6 +20606,10 @@ body.btopen{overflow:hidden}
 .btdet summary{cursor:pointer;font-size:13px;font-weight:600}
 .bttbl tr{cursor:pointer}.bttbl tr.on td{background:rgb(var(--cyan-rgb)/.08)}
 .btcfg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11.5px;color:var(--mut);margin-top:8px}.btcfg b{color:var(--tx);font-weight:600}
+.btov .bttrd{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;margin:2px 0 10px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;font-size:12px;color:var(--mut)}
+.btov .bttrd>span:first-child{color:var(--tx);font-weight:700;flex-basis:100%}
+.btov .btopen{margin:-2px 0 6px;font-size:11.5px;color:var(--mut2);line-height:1.7}
+.btov .btsum b{white-space:nowrap}
 .btov .g{color:var(--green)}.btov .r{color:var(--red)}
 .btpl{position:relative;margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:16px;background:var(--glass)}
 .btplh{display:flex;align-items:baseline;gap:8px;margin-bottom:8px;font-size:14px}.btplh small{color:var(--mut2)}
@@ -22828,6 +22896,14 @@ function btN(v,d=2){v=+v||0;return (v<0?'−':'')+Math.abs(v).toFixed(d)}
 function btS(v,d=2){v=+v||0;return (v>=0?'+':'−')+Math.abs(v).toFixed(d)}
 function btQ(v){v=+v||0;const a=Math.abs(v);return a>=1000?v.toFixed(2):a>=1?v.toFixed(4):v.toPrecision(5)}
 function btP(v){v=+v||0;const a=Math.abs(v);return a>=100?v.toFixed(2):a>=1?v.toFixed(4):v.toPrecision(5)}
+function btTr(m){return m.trade!=null?+m.trade:(m.coin?(+m.realized||0)*(+m.p0||0):+m.realized||0)}                    // 💰 ربح البيع والشراء (مهام قديمة: الدفتر)
+function btTrTxt(m,B){return (m.coin&&m.trade_coin!=null?btS(m.trade_coin,6)+' '+gEsc(B)+' ≈ ':'')+btS(btTr(m))+'$'}
+function btOpenTxt(m,B){const o=m.od||{},q=+o.q||0,Bn=gEsc(B);                                                       // 📦 ما بقي مفتوحاً عند النهاية — بالفصحى
+  if(o.k==='ri')return 'الربح بقي عملاتٍ داخل البوت (إعادة الاستثمار) — فكلّه داخل ربح البيع والشراء';
+  if(o.k==='held')return q>1e-9?`${btQ(q)} ${Bn} اشتراها البوت بـ <span class="num">${btN(o.c)}$</span> ولم يبعها بعد — قيمتها بسعر البداية <span class="num">${btN(q*(+m.p0||0))}$</span>`:'لا شيء — كل ما اشتراه البوت باعه';
+  if(o.k==='sold')return q>1e-9?`باع البوت ${btQ(q)} ${Bn} بـ <span class="num">${btN(o.u)}$</span> ولم يُعِد شراءها بعد — إعادة شرائها بسعر البداية تكلّف <span class="num">${btN(q*(+m.p0||0))}$</span>`:'لا شيء — كل ما باعه البوت أعاد شراءه';
+  if(o.k==='grid')return Math.abs(q)>1e-9?`${q>0?'معه':'عنده أقل بـ'} ${btQ(Math.abs(q))} ${Bn} ${q>0?'زيادة عن البداية (درجات اشتراها ولم يبعها بعد)':'عن البداية (درجات باعها ولم يُعِد شراءها بعد)'} وكسور العمولة`:'العملات نفسها التي بدأ بها';
+  return ''}
 function btT(s){s=Math.max(0,Math.round(+s||0));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
 function btFromForm(kind){                                    // من نموذج النشر — الإعدادات نفسها التي سيُنشر بها
   const fb={rec_va:window.vaFormBody,rec:window.recFormBody,dca:window.dcaFormBody,grid:window.gridFormBody}[kind];
@@ -22912,11 +22988,12 @@ function btResults(s){const el=$('#bt_res');if(!el||!s.paths.length||(s.job&&BT.
       <div><span>الأسوأ</span><b class="${A.min>=0?'g':'r'} num">${btS(A.min)}$</b><small class="num">${btS(A.pmin)}%</small></div>
       <div><span>الأفضل</span><b class="${A.max>=0?'g':'r'} num">${btS(A.max)}$</b><small class="num">${btS(A.pmax)}%</small></div>
       <div><span>رابح في</span><b class="num">${A.pos} / ${A.n}</b><small>مسار</small></div></div>
+     ${A.tmed!=null?`<div class="bttrd"><span>💰 ربح البيع والشراء (صافي العمولة)</span><span>الوسيط <b class="num ${A.tmed>=0?'g':'r'}">${btS(A.tmed)}$</b></span><span>الأسوأ <b class="num ${A.tmin>=0?'g':'r'}">${btS(A.tmin)}$</b></span><span>الأفضل <b class="num ${A.tmax>=0?'g':'r'}">${btS(A.tmax)}$</b></span></div>`:''}
      <div class="btbars">${s.paths.map(p=>`<button class="${p.n===BT.sel?'on ':''}${p.sum.result>=0?'g':'r'}" onclick="btPick(${p.n})" title="المسار ${p.n+1}: ${btS(p.sum.result)}$"><i style="height:${Math.max(4,Math.round(Math.abs(p.sum.result)/mx*100))}%"></i></button>`).join('')}</div>
      <small class="btnote">اضغط عموداً لتشاهد مساره يتحرّك.</small></div>`}
   h+=`<div id="bt_pl"></div>`;
-  h+=`<details class="btdet"><summary>🧮 أرقام كل المسارات</summary><div class="tblwrap"><table class="dntbl bttbl"><thead><tr><th>المسار</th><th>النتيجة</th><th>%</th><th>شراء · بيع</th><th>الربح المحقق</th><th>العمولات</th><th>أسوأ هبوط للمحفظة</th></tr></thead><tbody>
-   ${s.paths.map(p=>{const m=p.sum;return `<tr class="${p.n===BT.sel?'on':''}" onclick="btPick(${p.n})"><td class="num">${p.n+1} <small>#${p.seed}</small></td><td class="num ${m.result>=0?'g':'r'}">${btS(m.result)}$</td><td class="num">${btS(m.pct)}%</td><td class="num">${m.buys} · ${m.sells}</td><td class="num">${m.coin?btS(m.realized,6)+' '+gEsc(B):btS(m.realized)+'$'}</td><td class="num">${btN(m.fee_usd)}$</td><td class="num">${btN(m.mdd)}$</td></tr>`}).join('')}</tbody></table></div></details>`;
+  h+=`<details class="btdet"><summary>🧮 أرقام كل المسارات</summary><div class="tblwrap"><table class="dntbl bttbl"><thead><tr><th>المسار</th><th>النتيجة</th><th>%</th><th>شراء · بيع</th><th>ربح البيع والشراء</th><th>المفتوح عند النهاية</th><th>العمولات</th><th>أسوأ هبوط للمحفظة</th></tr></thead><tbody>
+   ${s.paths.map(p=>{const m=p.sum;return `<tr class="${p.n===BT.sel?'on':''}" onclick="btPick(${p.n})"><td class="num">${p.n+1} <small>#${p.seed}</small></td><td class="num ${m.result>=0?'g':'r'}">${btS(m.result)}$</td><td class="num">${btS(m.pct)}%</td><td class="num">${m.buys} · ${m.sells}</td><td class="num ${btTr(m)>=0?'g':'r'}">${btTrTxt(m,B)}</td><td class="num">${m.open_usd!=null?btS(m.open_usd)+'$':'—'}</td><td class="num">${btN(m.fee_usd)}$</td><td class="num">${btN(m.mdd)}$</td></tr>`}).join('')}</tbody></table></div></details>`;
   if(s.cfg)h+=`<details class="btdet"><summary>⚙️ الإعدادات التي اختُبرت (كما يكتبها النشر نفسه)</summary><div class="btcfg num">${Object.entries(s.cfg).map(([k,v])=>`<span>${gEsc(k)}: <b>${gEsc(typeof v==='object'?JSON.stringify(v):v)}</b></span>`).join('')}</div></details>`;
   const keep=$('#bt_pl')&&BT.pl&&BT.pl.n===BT.sel?$('#bt_pl'):null;
   if(keep){const tmp=document.createElement('div');tmp.innerHTML=h;tmp.querySelector('#bt_pl').replaceWith(keep);el.innerHTML='';while(tmp.firstChild)el.appendChild(tmp.firstChild)}
@@ -22944,7 +23021,7 @@ function btPlayer(el,d,s){
      <div class="btwal"><span>💼 المحفظة الآن</span><b class="num" id="bt_v">—</b><em class="num" id="bt_dv">—</em><div class="btpops" id="bt_pops"></div></div>
      <div class="btrw"><span>💵 دولار</span><b class="num" id="bt_q1">—</b></div>
      <div class="btrw"><span>🪙 ${gEsc(B)}</span><b class="num" id="bt_b1">—</b></div>
-     <div class="btrw"><span>💎 الربح المحقق</span><b class="num" id="bt_pr">—</b></div>
+     <div class="btrw"><span>💰 ربح البيع والشراء</span><b class="num" id="bt_pr">—</b></div>
      <div class="btrw"><span>🛒 شراء · 💰 بيع</span><b class="num" id="bt_tr">—</b></div>
      <div class="btcv btcv2"><canvas id="btc2"></canvas><div class="btct">💼 قيمة المحفظة</div></div>
     </div>
@@ -22961,7 +23038,7 @@ function btPlayer(el,d,s){
   if(S.rej_px)notes.push(`⚠️ رفضت المنصة سعر أو كمية أمر <span class="num">${S.rej_px}</span> مرة («Parameter px/sz error»)`);
   if(S.open)notes.push(`📌 بقي <span class="num">${S.open}</span> أمر معلّق على المنصة عند النهاية (أموالها محسوبة في المحفظة)`);
   if(!S.buys&&!S.sells)notes.push('ℹ️ لم يتداول البوت في هذا المسار — السعر لم يصل إلى شروطه');
-  if(S.ri)notes.push('💠 إعادة الاستثمار مفعّلة: الربح يبقى داخل البوت ويكبّر أوامره — لذلك يظهر في المحفظة لا في «الربح المحقق»');
+  if(S.ri)notes.push('💠 إعادة الاستثمار مفعّلة: الربح يبقى داخل البوت عملاتٍ تكبّر أوامره — فربح البيع والشراء هنا هو فرق المحفظة بسعر البداية');
   $('#bt_why').innerHTML=notes.map(x=>`<p class="btnote">${x}</p>`).join('');
   const c1=$('#btc1'),c2=$('#btc2'),x1=c1.getContext('2d'),x2=c2.getContext('2d');
   const pmin=Math.min(...C.map(c=>c[1])),pmax=Math.max(...C.map(c=>c[1])),vmin=Math.min(...V,S.v0),vmax=Math.max(...V,S.v0);
@@ -23003,7 +23080,10 @@ function btPlayer(el,d,s){
     E.innerHTML=`<div class="btendc"><h3>🏁 نهاية ${per[0]} — السعر عاد إلى <span class="num">${btP(S.p0)}</span></h3>
      <div class="btaggr"><div><span>بدأت المحفظة</span><b class="num">${btN(S.v0)}$</b></div><div><span>انتهت</span><b class="num">${btN(S.v1)}$</b></div>
       <div><span>الفرق = ما صنعه البوت</span><b class="num ${S.result>=0?'g':'r'}">${btS(S.result)}$</b><small class="num">${btS(S.pct)}%</small></div>
-      <div><span>منه ربح محقق</span><b class="num">${coin?btS(S.realized,6)+' '+gEsc(B):btS(S.realized)+'$'}</b></div></div>
+      <div><span>💰 ربح البيع والشراء</span><b class="num ${btTr(S)>=0?'g':'r'}">${btTrTxt(S,B)}</b><small>صفقات اكتملت · صافي العمولة</small></div></div>
+     ${S.open_usd!=null?`<div class="btendl"><span>📦 مفتوح عند النهاية (بسعر البداية)</span><b class="num ${S.open_usd>=0?'g':'r'}">${btS(S.open_usd)}$</b></div>
+     <p class="btopen">${btOpenTxt(S,B)}</p>
+     <div class="btendl btsum"><span>🧮 ربح البيع والشراء + المفتوح = الفرق في المحفظة</span><b class="num">${btS(btTr(S))} ${S.open_usd>=0?'+':'−'} ${Math.abs(S.open_usd).toFixed(2)} = ${btS(S.result)}$</b></div>`:''}
      <div class="btendl"><span>🛒 شراء · 💰 بيع</span><b class="num">${S.buys} · ${S.sells}</b></div>
      <div class="btendl"><span>🧾 العمولات المدفوعة</span><b class="num">${btN(S.fee_usd)}$</b></div>
      <div class="btendl"><span>📉 أسوأ هبوط للمحفظة · أقل قيمة</span><b class="num">${btN(S.mdd)}$ · ${btN(S.low)}$</b></div>
