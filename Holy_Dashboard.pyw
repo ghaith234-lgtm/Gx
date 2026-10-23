@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.0"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.1"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -4361,7 +4361,7 @@ def _bt_run(kind, cfg, sym, px, dt, quote, base, spec, maker=0.0008, taker=0.001
             except Exception:
                 return S["pr"]
 
-        def on_point(i):
+        def _pop_check(i):
             if len(ex.fills) != S["nf"]:
                 sold = any(x[1] == "sell" for x in ex.fills[S["nf"]:])
                 S["nf"] = len(ex.fills)
@@ -4370,6 +4370,9 @@ def _bt_run(kind, cfg, sym, px, dt, quote, base, spec, maker=0.0008, taker=0.001
                     if sold or p1 < S["pr"]:
                         pops.append((i, round(p1 - S["pr"], 8)))
                     S["pr"] = p1
+
+        def on_point(i):
+            _pop_check(i)
             if i % every == 0 or i == n:
                 curve.append((i, ex.p, round(ex.bal[ex.quote], 8), round(ex.bal[ex.base], 10), round(S["pr"], 8)))
 
@@ -4395,8 +4398,12 @@ def _bt_run(kind, cfg, sym, px, dt, quote, base, spec, maker=0.0008, taker=0.001
                 st = json.load(f) or {}
         except Exception:
             pass
-        if curve[-1][0] != clock.i:
-            curve.append((clock.i, ex.p, round(ex.bal[ex.quote], 8), round(ex.bal[ex.base], 10), round(float(st.get(pk) or S["pr"]), 8)))
+        _pop_check(clock.i)
+        fin = (clock.i, ex.p, round(ex.bal[ex.quote], 8), round(ex.bal[ex.base], 10), round(float(st.get(pk) or S["pr"]), 8))
+        if curve[-1][0] == clock.i:
+            curve[-1] = fin                       # آخر لحظة: ما فعله المحرك بعد وصول السعر لنقطة النهاية يدخل في الحالة الأخيرة (= بطاقة النهاية)
+        else:
+            curve.append(fin)
         return {"why": why, "secs": round(time.time() - w0, 2), "n": n, "i_end": clock.i, "ex": ex, "curve": curve, "pops": pops,
                 "state": st, "pkey": pk, "realized": float(st.get(pk) or 0)}
     finally:
