@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.35.1"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.35.2"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -3020,7 +3020,7 @@ def _rec_notify(b, st):
         _safe(save_json_atomic, REC_TG_FILE, d, default=None)
 
 
-# ═══════════ 🛤️ v3.34.0: بوت «مسار القيمة» (Value Averaging) — فرد من عائلة الدوري بالجدول (ربحه دولار) · 📉📈 v3.35.0: بالنسبة + 📋 الجدول · 👆 v3.35.1: البيع من أي مستوى ═══════════
+# ═══════════ 🛤️ v3.34.0: بوت «مسار القيمة» (Value Averaging) — فرد من عائلة الدوري بالجدول (ربحه دولار) · 📉📈 v3.35.0: بالنسبة + 📋 الجدول · 👆 v3.35.1: البيع من أي مستوى · 🗑 v3.35.2: الحذف يخيّرك (بيع العملات أو إبقاؤها) ═══════════
 #   المحرك (vpath.py) يتداول وحده؛ اللوحة تقرأ حالته (rec_state_) وتكتب حقول طلب فقط — لا أمر يخرج من اللوحة نفسها.
 #   القاعدة: هدف لقيمة العملة التي يحملها البوت (يبدأ بمبلغ ويكبر مبلغاً كل خطوة — أو ثابت) · الفرق يُشترى أو يُباع.
 #   المركز سطر «P» بقائمة الأوامر (كلفة العملة المحمولة) · كل بيعة بسجل الدورات بربحها المحقق (موجب أو سالب)
@@ -3335,7 +3335,8 @@ def _va_snapshot(b, st):
     except Exception:
         anchor = 0.0
     dd = _va_p(cfg, st, "drop_pct", 5.0)
-    return {"kind": "va", "base": base, "cp": cp, "side": "buy", "mode": "avg",
+    _drel, _dit = _va_del_of(b)
+    return {"kind": "va", "base": base, "cp": cp, "side": "buy", "mode": "avg", "del_pending": bool(_dit),
             "trigger": "price" if pm else "time", "drop_pct": dd, "rise_pct": _va_p(cfg, st, "rise_pct", dd), "anchor": anchor, "lvl": lvl, "plan": plan,
             "start": _va_p(cfg, st, "start_usd"), "step": _va_p(cfg, st, "step_usd"), "every": int(float(cfg.get("every") or 1)),
             "per": cfg.get("unit") or "d", "at": cfg.get("at") or "", "band": _va_p(cfg, st, "band_pct", 2.0),
@@ -3355,6 +3356,87 @@ def _va_snapshot(b, st):
             "fee_rate": round(F * 100, 4), "pending": bool(pdx), "unsure": bool(pdx and not pdx.get("oid")),
             "rq": {"now": bool(st.get("rq_now")), "exit": bool(st.get("rq_exit"))},
             "last": ({k: lc.get(k) for k in ("n", "ts", "profit", "manual", "px", "out", "in")} if lc else None)}
+
+
+VA_DEL_FILE = os.path.join(ROOT, "Holy_VaDelete.json")
+_VA_DEL = {"d": None}
+_VA_DEL_LOCK = threading.Lock()
+_VA_DEL_RUN = set()
+
+
+def _va_del_all():
+    """🗑 v3.35.2: «بع العملات ثم احذف» المعلّقة {مجلد البوت: {ts, bot_id, sym}} — بملف اللوحة (المحرك لا يكتب عليه)"""
+    with _VA_DEL_LOCK:
+        if _VA_DEL["d"] is None:
+            d = load_json(VA_DEL_FILE)
+            _VA_DEL["d"] = d if isinstance(d, dict) else {}
+        return dict(_VA_DEL["d"])
+
+
+def _va_del_set(rel, item):
+    _va_del_all()
+    with _VA_DEL_LOCK:
+        if item is None:
+            _VA_DEL["d"].pop(rel, None)
+        else:
+            _VA_DEL["d"][rel] = item
+        try:
+            save_json_atomic(VA_DEL_FILE, _VA_DEL["d"])
+        except Exception:
+            pass
+
+
+def _va_del_of(b):
+    """الطلب المعلّق لهذا البوت بالذات (نفس المجلد **ونفس المعرّف** — بوت جديد بنفس اسم المجلد لا يُحذف بالغلط)"""
+    rel = os.path.relpath(b["dir"], ROOT)
+    it = _va_del_all().get(rel)
+    if it and str(it.get("bot_id") or "") != str((b.get("cfg") or {}).get("bot_id") or ""):
+        _va_del_set(rel, None)
+        return rel, None
+    return rel, it
+
+
+def _va_del_abort(b, rel, why):
+    """البيع لم يكتمل ⇒ لا حذف: الطلب يُلغى (ولا يبقى «بيع الكل» معلّقاً يتنفّذ لاحقاً بالغلط) · إشعار واضح"""
+    _va_del_set(rel, None)
+    sp = paths_of(b)[0]
+    st = load_json(sp) or {}
+    if st.get("rq_exit"):
+        save_state_keys(sp, {"rq_exit": None})
+    base = str(b["symbol"]).split("-")[0]
+    journal("bot", f"⚠️ لم يُحذف بوت مسار القيمة: {why}", lv="warn", bot=os.path.basename(b["dir"]), sym=b["symbol"])
+    tg_send(f"⚠️ *لم يُحذف بوت مسار القيمة — `{b['symbol']}`*\n{why}\nالبوت والعملات ({base}) باقية كما هي — أعد المحاولة من 🗑")
+
+
+def _va_del_do(b, rel):
+    try:
+        res = delete_purge(b)
+        journal("bot", "🗑 بيعت عملات بوت مسار القيمة ثم حُذف البوت" + ("" if res.get("ok") else f" — تعذّر النقل: {res.get('msg')}"),
+                lv="info" if res.get("ok") else "warn", bot=os.path.basename(b["dir"]), sym=b["symbol"])
+    finally:
+        _va_del_set(rel, None)
+        _VA_DEL_RUN.discard(rel)
+
+
+def _va_del_tick(b, st):
+    """🗑 من حلقة الإشعارات (كل بضع ثوانٍ): بعد ما يحسم المحرك «بيع الكل» يُحذف البوت — أو يُلغى الحذف لو بقيت عملة"""
+    rel, it = _va_del_of(b)
+    if not it or rel in _VA_DEL_RUN:
+        return
+    st = load_json(paths_of(b)[0]) or st                   # قراءة طازجة: الطلب يُكتب بعد «بيع الكل» ⇒ لا تُقرأ حالة قديمة سبقت الضغطة
+    age = time.time() - float(it.get("ts") or 0)
+    if st.get("rq_exit") or st.get("pending"):              # البيع لم يُحسم بعد
+        if age > 900:
+            _va_del_abort(b, rel, "لم يتم البيع خلال 15 دقيقة (الشبكة أو المنصة)")
+        return
+    Q, _C = _va_pos(st)
+    cp = float(PX.get(b["symbol"]) or st.get("px") or 0)
+    mn = float((((_INST_CACHE.get(b["symbol"]) or {}).get("v")) or {}).get("minSz") or 0)
+    if Q > 0 and not ((cp > 0 and Q * cp < 1.0) or (mn > 0 and Q < mn)):
+        _va_del_abort(b, rel, f"بقيت {Q:.8g} {str(b['symbol']).split('-')[0]} لم تُبع (أمر البيع لم يُنفَّذ بالمنصة)")
+        return
+    _VA_DEL_RUN.add(rel)
+    threading.Thread(target=_va_del_do, args=(b, rel), daemon=True).start()
 
 
 def _va_control(b, sp, action, value):
@@ -3399,6 +3481,27 @@ def _va_control(b, sp, action, value):
         if not save_state_keys(sp, upd):
             return busy
         return {"ok": True, "msg": "✅ حُفظت الإعدادات — يطبّقها البوت من الخطوة القادمة: " + _va_cfg_txt(cfg, dict(st, **upd))}
+    if action == "va_exit_delete":                            # 🗑 v3.35.2: «بع العملات ثم احذف البوت» — البيع ينفّذه المحرك نفسه (لا أمر من اللوحة)
+        if st.get("rq_exit"):
+            return {"ok": False, "msg": "⏳ طلب بيع الكل السابق لم يُنفَّذ بعد — ثوانٍ"}
+        if st.get("pending"):
+            return {"ok": False, "msg": "⏳ هناك أمر بالطريق — انتظر ثوانٍ ثم أعد"}
+        if _va_pos(st)[0] <= 0:
+            return {"ok": False, "msg": "لا عملة يحملها البوت — احذفه مباشرة"}
+        rel = os.path.relpath(b["dir"], ROOT)
+        if not save_state_keys(sp, {"rq_exit": time.time()}):
+            return busy
+        _va_del_set(rel, {"ts": time.time(), "bot_id": str(cfg.get("bot_id") or ""), "sym": b["symbol"]})
+        started = ""
+        if not alive:
+            ok, msg = launch(b)
+            if not ok:
+                _va_del_set(rel, None)
+                save_state_keys(sp, {"rq_exit": None})
+                return {"ok": False, "msg": "تعذّر تشغيل البوت للبيع: " + str(msg)}
+            started = " (شُغّل البوت للبيع فقط)"
+        journal("bot", "🗑 طلب: بيع عملات بوت مسار القيمة ثم حذفه" + started, bot=os.path.basename(b["dir"]), sym=b["symbol"])
+        return {"ok": True, "msg": "💰 يبيع البوت عملاته الآن بسعر السوق" + started + " — وبعد تأكيد البيع من المنصة يُحذف البوت تلقائياً ويصلك إشعار"}
     if not alive:
         return {"ok": False, "msg": "البوت متوقف — شغّله أولاً (الطلب ينفّذه المحرك نفسه)"}
     if action == "va_now":
@@ -17593,6 +17696,8 @@ def notifier_loop():
                 prev = TG_LAST.setdefault(b["dir"], {"ab": 0, "as": 0, "log": "", "tp": None})
                 if b["cfg"].get("bot_type") in _REC_T:    # 🔁 v3.25.0: الدوري — من أحداث حالته (مؤشر محفوظ بملف ⇒ إعادة تشغيل اللوحة ما تعيد القديم)
                     _safe(_rec_notify, b, st, default=None)
+                    if b["cfg"].get("bot_type") == "rec_va":
+                        _safe(_va_del_tick, b, st, default=None)    # 🗑 v3.35.2: «بع العملات ثم احذف» — بعد إشعار البيعة نفسها
                     continue
                 # 📉 إشعار DCA: عند إغلاق دورة (ربح بالعملة)
                 if b["cfg"].get("bot_type") in ("dca", "dca_buy"):
@@ -19264,6 +19369,12 @@ body.boot .card{animation:rise .6s var(--ease) both;animation-delay:calc(var(--i
 .vaplat{background:rgb(var(--amber-rgb)/.07)}
 .vaplback{font-size:11px;padding:3px 8px;margin-inline-start:6px;border-radius:8px;vertical-align:middle}
 .vapltbl small{color:var(--mut2);font-size:10px}
+.vadel{display:flex;flex-direction:column;gap:6px;line-height:1.8;font-size:13px;background:rgb(var(--cyan-rgb)/.06);border-radius:10px;padding:10px 12px}
+.vadel small{color:var(--mut2);font-size:11px}
+.vadelnote{font-size:12px;color:var(--amber);margin:8px 0 0}
+.vadelbtns{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.vadelbtns button{text-align:center;padding:10px 12px;line-height:1.5}
+.vadelbtns button small{display:block;font-size:11px;opacity:.85;margin-top:2px}
 .card.rec .dcafill.hot{background:linear-gradient(90deg,var(--amber),var(--red));box-shadow:0 0 8px rgb(var(--red-rgb)/.4)}
 .card.rec .dcafill{background:linear-gradient(90deg,var(--cyan),var(--vio));box-shadow:0 0 8px rgb(var(--cyan-rgb)/.35)}
 /* 🃏 v3.26.8: كل الكروت بنفس النمط واللون — نفس الخلفية والحافة · نفس شارة النوع · نفس المربعات · نفس الحشوة */
@@ -21106,7 +21217,7 @@ function recRange(b){
 function recPause(b){const r=b.rec||{};ctl(b.dir,r.paused?'rec_resume':'rec_pause');if(b.rec)b.rec.paused=!r.paused}
 const BT_LBL={grid:'♾️ لانهائية',grid_range:'🎚️ مدى',grid_plus:'➕ بلس',dca:'📉 DCA بيعي',dca_buy:'📈 DCA شرائي',rec_buy:'دوري شرائي',rec_sell:'دوري بيعي',rec_va:'🛤️ مسار القيمة'};
 function recHist(b){return botHist(b)}
-/* ═══ 🛤️ v3.34.0: بوت «مسار القيمة» — كرت · رسم الهدف مقابل القيمة · خطوة الآن · إيقاف · بيع الكل · الإعدادات الحية · النشر · 📉📈 v3.35.0: بالنسبة + 📋 الجدول · 👆 v3.35.1: البيع من أي مستوى ═══ */
+/* ═══ 🛤️ v3.34.0: بوت «مسار القيمة» — كرت · رسم الهدف مقابل القيمة · خطوة الآن · إيقاف · بيع الكل · الإعدادات الحية · النشر · 📉📈 v3.35.0: بالنسبة + 📋 الجدول · 👆 v3.35.1: البيع من أي مستوى · 🗑 v3.35.2: الحذف يخيّرك ═══ */
 const VA_DEF={fixed:{start:100,step:0,every:4,unit:'h',band:8,max_order:60,cap:400,floor:true,brake:0},
               grow:{start:10,step:10,every:7,unit:'d',band:4,max_order:30,cap:300,floor:true,brake:0}};
 const VA_DEFP={fixed:{start:100,step:0,drop:8,rise:12,max_order:100,cap:400,floor:true,brake:0},          // 📉📈 بالنسبة (من القياس — الجولة 3)
@@ -21258,7 +21369,7 @@ function buildVaCard(b,i){
   R.plan.onclick=()=>vaPlanModal(cur());
   R.chart.onclick=()=>toggleChart(el,b);
   R.pw.onclick=()=>vaPower(cur(),el._alive);
-  R.del.onclick=()=>confirmPurge(b.dir);
+  R.del.onclick=()=>vaDelete(cur());
   return el;
 }
 function updVaCard(el,b){
@@ -21292,6 +21403,7 @@ function updVaCard(el,b){
   if((+r.cap||0)>0&&(+r.c||0)>=(+r.cap)-1&&r.hint==='buy')h='🛡️ الميزانية ممتلئة — لن يشتري والهدف ينتظر';
   R.hint.innerHTML=(r.paused?'⏸ المسار موقوف — ':'')+h+(vaPm(r)?` <small>(الهدف ${vaD(r.next_tgt)}$ · قيمة العملة ${vaD(val)}$)</small>`:` <small>(الفرق <span dir="ltr">${vaS(gap)}$</span> · النطاق ±${vaD(r.band_usd)}$)</small>`);
   if(window._vaPlanDir===b.dir)vaPlanLive();
+  if(r.del_pending)R.hint.innerHTML='🗑 يبيع البوت عملاته ثم يُحذف تلقائياً بعد تأكيد البيع…';
   R.hint.className='vahint '+(r.hint||'');
   const cap=+r.cap||0,pc=+r.cap_pct||0;
   R.capt.innerHTML=cap>0?`<span dir="ltr">${vaD(r.c)} / ${vaD(cap,0)}$</span> · ${pc.toFixed(0)}%`:'بلا حد';
@@ -21320,6 +21432,29 @@ function vaPause(b){const r=b.rec||{};ctl(b.dir,r.paused?'va_resume':'va_pause')
 function vaNow(b){
   const r=b.rec||{};if(!b.alive){toast('البوت متوقف — شغّله أولاً',false);return}
   askConfirm('⏩ خطوة الآن — '+b.symbol+'؟',vaPm(r)?`يقارن هدف المستوى الحالي (<b dir="ltr">${vaD(r.next_tgt)}$</b>) بقيمة العملة الآن ويشتري الفرق أو يبيع الفائض (فوق الكلفة) بسعر السوق — وتبدأ الشبكة من السعر الحالي.`:`يقارن الهدف القادم (<b dir="ltr">${vaD(r.next_tgt)}$</b>) بقيمة العملة الآن ويشتري الفرق أو يبيع الفائض بسعر السوق — وتُحسب خطوةً من المسار (الهدف يتقدّم). الموعد القادم لا يتغيّر.`,()=>ctl(b.dir,'va_now'))}
+function vaDelete(b){                                              // 🗑 v3.35.2: الحذف يسألك — تبيع العملات التي اشتراها البوت أم تبقيها
+  const r=b.rec||{},q=+r.q||0,cp=+r.cp||(window.JPX&&JPX[b.symbol])||0,val=q*cp,base=r.base||b.symbol.split('-')[0];
+  if(r.del_pending){toast('⏳ البوت يبيع عملاته الآن وسيُحذف بعد تأكيد البيع',false);return}
+  if(!(q>0)||val<1){
+    askConfirm('🗑 حذف بوت مسار القيمة — '+b.symbol+'؟',(q>0?`يحمل البوت كسوراً صغيرة فقط (<b dir="ltr">${recC(q)} ${gEsc(base)}</b> ≈ <b dir="ltr">${vaD(val)}$</b>) أصغر من أقل أمر — تبقى في محفظتك.<br>`:'لا عملة يحملها البوت.<br>')
+      +'يتوقف البوت ويُؤرشف مجلده — أرباحه المحققة تبقى في الدفاتر والتقارير.',()=>{ctl(b.dir,'delete_purge');closeDrawer()});return}
+  const un=+r.unreal||0,pr=+r.profit||0,tot=pr+un,loss=un<0,col=v=>v>=0?'var(--green)':'var(--red)';
+  showModal(`<h2 style="color:var(--cyan)">🗑 حذف بوت مسار القيمة — ${gEsc(b.symbol)}</h2>
+    <p style="font-size:13px;color:var(--mut);line-height:1.8;margin:0 0 10px">قبل الحذف: ماذا تريد أن تفعل بالعملة التي اشتراها البوت؟</p>
+    <div class="vadel">
+      <div>🪙 يحمل البوت: <b dir="ltr">${recC(q)} ${gEsc(base)}</b> · كلفتها <b dir="ltr">${vaD(r.c)}$</b> · قيمتها الآن <b dir="ltr">${vaD(val)}$</b></div>
+      <div>💎 الربح المحقق حتى الآن: <b dir="ltr" style="color:${col(pr)}">${vaS(pr)}$</b></div>
+      <div>${loss?'📉':'📈'} لو بعتها الآن: <b dir="ltr" style="color:${col(un)}">${vaS(un)}$</b> <small>صافٍ بعد عمولة البيع</small></div>
+      <div>📊 النتيجة الكلية للبوت لو بعت: <b dir="ltr" style="color:${col(tot)}">${vaS(tot)}$</b></div>
+    </div>
+    ${b.alive?'':'<p class="vadelnote">⏻ البوت متوقف — يُشغَّل لحظة البيع فقط ثم يُحذف.</p>'}
+    <div class="vadelbtns">
+      <button type="button" id="vd_sell" class="${loss?'danger':'primary'}" onclick="vaDelSell('${gEsc(b.dir)}')">💰 بع العملات ثم احذف البوت<small>${loss?`بيع بخسارة <span dir="ltr">${vaS(un)}$</span> — تُسجَّل في 📉 الخسائر`:'بسعر السوق — والربح يُسجَّل في الدفاتر'}</small></button>
+      <button type="button" id="vd_keep" onclick="vaDelKeep('${gEsc(b.dir)}')">🪙 احذف وأبقِ العملات في محفظتي<small>تبقى <span dir="ltr">${recC(q)} ${gEsc(base)}</span> عندك — لا ربح ولا خسارة تُسجَّل حتى تبيعها أنت</small></button>
+      <button type="button" onclick="hideModal()">إلغاء</button>
+    </div>`)}
+function vaDelSell(d){hideModal();ctl(d,'va_exit_delete');closeDrawer()}
+function vaDelKeep(d){hideModal();ctl(d,'delete_purge');closeDrawer()}
 function vaExit(b){
   const r=b.rec||{};if(!b.alive){toast('البوت متوقف — شغّله أولاً',false);return}
   const unreal=(+r.q||0)*(+r.cp||0)*(1-(+r.fee_rate||0.1)/100)-(+r.c||0);
@@ -24661,7 +24796,7 @@ function confirmStartAll(){askConfirm('▶️ تشغيل كل البوتات؟',
 function confirmShutdown(){askConfirm('⏻ إطفاء كل البوتات؟','توقف كل البوتات وتوصلك خلاصة تيليغرام. اللوحة والحارس يظلون شغالين.',()=>g('shutdown_all','noexit'))}
 function confirmResetLedger(){confirmLedgerReset()}      // 📒 v3.22.6: زر واحد آمن
 function confirmRebuild(){askConfirm('♻️ إعادة بناء '+CUR+'؟','يمسح الذاكرة ويلغي الأوامر ويرسم شبكة جديدة من سعر اليوم. مو ترقية!',()=>{ctl(CUR,'rebuild');closeDrawer()})}
-function confirmPurge(d){d=d||CUR;askConfirm('💣 حذف نهائي لـ '+d+'؟','يأمر البوت يلغي كل أوامره هو من المنصة (بصمته فقط — أوامرك اليدوية ما تنلمس)، ثم يؤرشف مجلده.',()=>{ctl(d,'delete_purge');closeDrawer()})}
+function confirmPurge(d){d=d||CUR;const _vb=botOf(d);if(_vb&&_vb.bot_type==='rec_va')return vaDelete(_vb);askConfirm('💣 حذف نهائي لـ '+d+'؟','يأمر البوت يلغي كل أوامره هو من المنصة (بصمته فقط — أوامرك اليدوية ما تنلمس)، ثم يؤرشف مجلده.',()=>{ctl(d,'delete_purge');closeDrawer()})}
 function confirmDelete(){askConfirm('🗑 حذف '+CUR+'؟','يوقف البوت وينقله للأرشيف _archive.',()=>{ctl(CUR,'delete');closeDrawer()})}
 
 async function openDeployDca(){
