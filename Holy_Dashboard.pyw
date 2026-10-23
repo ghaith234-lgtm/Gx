@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.35.2"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.0"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -3710,6 +3710,1128 @@ def va_plan_api(data):
     r = va_plan(cfg, None, px if px > 0 else 1.0, down=80, up=15, mn=mn, lot=lot, at=at)
     r["px_known"] = px > 0
     return r
+
+# ═══════════ 🧪 v3.36.0: الاختبار على مسار تجريبي — محرك البوت نفسه (المدمج هنا، بلا أي تعديل) داخل صندوق مغلق ═══════════
+#   منصة تجريبية تعيد مساراً عشوائياً واقعياً للسعر يبدأ وينتهي عند السعر نفسه ⇒ كل فرق بالمحفظة هو ما صنعه البوت ·
+#   ساعة افتراضية · مفاتيح وهمية · بلا شبكة أصلاً · عملية منفصلة بأولوية منخفضة · لا تلمس البوتات ولا الدفاتر ولا الإشعارات.
+#   المحرك يرى العالم الذي يراه على OKX نفسه (مكتبة okx · نقاط REST · الوقت) ⇒ أي تحديث للمحركات مستقبلاً يُختبر كما هو.
+#   الإعدادات = ما يكتبه النشر نفسه بالحرف: دالة النشر الحقيقية تُستدعى داخل العملية المنفصلة على مجلد مؤقت (بلا تشغيل ولا مفاتيح).
+import random as _bt_rnd, types as _bt_types, builtins as _bt_bi, io as _bt_io, itertools as _bt_it, tempfile as _bt_tmp
+import datetime as _bt_dtm
+import urllib.parse as _bt_up
+from decimal import Decimal as _BtD, InvalidOperation as _BtDI
+
+BT_DIR = os.path.join(ROOT, "Holy_Backtest")
+_BT_KINDS = ("grid", "grid_range", "grid_plus", "dca", "dca_buy", "rec_buy", "rec_sell", "rec_va")     # كل الأنواع عدا المُراكِم
+# تقلّب يومي نموذجي لكل عملة (الانحراف المعياري للعائد اليومي) — غيرها تأخذ «العادي»
+_BT_VOL = {"BTC": 0.028, "ETH": 0.036, "BNB": 0.030, "XRP": 0.045, "SOL": 0.050, "ADA": 0.045, "DOGE": 0.055, "TRX": 0.030, "TON": 0.045,
+           "AVAX": 0.052, "DOT": 0.045, "LINK": 0.048, "LTC": 0.040, "BCH": 0.042, "SHIB": 0.055, "PEPE": 0.070, "SUI": 0.060, "NEAR": 0.055,
+           "APT": 0.055, "ARB": 0.055, "OP": 0.055, "UNI": 0.050, "ATOM": 0.045, "FIL": 0.050, "ETC": 0.045, "OKB": 0.035, "WIF": 0.075,
+           "BONK": 0.075, "FLOKI": 0.070, "XLM": 0.045, "HBAR": 0.050, "ICP": 0.055, "AAVE": 0.050, "INJ": 0.060, "SEI": 0.065, "TIA": 0.065}
+_BT_VOL_DEF = 0.050
+_BT_MOOD = {"calm": 0.6, "normal": 1.0, "wild": 1.6}
+_BT_PER = {"week": (7, 60), "month": (30, 300), "year": (365, 3600)}       # (أيام، ثوانٍ بين نقطتي سعر) ≈ 9–10 آلاف نقطة لكل مدة
+_BT_PATHS = (1, 5, 10, 20)
+_BT_T0 = 1798761600.0                                                       # تقويم ثابت للصندوق (2027-01-01 UTC)
+_BT_JOBS = {}
+_BT_LK = threading.Lock()
+_BT_SPEC = {}
+
+
+class _BtDone(BaseException):
+    """انتهى المسار — يخرج من حلقات المحرك (ليس Exception: «except Exception» داخل المحرك لا يلتقطه)"""
+
+
+# ═══════════ 📈 المسار ═══════════
+def _bt_path(p0, days, dt, vol_day, seed):
+    """مسار عشوائي واقعي من N+1 نقطة ينتهي عند سعر بدايته بالضبط: مشي عشوائي للوغاريتم السعر بتقلّب يتنقّل بين هدوء وعاصفة
+    (لوغاريتم التقلّب يرتدّ لمتوسطه خلال ≈ 3 أيام) مع حركات مفاجئة نادرة — ثم «جسر براوني» يعيد النهاية إلى البداية (يختفي الاتجاه
+    ويبقى التذبذب). البذرة نفسها ⇒ المسار نفسه · التقلّب اليومي = تقلّب العملة في المتوسط مهما كانت المسافة بين النقاط."""
+    rnd = _bt_rnd.Random(int(seed))
+    n = max(2, int(round(days * 86400 / dt)))
+    k = dt / 86400.0
+    jr, j1, j2 = 0.12, 0.8, 2.0                     # حركة مفاجئة ≈ كل 8 أيام بحجم 0.8–2 من التقلّب اليومي
+    s0 = vol_day * math.sqrt(k / (1 + jr * (j1 * j1 + j1 * j2 + j2 * j2) / 3))
+    tau, vlv = 3.0, 0.25
+    eta = math.sqrt(2 * vlv / tau)
+    lv, x, xs = rnd.gauss(0, math.sqrt(vlv)), 0.0, [0.0]
+    pj = jr * k
+    for _ in range(n):
+        lv += -lv * (k / tau) + eta * math.sqrt(k) * rnd.gauss(0, 1)
+        e = rnd.gauss(0, 1) * s0 * math.exp(lv - vlv)
+        if rnd.random() < pj:
+            e += rnd.choice((-1.0, 1.0)) * vol_day * rnd.uniform(j1, j2)
+        x += e
+        xs.append(x)
+    end = xs[-1]
+    px = [p0 * math.exp(xs[i] - end * i / n) for i in range(n + 1)]
+    px[0] = px[n] = p0
+    return px
+
+
+# ═══════════ 🏦 المنصة التجريبية (قواعد OKX) ═══════════
+def _bt_dec(v):
+    try:
+        s = str(v).strip()
+        if not s or "e" in s.lower() or "n" in s.lower():     # OKX تقرأ الأرقام العشرية العادية فقط (1e-05 ⇒ «Parameter px error»)
+            return None
+        return _BtD(s)
+    except (_BtDI, ValueError):
+        return None
+
+
+def _bt_on(d, step):
+    try:
+        st = _BtD(repr(float(step)))
+        return st > 0 and (d / st) == (d / st).to_integral_value()
+    except Exception:
+        return False
+
+
+class _BtEx:
+    def __init__(self, sym, price, quote, base, tick, lot, minsz, maker, taker, slip):
+        self.sym = sym
+        self.base, self.quote = sym.split("-")
+        self.bal = {self.base: float(base), self.quote: float(quote)}
+        self.frz = {self.base: 0.0, self.quote: 0.0}
+        self.p = float(price)
+        self.tick, self.lot, self.minsz = float(tick), float(lot), float(minsz)
+        self.maker, self.taker, self.slip = float(maker), float(taker), float(slip)
+        self.orders, self.by_cl, self.ids = {}, {}, _bt_it.count(100001)
+        self.fills, self.rejects = [], []
+        self.fees = {self.base: 0.0, self.quote: 0.0}
+        self.lk = threading.RLock()
+        self.clock = None
+
+    def now(self):
+        return self.clock.t if self.clock else time.time()
+
+    def ask(self):
+        return math.ceil(self.p * (1 + self.slip) / self.tick - 1e-9) * self.tick
+
+    def bid(self):
+        return max(self.tick, math.floor(self.p * (1 - self.slip) / self.tick + 1e-9) * self.tick)
+
+    def _fill(self, o, px, maker):
+        q = o["sz"] - o["acc"]
+        if q <= 0:
+            return
+        rate = self.maker if maker else self.taker
+        if o["side"] == "buy":
+            if o.get("rest"):
+                self.frz[self.quote] -= q * o["px"]
+            self.bal[self.quote] -= q * px
+            fee = q * rate
+            self.bal[self.base] += q - fee
+            o["feeCcy"] = self.base
+            self.fees[self.base] += fee
+        else:
+            if o.get("rest"):
+                self.frz[self.base] -= q
+            self.bal[self.base] -= q
+            fee = q * px * rate
+            self.bal[self.quote] += q * px - fee
+            o["feeCcy"] = self.quote
+            self.fees[self.quote] += fee
+        o["fee"] -= fee
+        o["avg"] = (o["avg"] * o["acc"] + px * q) / (o["acc"] + q)
+        o["acc"] += q
+        o["state"] = "filled"
+        o["uTime"] = self.now()
+        self.fills.append((self.now(), o["side"], px, q, fee, bool(maker)))
+
+    def set_price(self, p):
+        with self.lk:
+            self.p = float(p)
+            for o in list(self.orders.values()):
+                if o["state"] != "live" or not o.get("rest"):
+                    continue
+                if o["side"] == "buy" and self.p < o["px"] - 1e-15:          # السعر عبر الأمر (لا يكفي أن يلمسه)
+                    self._fill(o, o["px"], True)
+                elif o["side"] == "sell" and self.p > o["px"] + 1e-15:
+                    self._fill(o, o["px"], True)
+
+    def avail(self, c):
+        return self.bal.get(c, 0.0) - self.frz.get(c, 0.0)
+
+    def _rej(self, sc, msg):
+        self.rejects.append((self.now(), sc))
+        return {"code": "1", "msg": "", "data": [{"sCode": sc, "sMsg": msg, "ordId": "", "clOrdId": ""}]}
+
+    def place(self, side, ordType, sz, px=None, cl="", tgt=None):
+        with self.lk:
+            side = str(side)
+            if cl and cl in self.by_cl:
+                return self._rej("51016", "Duplicated clOrdId")
+            ds = _bt_dec(sz)
+            if ds is None or ds <= 0:
+                return self._rej("51000", "Parameter sz error")
+            if ordType == "market":
+                tg = tgt or ("quote_ccy" if side == "buy" else "base_ccy")
+                fpx = self.ask() if side == "buy" else self.bid()
+                if tg == "quote_ccy":
+                    q = math.floor(float(ds) / fpx / self.lot + 1e-9) * self.lot
+                else:
+                    if not _bt_on(ds, self.lot):
+                        return self._rej("51000", "Parameter sz error")
+                    q = float(ds)
+                if q < self.minsz - 1e-12:
+                    return self._rej("51020", "Order amount should be greater than the min available amount")
+                if side == "buy" and self.avail(self.quote) < q * fpx - 1e-9:
+                    return self._rej("51008", "Order failed. Insufficient USDT balance in account")
+                if side == "sell" and self.avail(self.base) < q - 1e-9:
+                    return self._rej("51008", "Order failed. Insufficient balance in account")
+                o = self._new(cl, side, "market", q, fpx)
+                self._fill(o, fpx, False)
+                return {"code": "0", "msg": "", "data": [{"ordId": o["id"], "clOrdId": cl, "sCode": "0", "sMsg": ""}]}
+            dp = _bt_dec(px)
+            if dp is None or dp <= 0 or not _bt_on(dp, self.tick):
+                return self._rej("51000", "Parameter px error")
+            if not _bt_on(ds, self.lot):
+                return self._rej("51000", "Parameter sz error")
+            q, lp = float(ds), float(dp)
+            if q < self.minsz - 1e-12:
+                return self._rej("51020", "Order amount should be greater than the min available amount")
+            need = (self.quote, q * lp) if side == "buy" else (self.base, q)
+            if self.avail(need[0]) < need[1] - 1e-9:
+                return self._rej("51008", "Order failed. Insufficient balance in account")
+            o = self._new(cl, side, ordType, q, lp)
+            mk = (side == "buy" and lp >= self.ask() - 1e-15) or (side == "sell" and lp <= self.bid() + 1e-15)
+            if ordType == "post_only" and mk:
+                o["state"] = "canceled"
+            elif mk:
+                self._fill(o, self.ask() if side == "buy" else self.bid(), False)
+            elif ordType in ("ioc", "fok", "optimal_limit_ioc"):
+                o["state"] = "canceled"
+            else:
+                self.frz[need[0]] += need[1]
+                o["rest"] = True
+            return {"code": "0", "msg": "", "data": [{"ordId": o["id"], "clOrdId": cl, "sCode": "0", "sMsg": ""}]}
+
+    def _new(self, cl, side, typ, q, px):
+        oid = str(next(self.ids))
+        o = {"id": oid, "cl": cl, "side": side, "type": typ, "sz": q, "px": px, "acc": 0.0, "avg": 0.0, "state": "live",
+             "fee": 0.0, "feeCcy": "", "cTime": self.now()}
+        self.orders[oid] = o
+        if cl:
+            self.by_cl[cl] = oid
+        return o
+
+    def _find(self, oid, cl):
+        oid = oid or self.by_cl.get(cl or "")
+        return self.orders.get(str(oid)) if oid else None
+
+    def cancel(self, oid=None, cl=None):
+        with self.lk:
+            o = self._find(oid, cl)
+            if not o or o["state"] != "live":
+                return {"code": "1", "msg": "", "data": [{"ordId": str(oid or ""), "sCode": "51400",
+                                                          "sMsg": "Order cancellation failed as the order has been filled, canceled or does not exist"}]}
+            rem = o["sz"] - o["acc"]
+            if o.get("rest"):
+                if o["side"] == "buy":
+                    self.frz[self.quote] -= rem * o["px"]
+                else:
+                    self.frz[self.base] -= rem
+            o["state"] = "canceled"
+            o["uTime"] = self.now()
+            return {"code": "0", "msg": "", "data": [{"ordId": o["id"], "clOrdId": o["cl"], "sCode": "0", "sMsg": ""}]}
+
+    def amend(self, oid=None, newSz=None, cl=None):
+        with self.lk:
+            o = self._find(oid, cl)
+            if not o or o["state"] != "live":
+                return {"code": "1", "msg": "", "data": [{"sCode": "51503", "sMsg": "Order modification failed as the order has been filled, canceled or does not exist"}]}
+            d = _bt_dec(newSz)
+            if d is None or not _bt_on(d, self.lot) or float(d) <= o["acc"]:
+                return {"code": "1", "msg": "", "data": [{"sCode": "51000", "sMsg": "Parameter newSz error"}]}
+            nq = float(d)
+            dd = nq - o["sz"]
+            ccy, amt = (self.quote, dd * o["px"]) if o["side"] == "buy" else (self.base, dd)
+            if dd > 0 and self.avail(ccy) < amt - 1e-9:
+                return self._rej("51008", "Order failed. Insufficient balance in account")
+            if o.get("rest"):
+                self.frz[ccy] += amt
+            o["sz"] = nq
+            return {"code": "0", "msg": "", "data": [{"ordId": o["id"], "clOrdId": o["cl"], "sCode": "0", "sMsg": ""}]}
+
+    def odict(self, o):
+        st = o["state"]
+        if st == "live" and o["acc"] > 0:
+            st = "partially_filled"
+        return {"instId": self.sym, "ordId": o["id"], "clOrdId": o["cl"], "side": o["side"], "ordType": o["type"], "sz": repr(o["sz"]),
+                "px": repr(o["px"]) if o["type"] != "market" else "", "accFillSz": repr(o["acc"]), "fillSz": repr(o["acc"]),
+                "avgPx": repr(o["avg"]) if o["acc"] else "", "state": st, "fee": repr(o["fee"]), "feeCcy": o["feeCcy"],
+                "cTime": str(int(o["cTime"] * 1000)), "uTime": str(int(o.get("uTime", o["cTime"]) * 1000)), "tgtCcy": ""}
+
+    def query(self, oid=None, cl=None):
+        with self.lk:
+            o = self._find(oid, cl)
+            if not o:
+                return {"code": "51603", "msg": "Order does not exist", "data": []}
+            return {"code": "0", "msg": "", "data": [self.odict(o)]}
+
+    def pending(self):
+        with self.lk:
+            return {"code": "0", "msg": "", "data": [self.odict(o) for o in self.orders.values() if o["state"] == "live"]}
+
+    def balance(self, ccy=None):
+        with self.lk:
+            det = []
+            for c in ([x.strip() for x in str(ccy).split(",")] if ccy else list(self.bal)):
+                if self.avail(c) > 1e-12 or self.frz.get(c, 0) > 1e-12:
+                    det.append({"ccy": c, "availBal": repr(self.avail(c)), "cashBal": repr(self.bal.get(c, 0.0)),
+                                "frozenBal": repr(self.frz.get(c, 0.0)), "eq": repr(self.bal.get(c, 0.0))})
+            return {"code": "0", "msg": "", "data": [{"details": det, "totalEq": ""}]}
+
+    def ticker(self):
+        with self.lk:
+            return {"code": "0", "msg": "", "data": [{"instId": self.sym, "last": repr(self.p), "bidPx": repr(self.bid()), "askPx": repr(self.ask()),
+                                                       "ts": str(int(self.now() * 1000))}]}
+
+    def instrument(self):
+        return {"code": "0", "msg": "", "data": [{"instId": self.sym, "instType": "SPOT", "tickSz": repr(self.tick), "lotSz": repr(self.lot),
+                                                   "minSz": repr(self.minsz), "baseCcy": self.base, "quoteCcy": self.quote, "state": "live"}]}
+
+
+# ═══════════ ⏱️ الساعة الافتراضية ═══════════
+class _BtClock:
+    """وقت المحرك: sleep() يقدّم الوقت. انتظار المحرك بين نظرتين للسوق (≥ 2 ث، أو انتظار حدث) يقفز لنقطة السعر التالية —
+    السعر ثابت بينهما فلا قرار يتغيّر ⇒ المحرك ينظر للسوق عند كل نقطة من المسار مثل البوت الحي · الانتظار القصير داخل الأمر دقيق."""
+    JUMP = 2.0
+
+    def __init__(self, ex, px, t0, dt, on_point):
+        self.ex, self.px, self.t0, self.dt, self.on_point = ex, px, float(t0), float(dt), on_point
+        self.t, self.i, self.n = float(t0), 0, len(px) - 1
+        self.lk = threading.RLock()
+        self.stop = None
+        ex.clock = self
+
+    def sleep(self, s):
+        try:
+            s = max(0.0, float(s or 0))
+        except Exception:
+            s = 0.0
+        with self.lk:
+            t = self.t + s
+            if s >= self.JUMP:
+                t = max(t, self._next())
+            self._go(t)
+
+    def idle(self, s):
+        with self.lk:
+            self._go(max(self.t + max(0.0, float(s or 0)), self._next()))
+
+    def lat(self, s=0.05):
+        """زمن ذهاب الطلب وعودته (OKX ≈ 50 ملّي ثانية) — وهو ما يجعل أرقام الأوامر المبنية على الوقت فريدة"""
+        with self.lk:
+            self._go(self.t + s)
+
+    def _next(self):
+        return self.t0 + (math.floor((self.t - self.t0) / self.dt + 1e-9) + 1) * self.dt
+
+    def _go(self, t):
+        if self.stop is not None and self.stop.is_set():
+            raise _BtDone()
+        self.t = t
+        i = int((t - self.t0) / self.dt + 1e-9)
+        if i > self.n:
+            raise _BtDone()
+        if i != self.i:
+            for j in range(self.i + 1, i + 1):
+                self.ex.set_price(self.px[j])
+                self.i = j
+                self.on_point(j)
+
+
+# ═══════════ 🧱 العالم الذي يستورده المحرك داخل الصندوق ═══════════
+def _bt_mod(name, **kw):
+    m = _bt_types.ModuleType(name)
+    m.__dict__.update(kw)
+    return m
+
+
+class _BtResp:
+    def __init__(self, j):
+        self._j = j
+        self.status_code = 200
+        self.text = json.dumps(j)
+
+    def json(self):
+        return self._j
+
+    def read(self):
+        return self.text.encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def _bt_route(ex, method, url, body=None):
+    u = _bt_up.urlparse(url)
+    q = {k: v[0] for k, v in _bt_up.parse_qs(u.query).items()}
+    p = u.path
+    if method == "GET":
+        if p == "/api/v5/trade/order":
+            return ex.query(q.get("ordId"), q.get("clOrdId"))
+        if p == "/api/v5/trade/orders-pending":
+            return ex.pending()
+        if p == "/api/v5/account/balance":
+            return ex.balance(q.get("ccy"))
+        if p == "/api/v5/market/ticker":
+            return ex.ticker()
+        if p == "/api/v5/public/instruments":
+            return ex.instrument()
+    else:
+        b = json.loads(body or "{}") if isinstance(body, (str, bytes)) else (body or {})
+        if p == "/api/v5/trade/cancel-order":
+            return ex.cancel(b.get("ordId"), b.get("clOrdId"))
+        if p == "/api/v5/trade/amend-order":
+            return ex.amend(b.get("ordId"), b.get("newSz"), b.get("clOrdId"))
+        if p == "/api/v5/trade/order":
+            return ex.place(b.get("side"), b.get("ordType"), b.get("sz"), b.get("px"), b.get("clOrdId") or "", b.get("tgtCcy"))
+    raise ConnectionError("backtest: no network (" + method + " " + p + ")")
+
+
+def _bt_fakes(ex, clock):
+    """الوحدات التي يأخذها المحرك بدل الحقيقية — داخل المحرك فقط"""
+    class TradeAPI:
+        def __init__(self, *a, **k):
+            pass
+
+        def place_order(self, instId=None, tdMode=None, side=None, ordType=None, sz=None, px=None, clOrdId="", tgtCcy=None, **k):
+            clock.lat()
+            return ex.place(side, ordType, sz, px, clOrdId or "", tgtCcy)
+
+        def get_order(self, instId=None, ordId=None, clOrdId=None, **k):
+            clock.lat()
+            return ex.query(ordId, clOrdId)
+
+        def get_order_list(self, instId=None, **k):
+            clock.lat()
+            return ex.pending()
+
+        def cancel_order(self, instId=None, ordId=None, clOrdId=None, **k):
+            clock.lat()
+            return ex.cancel(ordId, clOrdId)
+
+        def amend_order(self, instId=None, ordId=None, clOrdId=None, newSz=None, **k):
+            clock.lat()
+            return ex.amend(ordId, newSz, clOrdId)
+
+    class MarketAPI:
+        def __init__(self, *a, **k):
+            pass
+
+        def get_ticker(self, instId=None, **k):
+            clock.lat()
+            return ex.ticker()
+
+        def get_instruments(self, instType=None, instId=None, **k):
+            clock.lat()
+            return ex.instrument()
+
+    okx = _bt_mod("okx")
+    okx.Trade = _bt_mod("okx.Trade", TradeAPI=TradeAPI)
+    okx.MarketData = _bt_mod("okx.MarketData", MarketAPI=MarketAPI)
+
+    def _get(url, headers=None, timeout=None, params=None, **k):
+        if params:
+            url = url + ("&" if "?" in url else "?") + _bt_up.urlencode(params)
+        clock.lat()
+        return _BtResp(_bt_route(ex, "GET", url))
+
+    def _post(url, headers=None, data=None, timeout=None, **k):
+        clock.lat()
+        return _BtResp(_bt_route(ex, "POST", url, data if data is not None else k.get("json")))
+
+    requests = _bt_mod("requests", get=_get, post=_post,
+                       exceptions=_bt_mod("requests.exceptions", RequestException=Exception, Timeout=TimeoutError, ConnectionError=ConnectionError))
+
+    def _urlopen(url, data=None, timeout=None, **k):
+        url = getattr(url, "full_url", url)
+        clock.lat()
+        return _BtResp(_bt_route(ex, "GET" if data is None else "POST", url, data))
+
+    class _Req:
+        def __init__(self, url, data=None, headers=None, method=None, **k):
+            self.full_url, self.data = url, data
+
+    urllib_ = _bt_mod("urllib", parse=_bt_up)
+    urllib_.request = _bt_mod("urllib.request", urlopen=_urlopen, Request=_Req)
+    urllib_.error = _bt_mod("urllib.error", URLError=OSError, HTTPError=OSError)
+
+    class _WsApp:
+        def __init__(self, *a, **k):
+            pass
+
+        def run_forever(self, *a, **k):
+            threading.Event().wait()                    # لا بث مباشر داخل الصندوق: المحرك يقرأ السوق بالسؤال
+
+        def send(self, *a, **k):
+            pass
+
+        def close(self, *a, **k):
+            pass
+
+    websocket = _bt_mod("websocket", WebSocketApp=_WsApp, enableTrace=lambda *a, **k: None)
+
+    class _Empty(Exception):
+        pass
+
+    class _Queue:
+        def __init__(self, *a, **k):
+            self.items = []
+
+        def put(self, x, *a, **k):
+            self.items.append(x)
+
+        def put_nowait(self, x):
+            self.items.append(x)
+
+        def get(self, block=True, timeout=None):
+            if self.items:
+                return self.items.pop(0)
+            if block and timeout:
+                clock.idle(timeout)
+            raise _Empty()
+
+        def get_nowait(self):
+            return self.get(False)
+
+        def empty(self):
+            return not self.items
+
+        def qsize(self):
+            return len(self.items)
+
+    queue_ = _bt_mod("queue", Queue=_Queue, Empty=_Empty, Full=Exception, LifoQueue=_Queue, SimpleQueue=_Queue)
+
+    class _Sock:
+        def __init__(self, *a, **k):
+            pass
+
+        def bind(self, *a, **k):
+            pass
+
+        def close(self):
+            pass
+
+        def setsockopt(self, *a, **k):
+            pass
+
+        def __getattr__(self, k):
+            raise OSError("backtest: no network")
+
+    import socket as _rs
+    socket_ = _bt_mod("socket", socket=_Sock, error=OSError, timeout=TimeoutError, AF_INET=_rs.AF_INET, SOCK_STREAM=_rs.SOCK_STREAM,
+                      SOL_SOCKET=_rs.SOL_SOCKET, SO_REUSEADDR=_rs.SO_REUSEADDR, setdefaulttimeout=lambda *a: None, getdefaulttimeout=lambda: None,
+                      gethostname=lambda: "backtest")
+
+    def _vt(t=None):
+        return clock.t if t is None else t
+
+    time_ = _bt_mod("time", time=lambda: clock.t, sleep=clock.sleep, monotonic=lambda: clock.t, perf_counter=time.perf_counter,
+                    time_ns=lambda: int(clock.t * 1e9), localtime=lambda t=None: time.localtime(_vt(t)), gmtime=lambda t=None: time.gmtime(_vt(t)),
+                    strftime=lambda f, t=None: time.strftime(f, t if t is not None else time.localtime(clock.t)), ctime=lambda t=None: time.ctime(_vt(t)),
+                    mktime=time.mktime, struct_time=time.struct_time, timezone=time.timezone, altzone=time.altzone, daylight=time.daylight,
+                    tzname=time.tzname, process_time=time.process_time)
+
+    class _DT(_bt_dtm.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return _bt_dtm.datetime.fromtimestamp(clock.t, tz)
+
+        @classmethod
+        def utcnow(cls):
+            return _bt_dtm.datetime.utcfromtimestamp(clock.t)
+
+        @classmethod
+        def today(cls):
+            return _bt_dtm.datetime.fromtimestamp(clock.t)
+
+    datetime_ = _bt_mod("datetime", **{k: getattr(_bt_dtm, k) for k in dir(_bt_dtm) if not k.startswith("__")})
+    datetime_.datetime = _DT
+
+    def _dump(obj, fp, **kw):                            # المحتوى نفسه بالمرمّز السريع (بلا إزاحة أسطر)
+        kw.pop("indent", None)
+        fp.write(json.dumps(obj, **kw))
+
+    def _dumps(obj, **kw):
+        kw.pop("indent", None)
+        return json.dumps(obj, **kw)
+
+    json_ = _bt_mod("json", **{k: getattr(json, k) for k in dir(json) if not k.startswith("__")})
+    json_.dump, json_.dumps = _dump, _dumps
+    return {"okx": okx, "okx.Trade": okx.Trade, "okx.MarketData": okx.MarketData, "requests": requests, "urllib": urllib_,
+            "urllib.request": urllib_.request, "urllib.error": urllib_.error, "websocket": websocket, "queue": queue_, "socket": socket_,
+            "time": time_, "datetime": datetime_, "json": json_}
+
+
+def _bt_no_net(*a, **k):
+    raise OSError("backtest: no network")
+
+
+def _bt_seal():
+    """🔒 عملية الاختبار بلا شبكة إطلاقاً (حتى لو استورد محرك شيئاً لم نزيّفه)"""
+    import socket as _s
+    _s.socket.connect = _bt_no_net
+    _s.socket.connect_ex = _bt_no_net
+    _s.create_connection = _bt_no_net
+    _s.getaddrinfo = _bt_no_net
+    os.fsync = lambda fd: None                         # قرص الصندوق لا يحتاج تثبيتاً (سرعة)
+
+
+class _BtNull(_bt_io.TextIOBase):
+    def write(self, s):
+        return len(s)
+
+
+def _bt_exec(src, script, folder, fakes, main_src=None):
+    """يشغّل مصدر المحرك كبرنامج رئيسي في مجلده — مثل التشغيل الحقيقي تماماً — مع العالم المزيّف ·
+    main_src: غلاف إعادة الاستثمار يستورد «main» ⇒ محرك الشبكة نفسه وحدةً بنفس العالم"""
+    real_import = _bt_bi.__import__
+    mods = dict(fakes)
+    bi = dict(_bt_bi.__dict__)
+
+    def _imp(name, globals=None, locals=None, fromlist=(), level=0):
+        if level == 0:
+            if name == "main" and main_src is not None:
+                if "main" not in mods:
+                    m = _bt_types.ModuleType("main")
+                    m.__dict__.update({"__file__": os.path.join(folder, "main.py"), "__builtins__": bi})
+                    mods["main"] = m
+                    exec(compile(main_src, os.path.join(folder, "main.py"), "exec"), m.__dict__)
+                return mods["main"]
+            if name in mods:
+                return mods[name] if (fromlist or "." not in name) else mods[name.split(".")[0]]
+            top = name.split(".")[0]
+            if top in mods and not fromlist and top != "main":
+                return mods[top]
+        return real_import(name, globals, locals, fromlist, level)
+
+    bi["__import__"] = _imp
+    bi["input"] = lambda *a: (_ for _ in ()).throw(_BtDone())        # محرك يسأل لوحة المفاتيح ⇒ يتوقف الاختبار
+    g = {"__name__": "__main__", "__file__": os.path.join(folder, script), "__builtins__": bi}
+    code = compile(src, os.path.join(folder, script), "exec")
+    old_cwd, old_out = os.getcwd(), sys.stdout
+    os.chdir(folder)
+    sys.stdout = _BtNull()
+    why = "end"
+    try:
+        exec(code, g)
+        why = "returned"
+    except _BtDone:
+        why = "end"
+    except SystemExit:
+        why = "exit"
+    finally:
+        sys.stdout = old_out
+        os.chdir(old_cwd)
+    return why
+
+
+def _bt_pkey(kind):
+    """مفتاح الربح المحقق بدفتر المحرك نفسه + ملف حالته"""
+    fam = (_BOT_KINDS.get(kind) or {}).get("fam")
+    return {"grid": "total_profit", "dca": "total_coin_profit", "rec": "profit_total"}.get(fam, "profit_total"), (_BOT_KINDS.get(kind) or {}).get("state", "")
+
+
+# ═══════════ ▶️ مسار واحد ═══════════
+def _bt_run(kind, cfg, sym, px, dt, quote, base, spec, maker=0.0008, taker=0.001, slip=0.0005, samples=1200, stop=None):
+    """محرك واحد على مسار واحد ⇒ الصفقات · المحفظة على طول المسار · ربح دفتر المحرك نفسه · النتيجة (بداية = نهاية ⇒ الفرق = ما صنعه البوت)"""
+    shm = "/dev/shm" if os.path.isdir("/dev/shm") and os.access("/dev/shm", os.W_OK) else None
+    folder = _bt_tmp.mkdtemp(prefix="holy_bt_", dir=shm)
+    try:
+        ex = _BtEx(sym, px[0], quote, base, spec["tickSz"], spec["lotSz"], spec["minSz"], maker, taker, slip)
+        n = len(px) - 1
+        every = max(1, n // max(1, samples))
+        pk, spre = _bt_pkey(kind)
+        sp_file = os.path.join(folder, f"{spre}{sym}.json")
+        S = {"nf": 0, "pr": 0.0}
+        curve, pops = [], []
+
+        def _prof():
+            try:
+                with open(sp_file, encoding="utf-8") as f:
+                    return float((json.load(f) or {}).get(pk) or 0)
+            except Exception:
+                return S["pr"]
+
+        def on_point(i):
+            if len(ex.fills) != S["nf"]:
+                sold = any(x[1] == "sell" for x in ex.fills[S["nf"]:])
+                S["nf"] = len(ex.fills)
+                p1 = _prof()
+                if abs(p1 - S["pr"]) > 1e-12:
+                    if sold or p1 < S["pr"]:
+                        pops.append((i, round(p1 - S["pr"], 8)))
+                    S["pr"] = p1
+            if i % every == 0 or i == n:
+                curve.append((i, ex.p, round(ex.bal[ex.quote], 8), round(ex.bal[ex.base], 10), round(S["pr"], 8)))
+
+        clock = _BtClock(ex, px, _BT_T0, dt, on_point)
+        clock.stop = stop
+        curve.append((0, px[0], round(quote, 8), round(base, 10), 0.0))
+        c = dict(cfg)
+        c.update({"api_key": "backtest", "secret_key": "backtest", "passphrase": "backtest", "symbol": sym, "is_demo": False,
+                  "auto_restart": False})
+        with open(os.path.join(folder, f"config_{sym}.json"), "w", encoding="utf-8") as f:
+            json.dump(c, f, ensure_ascii=False)
+        src, script, _v = engine_for(c)
+        main_src = None
+        if kind in ("grid", "grid_range", "grid_plus") and c.get("reinvest"):
+            main_src, src, script = src, REINV_SRC, "reinvest.py"          # نفس قرار التشغيل الحقيقي: الغلاف يستورد المحرك
+        w0 = time.time()
+        why = _bt_exec(src, script, folder, _bt_fakes(ex, clock), main_src=main_src)
+        if stop is not None and stop.is_set():
+            why = "stopped"
+        st = {}
+        try:
+            with open(sp_file, encoding="utf-8") as f:
+                st = json.load(f) or {}
+        except Exception:
+            pass
+        if curve[-1][0] != clock.i:
+            curve.append((clock.i, ex.p, round(ex.bal[ex.quote], 8), round(ex.bal[ex.base], 10), round(float(st.get(pk) or S["pr"]), 8)))
+        return {"why": why, "secs": round(time.time() - w0, 2), "n": n, "i_end": clock.i, "ex": ex, "curve": curve, "pops": pops,
+                "state": st, "pkey": pk, "realized": float(st.get(pk) or 0)}
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def _bt_summary(kind, r, quote0, base0, p0, dt):
+    """أرقام المسار الواحد — كلها من المنصة التجريبية (المحفظة) ودفتر المحرك نفسه"""
+    ex = r["ex"]
+    q1, b1 = ex.bal[ex.quote], ex.bal[ex.base]
+    v0 = quote0 + base0 * p0
+    v1 = q1 + b1 * p0                                     # النهاية = سعر البداية
+    vals = [c[2] + c[3] * c[1] for c in r["curve"]]
+    peak, mdd, low = vals[0] if vals else v0, 0.0, min(vals) if vals else v0
+    for v in vals:
+        peak = max(peak, v)
+        mdd = max(mdd, peak - v)
+    coin = (_BOT_KINDS.get(kind) or {}).get("cur") == "coin"
+    rej = {}
+    for _t, sc in ex.rejects:
+        rej[sc] = rej.get(sc, 0) + 1
+    fee_usd = ex.fees[ex.quote] + ex.fees[ex.base] * p0
+    return {"result": round(v1 - v0, 8), "pct": round((v1 - v0) / v0 * 100, 4) if v0 > 0 else 0.0, "v0": round(v0, 8), "v1": round(v1, 8),
+            "q0": quote0, "b0": base0, "q1": round(q1, 8), "b1": round(b1, 10), "p0": p0,
+            "realized": round(r["realized"], 8), "coin": coin, "buys": sum(1 for f in ex.fills if f[1] == "buy"),
+            "sells": sum(1 for f in ex.fills if f[1] == "sell"), "fee_usd": round(fee_usd, 8), "mdd": round(mdd, 8), "low": round(low, 8),
+            "used_max": round(max([quote0 - c[2] for c in r["curve"]] + [0.0]), 8),
+            "coin_used_max": round(max([base0 - c[3] for c in r["curve"]] + [0.0]), 10),
+            "pmin": round(min(c[1] for c in r["curve"]), 12), "pmax": round(max(c[1] for c in r["curve"]), 12),
+            "rej_bal": rej.get("51008", 0), "rej_min": rej.get("51020", 0), "rej_px": rej.get("51000", 0),
+            "rej_other": sum(v for k, v in rej.items() if k not in ("51008", "51020", "51000")),
+            "open": sum(1 for o in ex.orders.values() if o["state"] == "live"), "why": r["why"], "secs": r["secs"],
+            "ri": bool((r["state"].get("reinvest") or {}).get("on")),
+            "days": round(r["i_end"] * dt / 86400.0, 2)}
+
+
+def _bt_detail(r, dt):
+    """ما تحتاجه الإعادة المتحرّكة: المسار (عيّنات) · المحفظة · الربح المحقق · الصفقات · علامات الربح"""
+    fl = r["ex"].fills
+    stp = max(1, len(fl) // 4000)
+    return {"dt": dt, "n": r["n"], "c": [[c[0], round(c[1], 12), c[2], c[3], c[4]] for c in r["curve"]],
+            "f": [[int(round((f[0] - _BT_T0) / dt)), 1 if f[1] == "sell" else 0, round(f[2], 12), round(f[3], 10), round(f[4], 10), 1 if f[5] else 0]
+                  for f in fl[::stp]], "f_all": len(fl), "pops": r["pops"]}
+
+
+# ═══════════ 🧰 التحضير والتشغيل من اللوحة ═══════════
+def _bt_kind_of(body):
+    k = str(body.get("kind") or "").strip()
+    if k in _BT_KINDS:
+        return k
+    if body.get("g_type") is not None or body.get("grid_pct") is not None:
+        g = str(body.get("g_type") or "grid")
+        return g if g in ("grid", "grid_range", "grid_plus") else "grid"
+    if body.get("dca_type") is not None:
+        return "dca_buy" if str(body.get("dca_type")) == "dca_buy" else "dca"
+    if body.get("rec_type") is not None:
+        return "rec_sell" if str(body.get("rec_type")) == "rec_sell" else "rec_buy"
+    if body.get("start_usd") is not None:
+        return "rec_va"
+    return ""
+
+
+def _bt_spec(sym):
+    """قواعد العملة (خطوة السعر · خطوة الكمية · أقل كمية) — قراءة عامة بلا مفاتيح، محفوظة ساعة · آخر قراءة ناجحة تبقى بملف
+    (إذا تعذّر الوصول للمنصة لحظتها يُستعمل آخر ما عُرف)"""
+    c = _BT_SPEC.get(sym)
+    if c and time.time() - c[0] < 3600:
+        return c[1]
+    sf = os.path.join(BT_DIR, "spec.json")
+    v = None
+    try:
+        r = _okx_pub(f"/api/v5/public/instruments?instType=SPOT&instId={sym}")
+        if r and r.get("code") == "0" and (r.get("data") or []):
+            d = r["data"][0]
+            v = {"tickSz": float(d.get("tickSz") or 0), "lotSz": float(d.get("lotSz") or 0), "minSz": float(d.get("minSz") or 0)}
+            if v["tickSz"] <= 0 or v["lotSz"] <= 0:
+                v = None
+    except Exception:
+        v = None
+    if v:
+        _BT_SPEC[sym] = (time.time(), v)
+        try:
+            os.makedirs(BT_DIR, exist_ok=True)
+            d = load_json(sf) or {}
+            d[sym] = v
+            save_json_atomic(sf, d)
+        except Exception:
+            pass
+        return v
+    try:
+        v = (load_json(sf) or {}).get(sym)
+        if v and float(v.get("tickSz") or 0) > 0 and float(v.get("lotSz") or 0) > 0:
+            return {"tickSz": float(v["tickSz"]), "lotSz": float(v["lotSz"]), "minSz": float(v.get("minSz") or 0)}
+    except Exception:
+        pass
+    return None
+
+
+def _bt_src(data):
+    """المصدر: نموذج النشر (body) أو بوت قائم (dir) ⇒ (النوع، الرمز، الإعدادات من البوت أو None، الجسم أو None، رسالة خطأ)"""
+    d_rel = str(data.get("dir") or "").strip()
+    if d_rel:
+        full = os.path.realpath(os.path.join(ROOT, d_rel))
+        b = bot_dirs().get(full) if full.startswith(os.path.realpath(ROOT) + os.sep) else None
+        if not b:
+            return None, None, None, None, "مجلد غير معروف"
+        kind = str(b["cfg"].get("bot_type") or "grid")
+        if kind not in _BT_KINDS:
+            return None, None, None, None, "هذا النوع لا يُختبر هنا (المُراكِم خارج الاختبار)"
+        cfg = {k: v for k, v in b["cfg"].items() if k not in ("api_key", "secret_key", "passphrase", "wallet")}
+        return kind, b["symbol"], cfg, None, ""
+    body = dict(data.get("body") or {})
+    for k in ("api_key", "secret_key", "passphrase"):
+        body.pop(k, None)
+    kind = _bt_kind_of(dict(body, kind=data.get("kind")))
+    if kind not in _BT_KINDS:
+        return None, None, None, None, "نوع البوت غير معروف"
+    sym = str(body.get("symbol") or "").strip().upper()
+    if not sym or "-" not in sym:
+        return None, None, None, None, "اكتب الرمز كاملاً مثل XRP-USDT"
+    body["symbol"] = sym
+    return kind, sym, None, body, ""
+
+
+def _bt_wallet_def(kind, cfg, body, p0, spec):
+    """محفظة البداية المقترحة (تتغيّر من النافذة): ما يكفي خطة البوت تقريباً"""
+    g = dict(cfg or {})
+    g.update(body or {})
+    f = lambda k, d=0.0: (float(g.get(k)) if g.get(k) not in (None, "") else d)
+    try:
+        if kind in ("grid", "grid_range", "grid_plus"):
+            usd = f("usd_value", 10)
+            return round(usd * 25, 2), round(usd * 15 / p0, 8)
+        if kind == "rec_va":
+            return round(f("cap", 300), 2), 0.0
+        if kind == "rec_buy":
+            return round(f("cap", 60), 2), 0.0
+        if kind == "rec_sell":
+            return 0.0, round(f("cap", 60) / p0, 8)
+        if kind in ("dca", "dca_buy"):
+            bq, aq, sm, n = f("base_order_qty", 0), f("avg_order_qty", 0), f("size_multiplier", 1), int(f("max_safety_orders", 0))
+            tot = bq + sum(aq * sm ** i for i in range(max(0, n)))           # أقصى ما تحتاجه الخطة كاملة (بالعملة)
+            tot *= 1.02
+            return (round(tot * p0, 2), 0.0) if kind == "dca_buy" else (0.0, round(tot, 8))
+    except Exception:
+        pass
+    return 300.0, 0.0
+
+
+def bt_prep(data):
+    """🧪 ما تحتاجه النافذة قبل البدء: السعر الحالي · قواعد العملة · محفظة مقترحة · تقلّب العملة"""
+    kind, sym, cfg, body, err = _bt_src(data)
+    if err:
+        return {"ok": False, "msg": err}
+    try:
+        p0 = float(PX.get(sym) or 0) or float(_acc_price(sym) or 0)
+    except Exception:
+        p0 = 0.0
+    if p0 <= 0:                                              # آخر سعر رآه بوت يتداول العملة نفسها (أي نوع)
+        try:
+            for b_ in bot_dirs().values():
+                if b_["symbol"] == sym:
+                    st = load_json(paths_of(b_)[0]) or {}
+                    p0 = float(st.get("px") or st.get("current_price") or 0)
+                    if p0 > 0:
+                        break
+        except Exception:
+            p0 = 0.0
+    spec = _bt_spec(sym)
+    if not spec:
+        return {"ok": False, "msg": "تعذّر معرفة قواعد العملة من المنصة (خطوة السعر والكمية) — أعد المحاولة"}
+    q, b = _bt_wallet_def(kind, cfg, body, p0 if p0 > 0 else 1.0, spec)
+    if p0 <= 0:
+        b = 0.0
+    base = sym.split("-")[0]
+    warn = [] if p0 > 0 else ["سعر العملة غير معروف الآن — اكتب سعر البداية بنفسك"]
+    if kind in ("grid", "grid_range", "grid_plus") and p0 < 0.01:
+        warn.append("⚠️ محركات الشبكة تقرّب الأسعار إلى أربع خانات عشرية — عملة سعرها أقل من 0.01 لا تعمل عليها الشبكة كما ينبغي (سيظهر ذلك في الاختبار)")
+    return {"ok": True, "kind": kind, "sym": sym, "base": base, "p0": p0, "spec": spec, "quote_def": q, "base_def": b,
+            "vol": _BT_VOL.get(base, _BT_VOL_DEF), "vol_known": base in _BT_VOL, "label": (_BOT_KINDS.get(kind) or {}).get("lbl", kind),
+            "ico": (_BOT_KINDS.get(kind) or {}).get("ico", ""), "coin": (_BOT_KINDS.get(kind) or {}).get("cur") == "coin", "warn": warn,
+            "src": "bot" if cfg is not None else "form"}
+
+
+def _bt_workers():
+    try:
+        c = os.cpu_count() or 1
+    except Exception:
+        c = 1
+    return 1 if c < 4 else (2 if c < 8 else 3)
+
+
+def _bt_clean(keep=4):
+    try:
+        ds = sorted((d for d in os.listdir(BT_DIR) if d.startswith("bt_")), reverse=True)
+        for d in ds[keep:]:
+            if d not in _BT_JOBS or not any(p.poll() is None for p in _BT_JOBS[d]["procs"]):
+                shutil.rmtree(os.path.join(BT_DIR, d), ignore_errors=True)
+                _BT_JOBS.pop(d, None)
+    except Exception:
+        pass
+
+
+def bt_start(data):
+    """▶️ يبدأ الاختبار: عمليات منفصلة بأولوية منخفضة · اختبار واحد في المرة · لا مفاتيح في ملف المهمة"""
+    if getattr(sys, "frozen", False):
+        return {"ok": False, "msg": "الاختبار يحتاج نسخة بايثون من اللوحة"}
+    with _BT_LK:
+        for jid, j in list(_BT_JOBS.items()):
+            if any(p.poll() is None for p in j["procs"]) and not _bt_finished(j["dir"]):
+                return {"ok": False, "msg": "يوجد اختبار يعمل الآن — انتظره أو أوقفه أولاً", "id": jid}
+    kind, sym, cfg, body, err = _bt_src(data)
+    if err:
+        return {"ok": False, "msg": err}
+    per = str(data.get("period") or "month")
+    mood = str(data.get("mood") or "normal")
+    if per not in _BT_PER or mood not in _BT_MOOD:
+        return {"ok": False, "msg": "اختر المدة وطبيعة السوق"}
+    try:
+        npaths = int(data.get("paths") or 1)
+        seed = int(float(data.get("seed") or 0)) % 1000000000
+        p0 = float(data.get("p0") or 0)
+        q0 = float(data.get("quote") or 0)
+        b0 = float(data.get("base") or 0)
+        maker = float(data.get("maker") if data.get("maker") not in (None, "") else 0.08) / 100.0
+        taker = float(data.get("taker") if data.get("taker") not in (None, "") else 0.10) / 100.0
+        slip = float(data.get("slip") if data.get("slip") not in (None, "") else 0.05) / 100.0
+    except Exception:
+        return {"ok": False, "msg": "تأكد من الأرقام في كل الخانات"}
+    if npaths not in _BT_PATHS:
+        return {"ok": False, "msg": "عدد المسارات: 1 أو 5 أو 10 أو 20"}
+    if not (p0 > 0) or q0 < 0 or b0 < 0 or (q0 <= 0 and b0 <= 0):
+        return {"ok": False, "msg": "سعر البداية والمحفظة يجب أن تكون أرقاماً موجبة"}
+    if not (0 <= maker <= 0.01 and 0 <= taker <= 0.01 and 0 <= slip <= 0.02):
+        return {"ok": False, "msg": "العمولة من 0 إلى 1% · الانزلاق من 0 إلى 2%"}
+    spec = _bt_spec(sym)
+    if not spec:
+        return {"ok": False, "msg": "تعذّر معرفة قواعد العملة من المنصة — أعد المحاولة"}
+    base = sym.split("-")[0]
+    jid = "bt_" + time.strftime("%Y%m%d_%H%M%S") + f"_{int(time.time() * 1000) % 1000:03d}"
+    jd = os.path.join(BT_DIR, jid)
+    os.makedirs(jd, exist_ok=True)
+    job = {"id": jid, "v": 1, "kind": kind, "sym": sym, "cfg": cfg, "body": body, "period": per, "mood": mood, "paths": npaths, "seed": seed,
+           "p0": p0, "quote": q0, "base": b0, "spec": spec, "maker": maker, "taker": taker, "slip": slip,
+           "vol": _BT_VOL.get(base, _BT_VOL_DEF) * _BT_MOOD[mood], "t": time.time(), "app": APP_VERSION}
+    save_json_atomic(os.path.join(jd, "job.json"), job)
+    w = min(_bt_workers(), npaths)
+    procs = []
+    flags = (0x08000000 | 0x00004000) if os.name == "nt" else 0          # بلا نافذة · أولوية أقل من العادية (ويندوز)
+    for k in range(w):
+        lf = open(os.path.join(jd, f"w{k}.log"), "w", encoding="utf-8")
+        procs.append(subprocess.Popen([PYTHON_EXE, "-u", os.path.abspath(__file__), "--holy-bt", jd, str(k), str(w)], cwd=jd,
+                                      stdout=lf, stderr=lf, creationflags=flags, env={**os.environ, "PYTHONIOENCODING": "utf-8"}))
+    with _BT_LK:
+        _BT_JOBS[jid] = {"procs": procs, "t": time.time(), "dir": jd}
+    _bt_clean()
+    journal("bot", f"🧪 اختبار تجريبي بدأ — {sym} · {(_BOT_KINDS.get(kind) or {}).get('lbl', kind)} · {per} · {npaths} مسار", sym=sym)
+    return {"ok": True, "id": jid, "workers": w}
+
+
+def _bt_finished(jd):
+    """كل المسارات انتهت (أو أُوقف) — العامل قد يكون ما زال يغلق ملفاته"""
+    try:
+        if os.path.exists(os.path.join(jd, "stop.flag")):
+            return True
+        n = int((load_json(os.path.join(jd, "job.json")) or {}).get("paths") or 0)
+        return n > 0 and sum(1 for f in os.listdir(jd) if f.startswith("s_")) >= n
+    except Exception:
+        return False
+
+
+def _bt_jdir(jid):
+    jid = str(jid or "")
+    if not re.fullmatch(r"bt_[0-9_]+", jid):
+        return None
+    jd = os.path.join(BT_DIR, jid)
+    return jd if os.path.isdir(jd) else None
+
+
+def bt_status(data):
+    jd = _bt_jdir(data.get("id"))
+    if not jd:
+        return {"ok": False, "msg": "اختبار غير معروف"}
+    job = load_json(os.path.join(jd, "job.json")) or {}
+    paths = []
+    for n in range(int(job.get("paths") or 0)):
+        s = load_json(os.path.join(jd, f"s_{n}.json"))
+        if s:
+            paths.append(s)
+    err = None
+    for fn in sorted(os.listdir(jd)):
+        if fn.startswith("err_"):
+            e = load_json(os.path.join(jd, fn)) or {}
+            err = e.get("msg") or "خطأ"
+    j = _BT_JOBS.get(job.get("id"))
+    alive = bool(j and any(p.poll() is None for p in j["procs"]))
+    stopped = os.path.exists(os.path.join(jd, "stop.flag"))
+    done = len(paths) >= int(job.get("paths") or 0)
+    state = "error" if err else ("done" if done else ("stopped" if stopped and not alive else ("run" if alive else "lost")))
+    secs = [p["sum"]["secs"] for p in paths if p.get("sum")]
+    eta = None
+    if state == "run" and secs:
+        w = len(j["procs"]) if j else 1
+        eta = round(sum(secs) / len(secs) * (int(job.get("paths") or 0) - len(paths)) / max(1, w), 0)
+    agg = None
+    if paths:
+        rs = sorted(p["sum"]["result"] for p in paths)
+        pcs = sorted(p["sum"]["pct"] for p in paths)
+        agg = {"n": len(rs), "med": rs[len(rs) // 2] if len(rs) % 2 else (rs[len(rs) // 2 - 1] + rs[len(rs) // 2]) / 2, "min": rs[0], "max": rs[-1],
+               "mean": sum(rs) / len(rs), "pos": sum(1 for x in rs if x > 0), "pmed": pcs[len(pcs) // 2], "pmin": pcs[0], "pmax": pcs[-1]}
+    cfg_view = load_json(os.path.join(jd, "cfg.json"))
+    return {"ok": True, "id": job.get("id"), "state": state, "err": err, "done": len(paths), "total": int(job.get("paths") or 0), "eta": eta,
+            "paths": sorted(paths, key=lambda p: p["n"]), "agg": agg, "job": {k: job.get(k) for k in ("kind", "sym", "period", "mood", "paths", "seed", "p0", "quote",
+                                                                                                    "base", "maker", "taker", "slip", "vol", "spec")},
+            "cfg": cfg_view}
+
+
+def bt_path(data):
+    jd = _bt_jdir(data.get("id"))
+    if not jd:
+        return {"ok": False, "msg": "اختبار غير معروف"}
+    try:
+        n = int(data.get("n") or 0)
+    except Exception:
+        n = 0
+    d = load_json(os.path.join(jd, f"p_{n}.json"))
+    s = load_json(os.path.join(jd, f"s_{n}.json"))
+    if not d or not s:
+        return {"ok": False, "msg": "المسار لم ينتهِ بعد"}
+    return {"ok": True, "n": n, "d": d, "s": s}
+
+
+def bt_stop(data):
+    jd = _bt_jdir(data.get("id"))
+    if not jd:
+        return {"ok": False, "msg": "اختبار غير معروف"}
+    try:
+        open(os.path.join(jd, "stop.flag"), "w").close()
+    except Exception:
+        pass
+    j = _BT_JOBS.get(os.path.basename(jd))
+    if j:
+        for p in j["procs"]:
+            if p.poll() is None:
+                try:
+                    p.terminate()
+                except Exception:
+                    pass
+    return {"ok": True, "msg": "⏹ أُوقف الاختبار"}
+
+
+# ═══════════ 🧪 العملية المنفصلة ═══════════
+def _bt_dry_cfg(kind, body, sym, spec, p0):
+    """الإعدادات كما يكتبها النشر الحقيقي بالحرف: دالة النشر نفسها على جذر مؤقت — بلا مفاتيح ولا تشغيل ولا شبكة ولا إشعار
+    (هذا داخل عملية الاختبار المنفصلة فقط: تغيير متغيّراتها لا يمس اللوحة)"""
+    g = globals()
+    tmp = _bt_tmp.mkdtemp(prefix="holy_btroot_")
+    try:
+        g["ROOT"] = tmp
+        g["wallet_keys"] = lambda name: {"api_key": "backtest", "secret_key": "backtest", "passphrase": "backtest"}
+        g["launch"] = lambda b: (True, "backtest")
+        g["tg_send"] = lambda *a, **k: True
+        g["journal"] = lambda *a, **k: None
+        g["log_event"] = lambda *a, **k: None
+        g["_acc_spec"] = lambda s: {"lotSz": spec["lotSz"], "minSz": spec["minSz"]}
+        g["_acc_price"] = lambda s: p0
+        fn = {"grid": deploy, "grid_range": deploy, "grid_plus": deploy, "dca": deploy_dca, "dca_buy": deploy_dca,
+              "rec_buy": deploy_rec, "rec_sell": deploy_rec, "rec_va": deploy_va}[kind]
+        b = dict(body)
+        b.update({"symbol": sym, "wallet": "backtest", "auto": False})
+        if kind in ("grid", "grid_range", "grid_plus"):
+            b["g_type"], b["demo"] = kind, False
+        elif kind in ("dca", "dca_buy"):
+            b["dca_type"] = kind
+        elif kind in ("rec_buy", "rec_sell"):
+            b["rec_type"] = kind
+        r = fn(b) or {}
+        if not r.get("ok"):
+            return None, str(r.get("msg") or "الإعدادات غير صالحة")
+        for d in os.listdir(tmp):
+            p = os.path.join(tmp, d, f"config_{sym}.json")
+            if os.path.exists(p):
+                cfg = load_json(p) or {}
+                return {k: v for k, v in cfg.items() if k not in ("api_key", "secret_key", "passphrase")}, ""
+        return None, "تعذّر قراءة الإعدادات"
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _bt_child(jd, k, w):
+    """عامل الاختبار: بلا شبكة · أولوية منخفضة · يكتب كل مسار حين ينتهي (s_n ملخص · p_n تفاصيل)"""
+    _bt_seal()
+    try:
+        os.nice(10)
+    except Exception:
+        pass
+    k, w = int(k), max(1, int(w))
+    job = load_json(os.path.join(jd, "job.json")) or {}
+    stop = threading.Event()
+
+    def _watch():
+        while not stop.is_set():
+            if os.path.exists(os.path.join(jd, "stop.flag")):
+                stop.set()
+                break
+            time.sleep(0.5)
+
+    threading.Thread(target=_watch, daemon=True).start()
+    kind, sym, spec, p0 = job["kind"], job["sym"], job["spec"], float(job["p0"])
+    cfg = job.get("cfg")
+    if cfg is None:
+        cfg, err = _bt_dry_cfg(kind, job.get("body") or {}, sym, spec, p0)
+        if cfg is None:
+            save_json_atomic(os.path.join(jd, f"err_{k}.json"), {"msg": err})
+            return 2
+    if k == 0:
+        save_json_atomic(os.path.join(jd, "cfg.json"), {kk: v for kk, v in cfg.items() if kk not in ("api_key", "secret_key", "passphrase", "bot_id")})
+    days, dt = _BT_PER[job["period"]]
+    for n in range(k, int(job["paths"]), w):
+        if stop.is_set():
+            break
+        seed = int(job["seed"]) + n
+        px = _bt_path(p0, days, dt, float(job["vol"]), seed)
+        try:
+            r = _bt_run(kind, cfg, sym, px, dt, float(job["quote"]), float(job["base"]), spec, job["maker"], job["taker"], job["slip"], stop=stop)
+        except Exception as e:
+            save_json_atomic(os.path.join(jd, f"err_{k}.json"), {"msg": f"تعذّر تشغيل المحرك في الصندوق: {type(e).__name__}: {e}"})
+            return 3
+        if r["why"] == "stopped":
+            break
+        s = {"n": n, "seed": seed, "sum": _bt_summary(kind, r, float(job["quote"]), float(job["base"]), p0, dt)}
+        save_json_atomic(os.path.join(jd, f"p_{n}.json"), _bt_detail(r, dt))
+        save_json_atomic(os.path.join(jd, f"s_{n}.json"), s)
+    return 0
+
 
 def _rec_audit(b, led):
     """🧮 تدقيق الدوري (قراءة فقط): هوية إعادة الاستثمار (كل اللي انعاد استثماره = بالحصّالة + بالأوامر + انسحب) · الدفتر مقابل البوت"""
@@ -18710,7 +19832,10 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
         if path == "/api/deploy_va":
             return self._json(deploy_va(data))         # 🛤️ v3.34.0
         if path == "/api/va_plan":
-            return self._json(va_plan_api(data))       # 📋 v3.35.0: جدول ما قبل التشغيل (حساب فقط) · 👆 v3.35.1: البيع من مستوى مختار (حي أيضاً · قراءة فقط)
+            return self._json(va_plan_api(data))
+        if path in ("/api/bt_prep", "/api/bt_start", "/api/bt_status", "/api/bt_path", "/api/bt_stop"):   # 🧪 v3.36.0: الاختبار التجريبي
+            return self._json({"/api/bt_prep": bt_prep, "/api/bt_start": bt_start, "/api/bt_status": bt_status,
+                               "/api/bt_path": bt_path, "/api/bt_stop": bt_stop}[path](data))       # 📋 v3.35.0: جدول ما قبل التشغيل (حساب فقط) · 👆 v3.35.1: البيع من مستوى مختار (حي أيضاً · قراءة فقط)
         if path == "/api/dca_preview":
             try:
                 bp = float(data.get("base_price", 0))
@@ -19375,6 +20500,75 @@ body.boot .card{animation:rise .6s var(--ease) both;animation-delay:calc(var(--i
 .vadelbtns{display:flex;flex-direction:column;gap:8px;margin-top:12px}
 .vadelbtns button{text-align:center;padding:10px 12px;line-height:1.5}
 .vadelbtns button small{display:block;font-size:11px;opacity:.85;margin-top:2px}
+/* 🧪 v3.36.0: الاختبار على مسار تجريبي */
+.btov{position:fixed;inset:0;z-index:150;background:rgb(var(--scrim-rgb)/.78);backdrop-filter:blur(6px);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:22px 12px}
+body.btopen{overflow:hidden}
+.btbox{position:relative;width:min(1180px,100%);background:var(--modal-bg);border:1px solid var(--line2);border-radius:22px;padding:22px 22px 18px;box-shadow:0 30px 90px rgb(var(--sh-rgb)/.55)}
+.btx{position:absolute;top:12px;inset-inline-end:12px;width:34px;height:34px;padding:0;border-radius:50%;font-size:15px}
+.bth{color:var(--cyan);font-size:18px;margin-inline-end:40px;line-height:1.6}
+.btintro{color:var(--mut);font-size:13px;line-height:1.9;margin:8px 0 12px}
+.btintro b{color:var(--tx)}
+.btwarn{color:var(--amber);font-size:12.5px;line-height:1.8;background:rgb(var(--amber-rgb)/.08);border:1px solid rgb(var(--amber-rgb)/.25);border-radius:10px;padding:8px 12px;margin:8px 0}
+.btnote{color:var(--mut);font-size:12px;line-height:1.85;margin:6px 0}
+.btset{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px 14px}
+.btset .fld{margin:0;min-width:0}
+.btset input{width:100%;min-width:0;box-sizing:border-box}
+.btrow{display:flex;gap:6px}.btrow input{flex:1;min-width:0}.btrow button{padding:6px 10px}
+.btseg{display:flex;gap:4px;flex-wrap:wrap}
+.btseg button{flex:1;min-width:44px;padding:7px 8px;font-size:12.5px;border-radius:9px}
+.btseg button.on{background:linear-gradient(94deg,rgb(var(--cyan-rgb)/.85),rgb(var(--vio-rgb)/.85));color:var(--on-acc);border-color:transparent;font-weight:700}
+.btprog{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;font-size:12.5px;color:var(--mut)}
+.btprog .btbar{flex:1;min-width:160px}
+.btbar{height:9px;border-radius:6px;background:rgb(var(--ov-rgb)/.08);overflow:hidden;direction:ltr}
+.btbar i{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,var(--vio),var(--cyan));transition:width .4s ease}
+.btagg{margin-top:14px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--glass)}
+.btaggh{font-weight:700;font-size:13.5px;margin-bottom:8px}
+.btaggr{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.btaggr>div{background:rgb(var(--ov-rgb)/.035);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:2px}
+.btaggr span{font-size:11.5px;color:var(--mut)}.btaggr b{font-size:17px}.btaggr small{font-size:11px;color:var(--mut)}
+.btbars{display:flex;align-items:flex-end;gap:3px;height:64px;margin-top:10px;direction:ltr}
+.btbars button{flex:1;height:100%;padding:0;border:0;background:transparent;display:flex;align-items:flex-end;border-radius:4px;min-width:6px}
+.btbars button i{display:block;width:100%;border-radius:4px 4px 1px 1px;background:rgb(var(--green-rgb)/.7)}
+.btbars button.r i{background:rgb(var(--red-rgb)/.7)}
+.btbars button.on{outline:2px solid var(--cyan);outline-offset:1px}
+.btdet{margin-top:12px;border:1px solid var(--line);border-radius:12px;padding:8px 12px;background:rgb(var(--ov-rgb)/.02)}
+.btdet summary{cursor:pointer;font-size:13px;font-weight:600}
+.bttbl tr{cursor:pointer}.bttbl tr.on td{background:rgb(var(--cyan-rgb)/.08)}
+.btcfg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11.5px;color:var(--mut);margin-top:8px}.btcfg b{color:var(--tx);font-weight:600}
+.btov .g{color:var(--green)}.btov .r{color:var(--red)}
+.btpl{position:relative;margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:16px;background:var(--glass)}
+.btplh{display:flex;align-items:baseline;gap:8px;margin-bottom:8px;font-size:14px}.btplh small{color:var(--mut2)}
+.btplr{margin-inline-start:auto;font-weight:800;font-size:15px}
+.btgrid{display:grid;grid-template-columns:minmax(0,1.9fr) minmax(0,1fr);gap:12px}
+.btcv{position:relative;height:330px;border-radius:12px;background:rgb(var(--ov-rgb)/.025);border:1px solid rgb(var(--ov-rgb)/.05)}
+.btcv canvas{position:absolute;inset:0;width:100%;height:100%}
+.btct{position:absolute;top:6px;inset-inline-start:10px;font-size:11.5px;color:var(--mut);pointer-events:none}
+.btside{display:flex;flex-direction:column;gap:6px;min-width:0}
+.btwal{position:relative;padding:10px 12px;border-radius:12px;background:rgb(var(--ov-rgb)/.04);display:flex;flex-direction:column;gap:2px;overflow:hidden}
+.btwal span{font-size:11.5px;color:var(--mut)}.btwal b{font-size:26px;font-weight:800}.btwal em{font-style:normal;font-size:13px;font-weight:700}
+.btrw{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12.5px;padding:6px 10px;border-radius:9px;background:rgb(var(--ov-rgb)/.03)}
+.btrw span{color:var(--mut);white-space:nowrap}.btrw b{font-weight:700;text-align:end;overflow:hidden;text-overflow:ellipsis}
+.btcv2{height:auto;flex:1;min-height:110px}
+.btpops{position:absolute;inset-inline-end:10px;top:8px;width:50%;height:100%;pointer-events:none}
+.btpop{position:absolute;inset-inline-end:0;top:40%;font-style:normal;font-weight:800;font-size:17px;direction:ltr;text-shadow:0 0 12px rgb(var(--green-rgb)/.7);animation:btpop 1.6s ease-out forwards}
+.btpop.r{text-shadow:0 0 12px rgb(var(--red-rgb)/.7)}
+@keyframes btpop{0%{opacity:0;transform:translateY(8px) scale(.9)}15%{opacity:1;transform:translateY(0) scale(1.08)}100%{opacity:0;transform:translateY(-34px) scale(1)}}
+.bttl{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+.bttl #bt_pp{width:42px;padding:7px 0}
+.bttl .btseg{flex:0 0 auto}.bttl .btseg button{min-width:36px;flex:0 0 auto;padding:6px 7px}
+.bttl input[type=range]{flex:1;min-width:140px;direction:ltr;accent-color:var(--cyan)}
+.btday{font-size:12.5px;font-weight:700;min-width:96px}.btpx{font-size:12.5px;color:var(--mut);min-width:70px;text-align:end}
+.btend{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgb(var(--scrim-rgb)/.72);border-radius:16px;padding:12px;z-index:2}
+.btendc{width:min(680px,100%);background:var(--modal-bg);border:1px solid var(--line2);border-radius:16px;padding:16px 18px}
+.btendc h3{color:var(--cyan);font-size:16px;margin-bottom:10px}
+.btendl{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:5px 2px;border-bottom:1px solid rgb(var(--ov-rgb)/.06)}
+.btendl span{color:var(--mut)}.btendl b{font-weight:700;text-align:end}
+.btendc .btaggr{margin-bottom:8px}
+@media (max-width:760px){.btov{padding:0}.btbox{border-radius:0;min-height:100%;padding:16px 14px 18px;border:0}
+  .btgrid{grid-template-columns:1fr}.btcv{height:240px}.btcv2{height:150px;flex:0 0 auto}.btwal b{font-size:22px}
+  .btset{grid-template-columns:1fr 1fr}.bth{font-size:15.5px}}
+@media (max-width:380px){.btset{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){.btpop{animation:none;opacity:0}.btbar i{transition:none}}
 .card.rec .dcafill.hot{background:linear-gradient(90deg,var(--amber),var(--red));box-shadow:0 0 8px rgb(var(--red-rgb)/.4)}
 .card.rec .dcafill{background:linear-gradient(90deg,var(--cyan),var(--vio));box-shadow:0 0 8px rgb(var(--cyan-rgb)/.35)}
 /* 🃏 v3.26.8: كل الكروت بنفس النمط واللون — نفس الخلفية والحافة · نفس شارة النوع · نفس المربعات · نفس الحشوة */
@@ -21500,7 +22694,7 @@ function vaDetails(b){
     <div class="dnsec" style="margin-top:10px">🧭 آخر الخطوات</div>
     <div style="overflow-x:auto"><table class="dntbl"><thead><tr><th>#</th><th>الوقت</th><th>السعر</th><th>الهدف</th><th>قيمة العملة</th><th>ماذا فعل</th></tr></thead><tbody>${rows||'<tr><td colspan="6">لا خطوات بعد</td></tr>'}</tbody></table></div>
     <p style="font-size:11px;color:var(--mut2);margin-top:10px;line-height:1.8">كل خطوة: الفرق = الهدف − قيمة العملة. موجب ⇒ يشتري الفرق (حتى أقصى أمر والميزانية) · سالب ⇒ يبيع الفائض · داخل النطاق ⇒ لا شيء. التأجيل (ميزانية ممتلئة · رصيد ناقص · مكابح) لا يُقدّم الهدف. الأوامر كلها فورية — لا أوامر معلّقة بالمنصة.</p>
-    <div class="mbtns" style="margin-top:12px"><button class="primary" onclick="hideModal();botHist(botOf('${b.dir}'))">📜 السجل</button><button onclick="hideModal()">إغلاق</button></div>`);
+    <div class="mbtns" style="margin-top:12px"><button class="primary" onclick="hideModal();botHist(botOf('${b.dir}'))">📜 السجل</button><button onclick="btFromBot('${b.dir}')" title="إعدادات هذا البوت على مسار تجريبي — لا يمسّ البوت">🧪 اختبار تجريبي</button><button onclick="hideModal()">إغلاق</button></div>`);
 }
 async function openDeployVa(){
   _vaAt={ctx:'pre',i:0,A:null,sig:'',busy:0};
@@ -21538,7 +22732,7 @@ async function openDeployVa(){
   <div id="vd_preview" style="margin-top:14px"></div>
   <div class="dnsec" style="margin-top:12px">📋 الجدول قبل التشغيل — ماذا سيفعل عند كل سعر</div>
   <div id="vd_plan"><div class="vach0">…</div></div>
-  <div class="mbtns" style="margin-top:14px"><button class="primary" id="vd_go" style="background:linear-gradient(94deg,var(--green),#16a34a)">🚀 انشر وشغّل</button><button onclick="hideModal()">إلغاء</button></div>`);
+  <div class="mbtns" style="margin-top:14px"><button class="primary" id="vd_go" style="background:linear-gradient(94deg,var(--green),#16a34a)">🚀 انشر وشغّل</button><button id="vd_bt" onclick="btFromForm('rec_va')" title="يعمل محرك البوت نفسه على مسار تجريبي يعود في نهايته إلى سعر البداية — بلا مفاتيح ولا أوامر حقيقية">🧪 جرّب على مسار تجريبي</button><button onclick="hideModal()">إلغاء</button></div>`);
   $('#vd_go').onclick=async()=>{
     const body=vaFormBody();
     if(!body.symbol||!body.symbol.includes('-')){toast('اكتب الرمز كاملاً مثل XRP-USDT',false);return}
@@ -21619,6 +22813,216 @@ function vaPlanFetch(B){
     let P=null;try{P=await api('/api/va_plan',Object.assign({},B,{px:px||'',at}))}catch(e){}
     if(my!==_vaPlanN||!$('#vd_plan'))return;
     vaPlanPut($('#vd_plan'),vaPlanHTML(P,{known:!!(P&&P.px_known),ctx:'pre',at,A:at?P:null,err:at&&!(P&&P.up_at)}));if(at)vaPlanJump($('#vd_plan'))},250)}
+// ═══════════ 🧪 v3.36.0: الاختبار على مسار تجريبي — محرك البوت نفسه داخل صندوق مغلق · إعادة متحرّكة مثل الفيديو (بلا تسجيل) ═══════════
+const BT={src:null,prep:null,job:null,poll:0,pl:null,sel:0,st:null,cache:{}};
+const BT_PER={week:['أسبوع',7,'نقطة سعر كل دقيقة'],month:['شهر',30,'نقطة سعر كل 5 دقائق'],year:['سنة',365,'نقطة سعر كل ساعة']};
+const BT_MOOD={calm:'هادئ',normal:'عادي',wild:'عنيف'};
+function btN(v,d=2){v=+v||0;return (v<0?'−':'')+Math.abs(v).toFixed(d)}
+function btS(v,d=2){v=+v||0;return (v>=0?'+':'−')+Math.abs(v).toFixed(d)}
+function btQ(v){v=+v||0;const a=Math.abs(v);return a>=1000?v.toFixed(2):a>=1?v.toFixed(4):v.toPrecision(5)}
+function btP(v){v=+v||0;const a=Math.abs(v);return a>=100?v.toFixed(2):a>=1?v.toFixed(4):v.toPrecision(5)}
+function btT(s){s=Math.max(0,Math.round(+s||0));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
+function btFromForm(kind){                                    // من نموذج النشر — الإعدادات نفسها التي سيُنشر بها
+  const fb={rec_va:window.vaFormBody,rec:window.recFormBody,dca:window.dcaFormBody,grid:window.gridFormBody}[kind];
+  if(!fb){toast('تعذّر قراءة النموذج',false);return}
+  const body=fb();if(!body.symbol||!body.symbol.includes('-')){toast('اكتب الرمز كاملاً مثل XRP-USDT',false);return}
+  const k=kind==='rec'?(body.rec_type||'rec_buy'):kind==='dca'?(body.dca_type||'dca'):kind==='grid'?(body.g_type||'grid'):kind;
+  btOpen({kind:k,body})}
+function btFromBot(dir){hideModal();btOpen({dir})}            // من بوت قائم — إعداداته الحالية (بلا مفاتيح)
+function btClose(){const o=$('#btov');if(o)o.remove();clearTimeout(BT.poll);BT.poll=0;btStopPlay();document.body.classList.remove('btopen');
+  if(BT.job&&BT.st&&(BT.st.state==='run'||BT.st.state==='prep'))api('/api/bt_stop',{id:BT.job},true).catch(()=>{});BT.job=null}   // إغلاق النافذة يوقف الاختبار الجاري (لا عمل في الخلفية بلا فائدة)
+async function btOpen(src){
+  btClose();BT.src=src;BT.job=null;BT.st=null;BT.cache={};
+  const o=document.createElement('div');o.id='btov';o.className='btov';
+  o.innerHTML=`<div class="btbox" role="dialog" aria-modal="true"><button class="btx" onclick="btClose()" aria-label="إغلاق">✕</button><div id="bt_in"><div class="vach0">…</div></div></div>`;
+  document.body.appendChild(o);document.body.classList.add('btopen');
+  o.addEventListener('click',e=>{if(e.target.id==='btov')btClose()});
+  let P=null;try{P=await api('/api/bt_prep',src)}catch(e){}
+  if(!$('#btov'))return;
+  if(!P||!P.ok){$('#bt_in').innerHTML=`<h2>🧪 اختبار على مسار تجريبي</h2><p class="btwarn">${gEsc((P&&P.msg)||'تعذّر التحضير')}</p>
+    <div class="mbtns"><button onclick="btClose()">إغلاق</button></div>`;return}
+  BT.prep=P;btForm()}
+function btSeg(k,opts,v){return `<div class="btseg" data-k="${k}">${opts.map(([val,lab])=>`<button type="button" data-v="${val}" class="${String(val)===String(v)?'on':''}">${lab}</button>`).join('')}</div>`}
+function btForm(){
+  const P=BT.prep,B=P.base,seed=Math.floor(Math.random()*900000)+100000;
+  $('#bt_in').innerHTML=`<h2 class="bth">🧪 اختبار على مسار تجريبي — <span class="num">${gEsc(P.sym)}</span> · ${P.ico} ${gEsc(P.label)}</h2>
+  <p class="btintro">يعمل <b>محرك البوت الحقيقي نفسه</b> على سوق تجريبي: يتذبذب السعر ثم يعود في النهاية إلى <b>سعر البداية نفسه</b> — فأيّ فرق في المحفظة هو ما صنعه البوت وحده.
+   ${P.src==='bot'?'الإعدادات هي إعدادات البوت الحالية.':'الإعدادات هي ما في نموذج النشر الآن.'} لا مفاتيح ولا أوامر حقيقية، ولا يمسّ بوتاتك ولا دفاترك.</p>
+  ${(P.warn||[]).map(w=>`<p class="btwarn">${gEsc(w)}</p>`).join('')}
+  <div class="btset">
+    <div class="fld"><label>⏳ المدة</label>${btSeg('period',[['week','أسبوع'],['month','شهر'],['year','سنة']],'month')}</div>
+    <div class="fld"><label>🌊 طبيعة السوق</label>${btSeg('mood',[['calm','هادئ'],['normal','عادي'],['wild','عنيف']],'normal')}</div>
+    <div class="fld"><label>🧭 عدد المسارات</label>${btSeg('paths',[[1,'1'],[5,'5'],[10,'10'],[20,'20']],5)}</div>
+    <div class="fld"><label title="الرقم نفسه يعيد المسار نفسه بالضبط — غيّره لمسار آخر">🔢 رقم المسار</label><div class="btrow"><input id="bt_seed" class="num" value="${seed}"><button type="button" onclick="$('#bt_seed').value=Math.floor(Math.random()*900000)+100000" title="رقم عشوائي">🎲</button></div></div>
+    <div class="fld"><label>💲 سعر البداية (وهو سعر النهاية)</label><input id="bt_p0" class="num" value="${btP(P.p0)}"></div>
+    <div class="fld"><label>💵 المحفظة — دولار (USDT)</label><input id="bt_q" class="num" value="${+(+P.quote_def).toFixed(2)}"></div>
+    <div class="fld"><label>🪙 المحفظة — ${gEsc(B)}</label><input id="bt_b" class="num" value="${+(+P.base_def).toFixed(8)}"></div>
+    <div class="fld"><label>🧾 عمولة الصانع %</label><input id="bt_mk" class="num" value="0.08"></div>
+    <div class="fld"><label>🧾 عمولة الآخذ %</label><input id="bt_tk" class="num" value="0.10"></div>
+    <div class="fld"><label title="أوامر السوق تُنفَّذ أسوأ من السعر بهذه النسبة">↔️ الانزلاق %</label><input id="bt_sl" class="num" value="0.05"></div>
+  </div>
+  <p class="btnote" id="bt_note"></p>
+  <div class="mbtns"><button class="primary" id="bt_go">▶️ ابدأ الاختبار</button><button onclick="btClose()">إغلاق</button></div>
+  <div id="bt_prog"></div><div id="bt_res"></div>`;
+  document.querySelectorAll('#btov .btseg').forEach(g=>g.onclick=e=>{const b=e.target.closest('button');if(!b)return;g.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));btNote()});
+  $('#bt_go').onclick=btGo;btNote()}
+function btVal(k){const b=document.querySelector(`#btov .btseg[data-k="${k}"] button.on`);return b?b.dataset.v:''}
+function btNote(){const P=BT.prep,per=BT_PER[btVal('period')]||BT_PER.month,mo=btVal('mood'),m={calm:0.6,normal:1,wild:1.6}[mo]||1;
+  const n=$('#bt_note');if(!n)return;
+  n.innerHTML=`تقلّب ${gEsc(P.base)} اليومي في هذا الاختبار ≈ <span class="num">${(P.vol*m*100).toFixed(1)}%</span> (${P.vol_known?'متوسط العملة المعروف':'قيمة عامة — العملة ليست في الجدول'} · سوق ${BT_MOOD[mo]||''})
+   · ${per[0]} = ${per[2]} · كل مسار يبدأ وينتهي عند السعر نفسه`}
+async function btGo(){
+  const P=BT.prep;
+  const body=Object.assign({},BT.src,{period:btVal('period'),mood:btVal('mood'),paths:+btVal('paths'),seed:$('#bt_seed').value,
+    p0:$('#bt_p0').value,quote:$('#bt_q').value,base:$('#bt_b').value,maker:$('#bt_mk').value,taker:$('#bt_tk').value,slip:$('#bt_sl').value});
+  $('#bt_go').disabled=true;$('#bt_res').innerHTML='';btStopPlay();
+  let r=null;try{r=await api('/api/bt_start',body)}catch(e){}
+  if(!$('#btov'))return;
+  if(!r||!r.ok){$('#bt_go').disabled=false;toast((r&&r.msg)||'تعذّر بدء الاختبار',false);if(r&&r.id){BT.job=r.id;btPoll()}return}
+  BT.job=r.id;BT.sel=0;BT.cache={};BT.scrolled=false;btProg({state:'prep',done:0,total:body.paths});btPoll()}
+function btProg(s){const el=$('#bt_prog');if(!el)return;
+  if(s.state==='done'||s.state==='error'||s.state==='stopped'||s.state==='lost'){el.innerHTML=s.state==='error'?`<p class="btwarn">❌ ${gEsc(s.err||'خطأ')}</p>`:s.state==='stopped'?`<p class="btnote">⏹ أُوقف الاختبار — ${s.done} من ${s.total} مسار انتهى</p>`:s.state==='lost'?`<p class="btwarn">توقّف عامل الاختبار قبل أن ينتهي (${s.done} من ${s.total})</p>`:'';return}
+  const pc=s.total?Math.round(s.done/s.total*100):0;
+  el.innerHTML=`<div class="btprog"><div class="btbar"><i style="width:${Math.max(3,pc)}%"></i></div>
+   <span>${s.state==='prep'||!s.done?'⏳ يحضّر المحرك ويشغّل أول مسار…':`✅ ${s.done} من ${s.total} مسار`}${s.eta!=null?` · المتبقي ≈ <span class="num">${btT(s.eta)}</span>`:''}</span>
+   <button onclick="btStop()">⏹ إيقاف</button></div>`}
+async function btStop(){if(!BT.job)return;try{await api('/api/bt_stop',{id:BT.job})}catch(e){}}
+async function btPoll(){clearTimeout(BT.poll);if(!BT.job||!$('#btov'))return;
+  let s=null;try{s=await api('/api/bt_status',{id:BT.job},true)}catch(e){}
+  if(!$('#btov'))return;
+  if(s&&s.ok){BT.st=s;btProg(s);btResults(s);
+    if(s.state==='run'||s.state==='prep'){BT.poll=setTimeout(btPoll,1500);return}
+    $('#bt_go')&&($('#bt_go').disabled=false);return}
+  BT.poll=setTimeout(btPoll,2500)}
+function btResults(s){const el=$('#bt_res');if(!el||!s.paths.length||(s.job&&BT.prep&&s.job.sym!==BT.prep.sym))return;
+  const coin=BT.prep.coin,B=BT.prep.base,A=s.agg,J=s.job;
+  const per=BT_PER[J.period]||BT_PER.month;
+  let h='';
+  if(s.total>1){
+    const mx=Math.max(...s.paths.map(p=>Math.abs(p.sum.result)),1e-9);
+    h+=`<div class="btagg"><div class="btaggh">📊 النتيجة على <span class="num">${A.n}</span> ${A.n>2&&A.n<11?'مسارات':'مساراً'}${A.n<s.total?` (من ${s.total})`:''} — ${per[0]} · سوق ${BT_MOOD[J.mood]||''}</div>
+     <div class="btaggr"><div><span>الوسيط</span><b class="${A.med>=0?'g':'r'} num">${btS(A.med)}$</b><small class="num">${btS(A.pmed)}%</small></div>
+      <div><span>الأسوأ</span><b class="${A.min>=0?'g':'r'} num">${btS(A.min)}$</b><small class="num">${btS(A.pmin)}%</small></div>
+      <div><span>الأفضل</span><b class="${A.max>=0?'g':'r'} num">${btS(A.max)}$</b><small class="num">${btS(A.pmax)}%</small></div>
+      <div><span>رابح في</span><b class="num">${A.pos} / ${A.n}</b><small>مسار</small></div></div>
+     <div class="btbars">${s.paths.map(p=>`<button class="${p.n===BT.sel?'on ':''}${p.sum.result>=0?'g':'r'}" onclick="btPick(${p.n})" title="المسار ${p.n+1}: ${btS(p.sum.result)}$"><i style="height:${Math.max(4,Math.round(Math.abs(p.sum.result)/mx*100))}%"></i></button>`).join('')}</div>
+     <small class="btnote">اضغط عموداً لتشاهد مساره يتحرّك.</small></div>`}
+  h+=`<div id="bt_pl"></div>`;
+  h+=`<details class="btdet"><summary>🧮 أرقام كل المسارات</summary><div class="tblwrap"><table class="dntbl bttbl"><thead><tr><th>المسار</th><th>النتيجة</th><th>%</th><th>شراء · بيع</th><th>الربح المحقق</th><th>العمولات</th><th>أسوأ هبوط للمحفظة</th></tr></thead><tbody>
+   ${s.paths.map(p=>{const m=p.sum;return `<tr class="${p.n===BT.sel?'on':''}" onclick="btPick(${p.n})"><td class="num">${p.n+1} <small>#${p.seed}</small></td><td class="num ${m.result>=0?'g':'r'}">${btS(m.result)}$</td><td class="num">${btS(m.pct)}%</td><td class="num">${m.buys} · ${m.sells}</td><td class="num">${m.coin?btS(m.realized,6)+' '+gEsc(B):btS(m.realized)+'$'}</td><td class="num">${btN(m.fee_usd)}$</td><td class="num">${btN(m.mdd)}$</td></tr>`}).join('')}</tbody></table></div></details>`;
+  if(s.cfg)h+=`<details class="btdet"><summary>⚙️ الإعدادات التي اختُبرت (كما يكتبها النشر نفسه)</summary><div class="btcfg num">${Object.entries(s.cfg).map(([k,v])=>`<span>${gEsc(k)}: <b>${gEsc(typeof v==='object'?JSON.stringify(v):v)}</b></span>`).join('')}</div></details>`;
+  const keep=$('#bt_pl')&&BT.pl&&BT.pl.n===BT.sel?$('#bt_pl'):null;
+  if(keep){const tmp=document.createElement('div');tmp.innerHTML=h;tmp.querySelector('#bt_pl').replaceWith(keep);el.innerHTML='';while(tmp.firstChild)el.appendChild(tmp.firstChild)}
+  else{el.innerHTML=h;if(s.paths.some(p=>p.n===BT.sel))btLoad(BT.sel)}}
+function btPick(n){if(!BT.st)return;BT.sel=n;btStopPlay();BT.pl=null;btResults(BT.st);const p=$('#bt_pl');if(p)p.scrollIntoView({behavior:'smooth',block:'nearest'})}
+async function btLoad(n){const el=$('#bt_pl');if(!el)return;
+  let r=BT.cache[n];if(!r){el.innerHTML='<div class="vach0">…</div>';try{r=await api('/api/bt_path',{id:BT.job,n},true)}catch(e){}
+    if(r&&r.ok)BT.cache[n]=r}
+  if(!$('#bt_pl')||BT.sel!==n)return;
+  if(!r||!r.ok){el.innerHTML=`<p class="btwarn">${gEsc((r&&r.msg)||'تعذّر تحميل المسار')}</p>`;return}
+  btPlayer(el,r.d,r.s);if(!BT.scrolled){BT.scrolled=true;el.scrollIntoView({behavior:'smooth',block:'start'})}}
+// ═══════════ 🎞️ الإعادة المتحرّكة ═══════════
+function btStopPlay(){if(BT.pl){cancelAnimationFrame(BT.pl.raf);BT.pl.run=false;window.removeEventListener('resize',BT.pl.rs)}}
+function btCss(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()||'#888'}
+function btPlayer(el,d,s){
+  btStopPlay();
+  const S=s.sum,coin=S.coin,B=BT.prep.base,J=BT.st.job,per=BT_PER[J.period]||BT_PER.month;
+  const C=d.c,F=d.f,POPS=d.pops||[],N=d.n;
+  const V=C.map(c=>c[2]+c[3]*c[1]);
+  el.innerHTML=`<div class="btpl">
+   <div class="btplh"><b>🎞️ المسار ${s.n+1}</b> <small class="num">#${s.seed}</small><span class="btplr ${S.result>=0?'g':'r'} num">${btS(S.result)}$ · ${btS(S.pct)}%</span></div>
+   <div class="btgrid">
+    <div class="btcv"><canvas id="btc1"></canvas><div class="btct">📈 السعر — <span class="g">▲ شراء</span> · <span class="r">▼ بيع</span></div></div>
+    <div class="btside">
+     <div class="btwal"><span>💼 المحفظة الآن</span><b class="num" id="bt_v">—</b><em class="num" id="bt_dv">—</em><div class="btpops" id="bt_pops"></div></div>
+     <div class="btrw"><span>💵 دولار</span><b class="num" id="bt_q1">—</b></div>
+     <div class="btrw"><span>🪙 ${gEsc(B)}</span><b class="num" id="bt_b1">—</b></div>
+     <div class="btrw"><span>💎 الربح المحقق</span><b class="num" id="bt_pr">—</b></div>
+     <div class="btrw"><span>🛒 شراء · 💰 بيع</span><b class="num" id="bt_tr">—</b></div>
+     <div class="btcv btcv2"><canvas id="btc2"></canvas><div class="btct">💼 قيمة المحفظة</div></div>
+    </div>
+   </div>
+   <div class="bttl"><button id="bt_pp" title="تشغيل/إيقاف">⏸</button>${btSeg('spd',[[1,'1×'],[2,'2×'],[4,'4×'],[8,'8×']],1)}
+    <input type="range" id="bt_scr" min="0" max="1000" value="0" aria-label="الزمن"><span id="bt_day" class="btday">—</span><span id="bt_px" class="num btpx">—</span></div>
+   <div class="btend" id="bt_end" hidden></div>
+   <div id="bt_why"></div>
+  </div>`;
+  const notes=[];
+  if(S.why==='exit'||S.why==='returned')notes.push('⚠️ توقّف المحرك من تلقاء نفسه قبل نهاية المسار (انظر الإعدادات)');
+  if(S.rej_bal)notes.push(`⚠️ رُفض أمر لعدم كفاية الرصيد <span class="num">${S.rej_bal}</span> مرة — المحفظة أصغر من خطة البوت (كبّرها أو صغّر الأوامر)`);
+  if(S.rej_min)notes.push(`📏 أمر أصغر من أقل كمية تقبلها المنصة: <span class="num">${S.rej_min}</span> مرة`);
+  if(S.rej_px)notes.push(`⚠️ رفضت المنصة سعر أو كمية أمر <span class="num">${S.rej_px}</span> مرة («Parameter px/sz error»)`);
+  if(S.open)notes.push(`📌 بقي <span class="num">${S.open}</span> أمر معلّق على المنصة عند النهاية (أموالها محسوبة في المحفظة)`);
+  if(!S.buys&&!S.sells)notes.push('ℹ️ لم يتداول البوت في هذا المسار — السعر لم يصل إلى شروطه');
+  if(S.ri)notes.push('💠 إعادة الاستثمار مفعّلة: الربح يبقى داخل البوت ويكبّر أوامره — لذلك يظهر في المحفظة لا في «الربح المحقق»');
+  $('#bt_why').innerHTML=notes.map(x=>`<p class="btnote">${x}</p>`).join('');
+  const c1=$('#btc1'),c2=$('#btc2'),x1=c1.getContext('2d'),x2=c2.getContext('2d');
+  const pmin=Math.min(...C.map(c=>c[1])),pmax=Math.max(...C.map(c=>c[1])),vmin=Math.min(...V,S.v0),vmax=Math.max(...V,S.v0);
+  const col={g:btCss('--green'),r:btCss('--red'),c:btCss('--cyan'),v:btCss('--vio'),m:btCss('--mut2'),t:btCss('--tx'),l:btCss('--line'),a:btCss('--amber')};
+  const PL={run:true,raf:0,u:0,last:0,n:s.n,spd:1,dur:60,popI:0,fi:0};BT.pl=PL;
+  function fit(cv){const r=cv.getBoundingClientRect(),dp=Math.min(2,window.devicePixelRatio||1);cv.width=Math.max(10,Math.round(r.width*dp));cv.height=Math.max(10,Math.round(r.height*dp));return dp}
+  let dp1=fit(c1),dp2=fit(c2);
+  PL.rs=()=>{dp1=fit(c1);dp2=fit(c2);draw()};window.addEventListener('resize',PL.rs);
+  function idxAt(i){let lo=0,hi=C.length-1;while(lo<hi){const m=(lo+hi+1)>>1;if(C[m][0]<=i)lo=m;else hi=m-1}return lo}
+  function draw(){
+    const iNow=PL.u*N,k=idxAt(iNow);
+    // السعر
+    let W=c1.width,H=c1.height,pd=8*dp1,top=26*dp1;x1.clearRect(0,0,W,H);
+    const X=i=>pd+(W-2*pd)*i/N,Y=p=>top+(H-top-pd)*(1-(p-pmin)/((pmax-pmin)||1));
+    x1.strokeStyle=col.m;x1.globalAlpha=.5;x1.setLineDash([4*dp1,4*dp1]);x1.beginPath();x1.moveTo(pd,Y(S.p0));x1.lineTo(W-pd,Y(S.p0));x1.stroke();x1.setLineDash([]);x1.globalAlpha=1;
+    x1.strokeStyle=col.c;x1.lineWidth=1.6*dp1;x1.beginPath();
+    for(let j=0;j<=k;j++){const c=C[j];j?x1.lineTo(X(c[0]),Y(c[1])):x1.moveTo(X(c[0]),Y(c[1]))}x1.stroke();
+    const mk=Math.max(2.2,3.4-F.length/900)*dp1;
+    for(const f of F){if(f[0]>iNow)break;const xx=X(f[0]),yy=Y(f[2]);x1.fillStyle=f[1]?col.r:col.g;x1.beginPath();
+      if(f[1]){x1.moveTo(xx,yy-mk*1.6);x1.lineTo(xx-mk,yy-mk*3.2);x1.lineTo(xx+mk,yy-mk*3.2)}else{x1.moveTo(xx,yy+mk*1.6);x1.lineTo(xx-mk,yy+mk*3.2);x1.lineTo(xx+mk,yy+mk*3.2)}x1.fill()}
+    const cc=C[k];x1.fillStyle=col.t;x1.beginPath();x1.arc(X(cc[0]),Y(cc[1]),3.2*dp1,0,7);x1.fill();
+    // المحفظة
+    W=c2.width;H=c2.height;pd=6*dp2;top=22*dp2;x2.clearRect(0,0,W,H);
+    const X2=i=>pd+(W-2*pd)*i/N,Y2=v=>top+(H-top-pd)*(1-(v-vmin)/((vmax-vmin)||1));
+    x2.strokeStyle=col.m;x2.globalAlpha=.6;x2.setLineDash([4*dp2,4*dp2]);x2.beginPath();x2.moveTo(pd,Y2(S.v0));x2.lineTo(W-pd,Y2(S.v0));x2.stroke();x2.setLineDash([]);x2.globalAlpha=1;
+    const vNow=cc[2]+cc[3]*cc[1];x2.strokeStyle=vNow>=S.v0?col.g:col.r;x2.lineWidth=1.8*dp2;x2.beginPath();
+    for(let j=0;j<=k;j++){const c=C[j],v=c[2]+c[3]*c[1];j?x2.lineTo(X2(c[0]),Y2(v)):x2.moveTo(X2(c[0]),Y2(v))}x2.stroke();
+    // اللوحة
+    const dv=vNow-S.v0;
+    $('#bt_v').textContent=btN(vNow)+'$';const e=$('#bt_dv');e.textContent=btS(dv)+'$ · '+btS(S.v0?dv/S.v0*100:0)+'%';e.className='num '+(dv>=0?'g':'r');
+    $('#bt_q1').textContent=btN(cc[2])+'$';$('#bt_b1').textContent=btQ(cc[3])+' ≈ '+btN(cc[3]*cc[1])+'$';
+    $('#bt_pr').textContent=coin?btS(cc[4],6)+' '+B:btS(cc[4])+'$';$('#bt_pr').className='num '+(cc[4]>=0?'g':'r');
+    let nb=0,ns=0;for(const f of F){if(f[0]>iNow)break;f[1]?ns++:nb++}
+    $('#bt_tr').textContent=nb+' · '+ns;
+    const day=Math.min(per[1],Math.floor(iNow*d.dt/86400)+1);$('#bt_day').textContent=`اليوم ${day} من ${per[1]}`;$('#bt_px').textContent=btP(cc[1]);
+    $('#bt_scr').value=Math.round(PL.u*1000)}
+  function pop(v){const box=$('#bt_pops');if(!box)return;const p=document.createElement('i');p.className='btpop '+(v>=0?'g':'r');p.textContent=(coin?btS(v,6)+' '+B:btS(v)+'$');box.appendChild(p);setTimeout(()=>p.remove(),1600)}
+  function end(){const E=$('#bt_end');if(!E)return;E.hidden=false;
+    E.innerHTML=`<div class="btendc"><h3>🏁 نهاية ${per[0]} — السعر عاد إلى <span class="num">${btP(S.p0)}</span></h3>
+     <div class="btaggr"><div><span>بدأت المحفظة</span><b class="num">${btN(S.v0)}$</b></div><div><span>انتهت</span><b class="num">${btN(S.v1)}$</b></div>
+      <div><span>الفرق = ما صنعه البوت</span><b class="num ${S.result>=0?'g':'r'}">${btS(S.result)}$</b><small class="num">${btS(S.pct)}%</small></div>
+      <div><span>منه ربح محقق</span><b class="num">${coin?btS(S.realized,6)+' '+gEsc(B):btS(S.realized)+'$'}</b></div></div>
+     <div class="btendl"><span>🛒 شراء · 💰 بيع</span><b class="num">${S.buys} · ${S.sells}</b></div>
+     <div class="btendl"><span>🧾 العمولات المدفوعة</span><b class="num">${btN(S.fee_usd)}$</b></div>
+     <div class="btendl"><span>📉 أسوأ هبوط للمحفظة · أقل قيمة</span><b class="num">${btN(S.mdd)}$ · ${btN(S.low)}$</b></div>
+     <div class="btendl"><span>💲 السعر تحرّك بين</span><b class="num">${btP(S.pmin)} ↔ ${btP(S.pmax)}</b></div>
+     ${coin?`<div class="btendl"><span>🪙 أقصى ما استُخدم من ${gEsc(B)}</span><b class="num">${btQ(S.coin_used_max)}</b></div>`:`<div class="btendl"><span>💵 أقصى دولار استُخدم</span><b class="num">${btN(S.used_max)}$</b></div>`}
+     <div class="btendl"><span>🏁 المحفظة في النهاية</span><b class="num">${btN(S.q1)}$ + ${btQ(S.b1)} ${gEsc(B)}</b></div>
+     <div class="btendl"><span>▶️ وفي البداية</span><b class="num">${btN(S.q0)}$ + ${btQ(S.b0)} ${gEsc(B)}</b></div>
+     <div class="mbtns"><button class="primary" onclick="btReplay()">↺ أعد المشاهدة</button></div></div>`}
+  PL.end=end;PL.draw=draw;
+  function tick(ts){if(!PL.run)return;if(!PL.last)PL.last=ts;const dt=Math.min(.1,(ts-PL.last)/1000);PL.last=ts;
+    const u0=PL.u;PL.u=Math.min(1,PL.u+dt*PL.spd/PL.dur);
+    const i0=u0*N,i1=PL.u*N;
+    while(PL.popI<POPS.length&&POPS[PL.popI][0]<=i1){if(POPS[PL.popI][0]>i0)pop(POPS[PL.popI][1]);PL.popI++}
+    draw();
+    if(PL.u>=1){PL.run=false;$('#bt_pp').textContent='▶️';end();return}
+    PL.raf=requestAnimationFrame(tick)}
+  function seek(u){PL.u=Math.max(0,Math.min(1,u));PL.popI=0;while(PL.popI<POPS.length&&POPS[PL.popI][0]<=PL.u*N)PL.popI++;draw()}
+  function pause(){PL.run=false;cancelAnimationFrame(PL.raf);$('#bt_pp').textContent='▶️'}
+  function play(){if(PL.u>=1)seek(0);$('#bt_end').hidden=true;PL.run=true;PL.last=0;$('#bt_pp').textContent='⏸';cancelAnimationFrame(PL.raf);PL.raf=requestAnimationFrame(tick)}
+  PL.seek=seek;PL.play=play;
+  $('#bt_pp').onclick=()=>PL.run?pause():play();
+  $('#bt_scr').oninput=e=>{pause();$('#bt_end').hidden=true;seek(+e.target.value/1000);if(PL.u>=1)end()};
+  el.querySelector('.btseg[data-k="spd"]').onclick=e=>{const b=e.target.closest('button');if(!b)return;el.querySelectorAll('.btseg[data-k="spd"] button').forEach(x=>x.classList.toggle('on',x===b));PL.spd=+b.dataset.v||1};
+  const reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(reduce){seek(1);pause();end()}else{draw();PL.raf=requestAnimationFrame(tick)}}
+function btReplay(){const PL=BT.pl;if(!PL||!PL.play)return;PL.seek(0);PL.play()}
 async function botHist(b){                                     // 📜 v3.26.3: سجل البوت — لكل الأنواع (مثل الدوري)
   if(!b)return;
   let h=[];try{h=await api('/api/history?dir='+encodeURIComponent(b.dir))}catch(e){}
@@ -21653,7 +23057,7 @@ function recDetails(b){
       <tr><td style="text-align:right">⏭️ مواعيد تخطّاها</td><td class="num">${r.skips||0}</td></tr>
     </tbody></table>
     <p style="font-size:11px;color:var(--mut2);margin-top:10px;line-height:1.8">الهدف ما ينحط أمر بالمنصة: البوت يراقب السعر ويطلع بأمر فوري لما يوصل — وإنت تطلع بأي وقت من الكرت (حتى بخسارة). الإعدادات تثبت من الإنشاء (إلا ⚖️ النسبة وإيقاف الأمر الدوري)؛ لتغييرها احذف البوت وانشر واحد جديد.</p>
-    <div class="mbtns" style="margin-top:12px"><button class="primary" onclick="hideModal();recHist(botOf('${b.dir}'))">📜 السجل</button><button onclick="hideModal()">إغلاق</button></div>`);
+    <div class="mbtns" style="margin-top:12px"><button class="primary" onclick="hideModal();recHist(botOf('${b.dir}'))">📜 السجل</button><button onclick="btFromBot('${b.dir}')" title="إعدادات هذا البوت على مسار تجريبي — لا يمسّ البوت">🧪 اختبار تجريبي</button><button onclick="hideModal()">إغلاق</button></div>`);
 }
 async function openDeployRec(){
   let ws=[];try{const s=await api('/api/settings');ws=s.wallets||[]}catch(e){}
@@ -21683,7 +23087,7 @@ async function openDeployRec(){
   <div class="cklist" style="margin-top:12px"><label class="ck"><input type="checkbox" id="rd_now" checked onchange="recPreview()">⚡ أول أمر هسه</label>
     <label class="ck"><input type="checkbox" id="rd_auto" checked>🤖 يشمله الحارس</label></div>
   <div id="rd_preview" style="margin-top:14px"></div>
-  <div class="mbtns" style="margin-top:14px"><button class="primary" id="rd_go" style="background:linear-gradient(94deg,var(--green),#16a34a)">🚀 انشر وشغّل</button><button onclick="hideModal()">إلغاء</button></div>`);
+  <div class="mbtns" style="margin-top:14px"><button class="primary" id="rd_go" style="background:linear-gradient(94deg,var(--green),#16a34a)">🚀 انشر وشغّل</button><button id="rd_bt" onclick="btFromForm('rec')" title="يعمل محرك البوت نفسه على مسار تجريبي يعود في نهايته إلى سعر البداية — بلا مفاتيح ولا أوامر حقيقية">🧪 جرّب على مسار تجريبي</button><button onclick="hideModal()">إلغاء</button></div>`);
   $('#rd_go').onclick=async()=>{
     const body=recFormBody();
     if(!body.symbol||!body.symbol.includes('-')){toast('اكتب الرمز كاملاً مثل XRP-USDT',false);return}
@@ -23336,7 +24740,7 @@ function gridDetails(b){
     </div>
     <div class="mbtns" style="margin-top:14px">
       <button class="primary" onclick="hideModal();gridLadder(botOf('${b.dir}'))">🪜 السلم الكامل</button>
-      <button onclick="hideModal()">إغلاق</button></div>`);
+      <button onclick="btFromBot('${b.dir}')" title="إعدادات هذا البوت على مسار تجريبي — لا يمسّ البوت">🧪 اختبار تجريبي</button><button onclick="hideModal()">إغلاق</button></div>`);
   // اربط الأزرار
   $('#gd_guard').onclick=()=>{ctl(b.dir,'guard');hideModal()};
   $('#gd_auto').onclick=()=>{ctl(b.dir,'auto');hideModal()};
@@ -23382,7 +24786,7 @@ function dcaDetails(b){
     <p style="font-size:11px;color:var(--mut2);margin-top:10px">الإعدادات تثبت من الإنشاء. لتغييرها، احذف البوت وأنشئ واحداً جديداً بالأرقام الجديدة (لحماية الدورة الجارية).</p>
     <div class="mbtns" style="margin-top:14px">
       <button class="primary" onclick="hideModal();dcaLadder(botOf('${b.dir}'))">🪜 السلم</button>
-      <button onclick="hideModal()">إغلاق</button></div>`);
+      <button onclick="btFromBot('${b.dir}')" title="إعدادات هذا البوت على مسار تجريبي — لا يمسّ البوت">🧪 اختبار تجريبي</button><button onclick="hideModal()">إغلاق</button></div>`);
 }
 function closeDrawer(){CUR=null;$('#drawer').classList.remove('on')}
 function dTab(t){['over','log','set','danger'].forEach(k=>{$('#tab_'+k).style.display=k===t?'':'none';$('#tb_'+k).classList.toggle('act',k===t)});
@@ -24830,7 +26234,7 @@ async function openDeployDca(){
   <button class="primary" onclick="dcaPreview()" style="width:100%;margin-top:14px;background:linear-gradient(94deg,var(--cyan),var(--vio))">🔍 احسب الجدول والمخطط</button>
   <div id="dn_share"></div>
   <div id="dn_preview" style="margin-top:16px"></div>
-  <div class="mbtns" style="margin-top:14px"><button class="primary" id="dn_go" style="background:linear-gradient(94deg,var(--green),#16a34a)">🚀 انشر وشغّل</button><button onclick="hideModal()">إلغاء</button></div>`);
+  <div class="mbtns" style="margin-top:14px"><button class="primary" id="dn_go" style="background:linear-gradient(94deg,var(--green),#16a34a)">🚀 انشر وشغّل</button><button id="dn_bt" onclick="btFromForm('dca')" title="يعمل محرك البوت نفسه على مسار تجريبي يعود في نهايته إلى سعر البداية — بلا مفاتيح ولا أوامر حقيقية">🧪 جرّب على مسار تجريبي</button><button onclick="hideModal()">إلغاء</button></div>`);
   $('#dn_go').onclick=async()=>{
     const body=dcaFormBody();
     if(!body.symbol||!body.symbol.includes('-')){toast('اكتب الرمز كاملاً مثل XRP-USDT',false);return}
@@ -24849,6 +26253,13 @@ function dcaTypeSwitch(){
   $('#dn_tp_lbl').textContent=buy?'هدف الربح % (فوق المتوسط)':'هدف الربح % (تحت المتوسط)';
   dcaPreview();
 }
+function gridFormBody(){                                     // 🧪 v3.36.0: حقول نموذج الشبكة (نفسها التي كانت داخل زر النشر)
+  return {symbol:$('#n_sym').value.trim().toUpperCase(),grid_pct:$('#n_grid').value,usd_value:$('#n_usd').value,
+      min_price:$('#n_min').value,forced_base:$('#n_base').value,wallet:$('#n_wallet').value,
+      g_type:$('#n_gtype').value,
+      lower_price:$('#n_gtype').value==='grid_range'?$('#n_lower').value:0,upper_price:$('#n_gtype').value==='grid_range'?$('#n_upper').value:0,
+      buy_offset:$('#n_gtype').value==='grid_plus'?$('#n_boff').value:0,
+      guard:$('#n_guard').checked,auto:$('#n_auto').checked,demo:$('#n_demo').checked}}
 function dcaFormBody(){
   return {symbol:$('#dn_sym').value.trim().toUpperCase(),base_price:$('#dn_bp').value,
     dca_type:$('#dn_type').value,
@@ -25099,16 +26510,11 @@ async function openDeploy(pre){pre=pre||{};
   <button class="primary" id="b_rprev" onclick="gridRangePreview()" style="width:100%;margin-top:12px;background:linear-gradient(94deg,var(--cyan),var(--vio))">🔍 معاينة أوامر النطاق (كم USDT وكم عملة)</button>
   <div id="n_share"></div>
   <div id="n_gpreview" style="margin-top:14px"></div>
-  <div class="mbtns" style="margin-top:14px"><button class="primary" id="n_go">🚀 انشر وشغّل</button><button onclick="hideModal()">إلغاء</button></div>`);
+  <div class="mbtns" style="margin-top:14px"><button class="primary" id="n_go">🚀 انشر وشغّل</button><button id="n_bt" onclick="btFromForm('grid')" title="يعمل محرك البوت نفسه على مسار تجريبي يعود في نهايته إلى سعر البداية — بلا مفاتيح ولا أوامر حقيقية">🧪 جرّب على مسار تجريبي</button><button onclick="hideModal()">إلغاء</button></div>`);
   setTimeout(()=>gType(_gt0),0);                               // الحقول تنضبط حسب النوع من أول ما ينفتح
   setTimeout(()=>shareCheck('n_share',($('#n_sym')||{}).value,{wallet:($('#n_wallet')||{}).value}),0);
   $('#n_go').onclick=async()=>{
-    const body={symbol:$('#n_sym').value.trim().toUpperCase(),grid_pct:$('#n_grid').value,usd_value:$('#n_usd').value,
-      min_price:$('#n_min').value,forced_base:$('#n_base').value,wallet:$('#n_wallet').value,
-      g_type:$('#n_gtype').value,
-      lower_price:$('#n_gtype').value==='grid_range'?$('#n_lower').value:0,upper_price:$('#n_gtype').value==='grid_range'?$('#n_upper').value:0,
-      buy_offset:$('#n_gtype').value==='grid_plus'?$('#n_boff').value:0,
-      guard:$('#n_guard').checked,auto:$('#n_auto').checked,demo:$('#n_demo').checked};
+    const body=gridFormBody();
     $('#n_go').disabled=true;try{const r=await api('/api/deploy',body);toast(r.msg,r.ok);if(r.ok){hideModal();tick()}}finally{$('#n_go').disabled=false}}}
 
 /* ── المحرك ── */
@@ -29005,6 +30411,8 @@ APP_APK_B64 = "UEsDBBQAAAAIAAAAIVw+eN+/bAcAAEQZAAATAAAAQW5kcm9pZE1hbmlmZXN0Lnhtb
 
 
 if __name__ == "__main__":
+    if len(sys.argv) >= 5 and sys.argv[1] == "--holy-bt":      # 🧪 v3.36.0: عامل الاختبار التجريبي (عملية منفصلة بلا شبكة)
+        sys.exit(_bt_child(sys.argv[2], sys.argv[3], sys.argv[4]))
     # 🛟 شبكة أمان: أي فشل بالإقلاع يُكتب بملف ويُعرض بالشاشة بدل ما ينغلق بصمت
     try:
         _write_env("holy_startup.log")
