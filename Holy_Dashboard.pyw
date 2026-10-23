@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.35.0"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.35.1"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -3020,7 +3020,7 @@ def _rec_notify(b, st):
         _safe(save_json_atomic, REC_TG_FILE, d, default=None)
 
 
-# ═══════════ 🛤️ v3.34.0: بوت «مسار القيمة» (Value Averaging) — فرد من عائلة الدوري بالجدول (ربحه دولار) · 📉📈 v3.35.0: بالنسبة + 📋 الجدول ═══════════
+# ═══════════ 🛤️ v3.34.0: بوت «مسار القيمة» (Value Averaging) — فرد من عائلة الدوري بالجدول (ربحه دولار) · 📉📈 v3.35.0: بالنسبة + 📋 الجدول · 👆 v3.35.1: البيع من أي مستوى ═══════════
 #   المحرك (vpath.py) يتداول وحده؛ اللوحة تقرأ حالته (rec_state_) وتكتب حقول طلب فقط — لا أمر يخرج من اللوحة نفسها.
 #   القاعدة: هدف لقيمة العملة التي يحملها البوت (يبدأ بمبلغ ويكبر مبلغاً كل خطوة — أو ثابت) · الفرق يُشترى أو يُباع.
 #   المركز سطر «P» بقائمة الأوامر (كلفة العملة المحمولة) · كل بيعة بسجل الدورات بربحها المحقق (موجب أو سالب)
@@ -3109,10 +3109,11 @@ def _va_next_line(cfg, st):
     return "⏰ الخطوة القادمة: " + (datetime.fromtimestamp(nx).strftime("%Y-%m-%d %H:%M") if nx else "—")
 
 
-def _va_sim_step(T, p, Q, C, band_abs, mo, cap, floor_on, F, mn=0.0):
+def _va_sim_step(T, p, Q, C, band_abs, mo, cap, floor_on, F, mn=0.0, lot=0.0):
     """خطوة واحدة بنفس قواعد المحرك بالضبط ⇒ (الفعل، دولار الأمر، عملة الأمر، الكمية بعده، الكلفة بعده، ربح البيعة)
     الشراء: الفرق ⇐ أقصى أمر ⇐ ما بقي من الميزانية ⇐ بالسنت · العمولة من العملة · البيع: الفائض بسعر الشراء بالدفتر · العمولة من الدولار ·
-    «البيع فوق الكلفة»: لا بيع تحت (الكلفة للعملة × 1.001 ÷ (1 − العمولة)) · أقل أمر: 1$ أو أقل كمية بالمنصة (mn) أيهما أكبر"""
+    «البيع فوق الكلفة»: لا بيع تحت (الكلفة للعملة × 1.001 ÷ (1 − العمولة)) · أقل أمر: 1$ أو أقل كمية بالمنصة (mn) أيهما أكبر ·
+    v3.35.1: كمية البيع تنزل لوحدة العملة بالمنصة (lot) مثل المحرك (`fmt_qty`) — وبلا وحدة معروفة 8 خانات"""
     gap = T - Q * p
     if abs(gap) <= max(band_abs, 0.01):
         return "hold", 0.0, 0.0, Q, C, 0.0
@@ -3131,6 +3132,10 @@ def _va_sim_step(T, p, Q, C, band_abs, mo, cap, floor_on, F, mn=0.0):
         q = amt / p * (1 - F)
         return "buy", amt, q, Q + q, C + amt, 0.0
     q = min(-gap / p, Q)
+    if lot > 0:
+        q = round(math.floor(q / lot + 1e-9) * lot, max(0, -int(math.floor(math.log10(lot) + 1e-9))) + 2)
+    else:
+        q = math.floor(q * 1e8 + 1e-6) / 1e8
     if q <= 0 or q * p < 1.0 or (mn > 0 and q < mn):
         return "small", 0.0, 0.0, Q, C, 0.0
     if floor_on and Q > 0 and C > 0 and p < (C / Q) * 1.001 / (1 - F):
@@ -3140,11 +3145,13 @@ def _va_sim_step(T, p, Q, C, band_abs, mo, cap, floor_on, F, mn=0.0):
     return "sell", usd, q, Q - q, C - cost, usd - cost
 
 
-def va_plan(cfg, st=None, px=0.0, down=40, up=12, mn=0.0, keep=0):
+def va_plan(cfg, st=None, px=0.0, down=40, up=12, mn=0.0, keep=0, lot=0.0, at=0):
     """📋 v3.35.0: جدول مسار القيمة — نفس خطوات المحرك بالضبط على مسار أسعار محدد:
       📉📈 بالنسبة: مستويات الشبكة نفسها (كل نزول X% وكل صعود Y% عن آخر خطوة) ⇒ ما سيفعله البوت حرفياً عند كل سعر
       ⏱️ بالوقت: سيناريو «خطوة بكل موعد والسعر يتحرك النطاق + 1% كل مرة» ⇒ تقريبي (البوت الحقيقي يتبع سعر الموعد)
-    st = حالة البوت الحية (الجدول يبدأ من مركزه الآن ويتحدّث معه) أو None لبوت جديد يبدأ بالسعر px · mn = أقل كمية بالمنصة · المكابح لا تُحسب (تعتمد على الوقت)"""
+    st = حالة البوت الحية (الجدول يبدأ من مركزه الآن ويتحدّث معه) أو None لبوت جديد يبدأ بالسعر px · mn = أقل كمية بالمنصة · lot = وحدة الكمية ·
+    المكابح لا تُحسب (تعتمد على الوقت) · 👆 v3.35.1: at = رقم مستوى بجدول النزول ⇒ «up_at» = جدول الصعود لو اشترى البوت لحد ذاك المستوى ثم صعد ·
+    بكل سطر «res» = النتيجة لو بعت كل العملة هنا (المحقق بهذا المسار + قيمة العملة بعد عمولة البيع − كلفتها) — سالبها خسارة ورقية"""
     st = st or {}
     try:
         F = float(st.get("fee_rate") or 0)
@@ -3183,10 +3190,11 @@ def va_plan(cfg, st=None, px=0.0, down=40, up=12, mn=0.0, keep=0):
             n, tgt, lvl = 1, start, 0
         anchor = ref
 
-    def walk(sign, N):
-        rows, q_, c_, lv, tg, k, cum = [], Q, C, lvl, tgt, n, 0.0
-        base = anchor if pm else ref
-        for i in range(1, N + 1):
+    def walk(sign, N, s0, base, cut=0, nmax=0, need=0):
+        """صفوف مسار واحد من حالة s0 = (الكمية، الكلفة، المستوى، الهدف، الخطوات) · الصعود يكمل لحد «need» بيعات (حتى nmax) حتى يبيّن وين يبدأ البيع
+        ⇒ (الصفوف، الحالة بعد الصف «cut» وسعره)"""
+        rows, (q_, c_, lv, tg, k), cum, snap, sells = [], s0, 0.0, None, 0
+        for i in range(1, max(N, nmax) + 1):
             p = base * ((1 - d) ** i if sign < 0 else (1 + u) ** i)
             if p <= 0:
                 break
@@ -3197,7 +3205,8 @@ def va_plan(cfg, st=None, px=0.0, down=40, up=12, mn=0.0, keep=0):
             else:
                 T = (tg + S) if (k > 0 and tg is not None) else start
                 band_abs = bp / 100 * T
-            a, x, qq, q2, c2, pr = _va_sim_step(T, p, q_, c_, band_abs, mo, cap, fl, F, mn)
+            want = T - q_ * p
+            a, x, qq, q2, c2, pr = _va_sim_step(T, p, q_, c_, band_abs, mo, cap, fl, F, mn, lot)
             if a != "cap":
                 q_, c_ = q2, c2
                 if pm:
@@ -3205,16 +3214,27 @@ def va_plan(cfg, st=None, px=0.0, down=40, up=12, mn=0.0, keep=0):
                 else:
                     tg, k = T, k + 1
             cum += pr
-            rows.append({"i": i, "px": p, "chg": round((p / ref - 1) * 100, 4), "tgt": round(T, 6), "act": a, "usd": round(x, 6), "q": round(qq, 10),
-                         "Q": round(q_, 10), "C": round(c_, 6), "avg": (c_ / q_) if q_ > 0 else 0.0, "val": round(q_ * p, 6), "profit": round(pr, 6),
-                         "cum": round(cum, 6), "lvl": lv if pm else k, "cap_pct": round(min(100.0, c_ / cap * 100), 2) if cap > 0 else 0.0})
+            sells += a == "sell"
+            paper = (q_ * p * (1 - F) - c_) if q_ > 0 else -c_
+            rows.append({"i": i, "px": p, "chg": round((p / ref - 1) * 100, 4), "chg_b": round((p / base - 1) * 100, 4), "tgt": round(T, 6), "act": a,
+                         "usd": round(x, 6), "q": round(qq, 10), "Q": round(q_, 10), "C": round(c_, 6), "avg": (c_ / q_) if q_ > 0 else 0.0,
+                         "val": round(q_ * p, 6), "profit": round(pr, 6), "cum": round(cum, 6), "lvl": lv if pm else k, "want": round(want, 6),
+                         "paper": round(paper, 6), "res": round(cum + paper, 6), "cap_pct": round(min(100.0, c_ / cap * 100), 2) if cap > 0 else 0.0})
+            if cut and i == cut:
+                snap = ((q_, c_, lv, tg, k), p)
             if sign < 0 and a == "cap":
                 break
-            if sign > 0 and p > base * 4:
+            if sign > 0 and i >= N and (sells >= need or i >= nmax):
                 break
-        return rows
+        return rows, snap
 
-    rd, ru = walk(-1, down), walk(1, up)
+    s0, b0 = (Q, C, lvl, tgt, n), (anchor if pm else ref)
+    at = max(0, min(int(at or 0), down))
+    rd, snap = walk(-1, down, s0, b0, cut=at)
+    if at and snap is None and rd:                           # المستوى المختار بعد امتلاء الميزانية ⇒ آخر سطر
+        at = len(rd)
+        rd, snap = walk(-1, down, s0, b0, cut=at)
+    ru, _ = walk(1, up, s0, b0, nmax=40, need=3)
     buys = [r for r in rd if r["act"] == "buy"]
     capr = next((r for r in rd if r["act"] == "cap"), None)
     end = {"last_buy_px": buys[-1]["px"] if buys else None, "last_buy_chg": buys[-1]["chg"] if buys else None,
@@ -3222,11 +3242,23 @@ def va_plan(cfg, st=None, px=0.0, down=40, up=12, mn=0.0, keep=0):
            "levels": len(buys), "beyond": capr is None}
     nb = next((r for r in rd if r["act"] in ("buy", "cap")), None)
     ns = next((r for r in ru if r["act"] in ("sell", "floor")), None)
+    if capr:
+        end.update(full_C=capr["C"], full_val=round(capr["Q"] * capr["px"], 6), full_res=capr["res"])
+    at_info, up_at = None, None
+    if at and snap:                                          # 👆 جدول البيع لو اشترى لحد المستوى «at» ثم صعد (نفس الشبكة: المرساة = سعر ذاك المستوى)
+        (q0, c0, _l, _t, _k), p0 = snap
+        up_at, _ = walk(1, up, snap[0], p0, nmax=60, need=3)
+        fpx = (c0 / q0) * 1.001 / (1 - F) if (fl and q0 > 0 and c0 > 0) else 0.0
+        fs = next((r for r in up_at if r["act"] == "sell"), None)
+        at_info = {"i": at, "px": p0, "chg": round((p0 / ref - 1) * 100, 4), "Q": round(q0, 10), "C": round(c0, 6), "avg": (c0 / q0) if q0 > 0 else 0.0,
+                   "val": round(q0 * p0, 6), "res": round((q0 * p0 * (1 - F) - c0) if q0 > 0 else -c0, 6), "floor_px": fpx,
+                   "floor_chg_b": round((fpx / p0 - 1) * 100, 4) if fpx else None, "floor_chg": round((fpx / ref - 1) * 100, 4) if fpx else None,
+                   "first_sell": fs, "sells": sum(1 for r in up_at if r["act"] == "sell"), "lvl": _l if pm else _k}
     if keep and len(rd) > keep:                               # الملخص من كل المستويات (حتى امتلاء الميزانية) · الصفوف المرسلة أول «keep» + سطر الامتلاء
         rd = rd[:keep] + ([capr] if capr else [])
-    return {"ok": True, "trigger": "price" if pm else "time", "approx": not pm, "ref": ref, "min_sz": mn, "d": round(d * 100, 6), "u": round(u * 100, 6),
+    return {"ok": True, "trigger": "price" if pm else "time", "approx": not pm, "ref": ref, "min_sz": mn, "lot": lot, "d": round(d * 100, 6), "u": round(u * 100, 6),
             "anchor": anchor if pm else None, "lvl": lvl, "fee": round(F * 100, 4), "first": first, "down": rd, "up": ru, "end": end,
-            "next_buy": nb, "next_sell": ns, "Q": round(Q, 10), "C": round(C, 6)}
+            "next_buy": nb, "next_sell": ns, "Q": round(Q, 10), "C": round(C, 6), "at": at_info, "up_at": up_at}
 
 
 def _va_snapshot(b, st):
@@ -3293,8 +3325,9 @@ def _va_snapshot(b, st):
     if not _sc and b["symbol"] not in _VA_SPEC_ASKED:            # أقل كمية بالمنصة للجدول — تُجلب مرة بالخلفية (لا انتظار بجولة اللوحة)
         _VA_SPEC_ASKED.add(b["symbol"])
         threading.Thread(target=_acc_spec, args=(b["symbol"],), daemon=True).start()
+    _sv = (_sc or {}).get("v") or {}
     try:
-        plan = va_plan(cfg, st, cp, down=150, up=10, mn=float(((_sc or {}).get("v") or {}).get("minSz") or 0), keep=25) if cp > 0 else {"ok": False}
+        plan = va_plan(cfg, st, cp, down=150, up=10, mn=float(_sv.get("minSz") or 0), keep=25, lot=float(_sv.get("lotSz") or 0)) if cp > 0 else {"ok": False}
     except Exception:
         plan = {"ok": False}
     try:
@@ -3525,7 +3558,25 @@ def deploy_va(data):
 
 
 def va_plan_api(data):
-    """📋 v3.35.0: جدول ما قبل التشغيل — نفس قراءة إعدادات النشر (بلا مفاتيح ولا كتابة) ⇒ va_plan عند السعر الحالي"""
+    """📋 v3.35.0: جدول ما قبل التشغيل — نفس قراءة إعدادات النشر (بلا مفاتيح ولا كتابة) ⇒ va_plan عند السعر الحالي ·
+    👆 v3.35.1: «at» = مستوى مختار بجدول النزول (جدول البيع من عنده) · «dir» = بوت شغّال (نفس جدول كرته من حالته — قراءة فقط)"""
+    try:
+        at = max(0, min(150, int(float(data.get("at") or 0))))
+    except Exception:
+        at = 0
+    d_rel = str(data.get("dir") or "").strip()
+    if d_rel:
+        bots = bot_dirs()
+        full = os.path.realpath(os.path.join(ROOT, d_rel))
+        b = bots.get(full) if full.startswith(os.path.realpath(ROOT)) else None
+        if not b or not _is_va(b):
+            return {"ok": False, "msg": "مجلد غير معروف"}
+        st = load_json(paths_of(b)[0]) or {}
+        cp = float(PX.get(b["symbol"]) or st.get("px") or 0)
+        sv = (_INST_CACHE.get(b["symbol"]) or {}).get("v") or {}
+        if cp <= 0:
+            return {"ok": False, "msg": "السعر غير معروف الآن"}
+        return va_plan(b["cfg"], st, cp, down=150, up=10, mn=float(sv.get("minSz") or 0), keep=25, lot=float(sv.get("lotSz") or 0), at=at)
     sym = str(data.get("symbol", "")).strip().upper()
     try:
         px = float(data.get("px") or 0)
@@ -3546,13 +3597,14 @@ def va_plan_api(data):
         cfg["rise_pct"] = float(data.get("rise_pct") if data.get("rise_pct") not in (None, "") else cfg["drop_pct"])
     except Exception:
         return {"ok": False, "msg": "تأكد من الأرقام"}
-    mn = 0.0
+    mn = lot = 0.0
     if px > 0 and sym and "-" in sym:
         try:
-            mn = float(_acc_spec(sym).get("minSz") or 0)
+            sv = _acc_spec(sym)
+            mn, lot = float(sv.get("minSz") or 0), float(sv.get("lotSz") or 0)
         except Exception:
-            mn = 0.0
-    r = va_plan(cfg, None, px if px > 0 else 1.0, down=80, up=15, mn=mn)
+            mn = lot = 0.0
+    r = va_plan(cfg, None, px if px > 0 else 1.0, down=80, up=15, mn=mn, lot=lot, at=at)
     r["px_known"] = px > 0
     return r
 
@@ -18553,7 +18605,7 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
         if path == "/api/deploy_va":
             return self._json(deploy_va(data))         # 🛤️ v3.34.0
         if path == "/api/va_plan":
-            return self._json(va_plan_api(data))       # 📋 v3.35.0: جدول ما قبل التشغيل (حساب فقط)
+            return self._json(va_plan_api(data))       # 📋 v3.35.0: جدول ما قبل التشغيل (حساب فقط) · 👆 v3.35.1: البيع من مستوى مختار (حي أيضاً · قراءة فقط)
         if path == "/api/dca_preview":
             try:
                 bp = float(data.get("base_price", 0))
@@ -19204,6 +19256,14 @@ body.boot .card{animation:rise .6s var(--ease) both;animation-delay:calc(var(--i
 .vapltbl tr.cap td{background:rgb(var(--red-rgb)/.10);font-weight:700}
 .vapltbl tr.floor td{background:rgb(var(--vio-rgb)/.07);color:var(--mut)}
 .vaplnote{font-size:10.5px;color:var(--mut2);line-height:1.8;margin:8px 0 0}
+.vapltbl tr.pk{cursor:pointer}
+.vapltbl tr.pk:hover td,.vapltbl tr.pk:focus-visible td{background:rgb(var(--cyan-rgb)/.12)}
+.vapltbl tr.sel td{background:rgb(var(--cyan-rgb)/.22)!important;font-weight:700}
+.vapltbl tr.sel td:first-child{box-shadow:inset -3px 0 0 var(--cyan)}
+.vaplhint{font-size:11px;color:var(--mut2);margin:0 0 4px}
+.vaplat{background:rgb(var(--amber-rgb)/.07)}
+.vaplback{font-size:11px;padding:3px 8px;margin-inline-start:6px;border-radius:8px;vertical-align:middle}
+.vapltbl small{color:var(--mut2);font-size:10px}
 .card.rec .dcafill.hot{background:linear-gradient(90deg,var(--amber),var(--red));box-shadow:0 0 8px rgb(var(--red-rgb)/.4)}
 .card.rec .dcafill{background:linear-gradient(90deg,var(--cyan),var(--vio));box-shadow:0 0 8px rgb(var(--cyan-rgb)/.35)}
 /* 🃏 v3.26.8: كل الكروت بنفس النمط واللون — نفس الخلفية والحافة · نفس شارة النوع · نفس المربعات · نفس الحشوة */
@@ -21046,7 +21106,7 @@ function recRange(b){
 function recPause(b){const r=b.rec||{};ctl(b.dir,r.paused?'rec_resume':'rec_pause');if(b.rec)b.rec.paused=!r.paused}
 const BT_LBL={grid:'♾️ لانهائية',grid_range:'🎚️ مدى',grid_plus:'➕ بلس',dca:'📉 DCA بيعي',dca_buy:'📈 DCA شرائي',rec_buy:'دوري شرائي',rec_sell:'دوري بيعي',rec_va:'🛤️ مسار القيمة'};
 function recHist(b){return botHist(b)}
-/* ═══ 🛤️ v3.34.0: بوت «مسار القيمة» — كرت · رسم الهدف مقابل القيمة · خطوة الآن · إيقاف · بيع الكل · الإعدادات الحية · النشر · 📉📈 v3.35.0: بالنسبة + 📋 الجدول ═══ */
+/* ═══ 🛤️ v3.34.0: بوت «مسار القيمة» — كرت · رسم الهدف مقابل القيمة · خطوة الآن · إيقاف · بيع الكل · الإعدادات الحية · النشر · 📉📈 v3.35.0: بالنسبة + 📋 الجدول · 👆 v3.35.1: البيع من أي مستوى ═══ */
 const VA_DEF={fixed:{start:100,step:0,every:4,unit:'h',band:8,max_order:60,cap:400,floor:true,brake:0},
               grow:{start:10,step:10,every:7,unit:'d',band:4,max_order:30,cap:300,floor:true,brake:0}};
 const VA_DEFP={fixed:{start:100,step:0,drop:8,rise:12,max_order:100,cap:400,floor:true,brake:0},          // 📉📈 بالنسبة (من القياس — الجولة 3)
@@ -21076,32 +21136,79 @@ function vaChart(r){
 function vaActTxt(a){return {buy:'🛒 يشتري',sell:'💰 يبيع',hold:'⚖️ لا شيء',small:'⚖️ أصغر من أقل أمر',floor:'🔒 لا يبيع (تحت الكلفة)',cap:'🛡️ الميزانية ممتلئة'}[a]||a}
 function vaPlanHTML(P,opt){
   opt=opt||{};if(!P||!P.ok)return '<div class="vach0">الجدول غير متاح الآن (السعر غير معروف)</div>';
-  const pm=P.trigger==='price',E=P.end||{},F=P.first;
+  const pm=P.trigger==='price',E=P.end||{},F=P.first,ctx=opt.ctx||'',A=opt.A&&opt.A.ok&&opt.A.at&&opt.A.up_at?opt.A:null,sel=A?+A.at.i:(+opt.at||0);
   const px=v=>`<span dir="ltr">${f4(+v)}</span>`,usd=v=>`<span dir="ltr">${vaD(v)}$</span>`,pc=v=>`<span dir="ltr">${vaS(v,1)}%</span>`;
+  const res=v=>`<span dir="ltr" style="color:${(+v||0)>=0?'var(--green)':'var(--red)'}">${vaS(v)}$</span>`;
   const L=[];
   if(F)L.push(`🟢 أول خطوة: ${vaActTxt(F.act)} ${F.usd?usd(F.usd):''} بسعر ${px(F.px)}${opt.known===false?' <small>(سعر افتراضي 1 — اكتب الرمز لترى الأسعار الحقيقية)</small>':''}`);
   const nb=(P.down||[]).find(r=>r.act==='buy'),ns=(P.up||[]).find(r=>r.act==='sell'||r.act==='floor');
   if(nb)L.push(`📉 ${pm?'الشراء القادم':'لو نزل'} عند ${px(nb.px)} (${pc(nb.chg)}) ⇒ يشتري ${usd(nb.usd)}`);
   if(ns)L.push(`📈 ${pm?'البيع القادم':'لو صعد'} عند ${px(ns.px)} (${pc(ns.chg)}) ⇒ `+(ns.act==='sell'?`يبيع ${usd(ns.usd)} وربح البيعة ${usd(ns.profit)}`:'🔒 لا يبيع — السعر تحت كلفتك (يبيع لاحقاً فوقها)'));
-  if(E.full_px)L.push(`🛡️ الميزانية تكفي <b>${E.levels}</b> مستوى شراء ⇒ آخر شراء عند ${px(E.last_buy_px)} (${pc(E.last_buy_chg)}) · <b>تمتلئ عند ${px(E.full_px)} (${pc(E.full_chg)})</b> — تحته لا يشتري حتى يبيع فائضاً`);
+  if(E.full_px)L.push(`🛡️ الميزانية تكفي <b>${E.levels}</b> مستوى شراء ⇒ آخر شراء عند ${px(E.last_buy_px)} (${pc(E.last_buy_chg)}) · <b>تمتلئ عند ${px(E.full_px)} (${pc(E.full_chg)})</b> — تحته لا يشتري حتى يبيع فائضاً`
+    +(E.full_res!=null?`<br><small>لو وصل هناك وبعت كل العملة: دفعت ${usd(E.full_C)} وقيمتها ${usd(E.full_val)} ⇒ ${res(E.full_res)} (خسارة ورقية — البوت نفسه لا يبيع تحت الكلفة)</small>`:''));
   else if((P.down||[]).length)L.push(`🛡️ الميزانية تكفي أكثر من ${E.levels} مستوى (حتى ${pc((P.down.slice(-1)[0]||{}).chg)} على الأقل)`);
-  const dn=(P.down||[]).map(r=>`<tr class="${r.act}"><td class="num">${r.i}</td><td class="num">${px(r.px)}</td><td class="num">${pc(r.chg)}</td><td>${vaActTxt(r.act)}${r.usd?' '+usd(r.usd):''}</td><td class="num">${usd(r.C)}</td><td class="num">${r.avg?px(r.avg):'—'}</td><td class="num">${(+r.cap_pct||0).toFixed(0)}%</td></tr>`).join('');
-  const up=(P.up||[]).map(r=>`<tr class="${r.act}"><td class="num">${r.i}</td><td class="num">${px(r.px)}</td><td class="num">${pc(r.chg)}</td><td>${vaActTxt(r.act)}${r.usd?' '+usd(r.usd):''}</td><td class="num" style="color:${(+r.profit||0)>=0?'var(--green)':'var(--red)'}">${r.act==='sell'?usd(r.profit):'—'}</td><td class="num">${usd(r.cum)}</td></tr>`).join('');
+  if(+P.min_sz>0)L.push(`📏 أقل أمر بالمنصة: <span dir="ltr">${+P.min_sz}</span> عملة (≈ ${usd(P.min_sz*P.ref)} الآن) — فائض أصغر منه لا يُباع بمستواه بل يُضاف للمستوى التالي`);
+  const pk=r=>ctx?` class="${r.act} pk${r.i===sel?' sel':''}" role="button" tabindex="0" onclick="vaPlanPick('${ctx}',${r.i})" onkeydown="if(event.key==='Enter')this.click()" title="اضغط لترى البيع لو اشترى لحد هذا المستوى"`:` class="${r.act}"`;
+  const dn=(P.down||[]).map(r=>`<tr${pk(r)}><td class="num">${r.i}</td><td class="num">${px(r.px)}</td><td class="num">${pc(r.chg)}</td><td>${vaRowAct(r,-1)}</td><td class="num">${usd(r.C)}</td><td class="num">${r.avg?px(r.avg):'—'}</td><td class="num">${r.res!=null?res(r.res):'—'}</td><td class="num">${(+r.cap_pct||0).toFixed(0)}%</td></tr>`).join('');
+  const upRows=(rows,b)=>rows.map(r=>`<tr class="${r.act}"><td class="num">${r.i}</td><td class="num">${px(r.px)}</td><td class="num">${pc(b?r.chg_b:r.chg)}</td><td>${vaRowAct(r,1)}</td><td class="num" style="color:${(+r.profit||0)>=0?'var(--green)':'var(--red)'}">${r.act==='sell'?usd(r.profit):'—'}</td><td class="num">${usd(r.cum)}</td><td class="num">${r.res!=null?res(r.res):'—'}</td></tr>`).join('');
+  const upHead=b=>`<thead><tr><th>#</th><th>السعر</th><th>${b?'من المستوى '+sel:'من الآن'}</th><th>يفعل</th><th>ربح البيعة</th><th>المتراكم</th><th title="المحقق بهذا المسار + قيمة العملة الباقية بعد عمولة البيع − كلفتها">لو بعت الكل هنا</th></tr></thead>`;
+  let upBlock;
+  if(A){const I=A.at,fs=I.first_sell;
+    upBlock=`<div class="vapltit">📈 لو اشترى لحد المستوى ${sel} (${px(I.px)} · ${pc(I.chg)}) ثم صعد السعر${pm?` (كل ${vaN(A.u)}%)`:''} <button type="button" class="vaplback" onclick="vaPlanPick('${ctx}',0)">↩️ من الوضع الحالي</button></div>
+    <div class="vaplsum vaplat"><div>💼 عند المستوى ${sel}: كلفة العملة ${usd(I.C)} · قيمتها ${usd(I.val)} · المتوسط ${px(I.avg)} ⇒ لو بعت الكل هناك ${res(I.res)}</div>
+      ${I.floor_px?`<div>🔒 لا يبيع تحت ${px(I.floor_px)} (المتوسط + العمولتين) = <b>${pc(I.floor_chg_b)}</b> فوق سعر المستوى ${sel} · ${pc(I.floor_chg)} من الآن</div>`:'<div>🔓 «البيع فوق الكلفة» مطفأ — يبيع الفائض بأي سعر</div>'}
+      ${fs?`<div>💰 أول بيع عند ${px(fs.px)} (${pc(fs.chg_b)} من المستوى · ${pc(fs.chg)} من الآن) ⇒ يبيع ${usd(fs.usd)} وربح البيعة ${usd(fs.profit)}</div>`:'<div>💰 لا بيع ضمن الأسعار المعروضة</div>'}</div>
+    <div class="vaplwrap"><table class="dntbl vapltbl">${upHead(1)}<tbody>${upRows(A.up_at,1)||'<tr><td colspan="7">—</td></tr>'}</tbody></table></div>`}
+  else upBlock=(sel?`<div class="vaplhint">${opt.err?'⚠️ تعذّر حساب البيع من المستوى '+sel+' الآن':'⏳ يحسب البيع من المستوى '+sel+'…'}</div>`:'')+`<div class="vapltit">📈 لو صعد السعر من الآن${pm?` (كل ${vaN(P.u)}%)`:''}</div>
+    <div class="vaplwrap"><table class="dntbl vapltbl">${upHead(0)}<tbody>${upRows(P.up||[],0)||'<tr><td colspan="7">—</td></tr>'}</tbody></table></div>`;
   return `<div class="vaplan">
     <div class="vaplsum">${L.map(x=>'<div>'+x+'</div>').join('')}</div>
     ${pm?'':`<p class="vaplnote">⚠️ تقريبي: في وضع «بالوقت» يعمل البوت بسعر كل موعد — الجدول يفترض أن السعر يتحرك ${vaN(P.d)}% بين موعد وآخر (النطاق + 1%). للتحكم بالسعر نفسه اختر «📉📈 بالنسبة».</p>`}
     <div class="vapltit">📉 لو نزل السعر — مستوى بعد مستوى${pm?` (كل ${vaN(P.d)}%)`:''}</div>
-    <div class="vaplwrap"><table class="dntbl vapltbl"><thead><tr><th>#</th><th>السعر</th><th>من الآن</th><th>يفعل</th><th>كلفة العملة</th><th>المتوسط</th><th>الميزانية</th></tr></thead><tbody>${dn||'<tr><td colspan="7">—</td></tr>'}</tbody></table></div>
-    <div class="vapltit">📈 لو صعد السعر${pm?` (كل ${vaN(P.u)}%)`:''}</div>
-    <div class="vaplwrap"><table class="dntbl vapltbl"><thead><tr><th>#</th><th>السعر</th><th>من الآن</th><th>يفعل</th><th>ربح البيعة</th><th>المتراكم</th></tr></thead><tbody>${up||'<tr><td colspan="6">—</td></tr>'}</tbody></table></div>
-    <p class="vaplnote">الأرقام بنفس قواعد البوت بالضبط: العمولة ${vaN(P.fee)}% (من العملة عند الشراء ومن الدولار عند البيع) · أقصى أمر · الميزانية · البيع فوق الكلفة فقط · السنتات. ${pm?'كل سطر = مستوى؛ إذا قفز السعر عدة مستويات دفعة واحدة يخطو البوت خطوة واحدة بالمجموع.':''} مكابح الانهيار لا تظهر هنا.</p>
+    ${ctx?'<div class="vaplhint">👆 اضغط أي مستوى لترى ماذا يبيع لو اشترى البوت لحد عنده ثم صعد السعر</div>':''}
+    <div class="vaplwrap"><table class="dntbl vapltbl"><thead><tr><th>#</th><th>السعر</th><th>من الآن</th><th>يفعل</th><th>كلفة العملة</th><th>المتوسط</th><th title="قيمة كل العملة بهذا السعر بعد عمولة البيع − كلفتها">لو بعت الكل هنا</th><th>الميزانية</th></tr></thead><tbody>${dn||'<tr><td colspan="8">—</td></tr>'}</tbody></table></div>
+    ${upBlock}
+    <p class="vaplnote">الأرقام صافية وبنفس قواعد البوت بالضبط (العمولة ${vaN(P.fee)}%): <b>يشتري X$</b> = الدولار المدفوع، والعمولة تُخصم من العملة المستلمة · <b>يبيع X$</b> = الدولار الصافي الداخل محفظتك بعد عمولة البيع · <b>ربح البيعة</b> = صافي البيع − كلفة العملة المباعة بمتوسط شرائها (بعد العمولتين) · <b>لو بعت الكل هنا</b> = ربح هذا المسار + قيمة العملة الباقية بعد عمولة البيع − كلفتها (السالب خسارة ورقية: لا تقع إلا إذا بعت أنت بذاك السعر) · <b>⏭️ يعبر</b> = لا خسارة ولا بيع: المبلغ أصغر من أقل أمر بالمنصة فيُضاف للمستوى التالي · <b>🔒</b> = السعر تحت كلفتك فلا يبيع، والمستوى يُحسب ويبيع لاحقاً الفائض كله فوق الكلفة · أقصى أمر · الميزانية · كمية العملة بوحدة المنصة. ${pm?'كل سطر = مستوى؛ إذا قفز السعر عدة مستويات دفعة واحدة يخطو البوت خطوة واحدة بالمجموع.':''} يفترض التنفيذ بسعر المستوى نفسه (البوت ينفّذ بالسوق بعد عبوره بثوانٍ) · لا يشمل أرباحاً محققة سابقاً · مكابح الانهيار لا تظهر هنا.</p>
   </div>`}
+function vaRowAct(r,sg){
+  if(r.act==='small')return sg>0?`⏭️ يعبر بلا بيع <small>(الفائض ${vaD(-(+r.want||0))}$ أصغر من أقل أمر)</small>`:`⏭️ يعبر بلا شراء <small>(النقص ${vaD(+r.want||0)}$ أصغر من أقل أمر)</small>`;
+  if(r.act==='floor')return `🔒 لا يبيع — تحت الكلفة <small>(فائض ${vaD(-(+r.want||0))}$)</small>`;
+  return vaActTxt(r.act)+(r.usd?' '+`<span dir="ltr">${vaD(r.usd)}$</span>`:'')}
+let _vaAt={ctx:'',i:0,A:null,sig:'',busy:0};
+function vaPlanSig(P){P=P||{};return [P.Q,P.C,P.anchor,P.lvl,P.trigger,P.d,P.u].join('|')}
+function vaPlanPut(box,html){                                      // 👆 v3.35.1: يحفظ مكان التمرير بالجداول (التحديث الحي ما يرجّعك لفوق)
+  if(!box||box._h===html)return;
+  const sc=[...box.querySelectorAll('.vaplwrap')].map(w=>[w.scrollTop,w.scrollLeft]);
+  box.innerHTML=html;box._h=html;
+  box.querySelectorAll('.vaplwrap').forEach((w,k)=>{if(sc[k]){w.scrollTop=sc[k][0];w.scrollLeft=sc[k][1]}})}
+function vaPlanJump(box){                                         // أول ما يطلع جدول البيع للمستوى المختار: ينزل له (بالموبايل يكون تحت جدول النزول)
+  if(!_vaAt.jump||!box)return;const t=box.querySelector('.vaplat');if(!t)return;_vaAt.jump=0;
+  const h=t.previousElementSibling||t;try{h.scrollIntoView({block:'start',behavior:'smooth'})}catch(e){h.scrollIntoView()}}
+function vaPlanPick(ctx,i){
+  if(_vaAt.ctx===ctx&&_vaAt.i===i)i=0;                              // نفس المستوى مرة ثانية = رجوع
+  _vaAt={ctx,i,A:null,sig:'',busy:0,jump:i>0?1:0};
+  if(ctx==='pre'){if($('#vd_sym'))vaPlanFetch(vaFormBody());return}
+  vaPlanLive();
+}
+function vaPlanLive(){
+  const b=botOf(window._vaPlanDir),box=$('#va_plan_live');if(!b||!box){window._vaPlanDir=null;return}
+  const P=(b.rec||{}).plan,live=_vaAt.ctx==='live'&&_vaAt.i>0;
+  vaPlanPut(box,vaPlanHTML(P,{ctx:'live',at:live?_vaAt.i:0,A:live?_vaAt.A:null,err:live&&_vaAt.err}));vaPlanJump(box);
+  if(live&&!_vaAt.busy&&_vaAt.sig!==vaPlanSig(P))vaPlanLiveAt(P);      // يُعاد الحساب فقط إذا تغيّر مركز البوت (كمية · كلفة · مستوى)
+}
+async function vaPlanLiveAt(P){
+  const want=_vaAt.i,dir=window._vaPlanDir;_vaAt.busy=1;
+  let A=null;try{A=await api('/api/va_plan',{dir,at:want},true)}catch(e){}
+  if(_vaAt.ctx!=='live'||_vaAt.i!==want||window._vaPlanDir!==dir)return;
+  _vaAt.busy=0;_vaAt.A=A&&A.ok?A:null;_vaAt.err=!_vaAt.A;_vaAt.sig=vaPlanSig(P);vaPlanLive();
+}
 function vaPlanModal(b){
-  window._vaPlanDir=b.dir;
+  window._vaPlanDir=b.dir;_vaAt={ctx:'live',i:0,A:null,sig:'',busy:0};
   showModal(`<h2 style="color:var(--cyan)">📋 جدول مسار القيمة — ${b.symbol}</h2>
     <p style="font-size:12px;color:var(--mut2);line-height:1.8;margin:0 0 8px">يتحدّث مع البوت: يبدأ من مركزه الآن (الكمية · الكلفة · ${vaPm(b.rec)?'آخر مستوى':'الهدف القادم'}) ويقول ماذا سيفعل عند كل سعر.</p>
-    <div id="va_plan_live">${vaPlanHTML((b.rec||{}).plan)}</div>
+    <div id="va_plan_live"></div>
     <div class="mbtns" style="margin-top:12px"><button onclick="window._vaPlanDir=null;hideModal()">إغلاق</button></div>`);
+  vaPlanLive();
 }
 function buildVaCard(b,i){
   const el=document.createElement('div');el.className='card dca rec va';el.style.setProperty('--i',i);el.dataset.dir=b.dir;
@@ -21184,7 +21291,7 @@ function updVaCard(el,b){
   if(r.brake_now&&r.hint==='buy')h=`🧯 مكابح الانهيار: السعر نزل ${(+r.drop||0).toFixed(1)}% خلال 24 ساعة — لن يشتري`;
   if((+r.cap||0)>0&&(+r.c||0)>=(+r.cap)-1&&r.hint==='buy')h='🛡️ الميزانية ممتلئة — لن يشتري والهدف ينتظر';
   R.hint.innerHTML=(r.paused?'⏸ المسار موقوف — ':'')+h+(vaPm(r)?` <small>(الهدف ${vaD(r.next_tgt)}$ · قيمة العملة ${vaD(val)}$)</small>`:` <small>(الفرق <span dir="ltr">${vaS(gap)}$</span> · النطاق ±${vaD(r.band_usd)}$)</small>`);
-  if(window._vaPlanDir===b.dir){const lv=$('#va_plan_live');if(lv)lv.innerHTML=vaPlanHTML(P);else window._vaPlanDir=null}
+  if(window._vaPlanDir===b.dir)vaPlanLive();
   R.hint.className='vahint '+(r.hint||'');
   const cap=+r.cap||0,pc=+r.cap_pct||0;
   R.capt.innerHTML=cap>0?`<span dir="ltr">${vaD(r.c)} / ${vaD(cap,0)}$</span> · ${pc.toFixed(0)}%`:'بلا حد';
@@ -21261,6 +21368,7 @@ function vaDetails(b){
     <div class="mbtns" style="margin-top:12px"><button class="primary" onclick="hideModal();botHist(botOf('${b.dir}'))">📜 السجل</button><button onclick="hideModal()">إغلاق</button></div>`);
 }
 async function openDeployVa(){
+  _vaAt={ctx:'pre',i:0,A:null,sig:'',busy:0};
   let ws=[];try{const s=await api('/api/settings');ws=s.wallets||[]}catch(e){}
   showModal(`<h2 style="color:var(--cyan)">🛤️ نشر بوت «مسار القيمة»</h2>
   <p style="font-size:12.5px;color:var(--mut);line-height:1.9;margin:0 0 8px">تحدّد <b>قيمة العملة المطلوبة</b> في محفظة البوت، وعند كل خطوة يشتري الفرق إذا نقصت ويبيع الزائد إذا زادت — دون أن تحدّد أسعاراً.</p>
@@ -21372,9 +21480,10 @@ function vaPlanFetch(B){
     let px=0;const sym=(B.symbol||'').trim();
     if(sym.includes('-')){px=(window.JPX&&JPX[sym])||0;
       if(!px){try{const r=await fetch('https://www.okx.com/api/v5/market/ticker?instId='+sym,{cache:'no-store'});const j=await r.json();if(j&&j.code=='0'&&j.data)px=+j.data[0].last}catch(e){}}}
-    let P=null;try{P=await api('/api/va_plan',Object.assign({},B,{px:px||''}))}catch(e){}
+    const at=_vaAt.ctx==='pre'?_vaAt.i:0;
+    let P=null;try{P=await api('/api/va_plan',Object.assign({},B,{px:px||'',at}))}catch(e){}
     if(my!==_vaPlanN||!$('#vd_plan'))return;
-    $('#vd_plan').innerHTML=vaPlanHTML(P,{known:!!(P&&P.px_known)})},250)}
+    vaPlanPut($('#vd_plan'),vaPlanHTML(P,{known:!!(P&&P.px_known),ctx:'pre',at,A:at?P:null,err:at&&!(P&&P.up_at)}));if(at)vaPlanJump($('#vd_plan'))},250)}
 async function botHist(b){                                     // 📜 v3.26.3: سجل البوت — لكل الأنواع (مثل الدوري)
   if(!b)return;
   let h=[];try{h=await api('/api/history?dir='+encodeURIComponent(b.dir))}catch(e){}
