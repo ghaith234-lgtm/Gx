@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.2"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.3"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -737,6 +737,20 @@ def eng_script_of(b):
     except Exception:
         return "main.py"
 
+def _cycle_step(cfg):
+    """📐 v3.36.3: ربح الدورة الواحدة كنسبة من سعر الشراء — الشبكة: خطوتها · البلس: بُعد الشراء (buy_offset) مقرّباً لعدد درجات صحيح
+    مثل محركه بالحرف (main_plus.py `_offset_steps`: n = round(ln(1/(1−offset)) / ln(1+g)) ⇒ البيع = الشراء × (1+g)^n)"""
+    g = float(cfg.get("grid_percentage") or 0)
+    try:
+        off = float(cfg.get("buy_offset") or 0)
+    except Exception:
+        off = 0.0
+    if str(cfg.get("bot_type") or "") == "grid_plus" and 0 < off < 0.9 and g > 0:
+        n = max(1, int(round(math.log(1.0 / (1.0 - off)) / math.log(1.0 + g))))
+        return (1.0 + g) ** n - 1.0
+    return g
+
+
 def net_factor(b):
     """📉 معامل تحويل ربح المحرك لربح صافي.
 
@@ -747,9 +761,10 @@ def net_factor(b):
         الحقيقي  = كمية × سعر × (خطوة − 2×عمولة − خطوة×عمولة)
 
     النسبة بينهما ثابتة، فنضربها بكل رقم ربح يُعرض أو يُوزَّع.
+    🔧 v3.36.3: «خطوة» = ربح الدورة الحقيقي (`_cycle_step`) — للبلس بُعد الشراء لا مسافة السلم (كان يطرح عمولة أكثر ⇒ ربحه أقل بـ≈10%)
     """
     try:
-        g = float(b["cfg"].get("grid_percentage") or 0)
+        g = _cycle_step(b["cfg"])
         f = float(b["cfg"].get("fee_rate") or FEE_RATE_DEFAULT)
         if g <= 0 or f < 0:
             return 1.0
@@ -1499,7 +1514,7 @@ def export_md(days=30):
             L.append(f"- 🧾 عمولة OKX الفعلية: صانع **{_fe['maker']*100:.3f}%** · "
                      f"آخذ **{_fe['taker']*100:.3f}%** · التعادل عند خطوة "
                      f"**{2*_fe['maker']/(1-_fe['maker'])*100:.3f}%** (بالصانع)")
-            _g = float(b["cfg"].get("grid_percentage") or 0)
+            _g = _cycle_step(b["cfg"])                     # 📐 v3.36.3: ربح الدورة (البلس: بُعد الشراء)
             if _g > 0 and _g <= 2 * _fe["maker"] / (1 - _fe["maker"]):
                 L.append(f"- 🔴 **خطوة الشبكة {_g*100:.3f}% تحت التعادل** — "
                          f"كل دورة تخسر والمحرك يبلّغ ربحاً")
@@ -2458,8 +2473,8 @@ _BOT_KINDS = {
                    "route": ("events", "ledger", "trade", "released", "box", "coin_ledger", "loss", "report")},
     "dca":        {"lbl": "DCA بيعي",   "ico": "📉", "cur": "coin", "src": "cycles", "unit": "دورة", "fam": "dca", "state": "dca_state_", "eng": "DCA_SRC",
                    "route": ("events", "coin_ledger", "coin_trade", "loss", "report")},
-    "rec_va":     {"lbl": "مسار القيمة", "ico": "🛤️", "cur": "usd",  "src": "cycles", "unit": "بيعة", "fam": "rec", "state": "rec_state_", "eng": "VA_SRC",
-                   "route": ("events", "ledger", "trade", "released", "box", "loss", "report")},      # 🛤️ v3.34.0
+    "rec_va":     {"lbl": "مسار القيمة", "ico": "💹", "cur": "usd",  "src": "cycles", "unit": "بيعة", "fam": "rec", "state": "rec_state_", "eng": "VA_SRC",
+                   "route": ("events", "ledger", "trade", "released", "box", "loss", "report")},      # 💹 v3.34.0
     "rec_sell":   {"lbl": "دوري بيعي",  "ico": "🔂", "cur": "coin", "src": "cycles", "unit": "صفقة", "fam": "rec", "state": "rec_state_", "eng": "REC_SRC",
                    "route": ("events", "coin_ledger", "coin_trade", "ledger", "released", "box", "loss", "report")},
 }
@@ -2545,7 +2560,7 @@ def kinds_audit():
 _REC_T = _kinds(fam="rec")                   # 📐 v3.32.0: من الجدول (كان مكتوب باليد)
 _NONGRID = _kinds(fam=("dca", "rec"))        # بوتات بلا سلّم شبكة (ولا غلاف إعادة استثمار الشبكة ولا تدقيق سلّم) · 📐 من الجدول
 _LOSS_T = _kinds(book="loss")                # 📉 البوتات اللي خروجها بخسارة ينحسب (📐 من الجدول)
-_REC_USD = _kinds(fam="rec", cur="usd")      # 🛤️ v3.34.0: الدوري الشرائي ومسار القيمة — ربحهما دولار من بيع عملة اشتراها (📐 من الجدول)
+_REC_USD = _kinds(fam="rec", cur="usd")      # 💹 v3.34.0: الدوري الشرائي ومسار القيمة — ربحهما دولار من بيع عملة اشتراها (📐 من الجدول)
 REC_FEE = 0.001                              # نفس المحرك: عمولة الآخذ (أوامره كلها فورية)
 REC_TG_FILE = os.path.join(ROOT, "Holy_RecNotify.json")
 _REC_TG = {"d": None}
@@ -2682,7 +2697,7 @@ def _rec_ledger_book(b, st, led, now_t):
             t["r"] = round(float(t.get("r") or 0) + ri, 8)
             t["c"] = int(t.get("c") or 0) + 1
             tdl[day] = int(tdl.get(day, 0)) + 1
-            journal("profit", ("🛤️ مسار القيمة — بيعة #" if bt == "rec_va" else "💵 دوري شرائي — صفقة #") + f"{x.get('n', '?')}: ربح {pv:+.4f}$ صافي (محرر {rel:+.4f}$"
+            journal("profit", ("💹 مسار القيمة — بيعة #" if bt == "rec_va" else "💵 دوري شرائي — صفقة #") + f"{x.get('n', '?')}: ربح {pv:+.4f}$ صافي (محرر {rel:+.4f}$"
                     + (f" · 💠 {ri:.4f}$ معاد استثماره" if ri > 0 else "") + f") — يوم {day}", "ok", bot=key, sym=b["symbol"],
                     cycle=eid, day=day, profit=pv, rel=rel, ri=ri, manual=bool(x.get("manual")))
         else:
@@ -2714,7 +2729,7 @@ def _rec_range(cfg, st):
 def _rec_snapshot(b, st):
     """🔁 بيانات كرت الدوري: كل أمر مفتوح بحسبته (الهدف · لو طلع هسه) أو المعدل · المستثمر وحد الأمان · 💠 داخل البوت · الموعد الجاي"""
     if str((b.get("cfg") or {}).get("bot_type") or "") == "rec_va":
-        return _va_snapshot(b, st)                  # 🛤️ v3.34.0: مسار القيمة
+        return _va_snapshot(b, st)                  # 💹 v3.34.0: مسار القيمة
     cfg = b["cfg"]
     sell = cfg.get("bot_type") == "rec_sell"
     base = str(b["symbol"]).split("-")[0]
@@ -2817,7 +2832,7 @@ def _rec_snapshot(b, st):
 def _rec_control(b, sp, action, value):
     """🔁 أزرار الدوري — اللوحة تكتب **حقل طلب بس** بملف الحالة والمحرك ينفّذ (ولا أمر يطلع من اللوحة نفسها)"""
     if str((b.get("cfg") or {}).get("bot_type") or "") == "rec_va":
-        return _va_control(b, sp, action, value)    # 🛤️ v3.34.0: مسار القيمة
+        return _va_control(b, sp, action, value)    # 💹 v3.34.0: مسار القيمة
     st = load_json(sp) or {}
     cfg = b["cfg"]
     sell = cfg.get("bot_type") == "rec_sell"
@@ -2922,7 +2937,7 @@ def _rec_evn(e):
 def _rec_msg(b, st, e):
     """📨 نص تيليغرام لحدث واحد — قصير وواضح (والتطبيق ياخذ منه «ربح الصفقة»)"""
     if str((b.get("cfg") or {}).get("bot_type") or "") == "rec_va":
-        return _va_msg(b, st, e)                    # 🛤️ v3.34.0: مسار القيمة (بالفصحى)
+        return _va_msg(b, st, e)                    # 💹 v3.34.0: مسار القيمة (بالفصحى)
     cfg = b["cfg"]
     sym = b["symbol"]
     sell = cfg.get("bot_type") == "rec_sell"
@@ -3014,13 +3029,13 @@ def _rec_notify(b, st):
                 tg_send(txt)
                 sent += 1
         if len(new) > sent:
-            tg_send((f"🛤️ *`{b['symbol']}`* — و `{len(new) - sent}` أحداث أخرى ببوت مسار القيمة (التفاصيل بسجل البوت)" if _is_va(b) else
+            tg_send((f"💹 *`{b['symbol']}`* — و `{len(new) - sent}` أحداث أخرى ببوت مسار القيمة (التفاصيل بسجل البوت)" if _is_va(b) else
                      f"🔁 *`{b['symbol']}`* — و `{len(new) - sent}` حدث ثاني بالبوت الدوري (التفاصيل بسجل البوت)"))
         d[key] = max([last] + [_rec_evn(e) for e in new])
         _safe(save_json_atomic, REC_TG_FILE, d, default=None)
 
 
-# ═══════════ 🛤️ v3.34.0: بوت «مسار القيمة» (Value Averaging) — فرد من عائلة الدوري بالجدول (ربحه دولار) · 📉📈 v3.35.0: بالنسبة + 📋 الجدول · 👆 v3.35.1: البيع من أي مستوى · 🗑 v3.35.2: الحذف يخيّرك (بيع العملات أو إبقاؤها) ═══════════
+# ═══════════ 💹 v3.34.0: بوت «مسار القيمة» (Value Averaging) — فرد من عائلة الدوري بالجدول (ربحه دولار) · 📉📈 v3.35.0: بالنسبة + 📋 الجدول · 👆 v3.35.1: البيع من أي مستوى · 🗑 v3.35.2: الحذف يخيّرك (بيع العملات أو إبقاؤها) ═══════════
 #   المحرك (vpath.py) يتداول وحده؛ اللوحة تقرأ حالته (rec_state_) وتكتب حقول طلب فقط — لا أمر يخرج من اللوحة نفسها.
 #   القاعدة: هدف لقيمة العملة التي يحملها البوت (يبدأ بمبلغ ويكبر مبلغاً كل خطوة — أو ثابت) · الفرق يُشترى أو يُباع.
 #   المركز سطر «P» بقائمة الأوامر (كلفة العملة المحمولة) · كل بيعة بسجل الدورات بربحها المحقق (موجب أو سالب)
@@ -3262,7 +3277,7 @@ def va_plan(cfg, st=None, px=0.0, down=40, up=12, mn=0.0, keep=0, lot=0.0, at=0)
 
 
 def _va_snapshot(b, st):
-    """🛤️ بيانات كرت مسار القيمة: الهدف القادم مقابل قيمة العملة الآن · ماذا سيفعل · الكلفة والميزانية · المحقق وغير المحقق · رسم المسار"""
+    """💹 بيانات كرت مسار القيمة: الهدف القادم مقابل قيمة العملة الآن · ماذا سيفعل · الكلفة والميزانية · المحقق وغير المحقق · رسم المسار"""
     cfg = b["cfg"]
     base = str(b["symbol"]).split("-")[0]
     cp = float(PX.get(b["symbol"]) or st.get("px") or 0)
@@ -3440,7 +3455,7 @@ def _va_del_tick(b, st):
 
 
 def _va_control(b, sp, action, value):
-    """🛤️ أزرار مسار القيمة — اللوحة تكتب حقل طلب فقط بملف الحالة والمحرك ينفّذ"""
+    """💹 أزرار مسار القيمة — اللوحة تكتب حقل طلب فقط بملف الحالة والمحرك ينفّذ"""
     st = load_json(sp) or {}
     cfg = b["cfg"]
     alive = is_alive(b["dir"], sp)[0]
@@ -3572,7 +3587,7 @@ def _va_msg(b, st, e):
 
 
 def deploy_va(data):
-    """🛤️ v3.34.0: ينشئ بوت «مسار القيمة». الإعدادات كلها تتغيّر لاحقاً من الكرت (⚙️) — إلا العملة والمحفظة والجدول."""
+    """💹 v3.34.0: ينشئ بوت «مسار القيمة». الإعدادات كلها تتغيّر لاحقاً من الكرت (⚙️) — إلا العملة والمحفظة والجدول."""
     sym = str(data.get("symbol", "")).strip().upper()
     if not sym or "-" not in sym:
         return {"ok": False, "msg": "اكتب الرمز كاملاً مثل XRP-USDT"}
@@ -4940,7 +4955,7 @@ LOSS_FILE = os.path.join(ROOT, "Holy_Losses.json")
 _LOSS_LOCK = threading.Lock()
 LOSS_SRC = {"dca": "📉 DCA بيعي — دورة بخسارة", "dca_buy": "📈 DCA شرائي — دورة بخسارة", "acc": "🪙 المُراكِم — بيع تحت المعدل",
             "rec_avg": "🔁 الدوري (المعدل) — خروج بخسارة", "rec_lot": "🔁 الدوري — أمر انباع بخسارة",
-            "rec_va": "🛤️ مسار القيمة — بيعة بخسارة"}
+            "rec_va": "💹 مسار القيمة — بيعة بخسارة"}
 LOSS_KEEP = 50000
 
 
@@ -6932,7 +6947,7 @@ def _gd_pages(path, keys, idkey, stop_ms=0, pages=5):
 
 
 _FREE_T = {"grid": "🔷 شبكة", "grid_range": "🔷 شبكة مدى", "grid_plus": "🔷 شبكة بلس", "dca": "📉 DCA بيعي", "dca_buy": "📈 DCA شرائي",
-           "rec_buy": "🔁 دوري شرائي", "rec_sell": "🔁 دوري بيعي", "rec_va": "🛤️ مسار القيمة", "acc": "🪙 مُراكِم"}
+           "rec_buy": "🔁 دوري شرائي", "rec_sell": "🔁 دوري بيعي", "rec_va": "💹 مسار القيمة", "acc": "🪙 مُراكِم"}
 
 
 def _gd_free_claims(b, st):
@@ -9160,7 +9175,7 @@ def _pv_cfg_txt(c):
     """⚙️ إعدادات بوت الجرد بسطر واحد (للتقرير)."""
     try:
         if str(c.get("bot_type") or "") == "rec_va":
-            return _va_cfg_txt(c)                   # 🛤️ v3.34.0
+            return _va_cfg_txt(c)                   # 💹 v3.34.0
         if str(c.get("bot_type") or "") in _REC_T:
             _u = {"h": "ساعة", "d": "يوم", "m": "شهر"}.get(c.get("unit") or "d", "يوم")
             _a = f"{float(c.get('amount') or 0):g}" + ("$" if (c.get("bot_type") == "rec_buy" or c.get("amt_usd")) else " " + str(c.get("symbol") or "").split("-")[0])
@@ -9689,7 +9704,7 @@ tr.cur td{background:#f1fbf5}
 _REP_MN = ("كانون الثاني", "شباط", "آذار", "نيسان", "أيار", "حزيران", "تموز", "آب", "أيلول", "تشرين الأول", "تشرين الثاني", "كانون الأول")
 # 💵 v3.30.0: مصادر ربح الدولار (كلها شراء وبيع) — لون ثابت لكل مصدر بالدائري والجداول
 _REP_SRC = (("grid", "🧱 الجرد (لانهائية · مدى · بلس)", "#2a78d6"), ("dca_buy", "📈 DCA الشرائي", "#1baf7a"),
-            ("rec_buy", "🔁 الدوري الشرائي", "#eda100"), ("rec_va", "🛤️ مسار القيمة", "#8e6bd6"),
+            ("rec_buy", "🔁 الدوري الشرائي", "#eda100"), ("rec_va", "💹 مسار القيمة", "#8e6bd6"),
             ("acc", "🪙 المُراكِمات (ربح البيع)", "#e87ba4"),
             ("other", "♻️ غيرها (سحب الدوري البيعي · قديم)", "#b4b2a9"))
 
@@ -9737,7 +9752,7 @@ def _rep_map_svg(fv):
     XA, WA = 306, 176          # 🪙 المُراكِمات
     XP, WP = 10, 230           # 💰 الصندوق النهائي
     RH, GAP, TOP = 46, 10, 34
-    ico = {"grid": "♾️", "grid_range": "🎚️", "grid_plus": "➕", "dca": "📉", "dca_buy": "📈", "rec_buy": "🔁", "rec_sell": "🔂", "rec_va": "🛤️"}
+    ico = {"grid": "♾️", "grid_range": "🎚️", "grid_plus": "➕", "dca": "📉", "dca_buy": "📈", "rec_buy": "🔁", "rec_sell": "🔂", "rec_va": "💹"}
     tl = dict(_PV_TYPE_ALL)
     out, y0 = [], 0
     lines = fv.get("lines") or []
@@ -10031,7 +10046,7 @@ def report_html(days=30):
     for bd in bot_dirs().values():
         if not _is_rec(bd) or (bd.get("cfg") or {}).get("is_demo"):
             continue
-        if _is_va(bd):                              # 🛤️ v3.34.0: مسار القيمة بجدوله تحت
+        if _is_va(bd):                              # 💹 v3.34.0: مسار القيمة بجدوله تحت
             vr.append(bd)
             continue
         st0 = _safe(load_json, paths_of(bd)[0], default={}) or {}
@@ -10058,7 +10073,7 @@ def report_html(days=30):
                  '<th class="n">💸 العمولات</th></tr>' + "".join(rr) + '</table></div>'
                  '<p class="muted" style="font-size:11px">الشرائي ربحه دولار (داخل بأرقام الدولار فوق) · البيعي ربحه عملة (بقسم 🪙 تداول العملات) — '
                  'العمولات اللي دفعها فعلاً بالمنصة بعملتها.</p></section>')
-    vrows = []                                      # 🛤️ v3.34.0: بوتات مسار القيمة الآن
+    vrows = []                                      # 💹 v3.34.0: بوتات مسار القيمة الآن
     for bd in vr:
         st0 = _safe(load_json, paths_of(bd)[0], default={}) or {}
         V0 = _safe(_va_snapshot, bd, st0, default=None) or {}
@@ -10071,7 +10086,7 @@ def report_html(days=30):
                      f'<td class="n {"ok" if float(V0.get("profit") or 0) >= 0 else "bad"}">{float(V0.get("profit") or 0):+,.4f}$</td>'
                      f'<td class="n">{float(V0.get("unreal") or 0):+,.4f}$</td><td class="n">{fee0}</td></tr>')
     if vrows:
-        o.append('<section><h2>🛤️ بوتات مسار القيمة (الآن)</h2><div class="wrap"><table>'
+        o.append('<section><h2>💹 بوتات مسار القيمة (الآن)</h2><div class="wrap"><table>'
                  '<tr><th>البوت</th><th>الإعدادات</th><th class="n">خطوات · بيعات</th><th class="n">يحمل · كلفته</th>'
                  '<th class="n">الربح المحقق</th><th class="n">غير المحقق الآن</th><th class="n">💸 العمولات</th></tr>' + "".join(vrows) + '</table></div>'
                  '<p class="muted" style="font-size:11px">الربح المحقق دولار (داخل في أرقام الدولار أعلاه) · غير المحقق = قيمة العملة الآن بعد العمولة − كلفتها '
@@ -12034,7 +12049,7 @@ def build_report(kind, ref=None):
     else:
         title = f"📆 *التقرير الشهري — {end[:7]}* ({_tp_cnt(nd, 'يوم', 'يومين', 'أيام', 'يوم')})"
     SEP = "━━━━━━━━━━━━━━━"
-    L = [title, SEP, "💹 *ربح التداول حسب العملة*" + ("" if nd == 1 else " · " + _tp_cnt(nd, "يوم", "يومين", "أيام", "يوم"))]
+    L = [title, SEP, "💱 *ربح التداول حسب العملة*" + ("" if nd == 1 else " · " + _tp_cnt(nd, "يوم", "يومين", "أيام", "يوم"))]
     shown = 0
     for sym, c in sorted(P["coins"].items(), key=lambda kv: -(kv[1]["n"] + kv[1]["r"])):
         tt = c["n"] + c["r"]
@@ -15473,10 +15488,11 @@ def pxa_cfg():
     c = _safe(app_cfg, default={}) or {}
     s = str(c.get("pxa_sens") or "mid")
     ch = str(c.get("pxa_ch") or "both")
-    try:
-        cap = max(3, min(100, int(c.get("pxa_cap") or 20)))
+    try:                                          # 🔔 v3.36.3: بلا حد يومي افتراضياً (كان 20) — 0 = بلا حد · رقم مكتوب بالإعدادات = حدّه
+        v = int(c.get("pxa_cap") or 0)
+        cap = 0 if v <= 0 else max(3, min(100, v))
     except Exception:
-        cap = 20
+        cap = 0
     return {"on": bool(c.get("pxa_on", True)), "sens": s if s in PXA_SENS else "mid", "ch": ch if ch in PXA_CH else "both", "cap": cap}
 
 
@@ -15585,9 +15601,10 @@ def pxa_tick(now=None, rows=None, send=True):
                 elif lvl < prev and abs(d24) < (prev - 0.5) * S["d1"]:
                     L[key] = lvl                                # 🔁 ينعاد يتسلّح بس لما يرجع نص درجة (ما يتكرر لو يتذبذب حول 5%)
         cut = []
-        room = cfg["cap"] - int(st.get("n") or 0)
-        if len(al) > max(0, room):
-            cut, al = al[max(0, room):], al[:max(0, room)]
+        if cfg["cap"] > 0:                                  # 🔔 v3.36.3: الحد بس لو انكتب رقم (الافتراضي بلا حد · مهلة كل عملة باقية)
+            room = cfg["cap"] - int(st.get("n") or 0)
+            if len(al) > max(0, room):
+                cut, al = al[max(0, room):], al[:max(0, room)]
         st["n"] = int(st.get("n") or 0) + len(al)
         note = ""
         if cut and not st.get("capped"):
@@ -15692,10 +15709,11 @@ def ina_cfg():
     c = _safe(app_cfg, default={}) or {}
     s = str(c.get("ina_sens") or "mid")
     ch = str(c.get("ina_ch") or "both")
-    try:
-        cap = max(3, min(100, int(c.get("ina_cap") or 20)))
+    try:                                          # 📊 v3.36.3: بلا حد يومي افتراضياً (كان 20) — 0 = بلا حد
+        v = int(c.get("ina_cap") or 0)
+        cap = 0 if v <= 0 else max(3, min(100, v))
     except Exception:
-        cap = 20
+        cap = 0
     on = c.get("ina_on")
     return {"on": bool(c.get("pxa_ind", True) if on is None else on),        # أول مرة: نفس خيار «📊 صعود/نزول قوي» القديم
             "sens": s if s in INA_SENS else "mid", "ch": ch if ch in PXA_CH else "both", "cap": cap}
@@ -15827,9 +15845,10 @@ def ina_tick(now=None, rows=None, send=True):
             a.update(sym=sym, px=px, sc=sc)
             al.append(a)
     cut = []
-    room = cfg["cap"] - int(st.get("n") or 0)
-    if len(al) > max(0, room):
-        cut, al = al[max(0, room):], al[:max(0, room)]
+    if cfg["cap"] > 0:                                      # 📊 v3.36.3: الحد بس لو انكتب رقم (الافتراضي بلا حد · مهلة كل تنبيه باقية)
+        room = cfg["cap"] - int(st.get("n") or 0)
+        if len(al) > max(0, room):
+            cut, al = al[max(0, room):], al[:max(0, room)]
     st["n"] = int(st.get("n") or 0) + len(al)
     note = ""
     if cut and not st.get("capped"):
@@ -16084,7 +16103,7 @@ def _gd_rec_scan(g, now, snaps=None):
         sym = str(b.get("symbol") or cfg.get("symbol") or "")
         base, quote = (sym.split("-") + ["USDT"])[:2]
         sell = cfg.get("bot_type") == "rec_sell"
-        va_ = cfg.get("bot_type") == "rec_va"          # 🛤️ v3.34.0: مسار القيمة بنفس الفحوص (اسمه بالعناوين · ميزانيته من الكرت)
+        va_ = cfg.get("bot_type") == "rec_va"          # 💹 v3.34.0: مسار القيمة بنفس الفحوص (اسمه بالعناوين · ميزانيته من الكرت)
         nm_, nmL, nmB = ("بوت مسار القيمة", "لبوت مسار القيمة", "ببوت مسار القيمة") if va_ else ("البوت الدوري", "للبوت الدوري", "بالبوت الدوري")
         wid = _gd_wid(cfg.get("api_key")) if str(cfg.get("api_key") or "").strip() else ""
         alive = bool(_safe(is_alive, b["dir"], sp, default=(False,))[0])
@@ -19388,7 +19407,18 @@ class _AuthMixin:
     def _authed(self):
         if not auth_enabled():
             return True
-        return _session_ok(self._cookie_token(), self._client_ip())
+        tok = self._cookie_token()
+        ok = _session_ok(tok, self._client_ip())
+        if ok:
+            self._renew_tok = tok                 # 🔐 v3.36.3: الكوكي يتجدد ويّا الجلسة (كان ينتهي بعد مدة القفل من لحظة الدخول حتى وانت تتصفح)
+        return ok
+
+    def end_headers(self):
+        tok = getattr(self, "_renew_tok", None)
+        if tok:
+            self._renew_tok = None
+            self.send_header("Set-Cookie", f"holy_tok={tok}; Path=/; HttpOnly; SameSite=Strict; Max-Age={max(1, auth_cfg()['mins']) * 60}")
+        super().end_headers()
 
     def _send_login(self):
         body = _login_page()
@@ -19901,7 +19931,7 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
         if path == "/api/deploy_rec":
             return self._json(deploy_rec(data))
         if path == "/api/deploy_va":
-            return self._json(deploy_va(data))         # 🛤️ v3.34.0
+            return self._json(deploy_va(data))         # 💹 v3.34.0
         if path == "/api/va_plan":
             return self._json(va_plan_api(data))
         if path in ("/api/bt_prep", "/api/bt_start", "/api/bt_status", "/api/bt_path", "/api/bt_stop"):   # 🧪 v3.36.0: الاختبار التجريبي
@@ -20526,7 +20556,7 @@ body.boot .card{animation:rise .6s var(--ease) both;animation-delay:calc(var(--i
 .card.rec:hover{border-color:rgb(var(--cyan-rgb)/.5)}
 .dcatag.rectag{background:rgb(var(--cyan-rgb)/.14);color:var(--cyan);border-color:rgb(var(--cyan-rgb)/.35)}
 .rcmode{flex-basis:100%;font-size:10.5px;color:var(--mut);line-height:1.6}
-/* 🛤️ v3.34.0: كرت مسار القيمة */
+/* 💹 v3.34.0: كرت مسار القيمة */
 .card.va .vatag{background:linear-gradient(94deg,rgb(var(--cyan-rgb)/.18),rgb(var(--vio-rgb)/.18))}
 .card.va .vahint{margin:6px 0 2px;padding:6px 9px;border-radius:9px;font-size:12px;line-height:1.7;background:rgb(var(--cyan-rgb)/.07);color:var(--mut)}
 .card.va .vahint.buy{background:rgb(var(--green-rgb)/.10);color:var(--green)}
@@ -21513,7 +21543,7 @@ html.lite .card:hover,html.lite button:hover{transform:none}
       <button class="primary" onclick="openDeploy()">➕ شبكة</button>
       <button class="primary" onclick="openDeployDca()" style="background:linear-gradient(94deg,rgb(var(--amber-rgb)/.9),rgb(var(--amber3-rgb)/.9))">📉 نشر DCA</button>
       <button class="primary" onclick="openDeployRec()" title="بوت دوري: يشتري (أو يبيع) بمبلغ ثابت كل ساعات/أيام/أشهر ويطلع بالربح" style="background:linear-gradient(94deg,rgb(var(--cyan-rgb)/.9),rgb(var(--vio-rgb)/.9))">🔁 دوري</button>
-      <button class="primary" onclick="openDeployVa()" title="مسار القيمة: تحدد قيمة العملة المطلوبة، وعند كل خطوة يشتري الفرق أو يبيع الزائد — بلا أسعار تحددها" style="background:linear-gradient(94deg,rgb(var(--vio-rgb)/.9),rgb(var(--cyan-rgb)/.9))">🛤️ مسار القيمة</button>
+      <button class="primary" onclick="openDeployVa()" title="مسار القيمة: تحدد قيمة العملة المطلوبة، وعند كل خطوة يشتري الفرق أو يبيع الزائد — بلا أسعار تحددها" style="background:linear-gradient(94deg,rgb(var(--vio-rgb)/.9),rgb(var(--cyan-rgb)/.9))">💹 مسار القيمة</button>
       <button onclick="accEdit()" style="background:linear-gradient(94deg,rgb(var(--cyan-rgb)/.85),rgb(var(--cyan3-rgb)/.85));color:var(--on-acc);font-weight:700">🪙 المُراكِم</button>
     </div>
     <span class="gsep"></span>
@@ -21822,7 +21852,7 @@ pollNotif();
 /* ── بناء البطاقة (مرة واحدة) ── */
 function buildCard(b,i){
   if(b.bot_type==='dca'||b.bot_type==='dca_buy')return buildDcaCard(b,i);
-  if(b.bot_type==='rec_va')return buildVaCard(b,i);   // 🛤️ v3.34.0
+  if(b.bot_type==='rec_va')return buildVaCard(b,i);   // 💹 v3.34.0
   if(b.bot_type==='rec_buy'||b.bot_type==='rec_sell')return buildRecCard(b,i);   // 🔁 v3.25.0: الدوري
   const el=document.createElement('div');el.className='card';el.style.setProperty('--i',i);el.dataset.dir=b.dir;
   const BASE=b.symbol.split('-')[0];
@@ -22484,9 +22514,9 @@ function recRange(b){
     hideModal();ctl(b.dir,'rec_range',{lo,hi})};
 }
 function recPause(b){const r=b.rec||{};ctl(b.dir,r.paused?'rec_resume':'rec_pause');if(b.rec)b.rec.paused=!r.paused}
-const BT_LBL={grid:'♾️ لانهائية',grid_range:'🎚️ مدى',grid_plus:'➕ بلس',dca:'📉 DCA بيعي',dca_buy:'📈 DCA شرائي',rec_buy:'دوري شرائي',rec_sell:'دوري بيعي',rec_va:'🛤️ مسار القيمة'};
+const BT_LBL={grid:'♾️ لانهائية',grid_range:'🎚️ مدى',grid_plus:'➕ بلس',dca:'📉 DCA بيعي',dca_buy:'📈 DCA شرائي',rec_buy:'دوري شرائي',rec_sell:'دوري بيعي',rec_va:'💹 مسار القيمة'};
 function recHist(b){return botHist(b)}
-/* ═══ 🛤️ v3.34.0: بوت «مسار القيمة» — كرت · رسم الهدف مقابل القيمة · خطوة الآن · إيقاف · بيع الكل · الإعدادات الحية · النشر · 📉📈 v3.35.0: بالنسبة + 📋 الجدول · 👆 v3.35.1: البيع من أي مستوى · 🗑 v3.35.2: الحذف يخيّرك ═══ */
+/* ═══ 💹 v3.34.0: بوت «مسار القيمة» — كرت · رسم الهدف مقابل القيمة · خطوة الآن · إيقاف · بيع الكل · الإعدادات الحية · النشر · 📉📈 v3.35.0: بالنسبة + 📋 الجدول · 👆 v3.35.1: البيع من أي مستوى · 🗑 v3.35.2: الحذف يخيّرك ═══ */
 const VA_DEF={fixed:{start:100,step:0,every:4,unit:'h',band:8,max_order:60,cap:400,floor:true,brake:0},
               grow:{start:10,step:10,every:7,unit:'d',band:4,max_order:30,cap:300,floor:true,brake:0}};
 const VA_DEFP={fixed:{start:100,step:0,drop:8,rise:12,max_order:100,cap:400,floor:true,brake:0},          // 📉📈 بالنسبة (من القياس — الجولة 3)
@@ -22596,7 +22626,7 @@ function buildVaCard(b,i){
   el.innerHTML=`
   <div class="dcahead">
     <span class="sym"><img class="coin" src="https://assets.coincap.io/assets/icons/${BASE.toLowerCase()}@2x.png" data-alt="https://static.okx.com/cdn/oksupport/asset/currency/icon/${BASE.toLowerCase()}.png" onerror="cfb(this,'${BASE}')"> ${b.symbol}</span>
-    <span class="dcatag rectag vatag">🛤️ مسار القيمة</span>
+    <span class="dcatag rectag vatag">💹 مسار القيمة</span>
     <span class="pill off" data-k="pill">—</span><span class="hbadge" data-k="hb" style="display:none;cursor:pointer"></span>
     <span class="rcmode" data-k="mode">—</span></div>
   <div class="dcabody">
@@ -22774,7 +22804,7 @@ function vaDetails(b){
 async function openDeployVa(){
   _vaAt={ctx:'pre',i:0,A:null,sig:'',busy:0};
   let ws=[];try{const s=await api('/api/settings');ws=s.wallets||[]}catch(e){}
-  showModal(`<h2 style="color:var(--cyan)">🛤️ نشر بوت «مسار القيمة»</h2>
+  showModal(`<h2 style="color:var(--cyan)">💹 نشر بوت «مسار القيمة»</h2>
   <p style="font-size:12.5px;color:var(--mut);line-height:1.9;margin:0 0 8px">تحدّد <b>قيمة العملة المطلوبة</b> في محفظة البوت، وعند كل خطوة يشتري الفرق إذا نقصت ويبيع الزائد إذا زادت — دون أن تحدّد أسعاراً.</p>
   <input type="hidden" id="vd_mode" value="fixed">
   <div class="gtsel vdmode" style="display:flex;gap:6px;margin:8px 0">
@@ -24786,7 +24816,7 @@ function botOf(dir){return (DATA&&DATA.bots||[]).find(x=>x.dir===dir)}
 function openDrawer(dir){
   const b=botOf(dir);
   if(b&&(b.bot_type==='dca'||b.bot_type==='dca_buy'))return dcaDetails(b);  // DCA (البيعي والشرائي) له نافذة خاصة
-  if(b&&b.bot_type==='rec_va')return vaDetails(b);   // 🛤️ v3.34.0
+  if(b&&b.bot_type==='rec_va')return vaDetails(b);   // 💹 v3.34.0
   if(b&&(b.bot_type==='rec_buy'||b.bot_type==='rec_sell'))return recDetails(b);  // 🔁 الدوري
   return gridDetails(b);  // الجرد أيضاً نافذة بسيطة (مثل DCA)
 }
@@ -25464,7 +25494,7 @@ const fl$=v=>{v=+v||0;const a=Math.abs(v);return (a<5e-7?'0':a>=100?v.toFixed(2)
 const flC=v=>{v=+v||0;return Math.abs(v)<1e-12?'0':fmtQ(v)};
 const flQ=(v,c)=>c==='USDT'||!c?fl$(v):(flC(v)+' '+c);
 const flE=s=>gEsc(s);
-const flIco=t=>({grid:'♾️',grid_range:'🎚️',grid_plus:'➕',dca:'📉',dca_buy:'📈',rec_buy:'🔁',rec_sell:'🔂',rec_va:'🛤️'}[t]||'🤖');
+const flIco=t=>({grid:'♾️',grid_range:'🎚️',grid_plus:'➕',dca:'📉',dca_buy:'📈',rec_buy:'🔁',rec_sell:'🔂',rec_va:'💹'}[t]||'🤖');
 function flHMS(s){s=Math.max(0,Math.round(s));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return `${h}:${String(m).padStart(2,'0')}:${String(x).padStart(2,'0')}`}
 function openFlow(){openPage('flow');FL.data=null;FL.sig='';FL.hlId=null;loadFlow();clearInterval(FL.timer);clearInterval(FL.cd);
   FL.timer=setInterval(()=>{const pg=$('#page_flow');if(!pg||!pg.classList.contains('on')){clearInterval(FL.timer);clearInterval(FL.cd);return}if(!document.hidden)loadFlow()},4000);
@@ -29245,7 +29275,7 @@ _REC_B64 = (
 )
 REC_SRC = _zlib.decompress(_b64.b64decode(_REC_B64)).decode("utf-8")
 REC_VERSION = _eng_fp(REC_SRC)
-# 🛤️ v3.34.0: محرك «مسار القيمة» (Value Averaging) — يُكتب بمجلد البوت باسم vpath.py · 📉📈 v3.35.0: وضع «بالنسبة» (بلا وقت)
+# 💹 v3.34.0: محرك «مسار القيمة» (Value Averaging) — يُكتب بمجلد البوت باسم vpath.py · 📉📈 v3.35.0: وضع «بالنسبة» (بلا وقت)
 _VA_B64 = (
 "eNrVfWtzG9eV4Hf+it72aNktgSBIPcZBGU7ZMh1rbb0s2mMvi9MGgQaJEC+iAYoKhlWRRD3COOPYm9mp2pmprONkRFGSZdmxZcVV+0HzJ8D96D+w+Ql7HvfZ"
 "DxCklGSixBK6+/bte88973PuuS84U0ennEq7Wm8tF51+rzb1It6ZcF134vt/+uVf7/8nHGd+JXTeaDeuOO+WG/1w6kK5t+K82u453//0V84ff/0vv/1/337k"
@@ -29416,7 +29446,7 @@ def engine_for(cfg):
     if bt == "grid_plus":
         return GRIDP_SRC, "main.py", GRIDP_VERSION
     if bt == "rec_va":
-        return VA_SRC, "vpath.py", VA_VERSION                # 🛤️ v3.34.0: مسار القيمة
+        return VA_SRC, "vpath.py", VA_VERSION                # 💹 v3.34.0: مسار القيمة
     if bt in ("rec_buy", "rec_sell"):
         return REC_SRC, "recur.py", REC_VERSION              # 🔁 v3.25.0: الدوري
     return ENGINE_SRC, "main.py", ENGINE_VERSION
@@ -29932,7 +29962,7 @@ def health_scan():
             # التعادل
             try:
                 fe = _safe(okx_fee_rate, b, default=None)
-                g = float(b["cfg"].get("grid_percentage") or 0)
+                g = _cycle_step(b["cfg"])                 # 📐 v3.36.3: ربح الدورة (البلس: بُعد الشراء)
                 if fe and g > 0:
                     be = 2 * fe["maker"] / (1 - fe["maker"])
                     if g <= be:
