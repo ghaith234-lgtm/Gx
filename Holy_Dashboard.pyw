@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.3"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.4"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -1497,7 +1497,7 @@ def export_md(days=30):
             _uv = float(b["cfg"].get("usd_value") or 0)
             _cp = float(st.get("current_price") or 0)
             if _uv > 0 and _cp > 0 and _spec.get("lotSz"):
-                _steps = (_uv * float(b["cfg"].get("grid_percentage") or 0)) / (_spec["lotSz"] * _cp)
+                _steps = (_uv * _cycle_step(b["cfg"])) / (_spec["lotSz"] * _cp)   # 📐 v3.36.4: ربح الدورة الحقيقي (البلس: بُعد الشراء)
                 if _steps < 0.02:
                     L.append(f"  - ⚠️ ربح الدورة ≈ **{_steps*100:.2f}%** من وحدة كمية وحدة — "
                              f"إعادة الاستثمار راح تتراكم ببطء شديد")
@@ -15683,7 +15683,7 @@ def pxa_view():
     return {**c, "sens_lbl": S["lbl"], "ch_lbl": PXA_CH[c["ch"]], "muted": bool(TG_MUTED["v"]),
             "n_today": int(st.get("n") or 0) if st.get("day") == today else 0, "log": (st.get("log") or [])[:15],
             "rule": f"⚡ {S['m15']:g}% خلال 15 دقيقة · {S['h1']:g}% خلال ساعة · {S['h4']:g}% خلال 4 ساعات (أكبر للعملة المتقلبة) · 🔥 كل {S['d1']:g}% خلال 24 ساعة"
-                    + f" · حد {c['cap']} باليوم",
+                    + (f" · حد {c['cap']} باليوم" if c["cap"] else " · بلا حدّ يومي"),   # 🔔 v3.36.4: 0 = بلا حد (كان يكتب «حد 0 باليوم»)
             "sens_opts": {k: v["lbl"] for k, v in PXA_SENS.items()}, "ch_opts": PXA_CH}
 
 
@@ -15921,7 +15921,8 @@ def ina_view():
     S = INA_SENS[c["sens"]]
     rule = (f"🔄 المؤشرات تنقلب تميل للصعود/النزول (معدل ≥ {S['turn']}" + (f" · ثقة ≥ {S['conf']}%" if S["conf"] else "") + ")"
             + " · ⚡ خروج من الانضغاط" + (" · وبدايته" if S["sq_on"] else "")
-            + (f" · 🧱 قرب دعم/مقاومة (≤ {S['near']:g}%)" if S["near"] else "") + f" · حد {c['cap']} باليوم")
+            + (f" · 🧱 قرب دعم/مقاومة (≤ {S['near']:g}%)" if S["near"] else "")
+            + (f" · حد {c['cap']} باليوم" if c["cap"] else " · بلا حدّ يومي"))   # 📊 v3.36.4: 0 = بلا حد
     return {**c, "sens_lbl": S["lbl"], "ch_lbl": PXA_CH[c["ch"]], "muted": bool(TG_MUTED["v"]),
             "n_today": int(st.get("n") or 0) if st.get("day") == today else 0, "log": (st.get("log") or [])[:15], "rule": rule,
             "sens_opts": {k: v["lbl"] for k, v in INA_SENS.items()}, "ch_opts": PXA_CH,
