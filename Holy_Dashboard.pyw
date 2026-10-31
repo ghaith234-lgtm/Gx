@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.14"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.15"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -763,6 +763,8 @@ def net_factor(b):
     النسبة بينهما ثابتة، فنضربها بكل رقم ربح يُعرض أو يُوزَّع.
     🔧 v3.36.3: «خطوة» = ربح الدورة الحقيقي (`_cycle_step`) — للبلس بُعد الشراء لا مسافة السلم (كان يطرح عمولة أكثر ⇒ ربحه أقل بـ≈10%)
     """
+    if str(b["cfg"].get("bot_type") or "") == "grid_step":
+        return 1.0                          # 🪜 v3.36.15: المحرك يكتب الربح الصافي الحقيقي (العمولتين من التنفيذ نفسه)
     try:
         g = _cycle_step(b["cfg"])
         f = float(b["cfg"].get("fee_rate") or FEE_RATE_DEFAULT)
@@ -866,13 +868,21 @@ def bot_snapshot(b):
             "cover": _safe(coverage_of, b, st, default=None),
             "wid": _safe(wallet_id, b, default=None),
             "ri": _safe(reinvest_snapshot, b, st, default=None),
-            "ladder": {"sells": pack_levels(st.get("limit_sells"), "s"), "buys": pack_levels(st.get("limit_buys"), "b"),
-                       "vsells": pack_levels(st.get("virtual_sells"), "vs"), "vbuys": pack_levels(st.get("virtual_buys"), "vb"),
+            "ladder": {"sells": pack_levels(st.get("limit_sells"), "s"),
+                       "buys": (_step_merge_lv if _bt == "grid_step" else (lambda x: x))(pack_levels(st.get("limit_buys"), "b")),
+                       "vsells": pack_levels(st.get("virtual_sells"), "vs"),
+                       "vbuys": (_step_merge_lv if _bt == "grid_step" else (lambda x: x))(pack_levels(st.get("virtual_buys"), "vb")),
                        "asells": pack_levels(st.get("accum_sells"), "as"), "abuys": pack_levels(st.get("accum_buys"), "ab")},
             "bot_type": b["cfg"].get("bot_type", "grid"),
             "gcfg": ({"lower_price": b["cfg"].get("lower_price"), "upper_price": b["cfg"].get("upper_price"),
                       "buy_offset": b["cfg"].get("buy_offset")}
                      if b["cfg"].get("bot_type") in ("grid_range", "grid_plus") else None),
+            "scfg": ({"N": int(float(b["cfg"].get("step_parts") or 0)), "d": float(b["cfg"].get("step_sell") or 0),
+                      "G": float(b["cfg"].get("grid_percentage") or 0), "Q": float(b["cfg"].get("usd_value") or 0),
+                      "up": int(float(b["cfg"].get("up_groups") or 0)), "floor": float(b["cfg"].get("min_price") or 0),
+                      "P0": float(((st.get("step") or {}).get("P0")) or b["cfg"].get("forced_base_price") or 0),
+                      "slots": len(st.get("slots") or {})}
+                     if b["cfg"].get("bot_type") == "grid_step" else None),
             "fee": float((_safe(okx_fee_rate, b, default=None) or {}).get("maker")
                          or b["cfg"].get("fee_rate") or FEE_RATE_DEFAULT),
             "fee_src": ("okx" if (_FEE_CACHE.get(
@@ -1176,6 +1186,8 @@ def ladder_audit(b, st=None):
         st = load_json(sp) or {}
     if b["cfg"].get("bot_type") in _NONGRID:
         return {"ok": None, "msg": "التدقيق للجرد فقط"}
+    if b["cfg"].get("bot_type") == "grid_step":
+        return step_audit(b, st)                 # 🪜 v3.36.15: خانات بدل سلّم
     g = float(b["cfg"].get("grid_percentage") or 0)
     base = float(st.get("ladder_base") or 0)
     if g <= 0 or base <= 0:
@@ -2467,6 +2479,8 @@ _BOT_KINDS = {
                    "route": ("events", "ledger", "trade", "released", "box", "reinvest", "report")},
     "grid_plus":  {"lbl": "بلس",        "ico": "➕", "cur": "usd",  "src": "hist",   "unit": "بيعة", "fam": "grid", "state": "grid_state_", "eng": "GRIDP_SRC",
                    "route": ("events", "ledger", "trade", "released", "box", "reinvest", "report")},
+    "grid_step":  {"lbl": "متدرج",      "ico": "🪜", "cur": "usd",  "src": "hist",   "unit": "بيعة", "fam": "grid", "state": "grid_state_", "eng": "GRIDS_SRC",
+                   "route": ("events", "ledger", "trade", "released", "box", "report")},      # 🪜 v3.36.15: الشبكي المتدرج (بلا 💠 بهذا الإصدار)
     "dca_buy":    {"lbl": "DCA شرائي",  "ico": "📈", "cur": "usd",  "src": "cycles", "unit": "دورة", "fam": "dca", "state": "dca_state_", "eng": "DCAB_SRC",
                    "route": ("events", "ledger", "trade", "released", "box", "loss", "report")},
     "rec_buy":    {"lbl": "دوري شرائي", "ico": "🔁", "cur": "usd",  "src": "cycles", "unit": "صفقة", "fam": "rec", "state": "rec_state_", "eng": "REC_SRC",
@@ -4188,7 +4202,7 @@ import urllib.parse as _bt_up
 from decimal import Decimal as _BtD, InvalidOperation as _BtDI
 
 BT_DIR = os.path.join(ROOT, "Holy_Backtest")
-_BT_KINDS = ("grid", "grid_range", "grid_plus", "dca", "dca_buy", "rec_buy", "rec_sell", "rec_va")     # كل الأنواع عدا المُراكِم
+_BT_KINDS = ("grid", "grid_range", "grid_plus", "grid_step", "dca", "dca_buy", "rec_buy", "rec_sell", "rec_va")     # كل الأنواع عدا المُراكِم
 # تقلّب يومي نموذجي لكل عملة (الانحراف المعياري للعائد اليومي) — غيرها تأخذ «العادي»
 _BT_VOL = {"BTC": 0.028, "ETH": 0.036, "BNB": 0.030, "XRP": 0.045, "SOL": 0.050, "ADA": 0.045, "DOGE": 0.055, "TRX": 0.030, "TON": 0.045,
            "AVAX": 0.052, "DOT": 0.045, "LINK": 0.048, "LTC": 0.040, "BCH": 0.042, "SHIB": 0.055, "PEPE": 0.070, "SUI": 0.060, "NEAR": 0.055,
@@ -4941,7 +4955,10 @@ def _bt_trade(kind, r, p0, result, base0):
     ex, st, book = r["ex"], r["state"] or {}, float(r["realized"] or 0)
     out = {"trade_coin": None, "od": {}, "tie": None}
     f_ = lambda v: float(v or 0)
-    if kind in ("grid", "grid_range", "grid_plus"):
+    if kind == "grid_step":                   # 🪜 v3.36.15: دفتر المحرك صافٍ حقيقي (العمولتين من التنفيذ نفسه) ⇒ هو ربح البيع والشراء
+        trade = book
+        out["od"] = {"k": "grid", "q": round(ex.bal[ex.base] - base0, 10)}
+    elif kind in ("grid", "grid_range", "grid_plus"):
         if (st.get("reinvest") or {}).get("on"):
             trade = _bt_cum(st, r.get("pkey") or "total_profit", r["rnf"]) if r.get("rnf") is not None else result
             out["od"] = {"k": "ri", "q": round(ex.bal[ex.base] - base0, 10), "pot": round(_bt_ri_held(st), 8)}
@@ -4988,6 +5005,8 @@ def _bt_ri_coin(kind, r):
     · الدوري البيعي: ربحه عملة أصلاً — الحصّالة (عملة) + حصة الربح المعاد داخل دفعاته المفتوحة"""
     st = r.get("state") or {}
     f_ = lambda v: float(v or 0)
+    if kind == "grid_step":
+        return None                           # 🪜 بلا 💠 بهذا الإصدار
 
     def _lv(book):
         q = u = 0.0
@@ -5164,6 +5183,17 @@ def _bt_wallet_def(kind, cfg, body, p0, spec):
         if kind in ("grid", "grid_range", "grid_plus"):
             usd = f("usd_value", 10)
             return round(usd * 25, 2), round(usd * 15 / p0, 8)
+        if kind == "grid_step":               # 🪜 v3.36.15: من الجدول نفسه — دولار الشراءات حتى الأرضية + عملات المستويات فوق البداية
+            if cfg:
+                a = {"Q": f("usd_value", 15), "N": int(f("step_parts", 3)), "d": f("step_sell", 0.01), "G": f("grid_percentage", 0.03),
+                     "floor": f("min_price", 0), "up": int(f("up_groups", 0)), "p0": f("forced_base_price", 0)}
+            else:
+                a, _e = _step_args(g)
+            if a:
+                lay = [r for r in _step_layout(a["p0"] or p0, a["G"], a["d"], a["N"], a["Q"], a["floor"] or p0 * 0.5, a["up"], FEE_RATE_DEFAULT,
+                                               spec.get("lotSz"), spec.get("minSz")) if not r.get("skip")]
+                return (round(sum(r["q"] * r["bp"] for r in lay if r["side"] == "buy") * 1.02 + 1.0, 2),
+                        round(sum(r["sq"] for r in lay if r["side"] == "sell") * 1.01, 8))
         if kind == "rec_va":
             bq = 0.0
             if str(g.get("first_src") or "") == "wallet":                 # 👛 v3.36.11: أول طلب من المحفظة ⇒ عملات بقيمته بمحفظة الاختبار
@@ -5411,7 +5441,9 @@ def _bt_dry_cfg(kind, body, sym, spec, p0):
         g["log_event"] = lambda *a, **k: None
         g["_acc_spec"] = lambda s: {"lotSz": spec["lotSz"], "minSz": spec["minSz"]}
         g["_acc_price"] = lambda s: p0
-        fn = {"grid": deploy, "grid_range": deploy, "grid_plus": deploy, "dca": deploy_dca, "dca_buy": deploy_dca,
+        g["_okx_get"] = lambda *a, **k: {"code": "0", "data": [{"details": [{"ccy": sym.split("-")[0], "availBal": "1e18"}]}]}   # 🪜 الشبكي المتدرج: محفظة الاختبار هي الحَكَم
+        g["bot_dirs"] = lambda: {}
+        fn = {"grid": deploy, "grid_range": deploy, "grid_plus": deploy, "grid_step": deploy_step, "dca": deploy_dca, "dca_buy": deploy_dca,
               "rec_buy": deploy_rec, "rec_sell": deploy_rec, "rec_va": deploy_va}[kind]
         b = dict(body)
         b.update({"symbol": sym, "wallet": "backtest", "auto": False})
@@ -7515,7 +7547,7 @@ def _gd_pages(path, keys, idkey, stop_ms=0, pages=5):
     return out, False
 
 
-_FREE_T = {"grid": "🔷 شبكة", "grid_range": "🔷 شبكة مدى", "grid_plus": "🔷 شبكة بلس", "dca": "📉 DCA بيعي", "dca_buy": "📈 DCA شرائي",
+_FREE_T = {"grid": "🔷 شبكة", "grid_range": "🔷 شبكة مدى", "grid_plus": "🔷 شبكة بلس", "grid_step": "🪜 شبكي متدرج", "dca": "📉 DCA بيعي", "dca_buy": "📈 DCA شرائي",
            "rec_buy": "🔁 دوري شرائي", "rec_sell": "🔁 دوري بيعي", "rec_va": "💹 مسار القيمة", "acc": "🪙 مُراكِم"}
 
 
@@ -7629,7 +7661,7 @@ def _gd_gather(W, prev, now):
             st = load_json(sp) or {}
             name = os.path.basename(str(b["dir"]).rstrip("/\\")) or sym
             g = float(cfg.get("grid_percentage") or 0) or 0.008
-            step = max(g, float(cfg.get("buy_offset") or 0)) if bt == "grid_plus" else g
+            step = max(g, float(cfg.get("buy_offset") or 0)) if bt == "grid_plus" else (float(cfg.get("step_sell") or 0) or g) if bt == "grid_step" else g
             try:
                 alive = bool(is_alive(b["dir"], sp)[0])
             except Exception:
@@ -9151,7 +9183,7 @@ def link_audit(force=False):
             elif x["orphan"]:
                 add(S2, t, False, f"عنده {x['rows']} سطر ({rsum:.4f}$) بس ما داخل رقم التداول بالشريط")
             elif x["rows"] == 0 and abs(tot) > 1e-6:
-                plain = x["type"] in ("grid", "grid_range", "grid_plus") and x["r"] < 1e-9
+                plain = x["type"] in ("grid", "grid_range", "grid_plus", "grid_step") and x["r"] < 1e-9
                 add(S2, t, False, f"ربحه {tot:.4f}$ داخل الرقم بس ما عنده ولا سطر بسجل اليوم"
                     + (" — الدفتر سجّل ربح بلا سطر بيع (يمكن اللوحة كانت طافية وانحسب على أيامه)" if plain else ""), "warn" if plain else "err")
             elif abs(tot - rsum) <= tol:
@@ -9159,7 +9191,7 @@ def link_audit(force=False):
             elif now - float(x.get("last") or 0) < 180:
                 add(S2, t, True, f"صفقة جديدة تنتظر الدفتر (أقل من 3 دقائق) — الرقم {tot:.4f}$ · السطور {rsum:.4f}$", "info")
             else:
-                plain = x["type"] in ("grid", "grid_range", "grid_plus") and x["r"] < 1e-9
+                plain = x["type"] in ("grid", "grid_range", "grid_plus", "grid_step") and x["r"] < 1e-9
                 add(S2, t, False, f"الرقم {tot:.4f}$ · مجموع السطور {rsum:.4f}$ ({x['rows']}) — فرق {tot - rsum:+.4f}$"
                     + (" · الجرد البسيط: رقمه من الدفتر وسطوره من سجل البيع (توقيت/لوحة طافية)" if plain else ""), "warn" if plain else "err")
     except Exception as ex:
@@ -9206,7 +9238,7 @@ def link_audit(force=False):
         nb = 0
         for k, b in live.items():
             bt = str((b.get("cfg") or {}).get("bot_type") or "grid")
-            if bt not in _REC_T + ("dca_buy", "grid", "grid_range", "grid_plus"):
+            if bt not in _REC_T + ("dca_buy", "grid", "grid_range", "grid_plus", "grid_step"):
                 continue
             st = _safe(load_json, paths_of(b)[0], default={}) or {}
             le = led.get(k) if isinstance(led.get(k), dict) else {}
@@ -9769,7 +9801,7 @@ def reconcile():
 
 
 # ═══════════════ 📊 ربح التداول يوم بيوم + 🖨️ التقرير المصوّر ═══════════════
-_PV_TYPE = {"grid": "لانهائية", "grid_range": "مدى", "grid_plus": "بلس"}
+_PV_TYPE = {"grid": "لانهائية", "grid_range": "مدى", "grid_plus": "بلس", "grid_step": "متدرج"}
 _PV_WD = ("الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد")
 
 
@@ -9789,6 +9821,9 @@ def _pv_cfg_txt(c):
             return (f"أساس {float(c.get('base_order_qty') or 0):g} · {int(float(c.get('max_safety_orders') or 0))} أمان "
                     f"{float(c.get('first_deviation') or 0):g}% · هدف {float(c.get('take_profit_pct') or 0):g}%")
         g = float(c.get("grid_percentage") or 0) * 100
+        if str(c.get("bot_type") or "") == "grid_step":         # 🪜 v3.36.15
+            return (f"{int(float(c.get('step_parts') or 0))} بيعات لكل شراء · البيع {float(c.get('step_sell') or 0) * 100:g}% · "
+                    f"الشراء {g:g}% · {float(c.get('usd_value') or 0):g}$ لكل شراء")
         s = f"{g:.2f}% · {float(c.get('usd_value') or 0):g}$"
         bt = str(c.get("bot_type") or "grid")
         if bt == "grid_plus" and float(c.get("buy_offset") or 0) > 0:
@@ -10354,7 +10389,7 @@ def _rep_map_svg(fv):
     XA, WA = 306, 176          # 🪙 المُراكِمات
     XP, WP = 10, 230           # 💰 الصندوق النهائي
     RH, GAP, TOP = 46, 10, 34
-    ico = {"grid": "♾️", "grid_range": "🎚️", "grid_plus": "➕", "dca": "📉", "dca_buy": "📈", "rec_buy": "🔁", "rec_sell": "🔂", "rec_va": "💹"}
+    ico = {"grid": "♾️", "grid_range": "🎚️", "grid_plus": "➕", "grid_step": "🪜", "dca": "📉", "dca_buy": "📈", "rec_buy": "🔁", "rec_sell": "🔂", "rec_va": "💹"}
     tl = dict(_PV_TYPE_ALL)
     out, y0 = [], 0
     lines = fv.get("lines") or []
@@ -11051,7 +11086,7 @@ def trade_period(start, end):
             "by_bot": bots_out}
 
 
-_PV_TYPE_ALL = {"grid": "لانهائية", "grid_range": "مدى", "grid_plus": "بلس", "dca_buy": "DCA شرائي", "dca": "DCA بيعي",
+_PV_TYPE_ALL = {"grid": "لانهائية", "grid_range": "مدى", "grid_plus": "بلس", "grid_step": "متدرج", "dca_buy": "DCA شرائي", "dca": "DCA بيعي",
                 "rec_buy": "دوري شرائي", "rec_sell": "دوري بيعي", "rec_va": "مسار القيمة"}
 
 
@@ -17595,6 +17630,257 @@ def deploy_rec(data):
     _lbl = "دوري شرائي" if not sell else "دوري بيعي"
     return {"ok": ok, "msg": ("✅ بوت " + _lbl + " انطلق — " + sym) if ok else msg, "dir": folder}
 
+# ═══════════ 🪜 v3.36.15: الشبكي المتدرج — جدول ما قبل النشر + النشر ═══════════
+#   المعادلة نفس المحرك بالحرف (main_step.py → step_layout) ⇒ الجدول = المحرك (v3615_test يقارنهم خانة خانة)
+#   · مستوى j: القاعدة = البداية × (1+مسافة الشراء)^j · الجزء k يبيع بالقاعدة × (1 + k × مسافة البيع)
+#   · الكمية بالعملة: (المبلغ ÷ عدد البيعات) ÷ القاعدة — كل بيعة تعيد شراء كميتها نفسها بالقاعدة ⇒ الربح بالدولار
+#   · فوق البداية up مستوى من عملاتك (كأنها اشتُريت بقاعدتها) · تحتها شراءات ثابتة لحد الأرضية
+STEP_MIN_PART = 2.0          # 💵 أقل قيمة لكل بيعة (طلب المالك: «خلي اقل اوردر بيع دولارين»)
+STEP_MAX_SLOTS = 1500        # حد الخانات (أوامر بالذاكرة) — أكثر ⇒ الجدول يرفض (مسافة شراء أكبر أو أرضية أعلى) · ملف الحالة يبقى صغير
+STEP_MAX_PARTS = 20
+STEP_WINDOW = 8              # 🪟 الأقرب فقط على المنصة لكل جهة (المحرك step_window)
+
+
+def _step_round(v, step, up=False):
+    from decimal import Decimal, ROUND_FLOOR, ROUND_CEILING
+    if not step or step <= 0:
+        return float(v)
+    st = Decimal(str(step))
+    return float((Decimal(repr(float(v))) / st).quantize(Decimal(1), rounding=ROUND_CEILING if up else ROUND_FLOOR) * st)
+
+
+def _step_layout(P0, G, d, N, Q, floor, up, fee, lot=None, mn=None, max_down=400):
+    """نسخة حرفية من step_layout بالمحرك (main_step.py) — [{"j","k","bp","sp","q","sq","side"(+"skip")}]"""
+    P0, G, d, Q, floor, fee = float(P0), float(G), float(d), float(Q), float(floor or 0), float(fee or 0)
+    N, up = max(1, int(N)), max(0, int(up or 0))
+    lot = lot or 1e-6
+    out = []
+    if P0 <= 0 or G <= 0 or d <= 0 or Q <= 0:
+        return out
+    m = 0
+    if floor > 0 and floor < P0:
+        m = int(math.floor(math.log(P0 / floor) / math.log(1.0 + G) + 1e-9))
+    elif floor <= 0:
+        m = max_down
+    m = min(m, max_down)
+    sig = lambda x: float("%.12g" % float(x))
+
+    def fl(q):
+        return max(0.0, _step_round(float(q) + 1e-12, lot))
+    for j in list(range(-m, 0)) + list(range(0, up)):
+        bp = sig(P0 * (1.0 + G) ** j)
+        for k in range(1, N + 1):
+            sp = sig(bp * (1.0 + k * d))
+            q = fl((Q / N) / bp)
+            sq = fl(q * (1.0 - fee))
+            r = {"j": j, "k": k, "bp": bp, "sp": sp, "q": q, "sq": sq if j >= 0 else 0.0, "side": "sell" if j >= 0 else "buy"}
+            if q <= 0 or (mn and (q < mn - 1e-12 or fl(q * (1.0 - fee) * 0.999) < mn - 1e-12)):
+                r["skip"] = "min"
+            out.append(r)
+    return out
+
+
+def _step_args(data):
+    """قراءة نموذج النشر (نسب مئوية ⇒ كسور) · (args, None) أو (None, سبب الرفض)"""
+    sym = str(data.get("symbol", "")).strip().upper()
+    if not sym or "-" not in sym:
+        return None, "اكتب الرمز كاملاً مثل XRP-USDT"
+    try:
+        Q = float(data.get("usd_value") or 0)
+        N = int(float(data.get("step_parts") or 0))
+        d = float(data.get("step_sell_pct") or 0) / 100.0
+        G = float(data.get("grid_pct") or 0) / 100.0
+        floor = float(data.get("min_price") or 0)
+        up = int(float(data.get("up_groups") or 0))
+        p0 = float(data.get("forced_base") or 0)
+    except Exception:
+        return None, "تأكد من الأرقام (المبلغ · عدد البيعات · المسافات · الأرضية)"
+    if Q <= 0 or G <= 0 or d <= 0:
+        return None, "المبلغ ومسافة البيع ومسافة الشراء يجب أن تكون أكبر من صفر"
+    if not (1 <= N <= STEP_MAX_PARTS):
+        return None, f"عدد البيعات لكل شراء من 1 إلى {STEP_MAX_PARTS}"
+    if up < 0 or up > 200:
+        return None, "مستويات عملاتك فوق السعر من 0 إلى 200"
+    if floor < 0 or p0 < 0:
+        return None, "الأرضية وسعر البداية لا يكونان سالبين"
+    return {"sym": sym, "base": sym.split("-")[0], "Q": Q, "N": N, "d": d, "G": G, "floor": floor, "up": up, "p0": p0}, None
+
+
+def step_plan(data, px=None):
+    """📋 جدول ما قبل النشر (حساب فقط · بلا مفاتيح ولا كتابة) — كل مستوى: قاعدته · بيعاته وربح كل بيعة صافياً بعد العمولتين ·
+    المبلغ (تحت) أو العملات (فوق) · المجموع: أوامر · دولار حتى الأرضية · عملات فوق · خسارة على الورق عند الأرضية · الرفض والتنبيهات"""
+    a, err = _step_args(data)
+    if err:
+        return {"ok": False, "msg": err}
+    P0 = a["p0"] or float(px or 0) or float(PX.get(a["sym"]) or 0) or float(_acc_price(a["sym"]) or 0)
+    if P0 <= 0:
+        return {"ok": False, "msg": "سعر العملة غير معروف الآن — أعد المحاولة"}
+    sp_ = _acc_spec(a["sym"]) or {}
+    lot, mn = float(sp_.get("lotSz") or 0) or None, float(sp_.get("minSz") or 0) or None
+    f = FEE_RATE_DEFAULT
+    errs, warns = [], []
+    if a["floor"] <= 0:
+        errs.append("حدّد سعر الأرضية (لا شراء تحته) — بلا أرضية الشراء لا ينتهي")
+    elif a["floor"] >= P0:
+        errs.append(f"الأرضية ({a['floor']:g}) يجب أن تكون تحت سعر البداية ({P0:.8g})")
+    part = a["Q"] / a["N"]
+    if part < STEP_MIN_PART - 1e-9:
+        errs.append(f"أقل بيعة {STEP_MIN_PART:g}$: المبلغ ÷ عدد البيعات = {part:.4g}$ — زِد المبلغ أو قلّل البيعات")
+    lay = _step_layout(P0, a["G"], a["d"], a["N"], a["Q"], a["floor"] if a["floor"] > 0 else P0 * 0.5, a["up"], f, lot, mn)
+    if len(lay) > STEP_MAX_SLOTS:
+        errs.append(f"{len(lay)} خانة أكثر من الحد ({STEP_MAX_SLOTS}) — كبّر مسافة الشراء أو ارفع الأرضية")
+    skip = [r for r in lay if r.get("skip")]
+    if skip:
+        errs.append(f"{len(skip)} بيعة كميتها أصغر من حد المنصة الأدنى ({mn:g} {a['base']}) — زِد المبلغ")
+    rows, by = [], {}
+    for r in lay:
+        by.setdefault(r["j"], []).append(r)
+    p1 = None
+    gap = None      # (the coins a first sell leaves behind × its price, the row) — a coarse quantity step on OKX
+    usd = coins = paper = 0.0
+    lo_floor = a["floor"] if 0 < a["floor"] < P0 else None
+    for j in sorted(by, reverse=True):
+        parts = sorted(by[j], key=lambda r: r["k"])
+        bp = parts[0]["bp"]
+        sells = []
+        for r in parts:
+            qn = r["sq"] if r["side"] == "sell" else max(0.0, _step_round(r["q"] * (1 - f) + 1e-12, lot or 1e-6))
+            cq = r["q"] * (1 - f)      # what a buy of q leaves after its fee (taken in the coin) — the part under OKX's step is not lost:
+            pr = cq * r["sp"] * (1 - f) - r["q"] * r["bp"]   # the engine carries it (fee_dust) into the next sells ⇒ the profit of a sell on average
+            sells.append({"k": r["k"], "sp": r["sp"], "q": r["q"], "qn": round(qn, 10), "pr": round(pr, 6), "skip": bool(r.get("skip"))})
+            if r["k"] == 1 and (p1 is None or pr < p1):
+                p1 = pr
+            if not r.get("skip") and (gap is None or (cq - qn) * r["sp"] > gap[0]):
+                gap = ((cq - qn) * r["sp"], qn, cq, qn * r["sp"] * (1 - f) - r["q"] * r["bp"])
+            if lo_floor and not r.get("skip"):
+                paper += (qn if r["side"] == "sell" else cq) * lo_floor - r["q"] * r["bp"]
+        row = {"j": j, "bp": bp, "side": "inv" if j >= 0 else "buy", "sells": sells}
+        if j >= 0:
+            row["coins"] = round(sum(s["qn"] for s in sells if not s["skip"]), 10)
+            coins += row["coins"]
+        else:
+            row["usd"] = round(sum(s["q"] * bp for s in sells if not s["skip"]), 6)
+            usd += row["usd"]
+        rows.append(row)
+    if p1 is not None and p1 <= 0:
+        errs.append(f"مسافة البيع {a['d'] * 100:g}% لا تغطي العمولتين ({2 * f * 100:.2f}%) — أول بيعة تخسر · كبّر مسافة البيع")
+    if a["G"] < a["N"] * a["d"] - 1e-12:
+        warns.append(f"النسب تتداخل: بيعات كل مستوى تمتد ({a['N'] * a['d'] * 100:g}%) فوق مسافة الشراء ({a['G'] * 100:g}%) — مسموح، "
+                     "وكل أمر يبقى منفصلاً لخانته (لا اندماج حتى بنفس السعر)")
+    if gap and gap[0] >= 0.01:
+        warns.append(f"خطوة الكمية في المنصة {lot:g} {a['base']}: البيعة ترسل {gap[1]:g} بدل {gap[2]:.6g} لأن عمولة الشراء تُخصم من العملة — "
+                     f"الفارق يتجمّع في ذاكرة البوت ويُباع مع البيعات التالية، لذلك الربح المعروض هو متوسط البيعة: بعضها يُسجَّل بأقل منه "
+                     f"(حتى {gap[3]:+.4f}$) وبعضها بأكثر")
+    if a["up"] == 0:
+        warns.append("لا مستويات من عملاتك فوق السعر — البوت يبدأ بشراءات تحت السعر فقط")
+    nb = sum(1 for r in rows if r["side"] == "buy")
+    ni = len(rows) - nb
+    tot = {"nb": nb, "ni": ni, "orders": sum(1 for r in lay if not r.get("skip")), "window": STEP_WINDOW,
+           "usd": round(usd, 4), "coins": round(coins, 10), "paper": round(paper, 4) if lo_floor else None,
+           "lo": min((r["bp"] for r in rows if r["side"] == "buy"), default=None), "p1": round(p1 or 0, 6), "minpart": round(part, 6)}
+    return {"ok": True, "sym": a["sym"], "base": a["base"], "P0": P0, "fee": f, "lot": lot, "mn": mn, "rows": rows, "tot": tot,
+            "err": errs, "warn": warns, "args": {k: a[k] for k in ("Q", "N", "d", "G", "floor", "up")}}
+
+
+def deploy_step(data):
+    """🪜 نشر الشبكي المتدرج: نفس الجدول (يرفض بنفس الأسباب) · سعر البداية يُثبَّت بالإعداد (الجدول = المحرك) ·
+    عملاتك الحرة (رصيد OKX الحر − ما تحتاجه بوتاتك الأخرى بنفس المحفظة والعملة) تكفي مستويات فوق السعر ⇐ وإلا يرفض"""
+    a, err = _step_args(data)
+    if err:
+        return {"ok": False, "msg": err}
+    keys = wallet_keys(data.get("wallet", "")) or {
+        "api_key": str(data.get("api_key", "")).strip(), "secret_key": str(data.get("secret_key", "")).strip(),
+        "passphrase": str(data.get("passphrase", "")).strip()}
+    if not keys["api_key"]:
+        return {"ok": False, "msg": "اختر محفظة أو أدخل مفاتيح API"}
+    px = 0.0
+    if not a["p0"]:
+        try:
+            px = float(_acc_price(a["sym"]) or 0)
+        except Exception:
+            px = 0.0
+    P = step_plan(data, px=px)
+    if not P.get("ok"):
+        return P
+    if P["err"]:
+        return {"ok": False, "msg": "⛔ " + P["err"][0]}
+    need = float(P["tot"]["coins"] or 0)
+    if need > 0:
+        r = _okx_get(f"/api/v5/account/balance?ccy={a['base']}", keys["api_key"], keys["secret_key"], keys["passphrase"])
+        if not r or str(r.get("code")) != "0" or not isinstance(r.get("data"), list) or not r["data"]:
+            return {"ok": False, "msg": "تعذّر قراءة رصيد المحفظة من OKX — أعد المحاولة"}
+        av = 0.0
+        for dd in (r["data"][0].get("details") or []):
+            if str(dd.get("ccy")) == a["base"]:
+                av = max(0.0, float(dd.get("availBal") or 0))
+        claims = 0.0
+        for b in bot_dirs().values():
+            try:
+                if str((b.get("cfg") or {}).get("api_key") or "").strip() != keys["api_key"] or b["symbol"].split("-")[0] != a["base"]:
+                    continue
+                claims += float((_gd_free_claims(b, load_json(paths_of(b)[0]) or {}) or {}).get(a["base"]) or 0)
+            except Exception:
+                continue
+        free = max(0.0, av - claims)
+        if free + 1e-12 < need:
+            return {"ok": False, "msg": f"⛔ مستويات عملاتك فوق السعر تحتاج {need:.8g} {a['base']} — الحر بمحفظتك {free:.8g} "
+                                        f"(بعد ما تحتاجه بوتاتك الأخرى {claims:.8g}) · قلّل المستويات أو اجعلها 0"}
+    folder = "step_" + a["base"].lower()
+    base_folder, c = folder, 1
+    while os.path.exists(os.path.join(ROOT, folder)):
+        folder = f"{base_folder}_{c}"; c += 1
+    full = os.path.join(ROOT, folder)
+    os.makedirs(full, exist_ok=True)
+    cfg = {**keys, "symbol": a["sym"], "bot_type": "grid_step", "usd_value": a["Q"], "step_parts": a["N"], "step_sell": a["d"],
+           "grid_percentage": a["G"], "min_price": a["floor"], "up_groups": a["up"], "forced_base_price": float(P["P0"]),
+           "fee_rate": P["fee"], "step_window": STEP_WINDOW, "knife_guard": False, "is_demo": False,
+           "auto_restart": bool(data.get("auto", True))}
+    save_json_atomic(os.path.join(full, f"config_{a['sym']}.json"), cfg)
+    eng_src, eng_script, _ = engine_for(cfg)
+    with open(os.path.join(full, eng_script), "w", encoding="utf-8") as fh:
+        fh.write(eng_src)
+    _drop_reinvest(full)
+    b = {"dir": full, "cfg_path": os.path.join(full, f"config_{a['sym']}.json"), "cfg": cfg, "symbol": a["sym"]}
+    ok, msg = launch(b)
+    if ok:
+        tg_send(f"🪜 *تم نشر شبكي متدرج*\nالعملة: `{a['sym']}`\nالبداية: `{float(P['P0']):.8g}`\n"
+                f"`{a['N']}` بيعات لكل شراء · البيع `{a['d'] * 100:g}%` · الشراء `{a['G'] * 100:g}%` · `{a['Q']:g}$` لكل شراء")
+    return {"ok": ok, "msg": (f"🪜 انتشر الشبكي المتدرج وانطلق — {a['sym']} · البداية {float(P['P0']):.8g}") if ok else msg, "dir": folder}
+
+
+def step_audit(b, st):
+    """🪜 تدقيق الشبكي المتدرج (بدل سلّم الشبكة): كل خانة لها أمر واحد على الأكثر · أوامر البوت لا تتلاقى (شراء تحت بيع) ·
+    الأوامر الحية = الخانات اللي أمرها حي"""
+    S = st.get("slots") if isinstance(st.get("slots"), dict) else None
+    if not S:
+        return {"ok": None, "msg": "🪜 لا خانات بعد"}
+    lb, ls = st.get("limit_buys") or {}, st.get("limit_sells") or {}
+    live = {str((s.get("o") or {}).get("id")) for s in S.values() if (s.get("o") or {}).get("id") and (s.get("o") or {}).get("st") == "live"}
+    same = live == set(map(str, lb)) | set(map(str, ls))
+    bs = [float(v.get("target_price") or 0) for v in lb.values()]
+    ss = [float(v.get("target_price") or 0) for v in ls.values()]
+    cross = bool(bs and ss and max(bs) >= min(ss))
+    nb = sum(1 for s in S.values() if s.get("side") == "buy")
+    ok = same and not cross
+    return {"ok": ok, "levels": len(S), "buys": len(bs), "sells": len(ss), "overlap": cross,
+            "msg": (f"✅ {len(S)} خانة ({nb} شراء · {len(S) - nb} بيع) · على المنصة {len(bs)} شراء + {len(ss)} بيع"
+                    if ok else "⚠️ " + " · ".join(filter(None, ["أوامر البوت تتلاقى (شراء فوق بيع)" if cross else "",
+                                                                 "الأوامر الحية لا تطابق الخانات" if not same else ""])))}
+
+
+def _step_merge_lv(lv):
+    """البطاقة: شراءات المستوى الواحد (نفس السعر) تظهر سطراً واحداً — الكمية مجموعة · n = عدد أوامرها المنفصلة"""
+    out = {}
+    for x in lv or []:
+        k = (x.get("k"), x.get("p"))
+        if k in out:
+            out[k]["q"] = round(out[k]["q"] + float(x.get("q") or 0), 6)
+            out[k]["n"] = out[k].get("n", 1) + 1
+        else:
+            out[k] = dict(x, n=1)
+    return list(out.values())
+
+
 def deploy(data):
     sym = str(data.get("symbol", "")).strip().upper()
     if not sym or "-" not in sym:
@@ -17944,6 +18230,19 @@ def control(d_rel, action, value):
     b = bots[full]
     sp, hp, lp = paths_of(b)
 
+    if b["cfg"].get("bot_type") == "grid_step":                 # 🪜 v3.36.15
+        if action in ("reinvest", "ri_inject", "ri_pct", "ri_withdraw"):
+            return {"ok": False, "msg": "🪜 إعادة الاستثمار غير متاحة للشبكي المتدرج في هذا الإصدار"}
+        if action == "guard":
+            return {"ok": False, "msg": "🪜 درع السكين غير متاح للشبكي المتدرج — استعمل ⏸ إيقاف الشراء بدلاً منه"}
+        if action == "edit":
+            return {"ok": False, "msg": "🪜 إعدادات الشبكي المتدرج ثابتة منذ تشغيله (الجدول = المحرك) — للتغيير: احذفه وانشر من جديد"}
+        if action == "clone_info":
+            c = b["cfg"]
+            return {"ok": True, "cfg": {"bot_type": "grid_step", "symbol": c.get("symbol"), "usd_value": c.get("usd_value"),
+                                        "step_parts": c.get("step_parts"), "step_sell_pct": round(float(c.get("step_sell") or 0) * 100, 6),
+                                        "grid_pct": round(float(c.get("grid_percentage") or 0) * 100, 6), "min_price": c.get("min_price"),
+                                        "up_groups": c.get("up_groups"), "forced_base": 0}}
     if action == "start":
         alive, _ = is_alive(full, sp)
         if alive:
@@ -19054,7 +19353,7 @@ def app_feed_push(text, go=None, kind=None):
     return True
 
 
-_WD_E = {"grid": "♾️", "grid_plus": "➕", "grid_range": "🎚️", "dca": "📉", "dca_buy": "📈", "rec_buy": "🟢", "rec_sell": "🔴", "rec_va": "💹"}
+_WD_E = {"grid": "♾️", "grid_plus": "➕", "grid_range": "🎚️", "grid_step": "🪜", "dca": "📉", "dca_buy": "📈", "rec_buy": "🟢", "rec_sell": "🔴", "rec_va": "💹"}
 
 
 def _wd_n(v, u, sign=True):
@@ -20679,6 +20978,10 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
             return self._json(_safe(va_w0_api, data, default={"ok": False, "msg": "تعذّر الحساب"}))     # 👛 v3.36.11 (قراءة فقط)
         if path == "/api/va_plan":
             return self._json(va_plan_api(data))
+        if path == "/api/step_plan":
+            return self._json(_safe(step_plan, data, default={"ok": False, "msg": "تعذّر الحساب"}))     # 🪜 v3.36.15 (حساب فقط)
+        if path == "/api/deploy_step":
+            return self._json(deploy_step(data))         # 🪜 v3.36.15
         if path in ("/api/bt_prep", "/api/bt_start", "/api/bt_status", "/api/bt_path", "/api/bt_stop"):   # 🧪 v3.36.0: الاختبار التجريبي
             return self._json({"/api/bt_prep": bt_prep, "/api/bt_start": bt_start, "/api/bt_status": bt_status,
                                "/api/bt_path": bt_path, "/api/bt_stop": bt_stop}[path](data))       # 📋 v3.35.0: جدول ما قبل التشغيل (حساب فقط) · 👆 v3.35.1: البيع من مستوى مختار (حي أيضاً · قراءة فقط)
@@ -21500,7 +21803,9 @@ body.btopen{overflow:hidden}
 .card.sk:not(.skfull)>:not(.skin){display:none!important}
 .card.sk.skfull>.skin{margin-bottom:8px}.sk-back{width:100%;height:32px;font-size:12px;border-radius:10px}
 .card.sk{--k-rgb:var(--vio-rgb)}
-.card.sk.k-plus{--k-rgb:244 114 182}.card.sk.k-range{--k-rgb:var(--blue-rgb)}.card.sk.k-dca{--k-rgb:var(--amber-rgb)}
+.card.sk.k-plus{--k-rgb:244 114 182}.card.sk.k-step{--k-rgb:var(--cyan-rgb)}
+.sthelp{font-size:12.5px;color:var(--mut);line-height:1.9;margin:0 0 8px}.sterr{color:var(--red);font-size:12.5px;margin:4px 0}.stwarn{color:var(--amber);font-size:12px;margin:4px 0;line-height:1.7}.stsum{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;margin:8px 0;color:var(--tx);line-height:1.8}.stwrap{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:10px}.sttab{width:100%;border-collapse:collapse;font-size:12px}.sttab th,.sttab td{padding:5px 7px;border-bottom:1px solid var(--line);text-align:right;vertical-align:top}.sttab th{position:sticky;top:0;background:var(--bg1)}.sttab tr.stinv td{background:rgb(var(--cyan-rgb)/.07)}.sttab tr.st0 td{border-top:2px solid rgb(var(--cyan-rgb)/.55)}.stsl{display:inline-block;margin:1px 8px 1px 0;white-space:nowrap}.stsl .pos{color:var(--green)}.stsl .neg{color:var(--red)}.stsl.skip{opacity:.4;text-decoration:line-through}
+.card.sk.k-range{--k-rgb:var(--blue-rgb)}.card.sk.k-dca{--k-rgb:var(--amber-rgb)}
 .card.sk.k-rec{--k-rgb:var(--cyan-rgb)}.card.sk.k-va{--k-rgb:var(--green-rgb)}.card.sk.k-hyb{--k-rgb:var(--vio-rgb)}.card.sk.k-acc{--k-rgb:var(--amber-rgb)}
 .skin{position:relative;min-width:0}
 .skin svg{direction:ltr;display:block;width:100%;height:auto;overflow:visible}
@@ -22419,6 +22724,7 @@ html.lite .card:hover,html.lite button:hover{transform:none}
       <button class="primary" onclick="openDeployDca()" style="background:linear-gradient(94deg,rgb(var(--amber-rgb)/.9),rgb(var(--amber3-rgb)/.9))">📉 نشر DCA</button>
       <button class="primary" onclick="openDeployRec()" title="بوت دوري: يشتري (أو يبيع) بمبلغ ثابت كل ساعات/أيام/أشهر ويطلع بالربح" style="background:linear-gradient(94deg,rgb(var(--cyan-rgb)/.9),rgb(var(--vio-rgb)/.9))">🔁 دوري</button>
       <button class="primary" onclick="openDeployVa()" title="مسار القيمة: تحدد قيمة العملة المطلوبة، وعند كل خطوة يشتري الفرق أو يبيع الزائد — بلا أسعار تحددها" style="background:linear-gradient(94deg,rgb(var(--vio-rgb)/.9),rgb(var(--cyan-rgb)/.9))">💹 مسار القيمة</button>
+      <button class="primary" onclick="openDeployStep()" title="الشبكي المتدرج: مثل الشبكة اللانهائية، لكن كل شراء ثابت في مكانه وكميته تُقسَّم على عدة بيعات متدرجة فوقه" style="background:linear-gradient(94deg,rgb(var(--cyan-rgb)/.9),rgb(var(--green-rgb)/.85))">🪜 شبكي متدرج</button>
       <button onclick="accEdit()" style="background:linear-gradient(94deg,rgb(var(--cyan-rgb)/.85),rgb(var(--cyan3-rgb)/.85));color:var(--on-acc);font-weight:700">🪙 المُراكِم</button>
     </div>
     <span class="gsep"></span>
@@ -22830,11 +23136,11 @@ function updCard(el,b,bench){
   ch+=accChipsOf(b);
   if(b.launch_err)ch+=`<span class="chip" style="color:var(--hi);background:rgb(var(--red-rgb)/.25);border-color:var(--red)" title="${(b.launch_err||'').replace(/"/g,'')}">💥 ${b.launch_err.length>46?b.launch_err.slice(0,46)+'…':b.launch_err}</span>`;
   if(b.eng_old)ch+='<span class="chip" style="color:var(--red);border-color:rgb(var(--red-rgb)/.45)">🧬 محرك قديم</span>';
-  if(b.bot_type!=='dca'&&b.bot_type!=='dca_buy'){
+  if(b.bot_type!=='dca'&&b.bot_type!=='dca_buy'&&b.bot_type!=='grid_step'){   // 🪜 v3.36.15: بلا 🔄 وبلا ⚔️ للشبكي المتدرج (محركه ما فيه الاثنين)
     const _ri=b.ri||{};const _on=!!(_ri.on||_ri.cfg_on);const _uwn=+_ri.n_unwind||0;
     ch+=`<span class="chip ck ${_on?'gOn':''}" onclick="askReinvest('${b.dir}')" title="${_on?'إلغاء إعادة الاستثمار وتحرير الأرباح فوراً':'تشغيل إعادة الاستثمار — البوت يُعاد تشغيله تلقائياً'}">🔄 إعادة استثمار ${_on?'شغالة':(_uwn?'تتفكّك '+_uwn:'مطفية')}</span>`;
   }
-  ch+=`<span class="chip ck ${b.guard?'gOn':''}" onclick="ctl('${b.dir}','guard')" title="اضغط للتبديل">⚔️ درع ${b.guard?'شغال':'مطفي'}</span>`;
+  if(b.bot_type!=='grid_step')ch+=`<span class="chip ck ${b.guard?'gOn':''}" onclick="ctl('${b.dir}','guard')" title="اضغط للتبديل">⚔️ درع ${b.guard?'شغال':'مطفي'}</span>`;
   if(b.floor>0)ch+=`<span class="chip acc">أرضية ${b.floor}</span>`;
   if(b.ceil>0)ch+=`<span class="chip acc">سقف ${b.ceil}</span>`;
   if(R.chips._h!==ch){R.chips.innerHTML=ch;R.chips._h=ch}
@@ -23399,7 +23705,7 @@ function recRange(b){
     hideModal();ctl(b.dir,'rec_range',{lo,hi})};
 }
 function recPause(b){const r=b.rec||{};ctl(b.dir,r.paused?'rec_resume':'rec_pause');if(b.rec)b.rec.paused=!r.paused}
-const BT_LBL={grid:'♾️ لانهائية',grid_range:'🎚️ مدى',grid_plus:'➕ بلس',dca:'📉 DCA بيعي',dca_buy:'📈 DCA شرائي',rec_buy:'دوري شرائي',rec_sell:'دوري بيعي',rec_va:'💹 مسار القيمة'};
+const BT_LBL={grid:'♾️ لانهائية',grid_range:'🎚️ مدى',grid_plus:'➕ بلس',grid_step:'🪜 شبكي متدرج',dca:'📉 DCA بيعي',dca_buy:'📈 DCA شرائي',rec_buy:'دوري شرائي',rec_sell:'دوري بيعي',rec_va:'💹 مسار القيمة'};
 function recHist(b){return botHist(b)}
 /* ═══ 💹 v3.34.0: بوت «مسار القيمة» — كرت · رسم الهدف مقابل القيمة · خطوة الآن · إيقاف · بيع الكل · الإعدادات الحية · النشر · 📉📈 v3.35.0: بالنسبة + 📋 الجدول · 👆 v3.35.1: البيع من أي مستوى · 🗑 v3.35.2: الحذف يخيّرك ═══ */
 const VA_DEF={fixed:{start:100,step:0,every:4,unit:'h',band:8,max_order:60,cap:400,floor:true,brake:0},
@@ -23936,10 +24242,10 @@ function btOpenTxt(m,B){const o=m.od||{},q=+o.q||0,Bn=gEsc(B);                  
   return ''}
 function btT(s){s=Math.max(0,Math.round(+s||0));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
 function btFromForm(kind){                                    // من نموذج النشر — الإعدادات نفسها التي سيُنشر بها
-  const fb={rec_va:window.vaFormBody,rec:window.recFormBody,dca:window.dcaFormBody,grid:window.gridFormBody}[kind];
+  const fb={rec_va:window.vaFormBody,rec:window.recFormBody,dca:window.dcaFormBody,grid:window.gridFormBody,step:window.stBody}[kind];
   if(!fb){toast('تعذّر قراءة النموذج',false);return}
   const body=fb();if(!body.symbol||!body.symbol.includes('-')){toast('اكتب الرمز كاملاً مثل XRP-USDT',false);return}
-  const k=kind==='rec'?(body.rec_type||'rec_buy'):kind==='dca'?(body.dca_type||'dca'):kind==='grid'?(body.g_type||'grid'):kind;
+  const k=kind==='rec'?(body.rec_type||'rec_buy'):kind==='dca'?(body.dca_type||'dca'):kind==='grid'?(body.g_type||'grid'):kind==='step'?'grid_step':kind;
   btOpen({kind:k,body})}
 function btFromBot(dir){hideModal();btOpen({dir})}            // من بوت قائم — إعداداته الحالية (بلا مفاتيح)
 function btClose(){const o=$('#btov');if(o)o.remove();clearTimeout(BT.poll);BT.poll=0;btStopPlay();document.body.classList.remove('btopen');
@@ -25846,7 +26152,11 @@ function gridDetails(b){
     ${accChips?`<div style="margin-bottom:12px;display:flex;gap:6px;flex-wrap:wrap">${accChips}</div>`:''}
     <div class="dnsec">⚙ الإعدادات</div>
     <table class="dntbl"><tbody>
-      <tr><td style="text-align:right">النوع</td><td>${{grid:'♾️ لانهائية',grid_range:'🎚️ مدى',grid_plus:'➕ بلس'}[b.bot_type||'grid']||b.bot_type}</td></tr>
+      <tr><td style="text-align:right">النوع</td><td>${{grid:'♾️ لانهائية',grid_range:'🎚️ مدى',grid_plus:'➕ بلس',grid_step:'🪜 شبكي متدرج'}[b.bot_type||'grid']||b.bot_type}</td></tr>
+      ${b.scfg?`<tr><td style="text-align:right">البيعات لكل شراء</td><td class="num">${+b.scfg.N||0}</td></tr>
+      <tr><td style="text-align:right">مسافة البيع</td><td class="num">${+((+b.scfg.d||0)*100).toFixed(4)}%</td></tr>
+      <tr><td style="text-align:right">سعر البداية · مستويات من عملاتك</td><td class="num">${stN(b.scfg.P0)} · ${+b.scfg.up||0}</td></tr>
+      <tr><td style="text-align:right">الخانات (أمر لكل جزء)</td><td class="num">${+b.scfg.slots||0}</td></tr>`:''}
       <tr><td style="text-align:right">نسبة الشبكة</td><td class="num">${+(+b.grid_pct||0).toFixed(4)}%</td></tr>
       ${b.gcfg&&b.bot_type==='grid_range'?`<tr><td style="text-align:right">المدى (أرضية ↔ سقف)</td><td class="num">${b.gcfg.lower_price||'—'} ↔ ${b.gcfg.upper_price||'—'}</td></tr>`:''}
       ${b.gcfg&&b.bot_type==='grid_plus'?`<tr><td style="text-align:right">بُعد الشراء عن البيع</td><td class="num">${+((+b.gcfg.buy_offset||0)*100).toFixed(3)}%</td></tr>`:''}
@@ -25855,7 +26165,7 @@ function gridDetails(b){
     </tbody></table>
     <div class="dnsec" style="margin-top:14px">🎛 التحكم</div>
     <div class="gdbtns">
-      <button id="gd_guard" class="${guardOn?'on':''}">${guardOn?'⚔️ الدرع: شغّال':'⚔️ الدرع: مطفي'}</button>
+      ${b.bot_type==='grid_step'?'':`<button id="gd_guard" class="${guardOn?'on':''}">${guardOn?'⚔️ الدرع: شغّال':'⚔️ الدرع: مطفي'}</button>`}
       <button id="gd_auto" class="${autoOn?'on':''}">${autoOn?'🤖 الحارس: يشمله':'🤖 الحارس: مستثنى'}</button>
       <button id="gd_pb" class="${pauseBuy?'on':''}">${pauseBuy?(b.floor>0?`▶️ استئناف الشراء (${(b.accx||{}).nb||0})`:'▶️ إلغاء الإيقاف'):'⏸ إيقاف الشراء'}</button>
       <button id="gd_ps" class="${pauseSell?'on':''}">${pauseSell?(b.ceil>0?`▶️ استئناف البيع (${(b.accx||{}).ns||0})`:'▶️ إلغاء الإيقاف'):'⏸ إيقاف البيع'}</button>
@@ -25864,7 +26174,7 @@ function gridDetails(b){
       <button class="primary" onclick="hideModal();gridLadder(botOf('${b.dir}'))">🪜 السلم الكامل</button>
       <button onclick="btFromBot('${b.dir}')" title="إعدادات هذا البوت على مسار تجريبي — لا يمسّ البوت">🧪 اختبار تجريبي</button><button onclick="hideModal()">إغلاق</button></div>`);
   // اربط الأزرار
-  $('#gd_guard').onclick=()=>{ctl(b.dir,'guard');hideModal()};
+  if($('#gd_guard'))$('#gd_guard').onclick=()=>{ctl(b.dir,'guard');hideModal()};
   $('#gd_auto').onclick=()=>{ctl(b.dir,'auto');hideModal()};
   // 🧲 v3.21.10 (ب٢٦ · ب٢٧): نفس زرّي الكرت بالضبط — الإيقاف بسعر السوق · الاستئناف بنافذة تأكيد
   $('#gd_pb').onclick=()=>{hideModal();accumPrompt(botOf(b.dir)||b,'buy')};
@@ -25961,7 +26271,7 @@ async function saveSettings(){const btn=$('#s_save');btn.disabled=true;const ori
     else{btn.textContent=orig;btn.disabled=false}
   }catch(e){toast('تعذر الحفظ — تأكد من الاتصال',false);btn.textContent=orig;btn.disabled=false}}
 async function cloneBot(){const r=await api('/api/control',{dir:CUR,action:'clone_info'});
-  if(r.ok){closeDrawer();openDeploy(r.cfg);toast('📋 انعبت النموذج من البوت — غيّر الرمز وانشر',true)}}
+  if(r.ok){closeDrawer();(r.cfg&&r.cfg.bot_type==='grid_step'?openDeployStep:openDeploy)(r.cfg);toast('📋 انعبت النموذج من البوت — غيّر الرمز وانشر',true)}}
 
 /* ── الصفحات ── */
 function openPage(p){$('#page_'+p).classList.add('on')}
@@ -26515,7 +26825,7 @@ const fl$=v=>{v=+v||0;const a=Math.abs(v);return (a<5e-7?'0':a>=100?v.toFixed(2)
 const flC=v=>{v=+v||0;return Math.abs(v)<1e-12?'0':fmtQ(v)};
 const flQ=(v,c)=>c==='USDT'||!c?fl$(v):(flC(v)+' '+c);
 const flE=s=>gEsc(s);
-const flIco=t=>({grid:'♾️',grid_range:'🎚️',grid_plus:'➕',dca:'📉',dca_buy:'📈',rec_buy:'🔁',rec_sell:'🔂',rec_va:'💹'}[t]||'🤖');
+const flIco=t=>({grid:'♾️',grid_range:'🎚️',grid_plus:'➕',grid_step:'🪜',dca:'📉',dca_buy:'📈',rec_buy:'🔁',rec_sell:'🔂',rec_va:'💹'}[t]||'🤖');
 function flHMS(s){s=Math.max(0,Math.round(s));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return `${h}:${String(m).padStart(2,'0')}:${String(x).padStart(2,'0')}`}
 function openFlow(){openPage('flow');FL.data=null;FL.sig='';FL.hlId=null;loadFlow();clearInterval(FL.timer);clearInterval(FL.cd);
   FL.timer=setInterval(()=>{const pg=$('#page_flow');if(!pg||!pg.classList.contains('on')){clearInterval(FL.timer);clearInterval(FL.cd);return}if(!document.hidden)loadFlow()},4000);
@@ -27532,6 +27842,7 @@ function gType(t){                                          // 🎚️ اختي�
 function gtLabel(b){                                        // 🏷️ شارة نوع الشبكة على البطاقة
   const t=b&&b.bot_type;
   if(t==='grid_range')return '🎚️ مدى';
+  if(t==='grid_step')return '🪜 شبكي متدرج';
   if(t==='grid_plus'){const o=+(b.buy_offset||0);return '➕ بلس'+(o>0?` ${(o<1?o*100:o).toFixed(o<1?2:1)}%`:'');}
   if(t==='dca'||t==='dca_buy')return '';
   return '♾️';
@@ -27642,6 +27953,63 @@ async function gridRangePreview(){
   h+=`</div>`;
   box.innerHTML=h;
 }
+// 🪜 v3.36.15: الشبكي المتدرج — نموذج النشر + الجدول قبل النشر (اللوحة تحسبه بمعادلة المحرك نفسها)
+let _stT=0,_stSeq=0;
+function stN(v){v=+v||0;return String(+v.toPrecision(Math.abs(v)>=1?8:6))}
+async function openDeployStep(pre){pre=pre||{};
+  let ws=[];try{const s=await api('/api/settings');ws=s.wallets||[]}catch(e){}
+  const v=(k,d)=>pre[k]!=null&&pre[k]!==''?pre[k]:d;
+  showModal(`<h2 style="color:var(--cyan)">🪜 نشر «الشبكي المتدرج»</h2>
+  <p class="sthelp">مثل الشبكة اللانهائية، لكن <b>كل شراء ثابت في مكانه</b> وكميته تُقسَّم على <b>عدة بيعات فوقه</b> بالتدريج. كل بيعة تُنفَّذ تعيد شراء <b>الكمية نفسها</b> بسعر شرائها الثابت ⇐ الربح بالدولار والعملة تبقى كما هي. فوق سعر البداية تبيع من عملاتك كأنها اشتُريت بسعر مستواها، وتحته شراءات ثابتة حتى الأرضية.</p>
+  <div class="frm">
+    <div class="fld"><label>الرمز (مثل XRP-USDT)</label><input id="st_sym" style="text-transform:uppercase" placeholder="XRP-USDT" value="${gEsc(String(v('symbol','')))}" oninput="stPreview()"></div>
+    <div class="fld"><label title="المبلغ الذي يشتري به كل مستوى — يُقسَّم بالتساوي على البيعات">💵 مبلغ كل شراء ($)</label><input id="st_q" class="num" value="${v('usd_value',15)}" oninput="stPreview()"></div>
+    <div class="fld"><label title="كمية كل شراء تُقسَّم على هذا العدد من البيعات المتدرجة فوقه">🔢 عدد البيعات لكل شراء</label><input id="st_n" class="num" value="${v('step_parts',3)}" oninput="stPreview()"></div>
+    <div class="fld"><label title="المسافة بين الشراء وأول بيعة = المسافة بين بيعة وبيعة">📈 مسافة البيع (%)</label><input id="st_d" class="num" value="${v('step_sell_pct',1)}" oninput="stPreview()"></div>
+    <div class="fld"><label title="المسافة بين مستوى شراء والمستوى الذي تحته">📉 مسافة الشراء (%)</label><input id="st_g" class="num" value="${v('grid_pct',3)}" oninput="stPreview()"></div>
+    <div class="fld"><label title="لا شراء تحت هذا السعر">🧱 سعر الأرضية</label><input id="st_floor" class="num" value="${v('min_price','')}" oninput="stPreview()"></div>
+    <div class="fld"><label title="عدد المستويات فوق سعر البداية التي تبيع من عملاتك الحرة كأنها اشتُريت بسعر مستواها (0 = لا شيء)">⬆️ مستويات فوق السعر من عملاتك</label><input id="st_up" class="num" value="${v('up_groups',1)}" oninput="stPreview()"></div>
+    <div class="fld"><label title="فارغ = سعر السوق لحظة النشر">🎯 سعر البداية (اختياري)</label><input id="st_p0" class="num" value="${+v('forced_base',0)||''}" oninput="stPreview()"></div>
+    <div class="fld"><label>المحفظة</label><select id="st_wallet">${ws.map(w=>`<option>${gEsc(w.name)}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>
+  </div>
+  <div class="cklist" style="margin-top:10px"><label class="ck"><input type="checkbox" id="st_auto" checked>🤖 يشمله الحارس</label></div>
+  <div class="dnsec" style="margin-top:12px">📋 الجدول قبل النشر — كل مستوى وبيعاته وربح كل بيعة صافياً بعد العمولتين</div>
+  <div id="st_plan"><div class="vach0">…</div></div>
+  <div class="mbtns" style="margin-top:14px"><button class="primary" id="st_go" style="background:linear-gradient(94deg,var(--green),#16a34a)">🚀 انشر وشغّل</button><button id="st_bt" onclick="btFromForm('step')" title="يعمل المحرك نفسه على مسار سعري تجريبي بالإعدادات نفسها — بلا مفاتيح ولا أوامر حقيقية">🧪 جرّبه على مسار تجريبي</button><button onclick="hideModal()">إلغاء</button></div>`);
+  $('#st_go').onclick=async()=>{const body=stBody();
+    if(!body.symbol||!body.symbol.includes('-')){toast('اكتب الرمز كاملاً مثل XRP-USDT',false);return}
+    $('#st_go').disabled=true;
+    try{const r=await api('/api/deploy_step',body);toast(r.msg,r.ok);if(r.ok){hideModal();tick()}}
+    finally{const g=$('#st_go');if(g)g.disabled=false}};
+  stPreview()}
+function stBody(){const g=k=>(($('#'+k)||{}).value||'').trim();
+  return {symbol:g('st_sym').toUpperCase(),usd_value:g('st_q'),step_parts:g('st_n'),step_sell_pct:g('st_d'),grid_pct:g('st_g'),
+    min_price:g('st_floor'),up_groups:g('st_up'),forced_base:g('st_p0'),wallet:g('st_wallet'),auto:!!($('#st_auto')||{}).checked}}
+function stPreview(){clearTimeout(_stT);_stT=setTimeout(stPlan,350)}
+async function stPlan(){const box=$('#st_plan');if(!box)return;const b=stBody();
+  if(!b.symbol.includes('-')){box.innerHTML='<div class="vach0">اكتب الرمز لعرض الجدول</div>';return}
+  const my=++_stSeq;let P=null;try{P=await api('/api/step_plan',b,true)}catch(e){}
+  if(my!==_stSeq||!$('#st_plan'))return;
+  box.innerHTML=stPlanHtml(P)}
+function stPlanHtml(P){
+  if(!P||!P.ok)return `<div class="sterr">❌ ${gEsc((P&&P.msg)||'تعذّر الحساب')}</div>`;
+  const T=P.tot||{},B=gEsc(P.base||''),d2=x=>vaD(x);
+  let h='';
+  (P.err||[]).forEach(e=>h+=`<div class="sterr">⛔ ${gEsc(e)}</div>`);
+  (P.warn||[]).forEach(e=>h+=`<div class="stwarn">ℹ️ ${gEsc(e)}</div>`);
+  h+=`<div class="stsum">
+   <span>🎯 البداية <b dir="ltr">${stN(P.P0)}</b></span><span>⬇️ ${T.nb} مستوى شراء${T.lo?` حتى <b dir="ltr">${stN(T.lo)}</b>`:''}</span>
+   <span>⬆️ ${T.ni} مستوى من عملاتك</span><span>🧾 ${T.orders} أمر — على المنصة الأقرب فقط (${T.window} لكل جهة) والباقي بذاكرة البوت</span>
+   <span>💵 دولار الشراء حتى الأرضية <b>${d2(T.usd)}$</b></span><span>🪙 عملات تحتاجها فوق <b dir="ltr">${stN(T.coins)}</b> ${B}</span>
+   ${T.paper!=null?`<span>📉 على الورق لو نزل للأرضية واشترى الكل <b>${d2(T.paper)}$</b></span>`:''}
+   <span>💰 ربح أول بيعة صافياً <b>${d2(T.p1)}$</b> · كل بيعة <b>${d2(T.minpart)}$</b></span></div>`;
+  h+=`<div class="stwrap"><table class="sttab"><thead><tr><th>المستوى</th><th>الشراء الثابت</th><th>البيعات (السعر · الربح الصافي)</th><th>المبلغ</th></tr></thead><tbody>`;
+  (P.rows||[]).forEach(r=>{
+    h+=`<tr class="${r.side==='inv'?'stinv':''}${r.j===0?' st0':''}"><td>${r.j}</td><td dir="ltr">${stN(r.bp)}${r.side==='inv'?' <small>(من عملاتك)</small>':''}</td>
+      <td>${r.sells.map(s=>`<span class="stsl${s.skip?' skip':''}" dir="ltr">${stN(s.sp)} · <b class="${s.pr>0?'pos':'neg'}">${s.pr>0?'+':''}${(+s.pr).toFixed(4)}$</b></span>`).join(' ')}</td>
+      <td dir="ltr">${r.side==='inv'?stN(r.coins)+' '+B:d2(r.usd)+'$'}</td></tr>`});
+  h+='</tbody></table></div>';
+  return h}
 async function openDeploy(pre){pre=pre||{};
   let ws=[];try{const s=await api('/api/settings');ws=s.wallets||[]}catch(e){}
   const _gt0=['grid','grid_range','grid_plus'].includes(pre.bot_type)?pre.bot_type:((+pre.lower_price>0||+pre.upper_price>0)?'grid_range':(+pre.buy_offset>0?'grid_plus':'grid'));
@@ -27757,7 +28125,7 @@ function skShown(n){return !!n&&n.style.display!=='none'}
 function skBtn(el,k,lbl){const n=(el._r||{})[k];if(!n||!skShown(n))return null;return {k,t:lbl||(n.textContent||'').replace(/\s+/g,' ').trim(),dis:!!n.disabled}}
 function skKind(el,b){if(el.dataset.acc)return 'acc';const t=b.bot_type||'grid';
   if(t==='rec_va')return ((b.rec||{}).hg||{}).cfg||(((b.rec||{}).hg||{}).on)?'hyb':'va';
-  if(t==='rec_buy'||t==='rec_sell')return 'rec';if(t==='dca'||t==='dca_buy')return 'dca';if(t==='grid_plus')return 'plus';if(t==='grid_range')return 'range';return 'grid'}
+  if(t==='rec_buy'||t==='rec_sell')return 'rec';if(t==='dca'||t==='dca_buy')return 'dca';if(t==='grid_plus')return 'plus';if(t==='grid_range')return 'range';if(t==='grid_step')return 'step';return 'grid'}
 function skOn(el){
   const sk=document.createElement('div');sk.className='skin';sk.innerHTML='<div class="skv"><div class="skt"></div><div class="skx"></div><div class="skf"></div></div>';
   el.insertBefore(sk,el.firstChild);el._sk=sk;el._skv=sk.firstChild;[el._skt,el._skx,el._skf]=el._skv.children;el._skmv=[];   // 🧩 v3.36.14: الصندوق بين الأعلى والأزرار
@@ -27768,7 +28136,7 @@ function skOn(el){
   el.classList.add('sk')}
 function skOff(el){(el._skmv||[]).forEach(([n,p,nx])=>{try{if(n.dataset)delete n.dataset.skx;p.insertBefore(n,nx&&nx.parentNode===p?nx:null)}catch(e){}});
   if(el._sk)el._sk.remove();el._sk=el._skv=el._skx=el._skt=el._skf=null;el._skmv=[];el._skm=0;
-  el.classList.remove('sk','sk-c','sk-b','sk-o','skfull','k-grid','k-plus','k-range','k-dca','k-rec','k-va','k-hyb','k-acc')}
+  el.classList.remove('sk','sk-c','sk-b','sk-o','skfull','k-grid','k-plus','k-range','k-step','k-dca','k-rec','k-va','k-hyb','k-acc')}
 function skinUpd(el,b){
   if(!el)return;const sk=uiSkin();
   if(sk==='old'){if(el._sk)skOff(el);return}
@@ -27777,7 +28145,7 @@ function skinUpd(el,b){
   if(!el._sk)skOn(el);
   const kd=skKind(el,b);
   ['c','b','o'].forEach(x=>{const w=sk===x;if(el.classList.contains('sk-'+x)!==w)el.classList.toggle('sk-'+x,w)});
-  ['grid','plus','range','dca','rec','va','hyb','acc'].forEach(x=>{const w=kd===x;if(el.classList.contains('k-'+x)!==w)el.classList.toggle('k-'+x,w)});
+  ['grid','plus','range','step','dca','rec','va','hyb','acc'].forEach(x=>{const w=kd===x;if(el.classList.contains('k-'+x)!==w)el.classList.toggle('k-'+x,w)});
   let M;try{M=skModel(el,b,kd)}catch(e){console.error('skin',e);return}
   el._skM=M;
   const h=el.classList.contains('skfull')?`<button type="button" class="sk-back" data-sk="full">🃏 رجوع للشكل المختصر</button>`:(sk==='c'?skC(el,M):sk==='o'?skO(el,M):skB(el,M));
@@ -27883,9 +28251,10 @@ function skModel(el,b,kd){
   const pw=(lblOn,lblOff)=>({k:'pw',t:el._alive?(lblOn||'⏹ إيقاف البوت'):(lblOff||'▶️ تشغيل البوت'),dis:false,go:!el._alive});
   const sign=v=>((+v||0)>1e-12?'':((+v||0)<-1e-12?'n':'z'));
   const ME=(t,k,dz)=>k?Object.assign(skBtn(el,k,t)||{hide:1},dz?{dz:1}:{}):null;
-  if(kd==='grid'||kd==='plus'||kd==='range'){
-    const L=b.ladder||{},G=b.gcfg||{};
-    M.kind=gtLabel(b);M.sub=`درجة ${+(+b.grid_pct||0).toFixed(4)}% · ${+(+b.usd_value||0)}$ للأمر`+(kd==='range'&&(G.lower_price||G.upper_price)?` · ${+G.lower_price||'∞'} — ${+G.upper_price||'∞'}`:'');
+  if(kd==='grid'||kd==='plus'||kd==='range'||kd==='step'){
+    const L=b.ladder||{},G=b.gcfg||{},SC=b.scfg||{};
+    M.kind=gtLabel(b);M.sub=kd==='step'?`${+SC.N||0} بيعات لكل شراء · البيع ${+((+SC.d||0)*100).toFixed(4)}% · الشراء ${+((+SC.G||0)*100).toFixed(4)}% · ${+(+SC.Q||0)}$ لكل شراء`
+      :`درجة ${+(+b.grid_pct||0).toFixed(4)}% · ${+(+b.usd_value||0)}$ للأمر`+(kd==='range'&&(G.lower_price||G.upper_price)?` · ${+G.lower_price||'∞'} — ${+G.upper_price||'∞'}`:'');
     M.st=b.alive?'نشط':'متوقف';M.stc=b.alive?'':'off';
     M.big=f4(+b.profit||0);M.unit='$';const td=+b.today||0;M.pl=['اليوم',(td>0?'+':'')+td.toFixed(4)+'$'];M.pc=sign(td);
     M.gfx=skLadder(L.sells,L.buys,cp,{dn:M.dn,range:kd==='range'?[+G.lower_price||0,+G.upper_price||0]:null,
@@ -30635,6 +31004,170 @@ _REINV_B64 = "eNrtvWt3G9eVJvwdv6IGjl9WUSBEyrJbxoSZUStMooljuyVlkrxsDgQCRQgmCIAASE
 REINV_SRC = _zlib.decompress(_b64.b64decode(_REINV_B64)).decode("utf-8")
 REINV_VERSION = _eng_fp(REINV_SRC)
 GRIDP_VERSION = _eng_fp(GRIDP_SRC)
+# 🪜 v3.36.15: محرك الشبكي المتدرج (مشتق من ♾️ — خانة لكل جزء) — يُكتب بمجلد البوت باسم main.py
+_GRIDS_B64 = (
+"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"
+)
+GRIDS_SRC = _zlib.decompress(_b64.b64decode(_GRIDS_B64)).decode("utf-8")
+GRIDS_VERSION = _eng_fp(GRIDS_SRC)
 # 🔁 v3.25.0: محرك البوت الدوري (الشراء/البيع المتكرر) — يُكتب بمجلد البوت باسم recur.py
 _REC_B64 = (
 "eNrVfWlzHMeV4Hf8itriclFFNhoHRQ7doZZDIimLa4mURSpsLRZRanZXA230hapuEHAPNkwSPMRxhCxZs46YnQmNzNUChERRFCXSkiP2g+ZPAPtRf2D9E/Yd"
@@ -32082,6 +32615,8 @@ def engine_for(cfg):
         return GRIDR_SRC, "main.py", GRIDR_VERSION
     if bt == "grid_plus":
         return GRIDP_SRC, "main.py", GRIDP_VERSION
+    if bt == "grid_step":
+        return GRIDS_SRC, "main.py", GRIDS_VERSION          # 🪜 v3.36.15: الشبكي المتدرج
     if bt == "rec_va":
         return VA_SRC, "vpath.py", VA_VERSION                # 💹 v3.34.0: مسار القيمة
     if bt in ("rec_buy", "rec_sell"):
