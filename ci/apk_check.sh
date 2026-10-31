@@ -3,7 +3,10 @@
 set -u
 P=com.holy.dash
 OUT=ci_out; mkdir -p $OUT
-say(){ echo "HOLYCI $*"; }
+say(){ echo "HOLYCI $*"; case "$*" in PASS*) echo P >> $OUT/cnt;; FAIL*) echo F >> $OUT/cnt;; esac; }
+rm -f $OUT/cnt
+# one line at the end with the totals (the log is too big to read whole: screenshots are inlined)
+summ(){ echo "HOLYCI SUMMARY $(awk '/^P/{p++} /^F/{f++} END{printf "%d PASS · %d FAIL", p, f}' $OUT/cnt 2>/dev/null)"; }
 # uiautomator can die once (e.g. right after «adb root» restarts adbd) ⇒ an empty screen ⇒ try again
 # · it also needs 1 s with no screen change ⇒ «could not get idle state» while live prices tick (that part runs with OKX :8443 paused — see quiet())
 dump(){ local e=""; for t in 1 2 3 4 5 6; do rm -f $OUT/ui_$1.xml; adb shell rm -f /sdcard/ui.xml >/dev/null 2>&1
@@ -330,7 +333,7 @@ fi
 if [ -n "$LOST" ]; then
   say "FAIL emulator gone after the update (adb: device not found) — unlink and log checks skipped"
   pkill -f Holy_Dashboard.pyw || true
-  say "done"; exit 0
+  summ; say "done"; exit 0
 fi
 sleep 5
 adb shell dumpsys activity services $P | grep -E "WatchService|isForeground" | head -3 | sed 's/^/HOLYCI after-update svc: /'
@@ -349,4 +352,5 @@ fi
 say "crash buffer:"; timeout 60 adb logcat -d -b crash | head -40 | sed 's/^/HOLYCI crash: /'
 timeout 60 adb logcat -d | grep -E "holy|Holy|AndroidRuntime|chromium.*CONSOLE|ActivityManager.*$P" | grep -v chatty | tail -70 | sed 's/^/HOLYCI log: /'
 pkill -f Holy_Dashboard.pyw || true      # the CI step ends only when nothing it started is still running
+summ
 say "done"
