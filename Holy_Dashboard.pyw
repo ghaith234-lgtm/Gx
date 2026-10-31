@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.13"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.14"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -21547,6 +21547,8 @@ body.btopen{overflow:hidden}
 .skx{min-width:0}.skx>.cchart{margin-top:10px}
 .skx .rclots,.skx .rcavg,.skx .dcaladbox{margin-top:10px}
 .skx [data-skx]{display:none}.skx [data-skx].on{display:block}
+/* 🧩 v3.36.14: الصندوق الإضافي (أوامر الدوري · صندوق المعدل) فوق صف الأزرار — .skv = .skt (الأعلى) · .skx (الصندوق) · .skf (الأزرار والملاحظة) */
+.skt,.skf{min-width:0}
 /* 🃏 v3.36.13 OKX: pair + tag + status · the profit big · a 2×3 grid of grey labels over white numbers · a white main button on its own row · the outlined ones under it */
 .ok-hd{display:flex;align-items:center;gap:8px}.ok-hd img.coin{width:26px;height:26px;flex:0 0 auto}
 .ok-hd .t{flex:1;min-width:0;display:flex;align-items:center;gap:7px;flex-wrap:wrap}.ok-hd .t b{font-size:15px;font-weight:700;color:var(--tx)}
@@ -23237,6 +23239,16 @@ function buildRecCard(b,i){
   R.lots.onclick=ev=>{const t=ev.target.closest('[data-sell]');if(t)recSell(cur(),t.dataset.sell)};
   return el;
 }
+/* 🧩 v3.36.14: صندوق أوامر الدوري = 3 أوامر بالضبط والباقي بالسلايد — يقيس الأوامر نفسها (حجم الخط · عرض الشاشة) · يقيس لما الصندوق ياخذ
+   حجم (ResizeObserver: لما يبين وين ما كان بالصفحة · لما يتغير العرض) · لما تتغير الأوامر · بعد ما تكمّل الخطوط — ما يقرأ التخطيط بكل تحديث حي */
+let RCF_RO=null;
+function rcFit3(n){if(!n)return;
+  if(!n._ro&&typeof ResizeObserver==='function'){RCF_RO=RCF_RO||new ResizeObserver(es=>es.forEach(e=>rcFit3(e.target)));RCF_RO.observe(n);n._ro=1}   // يراقبه حتى قبل ما ينحط بالصفحة
+  const k=(n._k||'')+'|'+innerWidth;if(n._f3===k||!n.isConnected||!n.offsetParent)return;
+  const r=n.children;let h='none';
+  if(r.length>3){const d=r[3].offsetTop-r[0].offsetTop;if(!(d>0))return;h=d+'px'}
+  n.style.maxHeight=h;n._f3=k}
+try{document.fonts.ready.then(()=>document.querySelectorAll('.rclots').forEach(n=>{n._f3='';rcFit3(n)}))}catch(e){}
 function recLotRow(l,r){
   const pl=l.pl,up=pl!=null&&pl>=0,arw=r.side==='sell'?'▼':'▲';
   const dist=l.dist==null?'':(l.dist>0?`${arw} ${l.dist.toFixed(2)}%`:'✓ وصل');
@@ -23295,7 +23307,7 @@ function updRecCard(el,b){
     const k=JSON.stringify(lots.map(l=>[l.id,l.x,l.pl!=null?(+l.pl).toPrecision(4):null,l.dist,+l.ri]));
     if(R.lots._k!==k){R.lots._k=k;
       R.lots.innerHTML=nO?lots.slice().reverse().map(l=>recLotRow(l,r)).join(''):`<div class="rcempty">${r.paused?'⏸ الأمر الدوري موقوف — ماكو أوامر مفتوحة':'📭 ماكو أوامر مفتوحة — أول أمر بالموعد الجاي'}</div>`}
-    R.lots.style.display='';
+    R.lots.style.display='';if(R.lots._f3!==R.lots._k+'|'+innerWidth)rcFit3(R.lots);
   }else R.lots.style.display='none';
   // 💰 بيع الكل (المعدل دائماً الكل)
   const tot=A&&A.pl!=null?A.pl:null,showAll=!!A&&(r.mode==='avg'||nO>1)&&!r.closing;
@@ -27747,15 +27759,15 @@ function skKind(el,b){if(el.dataset.acc)return 'acc';const t=b.bot_type||'grid';
   if(t==='rec_va')return ((b.rec||{}).hg||{}).cfg||(((b.rec||{}).hg||{}).on)?'hyb':'va';
   if(t==='rec_buy'||t==='rec_sell')return 'rec';if(t==='dca'||t==='dca_buy')return 'dca';if(t==='grid_plus')return 'plus';if(t==='grid_range')return 'range';return 'grid'}
 function skOn(el){
-  const sk=document.createElement('div');sk.className='skin';sk.innerHTML='<div class="skv"></div><div class="skx"></div>';
-  el.insertBefore(sk,el.firstChild);el._sk=sk;el._skv=sk.firstChild;el._skx=sk.lastChild;el._skmv=[];
+  const sk=document.createElement('div');sk.className='skin';sk.innerHTML='<div class="skv"><div class="skt"></div><div class="skx"></div><div class="skf"></div></div>';
+  el.insertBefore(sk,el.firstChild);el._sk=sk;el._skv=sk.firstChild;[el._skt,el._skx,el._skf]=el._skv.children;el._skmv=[];   // 🧩 v3.36.14: الصندوق بين الأعلى والأزرار
   const R=el._r||{};
   ['cchart','ladbox','avgbox','lots'].forEach(k=>{const n=R[k];if(!n||!n.parentNode)return;      // تبقى حيّة (الشارت · السلم · الأوامر) — تنتقل للشكل الجديد وترجع مكانها
     el._skmv.push([n,n.parentNode,n.nextSibling]);if(k==='avgbox'||k==='lots'){n.dataset.skx=k}el._skx.appendChild(n)});
   el._skv.addEventListener('click',ev=>{const t=ev.target.closest('[data-sk]');if(!t||!el._skv.contains(t))return;ev.stopPropagation();skAct(el,t.dataset.sk)});
   el.classList.add('sk')}
 function skOff(el){(el._skmv||[]).forEach(([n,p,nx])=>{try{if(n.dataset)delete n.dataset.skx;p.insertBefore(n,nx&&nx.parentNode===p?nx:null)}catch(e){}});
-  if(el._sk)el._sk.remove();el._sk=el._skv=el._skx=null;el._skmv=[];el._skm=0;
+  if(el._sk)el._sk.remove();el._sk=el._skv=el._skx=el._skt=el._skf=null;el._skmv=[];el._skm=0;
   el.classList.remove('sk','sk-c','sk-b','sk-o','skfull','k-grid','k-plus','k-range','k-dca','k-rec','k-va','k-hyb','k-acc')}
 function skinUpd(el,b){
   if(!el)return;const sk=uiSkin();
@@ -27769,10 +27781,12 @@ function skinUpd(el,b){
   let M;try{M=skModel(el,b,kd)}catch(e){console.error('skin',e);return}
   el._skM=M;
   const h=el.classList.contains('skfull')?`<button type="button" class="sk-back" data-sk="full">🃏 رجوع للشكل المختصر</button>`:(sk==='c'?skC(el,M):sk==='o'?skO(el,M):skB(el,M));
-  if(el._skv._h!==h){el._skv.innerHTML=h;el._skv._h=h;if(M.after)try{M.after(el._skv)}catch(e){}}
+  if(el._skv._h!==h){const i=h.search(/<div class="(?:sk|ok)-ft"/),top=i<0?h:h.slice(0,i),ft=i<0?'':h.slice(i);   // 🧩 v3.36.14: جزءين — الصندوق بينهم ما ينلمس
+    if(el._skt._h!==top){el._skt.innerHTML=top;el._skt._h=top}if(el._skf._h!==ft){el._skf.innerHTML=ft;el._skf._h=ft}
+    el._skv._h=h;if(M.after)try{M.after(el._skv)}catch(e){}}
   if(el._skxo===undefined&&kd==='rec')el._skxo='*';                      // 🧩 v3.36.13: أوامر الدوري المفتوحة أمام عينك من البداية
   const xo=el._skxo==='*'?(((b.rec||{}).mode==='avg')?'avgbox':'lots'):(el._skxo||'');el._skxe=xo;
-  el._skx.querySelectorAll('[data-skx]').forEach(n=>n.classList.toggle('on',xo===n.dataset.skx));
+  el._skx.querySelectorAll('[data-skx]').forEach(n=>{const w=xo===n.dataset.skx;if(n.classList.contains('on')!==w){n.classList.toggle('on',w);if(w&&n.classList.contains('rclots'))rcFit3(n)}});
   skinLockPaint(el,uiCardLock(),uiCardLock()&&cardLocked(el))}
 function skinLockPaint(el,on,lk){const b=el._skv&&el._skv.querySelector('.lkbtn');if(!b)return;const d=on?'':'none';if(b.style.display!==d)b.style.display=d;
   const t=lk?'🔒':'🔓';if(b.textContent!==t){b.textContent=t;b.title=lk?'البطاقة مقفلة — اضغط لفتحها دقيقة واحدة':'البطاقة مفتوحة — اضغط لقفلها الآن'}}
