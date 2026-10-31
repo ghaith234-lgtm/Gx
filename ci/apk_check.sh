@@ -307,9 +307,9 @@ for t in 1 2 3 4 5 6; do
 done
 shot upd2
 [ -z "$asked" ] && say "FAIL Android installer screen never showed"
-sleep 15
-t1=$(adb shell dumpsys package $P | grep -m1 lastUpdateTime | tr -d '\r')
-[ "$t0" != "$t1" ] && say "PASS app updated itself ($t0 → $t1)" || say "FAIL app not updated ($t1)"
+# a slow emulator can take 20+ s to finish installing after the tap (run 69, Android 9: tap 14:21:55 · installed 14:22:18) ⇒ wait for it, up to 60 s
+t1="$t0"; for i in $(seq 1 12); do sleep 5; t1=$(adb shell dumpsys package $P | grep -m1 lastUpdateTime | tr -d '\r'); [ "$t0" != "$t1" ] && break; done
+[ "$t0" != "$t1" ] && say "PASS app updated itself ($t0 → $t1 · ~$((i*5)) s after the tap)" || say "FAIL app not updated ($t1)"
 sleep 5
 adb shell dumpsys activity services $P | grep -E "WatchService|isForeground" | head -3 | sed 's/^/HOLYCI after-update svc: /'
 pid=$(adb shell pidof $P | tr -d '\r'); say "app pid after update: ${pid:-NONE}"
