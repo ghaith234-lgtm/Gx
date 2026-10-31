@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.11"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.12"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -3021,17 +3021,19 @@ def _rec_notify(b, st):
         new = sorted([e for e in evs if _rec_evn(e) > last], key=_rec_evn)
         if not new and d.get(key) == last:
             return
-        sent = 0
+        sent = more = 0
         for e in new:
-            if sent >= 6:
-                break
             txt = _safe(_rec_msg, b, st, e, default="")
-            if txt:
-                tg_send(txt)
-                sent += 1
-        if len(new) > sent:
-            tg_send((f"💹 *`{b['symbol']}`* — و `{len(new) - sent}` أحداث أخرى ببوت مسار القيمة (التفاصيل بسجل البوت)" if _is_va(b) else
-                     f"🔁 *`{b['symbol']}`* — و `{len(new) - sent}` حدث ثاني بالبوت الدوري (التفاصيل بسجل البوت)"))
+            if not txt:
+                continue                      # 🔕 v3.36.12: حدث صامت (تبديل الشبكة ⇄ المسار …) — لا رسالة ولا «أحداث أخرى»
+            if sent >= 6:
+                more += 1
+                continue
+            tg_send(txt)
+            sent += 1
+        if more:
+            tg_send((f"💹 *`{b['symbol']}`* — و `{more}` أحداث أخرى ببوت مسار القيمة (التفاصيل بسجل البوت)" if _is_va(b) else
+                     f"🔁 *`{b['symbol']}`* — و `{more}` حدث ثاني بالبوت الدوري (التفاصيل بسجل البوت)"))
         d[key] = max([last] + [_rec_evn(e) for e in new])
         _safe(save_json_atomic, REC_TG_FILE, d, default=None)
 
@@ -9211,29 +9213,32 @@ def link_audit(force=False):
             dl = float((le.get("daily") or {}).get(today) or 0)
             ev = _safe(bot_day_events, b, today, default=[]) or []
             fresh = any(now - e["ts"] < 180 for e in ev)
-            wd = 0.0
+            wd, nwd = 0.0, 0
             for r in (st.get("releases") or []):
                 try:
                     if datetime.fromtimestamp(float(r.get("ts") or 0)).strftime("%Y-%m-%d") == today:
                         wd += float(r.get("usd") or 0)
+                        nwd += 1
                 except Exception:
                     continue
+            rt = lambda n: 1e-6 + 5e-7 * n                  # 🧮 v3.36.12: الدفتر يقرّب كل قيد لـ6 مراتب ⇒ يجوز نص جزء بالمليون لكل قيد (مو فرق حقيقي)
             if bt in _REC_USD:
                 nb += 1
                 x = (le.get("rec_tr") or {}).get(today) or {}
                 en, er = sum(e["n"] for e in ev), sum(e["r"] for e in ev)
-                ok = near(x.get("n"), en, 1e-6) and near(x.get("r"), er, 1e-6) and near(dl, en + wd, 1e-6)
+                ne = max(len(ev), int(x.get("c") or 0))
+                ok = near(x.get("n"), en, 1e-6 + 5e-9 * ne) and near(x.get("r"), er, 1e-6 + 5e-9 * ne) and near(dl, en + wd, rt(ne + nwd))
                 add(S5, nm(b, k), ok or fresh, f"صفقات اليوم: محرر {en:.6f} + 💠 {er:.6f}" + (f" · سحب {wd:.6f}" if wd else "")
                     + f" · الدفتر: تداول {float(x.get('n') or 0):.6f} + 💠 {float(x.get('r') or 0):.6f} · محرر {dl:.6f}"
                     + (" · صفقة جديدة تنتظر الدفتر" if (fresh and not ok) else ""), None if ok else ("info" if fresh else "err"))
             elif bt == "rec_sell":
                 if wd or abs(dl) > 1e-12:
                     nb += 1
-                    add(S5, nm(b, k), near(dl, wd, 1e-6) or fresh, f"الدفتر {dl:.6f} = سحب الدولار اليوم {wd:.6f} (ربح صفقاته عملة)")
+                    add(S5, nm(b, k), near(dl, wd, rt(nwd)) or fresh, f"الدفتر {dl:.6f} = سحب الدولار اليوم {wd:.6f} (ربح صفقاته عملة)")
             elif bt == "dca_buy":
                 nb += 1
                 ep = sum(e["n"] for e in ev)
-                ok = near(dl, ep, 1e-6)
+                ok = near(dl, ep, rt(len(ev)))
                 add(S5, nm(b, k), ok or fresh, f"دورات اليوم {ep:.6f} · الدفتر {dl:.6f}" + (" · دورة جديدة تنتظر الدفتر" if (fresh and not ok) else ""),
                     None if ok else ("info" if fresh else "err"))
             else:
@@ -9903,7 +9908,7 @@ def _arc_live(arcb, days=20):
     return out
 
 
-def profit_view(days=30, tick=True, start_hint=None):
+def profit_view(days=30, tick=True, start_hint=None, end=None):
     """📊 ربح التداول **بيوم ما انكسب** (مو يوم ما انحرر) — لكل بوت جرد ولكل يوم.
 
     المصدر: أرشيف إعادة الاستثمار (بيعة بيعة من سجل كل بوت، يتحدّث كل ~5 دقائق ويعيش أشهر):
@@ -9945,7 +9950,7 @@ def profit_view(days=30, tick=True, start_hint=None):
         for k, v in src.items():
             if isinstance(v, dict) and not str(k).startswith("_"):
                 keys.add(str(k))
-    today = datetime.now().date()
+    today = end or datetime.now().date()               # 📅 v3.36.12: نهاية الفترة (الشهر السابق ينتهي بآخر يوم بيه)
     today_s = today.strftime("%Y-%m-%d")
     d0 = today - timedelta(days=days - 1)
     per, first = _pv_per_rows(led, arcb, keys, d0, today, legacy, _ri_keyset(arcb))
@@ -10426,7 +10431,13 @@ def _rep_map_svg(fv):
     return (f'<svg viewBox="0 0 {W} {y0}" class="mapsvg" style="direction:rtl" role="img" aria-label="لقطة خريطة الأرباح">' + "".join(out) + "</svg>")
 
 
-def report_html(days=30):
+def _prev_month():
+    """📅 v3.36.12: الشهر السابق — (آخر يوم بيه كتاريخ · عدد أيامه)"""
+    last = datetime.now().date().replace(day=1) - timedelta(days=1)
+    return last, last.day
+
+
+def report_html(days=30, end=None):
     """🖨️ التقرير المصوّر (v3.30.0 — من جديد) — ملف HTML واحد مستقل: الچارتات والخريطة مرسومة بداخله (بلا إنترنت) · A4.
     الأساس ربح التداول اليومي: 💵 الدولار من كل مصدر (الجرد · DCA الشرائي · الدوري الشرائي · المُراكِمات) · 📆 كل شهر (للسحب) ·
     🪙 تداول العملات (DCA البيعي · الدوري البيعي) · 📥 وين راح الربح المحرر · 🗺️ لقطة الخريطة · البوتات الآن · الصحة · السجل اليومي.
@@ -10438,15 +10449,17 @@ def report_html(days=30):
     fq = lambda x: f"{float(x or 0):,.8g}"
     C = _REP_C
     now = datetime.now()
-    today_s = now.strftime("%Y-%m-%d")
+    end_d = end or now.date()                          # 📅 v3.36.12: نهاية فترة التقرير (الشهر السابق ⇒ آخر يوم بيه) · «هذا الشهر لحد هسه» يبقى على اليوم
+    today_s = end_d.strftime("%Y-%m-%d")
+    cur_s = now.strftime("%Y-%m-%d")
     try:
-        req0 = (now.date() - timedelta(days=max(1, min(400, int(days or 30))) - 1)).strftime("%Y-%m-%d")
+        req0 = (end_d - timedelta(days=max(1, min(400, int(days or 30))) - 1)).strftime("%Y-%m-%d")
     except Exception:
         req0 = today_s
     AP = _safe(acc_pl_period, req0, today_s, True, default={}) or {}
     CT = _safe(coin_trade_period, req0, today_s, True, default={}) or {}
     fa = [d for d, x in sorted((AP.get("days") or {}).items()) if abs(float(x)) > 1e-9][:1] + sorted(CT.get("days") or {})[:1]
-    v = profit_view(days, True, min(fa) if fa else None)     # 📅 الفترة تبدي من أول يوم بيه أي ربح (بوت · مُراكِم · عملة) ⇒ كل الأقسام نفس الأيام
+    v = profit_view(days, True, min(fa) if fa else None, end=end)     # 📅 الفترة تبدي من أول يوم بيه أي ربح (بوت · مُراكِم · عملة) ⇒ كل الأقسام نفس الأيام
     T = v.get("tot") or {}
     bots = v.get("bots") or []
     rec = _safe(reconcile, default={}) or {}
@@ -10474,7 +10487,7 @@ def report_html(days=30):
     usd_all = float(T.get("t") or 0) + acc_t
     dim = int(tb.get("dim") or _cal.monthrange(now.year, now.month)[1])
     mtd = float(tb.get("mtd") or 0)
-    mtd_acc = sum(float(x) for d, x in (APA.get("days") or {}).items() if d[:7] == today_s[:7])
+    mtd_acc = sum(float(x) for d, x in (APA.get("days") or {}).items() if d[:7] == cur_s[:7])
     month_avg = float(tb.get("month") or 0)
     o = []
     o.append(f'<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">'
@@ -10555,7 +10568,7 @@ def report_html(days=30):
         mt = float((mons.get(ym) or {}).get("t") or 0)
         ml = float((mons.get(ym) or {}).get("l") or 0)
         ma = float(accm.get(ym) or 0)
-        cur = ym == today_s[:7]
+        cur = ym == cur_s[:7]
         span_m = now.day if cur else dn
         f0 = str(tb.get("first") or "")
         if f0[:7] == ym:
@@ -20341,23 +20354,30 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                 pdays = int((q.get("days") or ["30"])[0])
             except Exception:
                 pdays = 30
-            _per = "month" if str((q.get("per") or [""])[0]) == "month" else ""
-            if _per:                                       # 📅 v3.36.10: هذا الشهر = من أول الشهر لليوم (بتاريخ اللوحة نفسها)
+            _per = str((q.get("per") or [""])[0])
+            _per = _per if _per in ("month", "prev") else ""
+            _end = None
+            if _per == "month":                            # 📅 v3.36.10: هذا الشهر = من أول الشهر لليوم (بتاريخ اللوحة نفسها)
                 pdays = datetime.now().day
-            _pv = _safe(profit_view, max(1, min(365, pdays)), default={"ok": False, "days": [], "bots": [], "tot": {}})
+            elif _per == "prev":                           # ⏮️ v3.36.12: الشهر السابق كاملاً (من 1 لآخر يوم بيه — ما يتغيّر)
+                _end, pdays = _prev_month()
+            _pv = _safe(profit_view, max(1, min(365, pdays)), True, None, _end, default={"ok": False, "days": [], "bots": [], "tot": {}})
             if isinstance(_pv, dict):
-                _n = datetime.now()
-                _pv.update(per=_per or "days", dim=_cal.monthrange(_n.year, _n.month)[1], mon=_n.month, mday=_n.day)
+                _n = _end or datetime.now().date()
+                _pv.update(per=_per or "days", dim=_cal.monthrange(_n.year, _n.month)[1], mon=_n.month, mday=_n.day, year=_n.year)
             return self._json(_pv)
         if u.path == "/api/report.html":                  # 🖨️ التقرير المصوّر — ملف واحد جاهز للطباعة
             try:
                 pdays = int((q.get("days") or ["30"])[0])
             except Exception:
                 pdays = 30
+            _rend = None
             if str((q.get("per") or [""])[0]) == "month":   # 📅 v3.36.10: نفس فترة لوحة التقارير
                 pdays = datetime.now().day
+            elif str((q.get("per") or [""])[0]) == "prev":  # ⏮️ v3.36.12: الشهر السابق كاملاً
+                _rend, pdays = _prev_month()
             try:
-                txt = report_html(max(1, min(365, pdays)))
+                txt = report_html(max(1, min(365, pdays)), _rend)
             except Exception as ex:
                 txt = f"<!doctype html><meta charset=utf-8><p>تعذّر توليد التقرير: {type(ex).__name__}</p>"
             body = txt.encode("utf-8")
@@ -21765,9 +21785,9 @@ html.scrolling .orb{animation-play-state:paused}   /* 🎨 v3.26.9: وقت ال�
 @media (prefers-reduced-motion:reduce){.fl-top .fl-live i,.fl-tl.blink i.on{animation:none}.fl-n{transition:none}}
 .panel h3{font-size:14px;margin-bottom:12px;color:var(--cyan)}
 /* 📊 ربح التداول اليومي — ألوان مفحوصة لعمى الألوان على خلفية اللوحة */
-.pc-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.pc-head{display:flex;flex-direction:column;align-items:stretch;gap:8px}
 .pc-sub{font-size:11.5px;color:var(--mut)}
-.pc-per{display:inline-flex;gap:6px;margin-inline-start:auto}
+.pc-per{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;width:100%}
 .st.tap{cursor:pointer}
 .st.tap:hover{border-color:var(--cyan)}
 .xo-sum{color:var(--mut);font-size:12.5px;line-height:1.8;margin-bottom:10px}
@@ -21779,7 +21799,9 @@ html.scrolling .orb{animation-play-state:paused}   /* 🎨 v3.26.9: وقت ال�
 .xo-t th{color:var(--mut);font-weight:500}
 .xo-wrap{max-height:62vh;overflow:auto}
 .xo-s{color:var(--red)}.xo-b{color:var(--green)}
-.pc-per button{padding:4px 10px;font-size:12px;min-height:30px}
+.pc-per button{padding:6px 4px;font-size:12.5px;min-height:34px;width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pc-per .ps{display:none}
+@media (max-width:560px){.pc-per .pl{display:none}.pc-per .ps{display:inline}}
 .pc-kpi{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:4px 0 14px}
 .pc-k{background:rgb(var(--ov-rgb)/.035);border:1px solid var(--line);border-radius:12px;padding:10px 12px;min-width:0}
 .pc-k small{display:block;font-size:11px;color:var(--mut)}
@@ -22378,7 +22400,7 @@ html.lite .card:hover,html.lite button:hover{transform:none}
 <section class="page" id="page_reports"><div class="pwrap">
   <div class="phead"><h2>📊 التقارير وسجل الأرباح</h2><button class="x" onclick="closePage('reports')">✕</button></div>
   <div class="panel pc" id="pcPanel">
-    <div class="pc-head"><h3>📊 ربح التداول اليومي</h3><span class="pc-per" id="pcPer"><button data-p="month" onclick="pcPerSet('month')">📅 هذا الشهر</button><button data-p="30" onclick="pcPerSet('30')">🗓️ آخر 30 يوم</button></span><span class="pc-sub" id="pcSub">…</span></div>
+    <div class="pc-head"><span class="pc-per" id="pcPer"><button data-p="month" onclick="pcPerSet('month')"><span class="pl">📅 هذا الشهر</span><span class="ps">📅 الحالي</span></button><button data-p="prev" onclick="pcPerSet('prev')"><span class="pl">⏮️ الشهر السابق</span><span class="ps">⏮️ السابق</span></button><button data-p="30" onclick="pcPerSet('30')"><span class="pl">🗓️ آخر 30 يوم</span><span class="ps">🗓️ 30 يوم</span></button></span><span class="pc-sub" id="pcSub">…</span></div>
     <div class="pc-kpi" id="pcKpi"></div>
     <div class="pc-grid" id="pcFig">
       <figure class="pc-fig"><div class="pc-leg"><span><i id="pcLd" style="background:#0aa5c4"></i>مباشر للربح المحرر</span><span><i id="pcLr" style="background:#8b5cf6"></i>معاد استثماره</span></div>
@@ -25921,11 +25943,11 @@ function pcPal(){return document.documentElement.dataset.theme==='light'
   ?{d:'#0891b2',r:'#7c3aed',bots:['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4'],other:'#b4b2a9'}
   :{d:'#0aa5c4',r:'#8b5cf6',bots:['#3987e5','#d95926','#199e70','#c98500','#d55181'],other:'#6f679e'}}
 let PV=null,PCDAYS=30,PCPER='month';
-try{const p=localStorage.getItem('holy_pcper');if(p==='30'||p==='month')PCPER=p}catch(e){}
+try{const p=localStorage.getItem('holy_pcper');if(p==='30'||p==='month'||p==='prev')PCPER=p}catch(e){}
 const PC_MN=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
-function pcQ(){return PCPER==='month'?'per=month':'days='+PCDAYS}
+function pcQ(){return PCPER==='month'?'per=month':PCPER==='prev'?'per=prev':'days='+PCDAYS}
 function pcPerSet(p){PCPER=p;try{localStorage.setItem('holy_pcper',p)}catch(e){}loadProfit()}
-function pcPerName(v){return PCPER==='month'?(v&&v.mon?'شهر '+PC_MN[v.mon-1]:'هذا الشهر'):'آخر 30 يوم'}
+function pcPerName(v){return PCPER==='month'?(v&&v.mon?'شهر '+PC_MN[v.mon-1]:'هذا الشهر'):PCPER==='prev'?(v&&v.mon?'شهر '+PC_MN[v.mon-1]:'الشهر السابق'):'آخر 30 يوم'}
 function pcN(v,dp){v=+v||0;return v.toFixed(dp==null?2:dp)}
 function pcCol(b){return b&&b.slot>=0?PC.bots[b.slot]:PC.other}
 function pcBot(k){return ((PV&&PV.bots)||[]).find(b=>b.k===k)}
@@ -25947,8 +25969,9 @@ async function loadProfit(){
 function pcKpi(v){
   // 📊 v3.22.2: نفس العشر خانات — الفترة فوق · الإجمالي تحت (بلا سطور صغيرة حتى المربعات متساوية)
   const T=v.tot||{},B=T.best,D=DATA||{},TP=D.trade||{},el=$('#pcKpi');
-  const M=PCPER==='month',PN=pcPerName(v),PS=M?'الشهر':'30 يوم',mn=v.mon?PC_MN[v.mon-1]:'';
+  const M=PCPER==='month',P=PCPER==='prev',PN=pcPerName(v),mn=v.mon?PC_MN[v.mon-1]:'',PS=M?'الشهر':P?(mn||'السابق'):'30 يوم';
   $('#pcSub').textContent=M?`${PN}: ${v.span} يوم من ${v.dim||30} · من ${pcD(v.from)} إلى ${pcD(v.to)} — يبدأ من الصفر أول كل شهر`
+                         :P?`${PN} (الشهر السابق كاملاً): ${v.span} يوم من ${v.dim||30} · من ${pcD(v.from)} إلى ${pcD(v.to)} — أرقامه ثابتة لا تتغيّر`
                            :`آخر 30 يوم: ${v.span} يوم · من ${pcD(v.from)} إلى ${pcD(v.to)}`;
   const c=(id,l,val,unit,tt,sh,x)=>`<div class="st${id?' rot':''}" title="${tt||''}"><span class="sl"${sh?` data-s="${sh}"`:''}${x?` data-x="${x}"`:''}>${l}</span><b class="sv"${id?` id="${id}"`:''}>${id?'':`<span class="num">${val}</span>${unit?`<small>${unit}</small>`:''}`}</b></div>`;
   const all=(TP.trade_all!=null)?(+TP.trade_all||0):((+D.total_profit||0)+(+TP.held||0)+(+TP.handoff||0)),ST=D.stats||{},SB=ST.best;
