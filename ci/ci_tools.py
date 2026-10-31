@@ -47,6 +47,22 @@ elif cmd == "findx":             # exact text only · on screen (a row below the
         if t == want and x2 > x1 and y2 > y1:
             print("%d %d" % center(n.get("bounds")))
             break
+elif cmd == "findb":             # 1.9: exact text on a tappable node (a sheet's button — not its title with the same words)
+    want = sys.argv[3]
+    for n in nodes(sys.argv[2]):
+        t = (n.get("text") or n.get("content-desc") or "").strip()
+        x1, y1, x2, y2 = map(int, re.findall(r"\d+", n.get("bounds") or "[0,0][0,0]"))
+        if t == want and x2 > x1 and y2 > y1 and (n.get("clickable") == "true" or "Button" in (n.get("class") or "")):
+            print("%d %d" % center(n.get("bounds")))
+            break
+elif cmd == "desc":              # 1.9: the first node whose description starts with argv[3] ⇒ «x y x1 y1 x2 y2 <description>»
+    for n in nodes(sys.argv[2]):
+        d = (n.get("content-desc") or "").strip()
+        if d.startswith(sys.argv[3]):
+            x1, y1, x2, y2 = map(int, re.findall(r"\d+", n.get("bounds") or "[0,0][0,0]"))
+            if x2 > x1 and y2 > y1:
+                print("%d %d %d %d %d %d %s" % ((x1 + x2) // 2, (y1 + y2) // 2, x1, y1, x2, y2, d))
+                break
 elif cmd == "edit":              # 1.7: the first text box on screen (the dashboard's password field)
     for n in nodes(sys.argv[2]):
         x1, y1, x2, y2 = map(int, re.findall(r"\d+", n.get("bounds") or "[0,0][0,0]"))
@@ -66,6 +82,17 @@ elif cmd == "img":
         im = im.resize((w, int(im.height * w / im.width)))
         bo = io.BytesIO()
         im.save(bo, "JPEG", quality=50)
+        print(f"HOLYIMG {sys.argv[3]} " + base64.b64encode(bo.getvalue()).decode())
+    except Exception as e:
+        print(f"HOLYIMG {sys.argv[3]} ERROR {e}")
+elif cmd == "imgc":              # 1.9: a part of a screenshot (the widget) at a readable size
+    from PIL import Image
+    try:
+        x1, y1, x2, y2 = map(int, sys.argv[4:8])
+        im = Image.open(sys.argv[2]).convert("RGB").crop((x1, y1, x2, y2))
+        im = im.resize((480, max(1, int(im.height * 480 / max(1, im.width)))))
+        bo = io.BytesIO()
+        im.save(bo, "JPEG", quality=70)
         print(f"HOLYIMG {sys.argv[3]} " + base64.b64encode(bo.getvalue()).decode())
     except Exception as e:
         print(f"HOLYIMG {sys.argv[3]} ERROR {e}")

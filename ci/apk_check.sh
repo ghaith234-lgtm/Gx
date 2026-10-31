@@ -27,15 +27,15 @@ API=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
 ssz=$(adb shell wm size | grep -oE "[0-9]+x[0-9]+" | tail -1); SW=${ssz%x*}; SH=${ssz#*x}
 say "android api $API · webview $(adb shell dumpsys package com.google.android.webview 2>/dev/null | grep -m1 versionName | tr -d '\r ')"
 adb logcat -c
-# ── start from the previous app (1.7 — taken from the v3.27.0 release commit) ⇒ the real update path to 1.8 (📊 indicator alerts on their own channel · 🔐 fingerprint · tone · lock · 120 fps) ──
-OLDC=594cb5c4189a2c01437f6b888ad23233ea25bd46
+# ── start from the previous app (1.8 — taken from the v3.36.12 release commit) ⇒ the real update path to 1.9 (📱 the home-screen widget · 📊 indicator alerts · 🔐 fingerprint · tone · lock · 120 fps) ──
+OLDC=0ea043c8a8bc1816f70bb5791cf699d5c6e67b7d
 if git fetch -q --depth=1 origin $OLDC 2>/dev/null && git show FETCH_HEAD:Holy_Dashboard.pyw | python3 ci/ci_tools.py apk > old.apk 2>/dev/null && [ -s old.apk ]; then
   adb install old.apk 2>&1 | tail -1 | sed 's/^/HOLYCI install previous: /'
   adb shell dumpsys package $P | grep -m1 versionName | tr -d '\r' | sed 's/^/HOLYCI before update: /'
   adb shell am start -n $P/.MainActivity >/dev/null; sleep 8
   adb shell dumpsys notification --noredact | grep -oE "mId='(trade2|alert2|price|info|watch)'[^}]{0,40}" | sort -u | head -5 | sed 's/^/HOLYCI previous channel: /'
   adb shell am force-stop $P
-else say "INFO couldn't fetch the 1.7 app ⇒ fresh install only"; fi
+else say "INFO couldn't fetch the 1.8 app ⇒ fresh install only"; fi
 adb install -r holy.apk 2>&1 | tail -1 | sed 's/^/HOLYCI install: /'
 adb shell pm list packages | grep -q "$P" && say "PASS installed" || { say "FAIL install"; exit 1; }
 adb shell dumpsys package $P | grep -E "versionCode|versionName|targetSdk|signatures|pkgFlags" | head -6 | sed 's/^/HOLYCI pkg: /'
@@ -131,6 +131,18 @@ ich=$(rch IND1 $OUT/n18.txt)
 pch=$(rch PRICE1 $OUT/n18.txt)
 [ "$pch" = "channel=price" ] && say "PASS 1.8: price alerts still on «price»" || say "INFO 1.8: price alert channel now: ${pch:-gone from the shade}"
 adb shell dumpsys package $P | grep -E "versionName|versionCode" | head -2 | tr -d '\r' | sed 's/^/HOLYCI now: /'
+# ── 1.9 📱 the home-screen widget (1): Android lists it (⇒ the launcher's widget list shows «Holy») · /api/app/widget answers this phone's key only ──
+WCMP="$P/$P.HolyWidget"
+adb shell dumpsys appwidget > $OUT/aw0.txt
+grep -q "cmp:ComponentInfo{$WCMP}" $OUT/aw0.txt && say "PASS 1.9: Android lists the Holy widget ($(grep -A3 "cmp:ComponentInfo{$WCMP}" $OUT/aw0.txt | grep -oE "min=\([^)]*\)|updatePeriodMillis=[0-9]+" | tr '\n' ' '))" || say "FAIL 1.9: Android doesn't list the Holy widget"
+tok=$(adb shell cat /data/data/$P/shared_prefs/holy.xml 2>/dev/null | tr -d '\r' | grep -oE '<string name="token">[^<]+' | sed 's/.*>//')   # the phone's key — used, never printed
+if [ -n "$tok" ]; then
+  c1=$(curl -s -o $OUT/wd.json -w "%{http_code}" localhost:8099/api/app/widget -H "X-Holy-Device: $tok"); c0=$(curl -s -o /dev/null -w "%{http_code}" localhost:8099/api/app/widget)
+  cw=$(curl -s -o /dev/null -w "%{http_code}" localhost:8099/api/app/widget -H "X-Holy-Device: ${tok}x")
+  [ "$c1" = 200 ] && [ "$c0" = 401 ] && [ "$cw" = 401 ] && say "PASS 1.9: /api/app/widget — this phone's key ⇒ 200 · no key / a wrong key ⇒ 401 · $(python3 -c "import json;j=json.load(open('$OUT/wd.json'));print(j['run'],'/',j['n'],'running ·',' · '.join(k[0]+' '+k[1] for k in j['k']))")" \
+    || say "FAIL 1.9: /api/app/widget — key $c1 · none $c0 · wrong $cw"
+else say "INFO 1.9: the phone's key isn't readable here (no root) ⇒ the widget's own fetch is checked on the home screen"; fi
+unset tok
 grep -q "android.title=Holy يراقب" $OUT/n13.txt && say "FAIL watcher line still says «Holy يراقب»" || say "PASS watcher line no longer says «يراقب»"
 grep -E "mId='watch'" $OUT/n13.txt | head -1 | cut -c1-240 | sed 's/^/HOLYCI watch channel: /'
 quiet on
@@ -172,6 +184,34 @@ if grep -q "الفريمات" $OUT/ui_set15.xml; then say "PASS ⚙️ «الف�
   seek "120" set15c; sleep 3
   if pf | grep -q "<map"; then pf | grep -q '<int name="fps" value="120"' && say "PASS back to 120 (saved)" || say "FAIL 120 not saved: $(pf | grep -o 'name="fps"[^/]*')"; fi
 else say "FAIL «الفريمات» row not on the ⚙️ screen ($(grep -c '<node' $OUT/ui_set15.xml 2>/dev/null) nodes)"; fi
+# ── 1.9 📱 the home-screen widget (2): ⚙️ 📱 «📌 أضفه» ⇒ Android's own «add» sheet ⇒ placed · it fetches with the phone's key and draws · a tap opens Holy ──
+WX=""; WY=""
+adb shell am start -n $P/.MainActivity --es go app >/dev/null; sleep 7; dump wd0
+if grep -q "ويدجت الشاشة الرئيسية" $OUT/ui_wd0.xml; then say "PASS 1.9: 📱 panel shows «🧩 ويدجت الشاشة الرئيسية»"; else say "FAIL 1.9: no widget row in the 📱 panel"; fi
+if seek "📌 أضفه" wd1; then
+  sleep 4; dump wd2; shot wd2; asked=""
+  for b in "Add automatically" "ADD AUTOMATICALLY" "Add to home screen" "ADD TO HOME SCREEN" "Add" "ADD"; do
+    xy=$(python3 ci/ci_tools.py findb $OUT/ui_wd2.xml "$b"); [ -n "$xy" ] && { adb shell input tap $xy; say "PASS 1.9: Android's own «add widget» sheet ⇒ tap «$b»"; asked=1; break; }; done
+  [ -z "$asked" ] && say "FAIL 1.9: no «add widget» sheet from the home screen ($(python3 ci/ci_tools.py texts $OUT/ui_wd2.xml wd2 | cut -c1-200))"
+  sleep 6
+fi
+nw=$(adb shell dumpsys appwidget | tr -d '\r' | grep -c "provider=ProviderId{.*cmp:ComponentInfo{$WCMP}")
+[ "${nw:-0}" -ge 1 ] && say "PASS 1.9: the widget is on the home screen ($nw)" || say "FAIL 1.9: no Holy widget placed"
+if [ "${nw:-0}" -ge 1 ]; then
+  sleep 4; dump wd3
+  grep -q "مضاف إلى الشاشة الرئيسية" $OUT/ui_wd3.xml && say "PASS 1.9: the panel now says «مضاف إلى الشاشة الرئيسية ✓»" || say "INFO 1.9: panel text after adding: $(python3 ci/ci_tools.py texts $OUT/ui_wd3.xml wd3 | grep -oE 'ويدجت[^|]{0,90}' | head -1)"
+  adb shell input keyevent KEYCODE_HOME; sleep 10
+  wj=$(adb shell cat /data/data/$P/shared_prefs/holy_widget.xml 2>/dev/null | tr -d '\r')
+  if [ -n "$wj" ]; then echo "$wj" | grep -q '&quot;ok&quot;:true' && say "PASS 1.9: the widget fetched /api/app/widget with the phone's key (its last answer kept for no-connection)" || say "FAIL 1.9: the widget has no answer saved"; fi
+  dump wd4; shot wd4
+  wd=$(python3 ci/ci_tools.py desc $OUT/ui_wd4.xml "Holy —")
+  if [ -n "$wd" ]; then
+    set -- $wd; WX=$1; WY=$2; python3 ci/ci_tools.py imgc $OUT/wd4.png widget $3 $4 $5 $6
+    say "PASS 1.9: the widget on the home screen ($3,$4–$5,$6) reads «${wd#* * * * * * }»"
+    adb shell input tap $WX $WY; sleep 5
+    adb shell dumpsys activity activities | grep -m1 -E "mResumedActivity|topResumedActivity" | grep -q "$P/.MainActivity" && say "PASS 1.9: a tap on the widget opens Holy" || say "FAIL 1.9: a tap on the widget didn't open Holy ($(adb shell dumpsys activity activities | grep -m1 -E 'mResumedActivity|topResumedActivity' | tr -d '\r'))"
+  else say "FAIL 1.9: the widget isn't on the home screen's first page / has no summary ($(python3 ci/ci_tools.py texts $OUT/ui_wd4.xml wd4 | cut -c1-200))"; fi
+fi
 # ── 1.5 🔐 fingerprint lock: a test PIN on the phone ⇒ turn on (asks the PIN) ⇒ 33 s in the background ⇒ locked ⇒ PIN ⇒ open ⇒ turn off ⇒ PIN removed ──
 #    (the emulator has no finger ⇒ the system sheet offers the phone's PIN — the same path a phone without a fingerprint takes)
 pin(){ sleep 4; adb shell input text 1111; sleep 1; adb shell input keyevent 66; sleep 5; }
@@ -193,6 +233,12 @@ if grep -q "قفل بالبصمة" $OUT/ui_lk1.xml; then
   locked lk3 && say "PASS back after 34 s ⇒ locked (dashboard covered · asks)" || say "FAIL back after 34 s ⇒ not locked ($(python3 ci/ci_tools.py texts $OUT/ui_lk3.xml lk3 | cut -c1-160))"
   pin; dump lk4; shot lk4
   if grep -q "Holy مقفول" $OUT/ui_lk4.xml; then say "FAIL still locked after the PIN"; elif dashv lk4; then say "PASS PIN ⇒ dashboard open again"; else say "FAIL after the PIN: screen unreadable"; fi
+  # 1.9: the widget is a door, not a key — after 34 s away a tap on it lands on the lock first
+  if [ -n "$WX" ]; then
+    adb shell input keyevent KEYCODE_HOME; sleep 34; adb shell input tap $WX $WY; sleep 5; dump lkw; shot lkw
+    locked lkw && say "PASS 1.9: the lock on ⇒ a tap on the widget after 34 s asks for the fingerprint/PIN first" || say "FAIL 1.9: the widget opened Holy past the lock ($(python3 ci/ci_tools.py texts $OUT/ui_lkw.xml lkw | cut -c1-160))"
+    pin; dump lkw2; dashv lkw2 && say "PASS 1.9: …PIN ⇒ dashboard open" || say "INFO 1.9: after the PIN: $(python3 ci/ci_tools.py texts $OUT/ui_lkw2.xml lkw2 | cut -c1-120)"
+  fi
   # ── 1.7 🔐 lock on ⇒ the fingerprint opens the dashboard instead of its password (the password stays the root · the key never printed) ──
   JAR=$OUT/jar.txt; rm -f $JAR
   apic(){ curl -s -b $JAR -c $JAR -X POST "localhost:8099$1" -H 'Content-Type: application/json' -d "$2"; echo; }
