@@ -206,12 +206,19 @@ if [ "${nw:-0}" -ge 1 ]; then
   if [ -n "$wj" ]; then echo "$wj" | grep -qE '&quot;ok&quot;: ?true' && say "PASS 1.9: the widget fetched /api/app/widget with the phone's key (its last answer kept for no-connection)" || say "FAIL 1.9: the widget has no answer saved"; fi
   dump wd4; shot wd4
   wd=$(python3 ci/ci_tools.py desc $OUT/ui_wd4.xml "Holy —")
+  for pg in 2 3; do      # the launcher puts a new widget where there is room — not always the first home page (run 71, Android 14)
+    [ -n "$wd" ] && break
+    sz=$(adb shell wm size | tr -d '\r' | grep -oE '[0-9]+x[0-9]+' | tail -1); SW=${sz%x*}; SH=${sz#*x}
+    adb shell input swipe $((SW*85/100)) $((SH/2)) $((SW*15/100)) $((SH/2)) 300; sleep 3
+    dump wd4; shot wd4; wd=$(python3 ci/ci_tools.py desc $OUT/ui_wd4.xml "Holy —")
+    [ -n "$wd" ] && say "INFO 1.9: the launcher put the widget on home page $pg"
+  done
   if [ -n "$wd" ]; then
     set -- $wd; WX=$1; WY=$2; python3 ci/ci_tools.py imgc $OUT/wd4.png widget $3 $4 $5 $6
     say "PASS 1.9: the widget on the home screen ($3,$4–$5,$6) reads «${wd#* * * * * * }»"
     adb shell input tap $WX $WY; sleep 5
     adb shell dumpsys activity activities | grep -m1 -E "mResumedActivity|topResumedActivity" | grep -q "$P/.MainActivity" && say "PASS 1.9: a tap on the widget opens Holy" || say "FAIL 1.9: a tap on the widget didn't open Holy ($(adb shell dumpsys activity activities | grep -m1 -E 'mResumedActivity|topResumedActivity' | tr -d '\r'))"
-  else say "FAIL 1.9: the widget isn't on the home screen's first page / has no summary ($(python3 ci/ci_tools.py texts $OUT/ui_wd4.xml wd4 | cut -c1-200))"; fi
+  else say "FAIL 1.9: the widget isn't on home pages 1–3 / has no summary ($(python3 ci/ci_tools.py texts $OUT/ui_wd4.xml wd4 | cut -c1-200))"; fi
 fi
 # ── 1.5 🔐 fingerprint lock: a test PIN on the phone ⇒ turn on (asks the PIN) ⇒ 33 s in the background ⇒ locked ⇒ PIN ⇒ open ⇒ turn off ⇒ PIN removed ──
 #    (the emulator has no finger ⇒ the system sheet offers the phone's PIN — the same path a phone without a fingerprint takes)
