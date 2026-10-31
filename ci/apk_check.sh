@@ -40,15 +40,15 @@ adb install -r holy.apk 2>&1 | tail -1 | sed 's/^/HOLYCI install: /'
 adb shell pm list packages | grep -q "$P" && say "PASS installed" || { say "FAIL install"; exit 1; }
 adb shell dumpsys package $P | grep -E "versionCode|versionName|targetSdk|signatures|pkgFlags" | head -6 | sed 's/^/HOLYCI pkg: /'
 [ "$API" -ge 33 ] && adb shell pm grant $P android.permission.POST_NOTIFICATIONS
-# 1.9 📱 Android lists the home-screen widget (⇒ «Holy» in the launcher's widget list) — every phone, linked or not (min = raw dp units: 250dp = 64001)
-WCMP="$P/$P.HolyWidget"
-adb shell dumpsys appwidget > $OUT/aw0.txt
-grep -q "cmp:ComponentInfo{$WCMP}" $OUT/aw0.txt && say "PASS 1.9: Android lists the Holy widget ($(grep -A3 "cmp:ComponentInfo{$WCMP}" $OUT/aw0.txt | grep -m2 -oE "min=\([^)]*\)|updatePeriodMillis=[0-9]+" | tr '\n' ' '))" || say "FAIL 1.9: Android doesn't list the Holy widget"
 adb shell am start -n $P/.MainActivity --es url http://10.0.2.2:8099 >/dev/null
 # a slow emulator may still be «Preparing for setup…» ⇒ the launcher stays in front ⇒ wait for the link screen, open the app again if it isn't up
 sleep 7; for i in 1 2 3 4 5 6; do dump setup >/dev/null; grep -q "اتصال" $OUT/ui_setup.xml && break
   say "INFO link screen not in front yet (try $i) ⇒ open the app again"; adb shell am start -n $P/.MainActivity --es url http://10.0.2.2:8099 >/dev/null; sleep 6; done
 dump setup; shot setup
+# 1.9 📱 Android lists the home-screen widget (⇒ «Holy» in the launcher's widget list) — every phone, linked or not · after the first start (a never-opened app is «stopped» on Android 9) · min = raw dp units (250dp = 64001)
+WCMP="$P/$P.HolyWidget"
+adb shell dumpsys appwidget > $OUT/aw0.txt
+grep -q "cmp:ComponentInfo{$WCMP}" $OUT/aw0.txt && say "PASS 1.9: Android lists the Holy widget ($(grep -A3 "cmp:ComponentInfo{$WCMP}" $OUT/aw0.txt | grep -m2 -oE "min=\([^)]*\)|updatePeriodMillis=[0-9]+" | tr '\n' ' '))" || say "FAIL 1.9: Android doesn't list the Holy widget"
 tap "اتصال" setup
 sleep 18; dump dash1
 if grep -q "متصفح النظام قديم" $OUT/ui_dash1.xml; then say "PASS old system WebView ⇒ the app asks to update it"; tap "بعدين" dash1; sleep 2; dump dash1; fi
