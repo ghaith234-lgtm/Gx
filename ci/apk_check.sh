@@ -40,6 +40,10 @@ adb install -r holy.apk 2>&1 | tail -1 | sed 's/^/HOLYCI install: /'
 adb shell pm list packages | grep -q "$P" && say "PASS installed" || { say "FAIL install"; exit 1; }
 adb shell dumpsys package $P | grep -E "versionCode|versionName|targetSdk|signatures|pkgFlags" | head -6 | sed 's/^/HOLYCI pkg: /'
 [ "$API" -ge 33 ] && adb shell pm grant $P android.permission.POST_NOTIFICATIONS
+# 1.9 📱 Android lists the home-screen widget (⇒ «Holy» in the launcher's widget list) — every phone, linked or not (min = raw dp units: 250dp = 64001)
+WCMP="$P/$P.HolyWidget"
+adb shell dumpsys appwidget > $OUT/aw0.txt
+grep -q "cmp:ComponentInfo{$WCMP}" $OUT/aw0.txt && say "PASS 1.9: Android lists the Holy widget ($(grep -A3 "cmp:ComponentInfo{$WCMP}" $OUT/aw0.txt | grep -m2 -oE "min=\([^)]*\)|updatePeriodMillis=[0-9]+" | tr '\n' ' '))" || say "FAIL 1.9: Android doesn't list the Holy widget"
 adb shell am start -n $P/.MainActivity --es url http://10.0.2.2:8099 >/dev/null
 # a slow emulator may still be «Preparing for setup…» ⇒ the launcher stays in front ⇒ wait for the link screen, open the app again if it isn't up
 sleep 7; for i in 1 2 3 4 5 6; do dump setup >/dev/null; grep -q "اتصال" $OUT/ui_setup.xml && break
@@ -131,10 +135,7 @@ ich=$(rch IND1 $OUT/n18.txt)
 pch=$(rch PRICE1 $OUT/n18.txt)
 [ "$pch" = "channel=price" ] && say "PASS 1.8: price alerts still on «price»" || say "INFO 1.8: price alert channel now: ${pch:-gone from the shade}"
 adb shell dumpsys package $P | grep -E "versionName|versionCode" | head -2 | tr -d '\r' | sed 's/^/HOLYCI now: /'
-# ── 1.9 📱 the home-screen widget (1): Android lists it (⇒ the launcher's widget list shows «Holy») · /api/app/widget answers this phone's key only ──
-WCMP="$P/$P.HolyWidget"
-adb shell dumpsys appwidget > $OUT/aw0.txt
-grep -q "cmp:ComponentInfo{$WCMP}" $OUT/aw0.txt && say "PASS 1.9: Android lists the Holy widget ($(grep -A3 "cmp:ComponentInfo{$WCMP}" $OUT/aw0.txt | grep -oE "min=\([^)]*\)|updatePeriodMillis=[0-9]+" | tr '\n' ' '))" || say "FAIL 1.9: Android doesn't list the Holy widget"
+# ── 1.9 📱 the home-screen widget (1): /api/app/widget answers this phone's key only (Android listing it is checked right after the install) ──
 tok=$(adb shell cat /data/data/$P/shared_prefs/holy.xml 2>/dev/null | tr -d '\r' | grep -oE '<string name="token">[^<]+' | sed 's/.*>//')   # the phone's key — used, never printed
 if [ -n "$tok" ]; then
   c1=$(curl -s -o $OUT/wd.json -w "%{http_code}" localhost:8099/api/app/widget -H "X-Holy-Device: $tok"); c0=$(curl -s -o /dev/null -w "%{http_code}" localhost:8099/api/app/widget)
@@ -202,7 +203,7 @@ if [ "${nw:-0}" -ge 1 ]; then
   grep -q "مضاف إلى الشاشة الرئيسية" $OUT/ui_wd3.xml && say "PASS 1.9: the panel now says «مضاف إلى الشاشة الرئيسية ✓»" || say "INFO 1.9: panel text after adding: $(python3 ci/ci_tools.py texts $OUT/ui_wd3.xml wd3 | grep -oE 'ويدجت[^|]{0,90}' | head -1)"
   adb shell input keyevent KEYCODE_HOME; sleep 10
   wj=$(adb shell cat /data/data/$P/shared_prefs/holy_widget.xml 2>/dev/null | tr -d '\r')
-  if [ -n "$wj" ]; then echo "$wj" | grep -q '&quot;ok&quot;:true' && say "PASS 1.9: the widget fetched /api/app/widget with the phone's key (its last answer kept for no-connection)" || say "FAIL 1.9: the widget has no answer saved"; fi
+  if [ -n "$wj" ]; then echo "$wj" | grep -qE '&quot;ok&quot;: ?true' && say "PASS 1.9: the widget fetched /api/app/widget with the phone's key (its last answer kept for no-connection)" || say "FAIL 1.9: the widget has no answer saved"; fi
   dump wd4; shot wd4
   wd=$(python3 ci/ci_tools.py desc $OUT/ui_wd4.xml "Holy —")
   if [ -n "$wd" ]; then
