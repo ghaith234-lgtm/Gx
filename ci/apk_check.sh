@@ -315,8 +315,23 @@ done
 shot upd2
 [ -z "$asked" ] && say "FAIL Android installer screen never showed"
 # a slow emulator can take 20+ s to finish installing after the tap (run 69, Android 9: tap 14:21:55 · installed 14:22:18) ⇒ wait for it, up to 60 s
-t1="$t0"; for i in $(seq 1 12); do sleep 5; t1=$(adb shell dumpsys package $P | grep -m1 lastUpdateTime | tr -d '\r'); [ "$t0" != "$t1" ] && break; done
-[ "$t0" != "$t1" ] && say "PASS app updated itself ($t0 → $t1 · ~$((i*5)) s after the tap)" || say "FAIL app not updated ($t1)"
+# run 73 (Android 9 + 14): adb lost the emulator during the install ("error: closed") ⇒ t1 came back EMPTY, which differs from t0 and read as
+#   a pass, and every later adb call waited for the device until the job's 45 min limit ⇒ an empty answer is not a pass · bounded waits ·
+#   one reconnect try · if the emulator is still gone, the later checks are skipped with a FAIL (the job ends instead of hanging)
+t1="$t0"; for i in $(seq 1 12); do sleep 5; t1=$(timeout 30 adb shell dumpsys package $P | grep -m1 lastUpdateTime | tr -d '\r'); [ -n "$t1" ] && [ "$t0" != "$t1" ] && break; done
+if [ -n "$t1" ] && [ "$t0" != "$t1" ]; then say "PASS app updated itself ($t0 → $t1 · ~$((i*5)) s after the tap)"
+elif [ -z "$t1" ]; then say "FAIL adb got no answer while the update installed (emulator connection lost)"
+else say "FAIL app not updated ($t1)"; fi
+LOST=""
+if ! timeout 15 adb get-state >/dev/null 2>&1; then
+  say "emulator not answering after the update — reconnecting"; adb reconnect >/dev/null 2>&1; sleep 5
+  timeout 120 adb wait-for-device || LOST=1
+fi
+if [ -n "$LOST" ]; then
+  say "FAIL emulator gone after the update (adb: device not found) — unlink and log checks skipped"
+  pkill -f Holy_Dashboard.pyw || true
+  say "done"; exit 0
+fi
 sleep 5
 adb shell dumpsys activity services $P | grep -E "WatchService|isForeground" | head -3 | sed 's/^/HOLYCI after-update svc: /'
 pid=$(adb shell pidof $P | tr -d '\r'); say "app pid after update: ${pid:-NONE}"
@@ -331,7 +346,7 @@ if [ -z "$id" ]; then say "SKIP unlink test — this phone never linked (its sys
   n=$(curl -s -X POST localhost:8099/api/app/devices -H 'Content-Type: application/json' -d '{"act":"list"}' | python3 -c "import sys,json;print(len(json.load(sys.stdin)['devs']))")
   [ "$n" = "0" ] && say "PASS no silent re-link after unlink" || say "FAIL re-linked by itself ($n)"
 fi
-say "crash buffer:"; adb logcat -d -b crash | head -40 | sed 's/^/HOLYCI crash: /'
-adb logcat -d | grep -E "holy|Holy|AndroidRuntime|chromium.*CONSOLE|ActivityManager.*$P" | grep -v chatty | tail -70 | sed 's/^/HOLYCI log: /'
+say "crash buffer:"; timeout 60 adb logcat -d -b crash | head -40 | sed 's/^/HOLYCI crash: /'
+timeout 60 adb logcat -d | grep -E "holy|Holy|AndroidRuntime|chromium.*CONSOLE|ActivityManager.*$P" | grep -v chatty | tail -70 | sed 's/^/HOLYCI log: /'
 pkill -f Holy_Dashboard.pyw || true      # the CI step ends only when nothing it started is still running
 say "done"
