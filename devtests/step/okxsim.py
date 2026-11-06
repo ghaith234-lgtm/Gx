@@ -20,7 +20,7 @@ import time as _real_time
 import requests as _requests_loaded   # loaded here with the real socket, before the engine imports it under the fake one  # noqa
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ENGINE = os.path.join(HERE, "eng", "main_step.py")
+ENGINE = os.environ.get("STEP_ENGINE") or os.path.join(HERE, "eng", "main_step.py")   # STEP_ENGINE=… tests another copy
 
 
 class Cut(BaseException):
@@ -355,6 +355,7 @@ class _Requests:
 DEFAULT_CFG = {"api_key": "FAKE-KEY", "secret_key": "FAKE-SECRET", "passphrase": "FAKE-PASS", "bot_type": "grid_step",
                "usd_value": 15.0, "step_parts": 3, "step_sell": 0.01, "grid_percentage": 0.03, "min_price": 0.7,
                "up_groups": 2, "forced_base_price": 1.0, "fee_rate": 0.0008, "step_window": 8, "is_demo": False}
+DEFAULT_CFG.update(json.loads(os.environ.get("STEP_CFG") or "{}"))   # STEP_CFG='{"step_first": 0.008}' runs every test with it
 
 
 class Bot:
