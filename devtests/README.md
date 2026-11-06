@@ -22,6 +22,7 @@ secrets, no network. The APK signing keystore never goes here.
 | `step/t_fixes.py` | v3.36.17 the owner-approved fixes as must-pass tests: F9 · F10 · F8 (engine + the dashboard's delete) · F2 — each fails on the engine before its fix |
 | `step/t_soak.py` | the long run: hours · days · `--forever` — random power cuts (off 0 s…5 min, the price moving while off) · a flaky API · the internet down · fast oscillation / wild jumps · audited every loop · a report of how the bot recovered and how it stores its orders |
 | `step/t_osc.py` | the owner's scenarios on t_soak (6 h each): very fast oscillation · wild swings · first sell 0.5 / 0.3 / 0.2% · 100$ × 20 sells (storage) · DOGE (7) |
+| `step/video/` | 🎬 the one-minute video of the 🪜 card: the real dashboard (closed folder · no network) + the real engine on the mock OKX (an «OKX side» panel: the bot's open orders by level and part · the price · its fills · profit · books = wallet) · an order deleted by hand · a power cut while the price moves · a −5% jump · oscillation — `python3 devtests/step/video/make_video.py OUT.mp4` (run with `unset TMPDIR`) |
 | `step/patches/` | every engine/dashboard change as an exact-text replacement script (each old text found once · AST scope check) |
 | `step/STATE.md` | the work state — read it first in a new session |
 | `tools/map_remap.py` · `tools/map_fix_bt.py` | MAP.md line remap between two dashboards + the trial-path rows (rebuilt 6-11, checked against git history) |
