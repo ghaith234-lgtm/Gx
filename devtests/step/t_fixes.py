@@ -2,6 +2,7 @@
 #   F9  the save after a fill fails 1–3 times, then a power cut around the writing of its log line ⇒ the line once · log = books
 #   F10 every number in a log line is a plain decimal (the dashboard read «+9e-05$» as 9$) · the log's profit = the books exactly
 #   F2  a coarse quantity step (DOGE · PEPE whole coins): every sell's booked profit > 0 and = its real profit · log = books
+#   F11 the coin's spec through the real library's ways (PublicData · requests — never urllib) · nothing answers ⇒ waits, says so
 #   F8  💣 while the cancels are lost / the internet is down / an order fills meanwhile ⇒ withdraws only when OKX confirms every
 #       order gone · fills booked · no new order meanwhile · never trades again · the dashboard refuses to delete unconfirmed
 #   python3 devtests/step/t_fixes.py [Holy_Dashboard.pyw] [-q] [--only=F9,...]        (STEP_ENGINE=… tests another engine copy)
@@ -270,6 +271,30 @@ if want("F2"):
             bad.append((seed, sym, cfg.get("step_first"), N, b.errors[:1], min(prof) if prof else None))
     ok("F2: 8 random markets on DOGE and PEPE (whole coins · partial fills · first sell 0.2–1%) ⇒ every sell's booked profit > 0 · "
        "the log's sum = the books · books = wallet every loop", not bad, bad[:3])
+
+# ── F11: the coin's spec through the ways the real python-okx offers — the mock's MarketAPI has no get_instruments (like 0.4.4)
+if want("F11"):
+    rows = []
+    for name, pub, req in (("PublicData", False, False), ("requests", True, False), ("none", True, True)):
+        c = Clock(); ex = Ex(c, base=100, quote=1000)
+        ex.pub_fail, ex.req_spec_fail = pub, req
+        b = Bot(ex)
+        b.run(walk([1.0, 0.97, 1.0], 600))                 # 30 minutes
+        born = bool((b.st or {}).get("slots"))
+        nlog = sum(1 for m_ in b.hist() if "تعذّر جلب مواصفات العملة" in m_)
+        late = None
+        if name == "none":                                 # the network comes back
+            ex.pub_fail = ex.req_spec_fail = False
+            b.run(walk([1.0, 1.0], 30))
+            late = (bool((b.st or {}).get("slots")), len(b.mine_open()), b.errors[:1])
+        rows.append((name, born, ex.spec_via, len(ex.orders) if name != "none" else late, nlog, b.errors[:1]))
+    pd, rq, no = rows
+    ok("F11: the spec through the library's PublicData (the real MarketAPI has no get_instruments) ⇒ born · trades · books = wallet",
+       pd[1] and pd[2] == "public" and pd[3] > 0 and not pd[5], pd)
+    ok("F11: PublicData fails ⇒ through requests (the project's rule — never urllib) ⇒ born · trades",
+       rq[1] and rq[2] == "requests" and rq[3] > 0 and not rq[5], rq)
+    ok("F11: nothing answers for 30 min ⇒ not born · no order · «تعذّر جلب مواصفات العملة» once per 10 min · the network back ⇒ born and trading",
+       not no[1] and 3 <= no[4] <= 4 and no[3] and no[3][0] and no[3][1] > 0 and not no[3][2], no)
 
 print(f"{sum(res)} ok · {len(res) - sum(res)} failed")
 sys.exit(0 if all(res) else 1)

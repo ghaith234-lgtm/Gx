@@ -123,6 +123,8 @@ class Ex:
         self.partial = float(partial)          # >0: a resting order touched by the price fills only this share (≥ 1 lot)
         self.rng = random.Random(seed)
         self.orders, self.by_cl, self.n = {}, {}, 0
+        self.pub_fail = self.req_spec_fail = False     # F11 tests: the library's PublicAPI / requests to the spec fail
+        self.spec_via = None
         self.open = {}                           # oid → the orders still live / partly filled (pending())
         self.fills = []                        # (ordId, clOrdId, side, px, sz, maker)
         self.late = []                         # [t_land, kind, params]
@@ -314,10 +316,23 @@ class _Market:
         ex = self.ex
         return ex.call("ticker", {}, lambda: {"code": "0", "data": [{"instId": ex.sym, "last": str(ex.price)}]})
 
-    def get_instruments(self, instType=None, instId=None, **k):
+    # (no get_instruments: the real python-okx 0.4.4 MarketAPI has none — it is in PublicData.PublicAPI · F11)
+
+
+def _spec_resp(ex):
+    return {"code": "0", "data": [{"instId": ex.sym, "tickSz": str(ex.tick), "lotSz": str(ex.lot), "minSz": str(ex.mn)}]}
+
+
+class _Public:                                   # okx.PublicData.PublicAPI as in the real library
+    def __init__(self, ex):
+        self.ex = ex
+
+    def get_instruments(self, instType=None, uly="", instId="", instFamily="", **k):
         ex = self.ex
-        return ex.call("spec", {}, lambda: {"code": "0", "data": [{"instId": ex.sym, "tickSz": str(ex.tick),
-                                                                   "lotSz": str(ex.lot), "minSz": str(ex.mn)}]})
+        if ex.pub_fail:
+            raise RuntimeError("PublicAPI unavailable (test)")
+        ex.spec_via = "public"
+        return ex.call("spec", {}, lambda: _spec_resp(ex))
 
 
 class _Resp:
@@ -342,6 +357,11 @@ class _Requests:
                 o = ex.orders.get(str(oid)) if oid else None
                 return {"code": "0", "msg": "", "data": [ex.rec(o)]} if o else {"code": "51603", "msg": "Order does not exist", "data": []}
             return _Resp(ex.call("order", q, act))
+        if u.path.endswith("/public/instruments"):            # the engine's last way to read the coin's spec (requests)
+            if ex.req_spec_fail:
+                raise ConnectionError("instruments unreachable (test)")
+            ex.spec_via = "requests"
+            return _Resp(ex.call("spec", q, lambda: _spec_resp(ex)))
         if u.path.endswith("/account/balance"):
             def act():
                 c = q.get("ccy")
@@ -400,7 +420,9 @@ class Bot:
         okx.MarketData = types.ModuleType("okx.MarketData")
         okx.Trade.TradeAPI = lambda *a, **k: _Trade(ex)
         okx.MarketData.MarketAPI = lambda *a, **k: _Market(ex)
-        sys.modules.update({"okx": okx, "okx.Trade": okx.Trade, "okx.MarketData": okx.MarketData})
+        okx.PublicData = types.ModuleType("okx.PublicData")
+        okx.PublicData.PublicAPI = lambda *a, **k: _Public(ex)
+        sys.modules.update({"okx": okx, "okx.Trade": okx.Trade, "okx.MarketData": okx.MarketData, "okx.PublicData": okx.PublicData})
         name = f"step_engine_{abs(hash(self.dir))}_{self.restarts}"
         spec = importlib.util.spec_from_file_location(name, ENGINE)
         m = importlib.util.module_from_spec(spec)
