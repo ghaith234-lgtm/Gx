@@ -108,3 +108,55 @@ if want("F6"):
     say("F6", len(sold) < 3,
         f"wallet coins taken after birth ⇒ {len(rej)} sell rejections logged · level −1's 3 bought parts sold {len(sold)}/3 "
         "as the price rose through their prices")
+
+# F8 — 💣 delete while the cancels don't reach OKX (a network blip): the bot still writes «destruct_done», logs «أُلغي N أمر»
+#      and exits — the dashboard trusts destruct_done and skips its own cancel ⇒ the bot's orders stay live with no bot
+if want("F8"):
+    c = Clock(); ex = Ex(c, base=100, quote=1000)
+    b = Bot(ex)
+    b.run(walk([1.0, 1.0], 20))
+    n0 = len(live(b))
+    ex.fault = lambda op, p: "drop" if op == "cancel" else None
+    b.audit_on = False
+    b.run([("do", lambda bb: (lambda pth: (lambda d: (d.update(self_destruct=True), __import__("json").dump(d, open(pth, "w"))))(
+        __import__("json").load(open(pth))))(os.path.join(bb.dir, f"grid_state_{bb.ex.sym}.json"))), ("wait", 6)])
+    left = live(b)
+    say("F8", bool(left) and b.disk().get("destruct_done") is True,
+        f"{n0} live orders · every cancel lost ⇒ destruct_done = {b.disk().get('destruct_done')} · the log: "
+        f"«{next((m for m in b.hist() if m.startswith('💣')), '')}» · {len(left)} orders still live on OKX with no bot")
+
+# F9 — the save after a fill fails (the state file held by another program · disk full) and keeps failing until the next
+#      loop: the loop writes the pending log lines first, then saves — a power cut between the two ⇒ on restart the fill is
+#      processed again (the state on disk never had it) ⇒ its log line twice (the dashboard books from the log)
+if want("F9"):
+    from okxsim import Cut
+    ph = {"n": 0}
+    c = Clock(); ex = Ex(c, base=100, quote=1000)
+    b = Bot(ex)
+    _orig = b._load
+
+    def _load9():
+        m = _orig()
+        inner = m.save_json
+
+        def sj(path, data):
+            if path == m.STATE_FILE and isinstance(data, dict):
+                fx = data.get("fx_log") or {}
+                if ph["n"] == 0 and any(str(x[1]).startswith("🔴") for x in fx.get("lines") or []):
+                    ph["n"] = 1
+                if ph["n"] == 1:
+                    if data.get("fx_log"):
+                        return False                    # every save fails while the fill's lines are pending
+                    ph["n"] = 2
+                    raise Cut("power cut after the flush, before its save")
+            return inner(path, data)
+        m.save_json = sj
+        return m
+    b._load = _load9
+    b.audit_on = False
+    b.run(walk([1.0, 1.0101, 1.0101, 1.0101], 20))
+    s01 = [m_ for m_ in b.hist() if m_.startswith("🔴") and "المستوى 0 · الجزء 1/" in m_]
+    fills = [x for x in ex.fills if x[2] == "sell"]
+    say("F9", ph["n"] == 2 and len(s01) > len(fills),
+        f"phase {ph['n']} · {len(fills)} sell fill on OKX · {len(s01)} sell lines in the log for it · books on disk "
+        f"{b.disk().get('total_profit')} · log sum {sum(float(x.split('الربح: ')[1].split('$')[0]) for x in s01) if s01 else 0}")
