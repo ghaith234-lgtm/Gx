@@ -1,13 +1,17 @@
 # 🪜 the owner-approved fixes of the review (REVIEW.md) as must-pass tests — each part fails on the engine before its fix
 #   F9  the save after a fill fails 1–3 times, then a power cut around the writing of its log line ⇒ the line once · log = books
 #   F10 every number in a log line is a plain decimal (the dashboard read «+9e-05$» as 9$) · the log's profit = the books exactly
-#   python3 devtests/step/t_fixes.py [-q] [--only=F9,...]        (STEP_ENGINE=… tests another engine copy)
+#   F8  💣 while the cancels are lost / the internet is down / an order fills meanwhile ⇒ withdraws only when OKX confirms every
+#       order gone · fills booked · no new order meanwhile · never trades again · the dashboard refuses to delete unconfirmed
+#   python3 devtests/step/t_fixes.py [Holy_Dashboard.pyw] [-q] [--only=F9,...]        (STEP_ENGINE=… tests another engine copy)
 import os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from okxsim import Clock, Ex, Bot, walk, Cut
 
 Q = "-q" in sys.argv
 ONLY = next((a.split("=", 1)[1].split(",") for a in sys.argv if a.startswith("--only=")), None)
+DASHP = os.path.abspath(next((a for a in sys.argv[1:] if not a.startswith("-")),
+                            os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "Holy_Dashboard.pyw")))
 res = []
 
 
@@ -82,7 +86,7 @@ if want("F9"):
 if want("F10"):
     import ast, math
     H = os.path.dirname(os.path.abspath(__file__))
-    DASH = os.path.join(H, "..", "..", "Holy_Dashboard.pyw")
+    DASH = DASHP
     src = open(DASH, encoding="utf-8").read()
     PROFIT_RE = next(eval(compile(ast.Expression(n.value), DASH, "eval"), {"re": re}) for n in ast.parse(src).body
                      if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") == "PROFIT_RE")
@@ -108,6 +112,118 @@ if want("F10"):
        "each one right · their sum = the books (10 decimals) · no number in scientific notation anywhere in the log",
        len(sells) >= 3 and all(r is not None and 0 < r < 1e-4 for r in read) and abs(sum(read) - tp) < 1e-9 and not sci and not b.errors,
        (read, tp, sci[:2], b.errors[:1]))
+
+# ── F8: 💣 withdraws only when OKX confirms that no order of the bot is left
+if want("F8"):
+    import json
+
+    def press(bb, **kv):
+        pth = os.path.join(bb.dir, f"grid_state_{bb.ex.sym}.json")
+        d = json.load(open(pth))
+        d.update(kv)
+        json.dump(d, open(pth + ".dash", "w"))
+        os.replace(pth + ".dash", pth)
+
+    def mine_live(bb):
+        return [o for o in bb.mine() if o["state"] in ("live", "partially_filled")]
+
+    def scenario(name, during, after=None, n_drop=0):
+        c = Clock(); ex = Ex(c, base=100, quote=1000)
+        b = Bot(ex)
+        b.run(walk([1.0, 1.0], 20))
+        n0 = len(mine_live(b))
+        k0 = len([o for o in b.mine()])
+        drops = {"n": n_drop}
+
+        def fault(op, p):
+            if op == "cancel" and drops["n"] > 0:
+                drops["n"] -= 1
+                return "drop"
+            return None
+        ex.fault = fault
+        steps = [("do", lambda bb: press(bb, self_destruct=True))] + during + [("wait", 200)]
+        b.run(steps)
+        made = len(b.mine()) - k0
+        d = b.disk()
+        lines = [m_ for m_ in b.hist() if m_.startswith("💣")]
+        return b, ex, n0, made, d, lines
+
+    # A — the first 20 cancels never reach OKX (a network blip)
+    b, ex, n0, made, d, lines = scenario("blip", [], n_drop=20)
+    ok(f"F8: 💣 while the first 20 cancels are lost ⇒ waits («الحذف ينتظر») · withdraws only when OKX confirms · 0 orders left of {n0} · "
+       "no new order meanwhile · books = wallet",
+       d.get("destruct_done") is True and not mine_live(b) and made == 0 and any("الحذف ينتظر" in x for x in lines)
+       and any("كلها تأكد إلغاؤها" in x for x in lines) and not b.errors, (d.get("destruct_done"), len(mine_live(b)), made, lines[:3], b.errors[:2]))
+
+    # B — the internet is down for 60 s after the press
+    def down(bb):
+        bb.ex.down = True
+
+    def up(bb):
+        bb.ex.down = False
+    b, ex, n0, made, d, lines = scenario("down", [("do", down), ("wait", 60), ("do", up)])
+    ok("F8: 💣 with the internet down 60 s ⇒ nothing withdrawn while down · back online ⇒ every order canceled and confirmed · no new order",
+       d.get("destruct_done") is True and not mine_live(b) and made == 0 and not b.errors, (d.get("destruct_done"), len(mine_live(b)), made, b.errors[:2]))
+
+    # C — a sell fills between the press and its (lost) cancel ⇒ booked
+    b, ex, n0, made, d, lines = scenario("fill", [("px", 1.0101, 0)], n_drop=6)
+    sold = [m_ for m_ in b.hist() if m_.startswith("🔴")]
+    ok("F8: 💣 and a sell fills before its cancel arrives ⇒ the fill is booked (its 🔴 line · books = wallet every loop) · then withdraws",
+       d.get("destruct_done") is True and not mine_live(b) and sold and not b.errors, (len(sold), d.get("destruct_done"), b.errors[:2]))
+
+    # D — a bot that withdrew never trades again (the watchdog may start it)
+    k1 = len(b.mine())
+    b.run(walk([0.97, 1.02, 1.0], 30))
+    ok("F8: started again after it withdrew ⇒ exits at once · no order placed", len(b.mine()) == k1 and not b.errors, (len(b.mine()) - k1, b.errors[:1]))
+
+    # E — the dashboard's delete of a 🪜 bot: refused unless no order of the bot is confirmed left
+    import importlib.machinery, importlib.util, shutil, tempfile
+    H = os.path.dirname(os.path.abspath(__file__))
+    R = tempfile.mkdtemp(prefix="t_fixes_")
+    json.dump({"port": 8095}, open(os.path.join(R, "dashboard_config.json"), "w"))
+    json.dump({"wallets": []}, open(os.path.join(R, "monitor_config.json"), "w"))
+    shutil.copy(DASHP, os.path.join(R, "Holy_Dashboard.pyw"))
+    cwd0 = os.getcwd(); os.chdir(R)
+    ld = importlib.machinery.SourceFileLoader("hd_fixes", os.path.join(R, "Holy_Dashboard.pyw"))
+    m = importlib.util.module_from_spec(importlib.util.spec_from_loader("hd_fixes", ld)); a0 = sys.argv; sys.argv = ["x"]; ld.exec_module(m); sys.argv = a0
+    os.chdir(cwd0)
+
+    def fake_bot(kind):
+        d_ = tempfile.mkdtemp(prefix="bot_", dir=R)
+        cfg = {"api_key": "KEYA-tfx", "secret_key": "SECA-tfx", "passphrase": "PASA-tfx", "symbol": "XRP-USDT", "bot_type": kind,
+               "bot_id": "HBTFX0000001", "auto_restart": True}
+        cp_ = os.path.join(d_, "config_XRP-USDT.json")
+        json.dump(cfg, open(cp_, "w"))
+        json.dump({"total_profit": 0}, open(os.path.join(d_, "grid_state_XRP-USDT.json"), "w"))
+        return {"dir": d_, "cfg_path": cp_, "cfg": cfg, "symbol": "XRP-USDT"}
+    deleted = []
+    m.is_alive = lambda *a, **k: (False, None)
+    m.delete_bot = lambda bb: (deleted.append(bb["dir"]) or {"ok": True, "msg": "deleted"})
+    m.tg_send = lambda *a, **k: True
+    mine2 = [{"ordId": "1", "clOrdId": "HBTFX0000001s1"}, {"ordId": "2", "clOrdId": "HBTFX0000001b2"}, {"ordId": "9", "clOrdId": "OTHER1"}]
+    seq = {"get": [], "posts": 0}
+    m._okx_get = lambda *a, **k: seq["get"].pop(0) if seq["get"] else None
+    m._okx_post = lambda *a, **k: (seq.__setitem__("posts", seq["posts"] + 1) or {"code": "0", "data": [{"sCode": "0"}, {"sCode": "0"}]})
+    out = []
+    for name, gets, kind, want_ok in (("no connection", [None, None], "grid_step", False),
+                                      ("2 orders stay after the cancel", [{"code": "0", "data": mine2}, {"code": "0", "data": mine2}], "grid_step", False),
+                                      ("canceled and confirmed", [{"code": "0", "data": mine2}, {"code": "0", "data": mine2[2:]}], "grid_step", True),
+                                      ("never started (no order possible)", [None, None], "grid_step", None),
+                                      ("♾️ bot, no connection (unchanged)", [None, None], "grid", True)):
+        bb = fake_bot(kind)
+        if want_ok is None:
+            bb["cfg"].pop("bot_id")
+            want_ok = True
+        seq["get"] = list(gets)
+        n_del = len(deleted)
+        r = m.delete_purge(bb)
+        auto = json.load(open(bb["cfg_path"])).get("auto_restart")
+        good = bool(r.get("ok")) == want_ok and (len(deleted) > n_del) == want_ok and (want_ok or (auto is False and "لم يُحذف" in r.get("msg", "")))
+        out.append((name, good, r.get("msg", "")[:90], auto))
+    shutil.rmtree(R, ignore_errors=True)
+    ok("F8: the dashboard deletes a 🪜 bot only when no order of it is confirmed left (no connection ⇒ refused · 2 left ⇒ refused · "
+       "canceled and confirmed ⇒ deleted · never started ⇒ deleted) · refusal turns its auto-restart off · other kinds unchanged",
+       all(x[1] for x in out), [x for x in out if not x[1]] or out)
 
 print(f"{sum(res)} ok · {len(res) - sum(res)} failed")
 sys.exit(0 if all(res) else 1)
