@@ -405,6 +405,7 @@ class Bot:
         m.datetime = _fake_dt(self.clock)
         m.requests = _Requests(ex)
         save0, log0, fin0 = m.save_json, m.log_trade_history, m._finish
+        me._fin = None
 
         def save_json(path, data):
             if path == m.STATE_FILE and isinstance(data, dict):
@@ -413,6 +414,10 @@ class Bot:
                     me.W0 = sum(D(s["sq"]) for s in data["slots"].values() if s["j"] >= 0 and s["side"] == "sell" and not s["cyc"])
             me._moment("save", "before")
             r = save0(path, data)
+            if r is True and me._fin and path == m.STATE_FILE:   # the save that writes a sale: book it now (a cut right after
+                fk, fpre, fod = me._fin                          # it must not lose it — the engine won't process it again)
+                if fpre.get("side") == "sell" and ((data.get("slots") or {}).get(fk) or {}).get("side") == "buy":
+                    _book(fk, fpre, fod)
             me._moment("save", "after")
             return r
 
@@ -421,18 +426,25 @@ class Bot:
             log0(sym, msg)
             me._moment("log", "after")
 
+        def _book(key, pre, od):                  # a sale's basis the books need: wallet coins «as if bought» · coins kept back
+            sq = float(pre.get("sq") or 0)
+            sold = float(pre.get("acc") or 0) + float(od.get("accFillSz") or 0)
+            basis = float(pre.get("spent") or 0) if float(pre.get("cost") or 0) > 0 else float(pre["q"]) * float(pre["bp"])
+            used = basis * (min(1.0, sold / sq) if sq > 0 else 1.0)
+            if float(pre.get("cost") or 0) > 0:
+                me.unbooked[(key, pre.get("cyc"))] = basis - used
+            else:
+                me.virt[(key, pre.get("cyc"))] = used
+
         def _finish(state, key, s, od):           # (only to book the wallet slots' virtual basis — the engine's own maths runs)
             pre = dict(s)
-            r = fin0(state, key, s, od)
+            me._fin = (key, pre, od)
+            try:
+                r = fin0(state, key, s, od)
+            finally:
+                me._fin = None
             if pre.get("side") == "sell" and s.get("side") == "buy":
-                sq = float(pre.get("sq") or 0)
-                sold = float(pre.get("acc") or 0) + float(od.get("accFillSz") or 0)
-                basis = float(pre.get("spent") or 0) if float(pre.get("cost") or 0) > 0 else float(pre["q"]) * float(pre["bp"])
-                used = basis * (min(1.0, sold / sq) if sq > 0 else 1.0)
-                if float(pre.get("cost") or 0) > 0:
-                    me.unbooked[(key, pre.get("cyc"))] = basis - used
-                else:
-                    me.virt[(key, pre.get("cyc"))] = used
+                _book(key, pre, od)                # (same key as the save's booking — once)
             return r
 
         m.save_json, m.log_trade_history, m._finish = save_json, log_trade_history, _finish
