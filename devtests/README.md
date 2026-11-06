@@ -16,6 +16,7 @@ secrets, no network. The APK signing keystore never goes here.
 | `step/t_cut.py` | a power cut at every moment of a story (4546 moments) — the same fills, profit, slots and log as with no cut · `--move` the price moves while off · `-jN` · `--every=K` |
 | `step/t_findings.py` | probes of suspected weaknesses (F1–F6) — they print, they do not pass or fail |
 | `step/t_first.py` | v3.36.16 the first sell distance: layout · table = engine · no sell that loses · the engine on the mock OKX (22) |
+| `step/ui_first.py` + `ui_first.js` | v3.36.16 in a real browser (Playwright · only 127.0.0.1): the two fields · the body sent · the table 1.01 · 1.015 · 1.02 · the refusals · the card's line (9) · `--shot=/abs/path.png` · run with `unset TMPDIR` |
 | `step/t_inputs.py` | v3.36.16 F7: nan / inf in the form or a hand-written config are refused (5) |
 | `step/patches/` | every engine/dashboard change as an exact-text replacement script (each old text found once · AST scope check) |
 | `step/STATE.md` | the work state — read it first in a new session |
