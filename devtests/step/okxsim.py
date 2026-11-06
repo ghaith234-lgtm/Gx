@@ -123,6 +123,7 @@ class Ex:
         self.partial = float(partial)          # >0: a resting order touched by the price fills only this share (≥ 1 lot)
         self.rng = random.Random(seed)
         self.orders, self.by_cl, self.n = {}, {}, 0
+        self.open = {}                           # oid → the orders still live / partly filled (pending())
         self.fills = []                        # (ordId, clOrdId, side, px, sz, maker)
         self.late = []                         # [t_land, kind, params]
         self.fault = None                      # fault(op, params) -> None | "drop" | "lost" | ("late", s) | ("code", c) | ("ambig", placed)
@@ -140,19 +141,24 @@ class Ex:
 
     def locked(self, ccy):
         t = D(0)
-        for o in self.orders.values():
-            if o["state"] in ("live", "partially_filled"):
-                if o["side"] == "buy" and ccy == self.quote:
-                    t += self._rem(o) * o["px"]
-                if o["side"] == "sell" and ccy == self.base:
-                    t += self._rem(o)
+        for o in self.pending():
+            if o["side"] == "buy" and ccy == self.quote:
+                t += self._rem(o) * o["px"]
+            if o["side"] == "sell" and ccy == self.base:
+                t += self._rem(o)
         return t
 
     def avail(self, ccy):
         return self.bal[ccy] - self.locked(ccy)
 
-    def pending(self):
-        return [o for o in self.orders.values() if o["state"] in ("live", "partially_filled")]
+    def pending(self):                          # the open orders, in placement order (kept apart: a long run has tens of
+        out = []                                 # thousands of finished orders — scanning them every loop was quadratic)
+        for oid, o in list(self.open.items()):
+            if o["state"] in ("live", "partially_filled"):
+                out.append(o)
+            else:
+                del self.open[oid]
+        return out
 
     def rec(self, o):                          # the order as OKX's JSON shows it
         return {"ordId": o["ordId"], "clOrdId": o["cl"], "instId": self.sym, "side": o["side"], "px": str(o["px"]),
@@ -233,6 +239,7 @@ class Ex:
         o = {"ordId": oid, "cl": cl, "side": side, "px": px, "sz": sz, "acc": D(0), "accv": D(0), "fee": D(0),
              "feeCcy": self.base if side == "buy" else self.quote, "state": "live", "t": self.clock.t}
         self.orders[oid] = o
+        self.open[oid] = o
         if cl:
             self.by_cl[cl] = oid
         if (side == "buy" and px >= self.price) or (side == "sell" and px <= self.price):   # crosses the price ⇒ taker now
@@ -557,6 +564,9 @@ class Bot:
     def mine(self):
         return [o for o in self.ex.orders.values() if o["cl"].startswith(self.bot_id)]
 
+    def mine_open(self):                         # the bot's live / partly filled orders only (the audit runs every loop)
+        return [o for o in self.ex.pending() if o["cl"].startswith(self.bot_id)]
+
     def _ex_of(self, o):
         if o.get("id"):
             return self.ex.orders.get(str(o["id"]))
@@ -618,13 +628,13 @@ class Bot:
             self.err(f"coins: wallet {coins} ≠ books {self.coin0 - self.W0 + L} (Δ {coins - (self.coin0 - self.W0 + L)})")
         if abs(usd - (self.usd0 + U)) > D("1e-6") + abs(usd) * D("1e-10"):
             self.err(f"dollars: wallet {usd} ≠ books {self.usd0 + U} (Δ {usd - (self.usd0 + U)})")
-        for o in self.mine():                    # every live order of the bot belongs to a slot
+        for o in self.mine_open():               # every live order of the bot belongs to a slot
             if o["state"] in ("live", "partially_filled") and o["ordId"] not in refd:
                 n = self.orphan_seen.get(o["ordId"], 0) + 1
                 self.orphan_seen[o["ordId"]] = n
                 if n >= 3:
                     self.err(f"stray order {o['ordId']} {o['side']} {o['sz']}@{o['px']} survives {n} loops")
-        live = [o for o in self.mine() if o["state"] in ("live", "partially_filled")]
+        live = self.mine_open()
         hb = max((o["px"] for o in live if o["side"] == "buy"), default=None)
         ls = min((o["px"] for o in live if o["side"] == "sell"), default=None)
         if hb is not None and ls is not None and hb >= ls:

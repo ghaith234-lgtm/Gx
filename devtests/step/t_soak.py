@@ -75,7 +75,7 @@ def soak(hours=48.0, profile="fast", seed=1, cfg=None, cuts_per_hour=6.0, faults
 
     def watch(bb):
         S = (bb.st or {}).get("slots") or {}
-        live = [o for o in bb.mine() if o["state"] in ("live", "partially_filled")]
+        live = bb.mine_open()
         for i, side in enumerate(("buy", "sell")):
             nl = sum(1 for o in live if o["side"] == side and o["acc"] == 0)
             rep["peak_live"][i] = max(rep["peak_live"][i], sum(1 for o in live if o["side"] == side))
