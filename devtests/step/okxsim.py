@@ -17,6 +17,7 @@ from collections import Counter
 from datetime import datetime as _RealDT, timezone
 from decimal import Decimal, ROUND_FLOOR
 import time as _real_time
+import requests as _requests_loaded   # loaded here with the real socket, before the engine imports it under the fake one  # noqa
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ENGINE = os.path.join(HERE, "eng", "main_step.py")
@@ -71,6 +72,30 @@ class _FakeTime:
 
     def __getattr__(self, n):
         return getattr(_real_time, n)
+
+
+class _FakeSocketMod:
+    """the engine's `socket`: its «already running» lock binds a port per bot id — real ports would collide between test
+    processes running in parallel, so the lock is kept per process (a second copy of the SAME bot in one process still fails)"""
+    AF_INET, SOCK_STREAM, error, timeout = 2, 1, OSError, TimeoutError
+    bound = set()
+
+    class socket:
+        def __init__(self, *a, **k):
+            self.port = None
+
+        def bind(self, addr):
+            if addr in _FakeSocketMod.bound:
+                raise OSError("address in use")
+            _FakeSocketMod.bound.add(addr)
+            self.port = addr
+
+        def close(self):
+            _FakeSocketMod.bound.discard(self.port)
+
+    @staticmethod
+    def setdefaulttimeout(t):
+        pass
 
 
 def _fake_dt(clock):
@@ -177,7 +202,7 @@ class Ex:
             if not hit or o.get("foreign_frozen"):
                 continue
             sz = self._rem(o)
-            if self.partial > 0:
+            if self.partial > 0 and o["acc"] == 0:      # the first touch fills a share, the next one the rest
                 part = (sz * D(self.partial) / self.lot).to_integral_value(rounding=ROUND_FLOOR) * self.lot
                 sz = max(min(sz, self.lot), min(sz, part)) if part > 0 else min(sz, self.lot)
             self._fill(o, sz, o["px"], True)
@@ -339,7 +364,7 @@ class Bot:
         self.ex, self.clock = ex, ex.clock
         self.dir = folder or tempfile.mkdtemp(prefix="step_")
         self.cfg = dict(DEFAULT_CFG, symbol=ex.sym, **(cfg or {}))
-        self.cfg.setdefault("bot_id", "HBT" + "".join(random.Random(id(self)).choice(string.ascii_uppercase + string.digits) for _ in range(9)))
+        self.cfg.setdefault("bot_id", "HBT" + "".join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(9)))
         with open(os.path.join(self.dir, f"config_{ex.sym}.json"), "w") as f:
             json.dump(self.cfg, f)
         self.bot_id = self.cfg["bot_id"]
@@ -368,8 +393,13 @@ class Bot:
         name = f"step_engine_{abs(hash(self.dir))}_{self.restarts}"
         spec = importlib.util.spec_from_file_location(name, ENGINE)
         m = importlib.util.module_from_spec(spec)
-        with contextlib.redirect_stdout(io.StringIO()):
-            spec.loader.exec_module(m)
+        real_socket = sys.modules["socket"]
+        sys.modules["socket"] = _FakeSocketMod      # only while the engine imports: it keeps this one, nothing else does
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                spec.loader.exec_module(m)
+        finally:
+            sys.modules["socket"] = real_socket
         m.time = _FakeTime(self.clock)
         m.datetime = _fake_dt(self.clock)
         m.requests = _Requests(ex)
