@@ -1,5 +1,6 @@
 # 🪜 the owner-approved fixes of the review (REVIEW.md) as must-pass tests — each part fails on the engine before its fix
 #   F9  the save after a fill fails 1–3 times, then a power cut around the writing of its log line ⇒ the line once · log = books
+#   F10 every number in a log line is a plain decimal (the dashboard read «+9e-05$» as 9$) · the log's profit = the books exactly
 #   python3 devtests/step/t_fixes.py [-q] [--only=F9,...]        (STEP_ENGINE=… tests another engine copy)
 import os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -21,7 +22,7 @@ def want(n):
 
 
 PR = re.compile(r"الربح: ([+-][0-9.]+)\$")
-TOL = 5e-7          # the log's profit per line is rounded to 6 decimals (until the exact-profit fix)
+TOL = 1e-9          # the log's profit is the books' own 10 decimals (F10)
 
 
 def log_profit(b):
@@ -76,6 +77,37 @@ if want("F9"):
                 bad.append((fails, mode, ph["cut"], n_fill, n_line, tp, log_profit(b), b.errors[:1]))
     ok("F9: the save after a sell fails 1–3 times, then a power cut before / after its log line / at the save after it (9 cases) ⇒ "
        "the line in the log exactly once · the log's profit = the books · books = wallet every loop", not bad, bad[:3])
+
+# ── F10: plain decimals in the log · the dashboard's own PROFIT_RE reads every sell's profit exactly
+if want("F10"):
+    import ast, math
+    H = os.path.dirname(os.path.abspath(__file__))
+    DASH = os.path.join(H, "..", "..", "Holy_Dashboard.pyw")
+    src = open(DASH, encoding="utf-8").read()
+    PROFIT_RE = next(eval(compile(ast.Expression(n.value), DASH, "eval"), {"re": re}) for n in ast.parse(src).body
+                     if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") == "PROFIT_RE")
+    import okxsim
+    ns = {"Decimal": __import__("decimal").Decimal}
+    for n in ast.parse(open(okxsim.ENGINE, encoding="utf-8").read()).body:
+        if isinstance(n, ast.FunctionDef) and n.name == "_n":
+            exec(compile(ast.Module([n], []), "eng", "exec"), ns)
+    fn = ns.get("_n")
+    cases = {9e-05: "0.00009", 1.23e-05: "0.0000123", 0.041923232: "0.041923232", 100.0: "100", 0.0: "0", -0.0: "0",
+             1e-11: "0", 2.5: "2.5", 65000.1: "65000.1"}
+    got = {k: (fn(k) if fn else None) for k in cases}
+    ok("F10: the engine's number format: 9e-05 ⇒ 0.00009 · 1.23e-05 ⇒ 0.0000123 · 100 ⇒ 100 · −0 ⇒ 0 (no scientific notation)",
+       fn and all(got[k] == v for k, v in cases.items()), got)
+    c = Clock(); ex = Ex(c, base=100, quote=1000, tick="0.00001")     # (a fine price step: the sell is not rounded up past 0.0001$)
+    b = Bot(ex, {"usd_value": 2.0, "step_parts": 1, "step_sell": 0.01, "step_first": 0.00165, "up_groups": 1})
+    b.run(walk([1.0, 1.00166, 1.0, 1.00166, 1.0, 1.00166, 1.0, 1.00166, 1.0], 20))
+    sells = [m_ for m_ in b.hist() if m_.startswith("🔴")]
+    read = [float(PROFIT_RE.search(m_).group(1)) if PROFIT_RE.search(m_) else None for m_ in sells]
+    tp = float(b.disk().get("total_profit") or 0)
+    sci = [m_ for m_ in b.hist() if re.search(r"[0-9]e-[0-9]", m_)]
+    ok(f"F10: first sell 0.165% (just above the two fees) · {len(sells)} sells each under 0.0001$ ⇒ the dashboard's PROFIT_RE reads "
+       "each one right · their sum = the books (10 decimals) · no number in scientific notation anywhere in the log",
+       len(sells) >= 3 and all(r is not None and 0 < r < 1e-4 for r in read) and abs(sum(read) - tp) < 1e-9 and not sci and not b.errors,
+       (read, tp, sci[:2], b.errors[:1]))
 
 print(f"{sum(res)} ok · {len(res) - sum(res)} failed")
 sys.exit(0 if all(res) else 1)
