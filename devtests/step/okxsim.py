@@ -373,6 +373,7 @@ class Bot:
         self.st = None                          # the engine's live state dict (captured at its first save)
         self.coin0, self.usd0 = ex.bal[ex.base], ex.bal[ex.quote]
         self.W0 = None                          # coins the wallet slots took at birth
+        self.fill_lines = []                    # every 🟢/🔴 line the engine wrote (its file trims to 1000)
         self.legacy, self.V0 = True, D(0)       # v3.36.17 engines: the wallet slots' «as if bought» basis at birth
         self.virt = {}                          # (slot, cyc) → virtual basis booked for a wallet slot's first sell
         self.unbooked = {}                      # (slot, cyc) → basis not booked when a sell ended short (coins went to fee dust)
@@ -427,6 +428,8 @@ class Bot:
         def log_trade_history(sym, msg):
             me._moment("log", "before")
             log0(sym, msg)
+            if str(msg).startswith(("🟢", "🔴")):     # every fill line as written — the engine's file keeps only its newest 1000
+                me.fill_lines.append(msg)
             me._moment("log", "after")
 
         def _book(key, pre, od):                  # a sale's basis the books need: wallet coins «as if bought» · coins kept back
@@ -622,7 +625,7 @@ class Bot:
         if hb is not None and ls is not None and hb >= ls:
             self.err(f"self-cross: own buy {hb} ≥ own sell {ls}")
         if not st.get("fx_log"):
-            h = self.hist()
+            h = self.fill_lines                  # (not the file: it keeps its newest 1000 lines only)
             nb = sum(1 for x in h if x.startswith("🟢 [شراء"))
             ns = sum(1 for x in h if x.startswith("🔴 [بيع"))
             cyc = sum(int(s.get("cyc") or 0) for s in S.values())

@@ -19,6 +19,9 @@ secrets, no network. The APK signing keystore never goes here.
 | `step/t_first.py` | v3.36.16 the first sell distance: layout · table = engine · no sell that loses · the engine on the mock OKX (22) |
 | `step/ui_first.py` + `ui_first.js` | v3.36.16 in a real browser (Playwright · only 127.0.0.1): the two fields · the body sent · the table 1.01 · 1.015 · 1.02 · the refusals · the card's line (9) · `--shot=/abs/path.png` · run with `unset TMPDIR` |
 | `step/t_inputs.py` | v3.36.16 F7: nan / inf in the form or a hand-written config are refused (5) |
+| `step/t_fixes.py` | v3.36.17 the owner-approved fixes as must-pass tests: F9 · F10 · F8 (engine + the dashboard's delete) · F2 — each fails on the engine before its fix |
+| `step/t_soak.py` | the long run: hours · days · `--forever` — random power cuts (off 0 s…5 min, the price moving while off) · a flaky API · the internet down · fast oscillation / wild jumps · audited every loop · a report of how the bot recovered and how it stores its orders |
+| `step/t_osc.py` | the owner's scenarios on t_soak (6 h each): very fast oscillation · wild swings · first sell 0.5 / 0.3 / 0.2% · 100$ × 20 sells (storage) · DOGE (7) |
 | `step/patches/` | every engine/dashboard change as an exact-text replacement script (each old text found once · AST scope check) |
 | `step/STATE.md` | the work state — read it first in a new session |
 | `tools/map_remap.py` · `tools/map_fix_bt.py` | MAP.md line remap between two dashboards + the trial-path rows (rebuilt 6-11, checked against git history) |
