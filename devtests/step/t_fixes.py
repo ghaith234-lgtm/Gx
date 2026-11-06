@@ -104,7 +104,7 @@ if want("F10"):
     ok("F10: the engine's number format: 9e-05 ⇒ 0.00009 · 1.23e-05 ⇒ 0.0000123 · 100 ⇒ 100 · −0 ⇒ 0 (no scientific notation)",
        fn and all(got[k] == v for k, v in cases.items()), got)
     c = Clock(); ex = Ex(c, base=100, quote=1000, tick="0.00001")     # (a fine price step: the sell is not rounded up past 0.0001$)
-    b = Bot(ex, {"usd_value": 2.0, "step_parts": 1, "step_sell": 0.01, "step_first": 0.00165, "up_groups": 1})
+    b = Bot(ex, {"usd_value": 2.0, "step_parts": 1, "step_sell": 0.01, "step_first": 0.00165, "up_groups": 1, "taker_rate": 0.0008})   # (maker-only: a bot set by hand)
     b.run(walk([1.0, 1.00166, 1.0, 1.00166, 1.0, 1.00166, 1.0, 1.00166, 1.0], 20))
     sells = [m_ for m_ in b.hist() if m_.startswith("🔴")]
     read = [float(PROFIT_RE.search(m_).group(1)) if PROFIT_RE.search(m_) else None for m_ in sells]
@@ -254,7 +254,7 @@ if want("F2"):
         rng = random.Random(4200 + seed)
         sym, tick, lot, mn, p0 = [("DOGE-USDT", "0.00001", "1", "10", 0.15), ("PEPE-USDT", "0.00000001", "1", "100000", 0.0000123)][seed % 2]
         N = rng.randint(1, 6)
-        cfg = {"step_parts": N, "step_sell": rng.choice([0.002, 0.004, 0.01]), "step_first": rng.choice([0.002, 0.003, 0.005, 0.01]),
+        cfg = {"step_parts": N, "step_sell": rng.choice([0.002, 0.004, 0.01]), "step_first": rng.choice([0.0021, 0.003, 0.005, 0.01]),
                "grid_percentage": rng.choice([0.01, 0.02, 0.03]), "usd_value": float(max(2.5 * N, 15) * (3 if sym == "PEPE-USDT" else 1)),
                "min_price": p0 * 0.6, "up_groups": rng.randint(0, 2), "forced_base_price": p0, "step_window": rng.choice([4, 8])}
         c = Clock()

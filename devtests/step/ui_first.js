@@ -52,6 +52,11 @@ function ok(name, cond, det) {
   await fill({ st_d1: 0.1 });
   const err1 = await pg.evaluate(() => [...document.querySelectorAll('#st_plan .sterr')].map(e => e.textContent));
   ok('first sell 0.1% ⇒ the table refuses in red: «مسافة أول بيعة 0.1% لا تغطي العمولتين»', err1.some(e => e.includes('مسافة أول بيعة 0.1%') && e.includes('لا تغطي العمولتين')), err1);
+  const neg = await pg.evaluate(() => { const tr = document.querySelector('#st_plan tr.stneg'); if (!tr) return null;
+    const td = tr.querySelector('td.stpr') || tr.cells[tr.cells.length - 1]; return { n: document.querySelectorAll('#st_plan tr.stneg').length,
+      bg: getComputedStyle(td).backgroundColor, fg: getComputedStyle(td).color } });
+  ok('a losing first sell (0.1%) ⇒ its whole row is red (background and text)', neg && neg.n > 0 && /rgba?\((\d+)/.test(neg.bg)
+     && +neg.bg.match(/rgba?\((\d+)/)[1] > 150 && neg.bg !== 'rgba(0, 0, 0, 0)', neg);
   await fill({ st_d1: 'nan' });
   const err2 = await pg.evaluate(() => (document.querySelector('#st_plan') || {}).textContent || '');
   ok('first sell «nan» ⇒ refused («تأكد من الأرقام»)', err2.includes('تأكد من الأرقام'), err2.slice(0, 200));

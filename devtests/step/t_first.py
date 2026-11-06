@@ -113,6 +113,7 @@ m._okx_pub = lambda p: ({"code": "0", "data": [dict(zip(("tickSz", "lotSz", "min
 m.PX.update({"XRP-USDT": 1.0, "DOGE-USDT": 0.15, "PEPE-USDT": 0.0000123})
 m.tg_send = lambda *a, **k: True
 F = m.FEE_RATE_DEFAULT
+T = max(F, getattr(m, "STEP_TAKER_FEE", F))     # v3.36.18: the table and the birth rule count the taker fee (the worst)
 
 
 def body(**kw):
@@ -136,16 +137,16 @@ ok("③ the first-sell field empty ⇒ d1 = the sell spacing ⇒ the table = the
 for v, word in (("0", "أكبر من صفر"), ("-1", "أكبر من صفر"), ("abc", "تأكد من الأرقام")):
     Pv = m.step_plan(body(step_first_pct=v))
     ok(f"③ first sell «{v}» ⇒ refused ({word})", not Pv.get("ok") and word in str(Pv.get("msg")), Pv.get("msg"))
-lim = 1.0 / (1.0 - F) ** 2 - 1.0                          # (1 + d1)(1 − f)² = 1 — under it the first sell loses
+lim = 1.0 / (1.0 - T) ** 2 - 1.0                          # (1 + d1)(1 − taker)² = 1 — under it a first sell can lose
 verdicts = []
 for d1 in (0.0005, 0.001, lim * 0.999, lim * 1.001, lim * 1.01, 0.002, 0.003):
     Pv = m.step_plan(body(step_first_pct=repr(d1 * 100), step_sell_pct="0.2"))
     refused = bool(Pv.get("ok") and any("لا تغطي العمولتين" in e and "مسافة أول بيعة" in e for e in Pv["err"]))
     lose = any(s["pr"] <= 0 for r in Pv["rows"] for s in r["sells"] if not s["skip"]) if Pv.get("ok") else None
-    eng = any(not r.get("skip") and r["sp"] * (1 - F) * (1 - F) <= r["bp"]
+    eng = any(not r.get("skip") and r["sp"] * (1 - T) * (1 - T) <= r["bp"]
               for r in lay_e(1.0, 0.03, 0.002, 3, 15, 0.7, 1, F, 0.000001, 0.1, d1=d1))
     verdicts.append((round(d1 * 100, 5), refused, lose, eng, d1 > lim))
-ok(f"③ around the two fees ({lim * 100:.5f}%): the table refuses ⇔ a sell shows ≤ 0 ⇔ the engine's birth rule refuses ⇔ d1 under the limit",
+ok(f"③ around the two taker fees ({lim * 100:.5f}%): the table refuses ⇔ a sell shows ≤ 0 ⇔ the engine's birth rule refuses ⇔ d1 under the limit",
    all(x[1] == x[2] == x[3] == (not x[4]) for x in verdicts), verdicts)
 Pw = m.step_plan(body(step_first_pct="2.5", step_sell_pct="0.5", step_parts="4", grid_pct="3"))
 ok("③ overlap warning counts buy → last sell = d1 + (N−1)·d (2.5% + 3 × 0.5% = 4% > 3%)",
@@ -168,6 +169,34 @@ txt = m._pv_cfg_txt({"bot_type": "grid_step", "step_parts": 3, "step_sell": 0.00
 txt0 = m._pv_cfg_txt({"bot_type": "grid_step", "step_parts": 3, "step_sell": 0.01, "grid_percentage": 0.03, "usd_value": 15})
 ok("④ the settings text shows both distances when they differ · the old text when they don't",
    "أول بيعة 1% · بين البيعات 0.5%" in txt and "البيع 1% ·" in txt0 and "أول بيعة" not in txt0, (txt, txt0))
+# ── ⑤ v3.36.18 (the owner 6-11): the table counts the TAKER fee on both sides (the worst) · one graded grid per coin
+if hasattr(m, "STEP_TAKER_FEE"):
+    Pt = m.step_plan(body())
+    s1 = next(x for x in Pt["rows"] if x["j"] == 0)["sells"][0]
+    want_pr = s1["q"] * (1 - T) * s1["sp"] * (1 - T) - s1["q"] * 1.0
+    ok(f"⑤ the table's profit is the worst case (taker {T * 100:g}% on the buy and the sell): first sell {s1['pr']:+.6f}$ = q·(1−t)·sp·(1−t) − q·bp",
+       abs(s1["pr"] - round(want_pr, 6)) < 1e-9 and Pt.get("taker") == T, (s1, want_pr, Pt.get("taker")))
+    P18 = m.step_plan(body(step_first_pct="0.18", step_sell_pct="0.3"))
+    ok("⑤ first sell 0.18% (covers the maker fees, not the taker ones) ⇒ refused before deploy",
+       P18.get("ok") and any("مسافة أول بيعة 0.18%" in e for e in P18["err"]), P18.get("err"))
+    _bd = m.bot_dirs
+    fake_dir = os.path.join(R, "step_xrp")
+    m.bot_dirs = lambda: {fake_dir: {"dir": fake_dir, "symbol": "XRP-USDT", "cfg": {"bot_type": "grid_step", "symbol": "XRP-USDT"}}}
+    Pl, Pn = m.step_plan(body(), live=True), m.step_plan(body(), live=False)
+    Pd = m.step_plan(body(symbol="DOGE-USDT", forced_base="0.15", min_price="0.1", up_groups="0"), live=True)
+    m.launch = lambda bb: (True, "")
+    m.wallet_keys = lambda w: {"api_key": "KEYA-tfirst", "secret_key": "SECA-tfirst", "passphrase": "PASA-tfirst"}
+    m.ROOT = R
+    dx = m.deploy_step(body(wallet="main"))
+    dd = m.deploy_step(body(symbol="DOGE-USDT", forced_base="0.15", min_price="0.1", up_groups="0", wallet="main"))
+    m.bot_dirs = _bd
+    ok("⑤ one graded grid per coin: a 🪜 on XRP-USDT exists ⇒ the form's table says so · deploy refuses · DOGE-USDT is deployed · "
+       "the trial path's table (not live) does not refuse",
+       any("واحد لكل عملة" in e for e in Pl["err"]) and not any("واحد لكل عملة" in e for e in Pn["err"])
+       and not any("واحد لكل عملة" in e for e in Pd.get("err", [])) and not dx.get("ok") and "واحد لكل عملة" in dx.get("msg", "")
+       and dd.get("ok"), (Pl["err"][:1], dx.get("msg"), dd.get("msg")))
+    cfg_t = json.load(open(os.path.join(R, dd.get("dir", "x"), "config_DOGE-USDT.json"))) if dd.get("ok") else {}
+    ok("⑤ deploy writes the taker fee for the bot's own birth rule (taker_rate)", cfg_t.get("taker_rate") == T, cfg_t.get("taker_rate"))
 shutil.rmtree(R, ignore_errors=True)
 
 # ── ④ the real engine on the mock OKX
@@ -234,6 +263,17 @@ b.run(walk([1.0, 0.97, 1.02], 600))
 nlog = sum(1 for x in b.hist() if "لا تغطي العمولتين" in x)
 ok("④ engine: first sell 0.15% (under the two fees) ⇒ no slot · no order on OKX · the reason logged once per 10 min (30 min ⇒ 3)",
    not (b.st or {}).get("slots") and not ex.orders and nlog == 3 and (b.st or {}).get("step", {}).get("d1") == 0.0015, (nlog, len(ex.orders)))
+
+# v3.36.18: the birth rule counts the taker fee — 0.18% covers the maker fees but not the taker ones
+born18 = []
+for extra in ({}, {"taker_rate": 0.0008}):
+    c = Clock(); ex = Ex(c, base=100, quote=1000)
+    b = Bot(ex, dict({"step_first": 0.0018, "step_sell": 0.005}, **extra))
+    b.audit_on = False
+    b.run(walk([1.0, 1.0], 30))
+    born18.append(bool((b.st or {}).get("slots")))
+ok("④ engine: first sell 0.18% ⇒ refused at birth with the default taker fee (0.1%) · born when the config says maker-only (taker_rate 0.08%)",
+   born18 == [False, True], born18)
 
 # random markets with d1 ≠ d (both closer and farther than the between-sells distance)
 COINS = [("XRP-USDT", "0.0001", "0.000001", "0.1", 1.0), ("BTC-USDT", "0.1", "0.00000001", "0.00001", 65000.0),
