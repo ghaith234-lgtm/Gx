@@ -373,6 +373,7 @@ class Bot:
         self.st = None                          # the engine's live state dict (captured at its first save)
         self.coin0, self.usd0 = ex.bal[ex.base], ex.bal[ex.quote]
         self.W0 = None                          # coins the wallet slots took at birth
+        self.legacy, self.V0 = True, D(0)       # v3.36.17 engines: the wallet slots' «as if bought» basis at birth
         self.virt = {}                          # (slot, cyc) → virtual basis booked for a wallet slot's first sell
         self.unbooked = {}                      # (slot, cyc) → basis not booked when a sell ended short (coins went to fee dust)
         self.steps, self.si, self.next_t = [], 0, 0.0
@@ -412,6 +413,8 @@ class Bot:
                 me.st = data
                 if me.W0 is None and data.get("slots"):      # the birth save: the wallet slots, untouched yet
                     me.W0 = sum(D(s["sq"]) for s in data["slots"].values() if s["j"] >= 0 and s["side"] == "sell" and not s["cyc"])
+                    me.legacy = not any("spent" in s for s in data["slots"].values())     # (an engine before v3.36.17)
+                    me.V0 = sum(D(str(s.get("spent") or 0)) for s in data["slots"].values() if s["j"] >= 0 and s["side"] == "sell")
             me._moment("save", "before")
             r = save0(path, data)
             if r is True and me._fin and path == m.STATE_FILE:   # the save that writes a sale: book it now (a cut right after
@@ -564,14 +567,19 @@ class Bot:
             return
         L = D(st.get("fee_dust") or 0)
         U = D(st.get("total_profit") or 0)
+        if not self.legacy:                      # v3.36.17: every basis dollar is either still held (a selling slot's spent ·
+            U += self.V0                         # any slot's leftover dc) or was used by a sale ⇒ usd = usd0 + profit + V0 − held
         refd = {}
         for k, s in S.items():
             acc, accv, accf = D(s.get("acc") or 0), D(s.get("accv") or 0), D(s.get("accf") or 0)
+            if not self.legacy:
+                L += D(str(s.get("dq") or 0))
+                U -= D(str(s.get("dc") or 0))
             if s["side"] == "sell":
                 L += D(s["sq"]) - acc
                 U += accv - accf
-                if float(s.get("cost") or 0) > 0:
-                    U -= D(s.get("spent") or 0)
+                if not self.legacy or float(s.get("cost") or 0) > 0:
+                    U -= D(str(s.get("spent") or 0))
             else:
                 L += acc - accf
                 U -= accv
@@ -591,10 +599,11 @@ class Bot:
                         else:
                             L -= eo["acc"]
                             U += eo["accv"] - (eo["fee"] if eo["feeCcy"] == ex.quote else 0)
-        for (key, cyc), v in self.virt.items():
-            U += D(v)
-        for (key, cyc), v in self.unbooked.items():
-            U -= D(v)
+        if self.legacy:
+            for (key, cyc), v in self.virt.items():
+                U += D(v)
+            for (key, cyc), v in self.unbooked.items():
+                U -= D(v)
         coins, usd = ex.bal[ex.base], ex.bal[ex.quote]
         tol_c = max(D("1e-9"), abs(coins) * D("1e-10")) + ex.lot * D("1e-6")
         if abs(coins - (self.coin0 - self.W0 + L)) > tol_c:

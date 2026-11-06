@@ -37,8 +37,8 @@ DUST = []      # sells booked under zero only because OKX's coarse quantity step
 
 
 def discipline(b, fee=0.001):
-    """every buy at or under its slot's fixed buy price · every sell at or over its sell price · every sell made money —
-    a sell booked ≤ 0 passes only if the coins it had to keep back (step of the quantity) cover it (profit + their value > 0)"""
+    """every buy at or under its slot's fixed buy price · every sell at or over its sell price · every sell made money
+    (v3.36.17 — F2: also on a coin with a coarse quantity step: the coins kept back carry their own cost)"""
     S, bad = b.st["slots"], []
     for t in trades(b):
         s = S.get(t["key"])
@@ -48,12 +48,8 @@ def discipline(b, fee=0.001):
             bad.append(("bought above its price", t["key"], t["px"], s["bp"]))
         if t["side"] == "sell" and t["px"] < s["sp"] * (1 - 1e-9):
             bad.append(("sold under its price", t["key"], t["px"], s["sp"]))
-        if t["side"] == "sell" and t["profit"] is not None and t["profit"] <= 0:
-            kept = max(0.0, float(s["q"]) * (1 - fee) - t["qty"])
-            if t["profit"] + kept * t["px"] * (1 - fee) > 0:
-                DUST.append((b.ex.sym, t["key"], t["profit"], round(kept, 8)))
-            else:
-                bad.append(("sell without profit", t["key"], t["profit"], "kept", round(kept, 8)))
+        if t["side"] == "sell" and t["profit"] is not None and t["profit"] <= 0:      # v3.36.17 (F2): no exception any more —
+            bad.append(("sell without profit", t["key"], t["profit"]))                  # the leftover coins carry their cost
     return bad
 
 

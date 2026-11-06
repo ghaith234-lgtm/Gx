@@ -62,6 +62,11 @@ for sym, Qv, N, d, G, fl, up in (("XRP-USDT", 15, 3, 1.0, 3.0, 1.0, 2), ("SOL-US
         if eo and eo["acc"] > 0:
             inflight += (-eo["acc"] * eo["avg"]) if eo["side"] == "buy" else (eo["acc"] * eo["avg"] - abs(eo.get("fee", 0)))
     books = float(P["quote_def"]) + float(st.get("total_profit") or 0) + inv_sold - held_spent - part_buy + part_sell + inflight
+    if any("dq" in s for s in S.values()):          # v3.36.17 (F2): every cost dollar is held (a selling slot's spent · any slot's
+        fee = float(plan["fee"])                    # leftover dc) or was used by a sale ⇒ start + profit + the wallet's «as if
+        V0 = sum(round(x["qn"] * r_["bp"] / (1.0 - fee), 10) for r_ in plan["rows"] if r_["j"] >= 0 for x in r_["sells"] if not x["skip"])
+        held = sum(float(s.get("spent") or 0) for s in S.values() if s["side"] == "sell") + sum(float(s.get("dc") or 0) for s in S.values())
+        books = float(P["quote_def"]) + float(st.get("total_profit") or 0) + V0 - held - part_buy + part_sell + inflight   # bought» − held
     ok(f"{sym}: dollars on the box = the engine's slots to the millime (start + profit + wallet parts sold − coins held at cost)",
        abs(books - ex.bal[ex.quote]) < 1e-4, (round(books, 8), round(ex.bal[ex.quote], 8)))
     s_ = m._bt_summary("grid_step", r, float(P["quote_def"]), float(P["base_def"]), p0, dt)

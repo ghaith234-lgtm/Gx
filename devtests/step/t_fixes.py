@@ -1,6 +1,7 @@
 # 🪜 the owner-approved fixes of the review (REVIEW.md) as must-pass tests — each part fails on the engine before its fix
 #   F9  the save after a fill fails 1–3 times, then a power cut around the writing of its log line ⇒ the line once · log = books
 #   F10 every number in a log line is a plain decimal (the dashboard read «+9e-05$» as 9$) · the log's profit = the books exactly
+#   F2  a coarse quantity step (DOGE · PEPE whole coins): every sell's booked profit > 0 and = its real profit · log = books
 #   F8  💣 while the cancels are lost / the internet is down / an order fills meanwhile ⇒ withdraws only when OKX confirms every
 #       order gone · fills booked · no new order meanwhile · never trades again · the dashboard refuses to delete unconfirmed
 #   python3 devtests/step/t_fixes.py [Holy_Dashboard.pyw] [-q] [--only=F9,...]        (STEP_ENGINE=… tests another engine copy)
@@ -224,6 +225,51 @@ if want("F8"):
     ok("F8: the dashboard deletes a 🪜 bot only when no order of it is confirmed left (no connection ⇒ refused · 2 left ⇒ refused · "
        "canceled and confirmed ⇒ deleted · never started ⇒ deleted) · refusal turns its auto-restart off · other kinds unchanged",
        all(x[1] for x in out), [x for x in out if not x[1]] or out)
+
+# ── F2: a coarse quantity step — each sell is charged exactly the coins it sold, the leftover stays with its slot at its cost
+if want("F2"):
+    import math, random
+    LN = re.compile(r"^🔴 \[بيع فوري\] السعر: ([0-9.]+) \| الكمية: ([0-9.]+) \| الربح: ([+-][0-9.]+)\$")
+    c = Clock(); ex = Ex(c, sym="DOGE-USDT", price=0.15, tick="0.00001", lot="1", mn="10", base=1000, quote=1000)
+    b = Bot(ex, {"forced_base_price": 0.15, "min_price": 0.1, "step_parts": 5, "step_sell": 0.02, "grid_percentage": 0.05})
+    b.run(walk([0.15, 0.142, 0.142, 0.1449, 0.148, 0.151, 0.154, 0.157, 0.15, 0.142, 0.1449, 0.148, 0.151, 0.154, 0.157], 20))
+    S0 = b.st["slots"]
+    sells = [LN.match(m_) for m_ in b.hist() if m_.startswith("🔴")]
+    prof = [float(x.group(3)) for x in sells if x]
+    tp = float(b.disk().get("total_profit") or 0)
+    ok(f"F2: DOGE (whole coins) · 5 sells per buy · {len(prof)} sells ⇒ every booked profit > 0 (was down to −0.09$) · the log's sum = the books · "
+       "books = wallet every loop", len(prof) >= 8 and all(p_ > 0 for p_ in prof) and abs(sum(prof) - tp) < 1e-9 and not b.errors,
+       (sorted(prof)[:3], tp, b.errors[:1]))
+    c = Clock(); ex = Ex(c, sym="DOGE-USDT", price=0.15, tick="0.00001", lot="1", mn="10", base=1000, quote=1000)
+    nb = Bot(ex, {"forced_base_price": 0.15, "min_price": 0.1, "step_parts": 5, "step_sell": 0.02, "grid_percentage": 0.05, "up_groups": 2})
+    nb.run(walk([0.15], 6))
+    W = [s_ for s_ in nb.st["slots"].values() if s_["j"] >= 0]
+    ok("F2: at birth the wallet's coins are «as if bought» for exactly the coins they sell: basis = sq × buy ÷ (1 − fee) "
+       "(was q × buy for fewer coins) · every slot starts with no leftover",
+       W and all(abs(float(s_.get("spent") or -1) - s_["sq"] * s_["bp"] / (1 - 0.0008)) < 1e-9 and s_.get("dq") == 0 and s_.get("dc") == 0 for s_ in W),
+       [(s_["j"], s_["k"], s_["q"], s_["sq"], s_.get("spent")) for s_ in W[:2]])
+    bad = []
+    for seed in range(8):
+        rng = random.Random(4200 + seed)
+        sym, tick, lot, mn, p0 = [("DOGE-USDT", "0.00001", "1", "10", 0.15), ("PEPE-USDT", "0.00000001", "1", "100000", 0.0000123)][seed % 2]
+        N = rng.randint(1, 6)
+        cfg = {"step_parts": N, "step_sell": rng.choice([0.002, 0.004, 0.01]), "step_first": rng.choice([0.002, 0.003, 0.005, 0.01]),
+               "grid_percentage": rng.choice([0.01, 0.02, 0.03]), "usd_value": float(max(2.5 * N, 15) * (3 if sym == "PEPE-USDT" else 1)),
+               "min_price": p0 * 0.6, "up_groups": rng.randint(0, 2), "forced_base_price": p0, "step_window": rng.choice([4, 8])}
+        c = Clock()
+        ex = Ex(c, sym=sym, price=p0, tick=tick, lot=lot, mn=mn, base=round(cfg["usd_value"] * 4 / p0), quote=4000,
+                partial=rng.choice([0, 0.4]), seed=seed)
+        b = Bot(ex, cfg)
+        pr, out = p0, []
+        for _ in range(140):
+            pr = max(p0 * 0.6, min(p0 * 1.6, pr * math.exp(rng.gauss(0, 0.008) + (rng.choice([-1, 1]) * 0.05 if rng.random() < 0.03 else 0))))
+            out.append(pr)
+        b.run(walk(out, hold=rng.choice([3.0, 6.0])))
+        prof = [float(x.group(3)) for x in (LN.match(m_) for m_ in b.hist() if m_.startswith("🔴")) if x]
+        if b.errors or not prof or min(prof) <= 0 or abs(sum(prof) - float(b.disk().get("total_profit") or 0)) > 1e-8:
+            bad.append((seed, sym, cfg.get("step_first"), N, b.errors[:1], min(prof) if prof else None))
+    ok("F2: 8 random markets on DOGE and PEPE (whole coins · partial fills · first sell 0.2–1%) ⇒ every sell's booked profit > 0 · "
+       "the log's sum = the books · books = wallet every loop", not bad, bad[:3])
 
 print(f"{sum(res)} ok · {len(res) - sum(res)} failed")
 sys.exit(0 if all(res) else 1)
