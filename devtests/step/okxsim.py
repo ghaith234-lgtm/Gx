@@ -374,6 +374,7 @@ class Bot:
         self.coin0, self.usd0 = ex.bal[ex.base], ex.bal[ex.quote]
         self.W0 = None                          # coins the wallet slots took at birth
         self.fill_lines = []                    # every 🟢/🔴 line the engine wrote (its file trims to 1000)
+        self.n_bl = self.n_sl = 0                # their counts (the audit runs every loop: no rescan of a long run)
         self.legacy, self.V0 = True, D(0)       # v3.36.17 engines: the wallet slots' «as if bought» basis at birth
         self.virt = {}                          # (slot, cyc) → virtual basis booked for a wallet slot's first sell
         self.unbooked = {}                      # (slot, cyc) → basis not booked when a sell ended short (coins went to fee dust)
@@ -430,6 +431,10 @@ class Bot:
             log0(sym, msg)
             if str(msg).startswith(("🟢", "🔴")):     # every fill line as written — the engine's file keeps only its newest 1000
                 me.fill_lines.append(msg)
+                if str(msg).startswith("🟢 [شراء"):
+                    me.n_bl += 1
+                elif str(msg).startswith("🔴 [بيع"):
+                    me.n_sl += 1
             me._moment("log", "after")
 
         def _book(key, pre, od):                  # a sale's basis the books need: wallet coins «as if bought» · coins kept back
@@ -625,9 +630,7 @@ class Bot:
         if hb is not None and ls is not None and hb >= ls:
             self.err(f"self-cross: own buy {hb} ≥ own sell {ls}")
         if not st.get("fx_log"):
-            h = self.fill_lines                  # (not the file: it keeps its newest 1000 lines only)
-            nb = sum(1 for x in h if x.startswith("🟢 [شراء"))
-            ns = sum(1 for x in h if x.startswith("🔴 [بيع"))
+            nb, ns = self.n_bl, self.n_sl        # every line as written (the file keeps its newest 1000) · counted, not rescanned
             cyc = sum(int(s.get("cyc") or 0) for s in S.values())
             sells = sum(int(s.get("n") or 0) for s in S.values())
             if ns != sells or nb != cyc - sells:
