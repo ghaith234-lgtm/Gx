@@ -7,5 +7,6 @@ secrets, no network. The APK signing keystore never goes here.
 | Path | What |
 |---|---|
 | `step/extract_engine.py` | writes the 🪜 graded-grid engine embedded in `Holy_Dashboard.pyw` to `step/eng/main_step.py` (ignored by git) |
+| `step/embed_engine.py` | the only way a changed engine goes back into the dashboard: replaces just the `_GRIDS_B64` text, refuses unless the engine compiles, decodes back exactly, and nothing else in the dashboard changed (AST) — proven on a copy 6-11 |
 | `step/bt3615_test.py` | 🧪 the trial path runs the real graded-grid engine in its box (XRP · SOL · PEPE) — `python3 devtests/step/bt3615_test.py Holy_Dashboard.pyw` |
 | `tools/map_remap.py` · `tools/map_fix_bt.py` | MAP.md line remap between two dashboards + the trial-path rows (rebuilt 6-11, checked against git history) |
