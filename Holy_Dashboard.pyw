@@ -21820,7 +21820,7 @@ body.btopen{overflow:hidden}
 .card.sk.skfull>.skin{margin-bottom:8px}.sk-back{width:100%;height:32px;font-size:12px;border-radius:10px}
 .card.sk{--k-rgb:var(--vio-rgb)}
 .card.sk.k-plus{--k-rgb:244 114 182}.card.sk.k-step{--k-rgb:var(--cyan-rgb)}
-.sthelp{font-size:12.5px;color:var(--mut);line-height:1.9;margin:0 0 8px}.sterr{color:var(--red);font-size:12.5px;margin:4px 0}.stwarn{color:var(--amber);font-size:12px;margin:4px 0;line-height:1.7}.stsum{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;margin:8px 0;color:var(--tx);line-height:1.8}.stwrap{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:10px}.sttab{width:100%;border-collapse:collapse;font-size:12px}.sttab th,.sttab td{padding:5px 7px;border-bottom:1px solid var(--line);text-align:right;vertical-align:top}.sttab th{position:sticky;top:0;background:var(--bg1)}.sttab tr.stinv td{background:rgb(var(--cyan-rgb)/.07)}.sttab tr.st0 td{border-top:2px solid rgb(var(--cyan-rgb)/.55)}.stsl{display:inline-block;margin:1px 8px 1px 0;white-space:nowrap}.stsl .pos{color:var(--green)}.stsl .neg{color:var(--red)}.stsl.skip{opacity:.4;text-decoration:line-through}
+.sthelp{font-size:12.5px;color:var(--mut);line-height:1.9;margin:0 0 8px}.sterr{color:var(--red);font-size:12.5px;margin:4px 0}.stwarn{color:var(--amber);font-size:12px;margin:4px 0;line-height:1.7}.stsum{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;margin:8px 0;color:var(--tx);line-height:1.8}.stwrap{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:10px}.sttab{width:100%;border-collapse:collapse;font-size:12px}.sttab th,.sttab td{padding:5px 7px;border-bottom:1px solid var(--line);text-align:right;vertical-align:top}.sttab th{position:sticky;top:0;background:var(--bg1)}.sttab tr.stinv td{background:rgb(var(--cyan-rgb)/.07)}.sttab tr.st0 td{border-top:2px solid rgb(var(--cyan-rgb)/.55)}.stsl{display:inline-block;margin:1px 8px 1px 0;white-space:nowrap}.stsl .pos{color:var(--green)}.stsl .neg{color:var(--red)}.stsl.skip{opacity:.4;text-decoration:line-through}.sttab tr.stg td{border-top:1px solid rgb(var(--cyan-rgb)/.35)}.sttab td.stsk{opacity:.4;text-decoration:line-through}.sttab .pos{color:var(--green)}.sttab .neg{color:var(--red)}.sttab td[rowspan]{vertical-align:middle}
 .card.sk.k-range{--k-rgb:var(--blue-rgb)}.card.sk.k-dca{--k-rgb:var(--amber-rgb)}
 .card.sk.k-rec{--k-rgb:var(--cyan-rgb)}.card.sk.k-va{--k-rgb:var(--green-rgb)}.card.sk.k-hyb{--k-rgb:var(--vio-rgb)}.card.sk.k-acc{--k-rgb:var(--amber-rgb)}
 .skin{position:relative;min-width:0}
@@ -28021,11 +28021,16 @@ function stPlanHtml(P){
    <span>💵 دولار الشراء حتى الأرضية <b>${d2(T.usd)}$</b></span><span>🪙 عملات تحتاجها فوق <b dir="ltr">${stN(T.coins)}</b> ${B}</span>
    ${T.paper!=null?`<span>📉 على الورق لو نزل للأرضية واشترى الكل <b>${d2(T.paper)}$</b></span>`:''}
    <span>💰 ربح أول بيعة صافياً <b>${d2(T.p1)}$</b> · كل بيعة <b>${d2(T.minpart)}$</b></span></div>`;
-  h+=`<div class="stwrap"><table class="sttab"><thead><tr><th>المستوى</th><th>الشراء الثابت</th><th>البيعات (السعر · الربح الصافي)</th><th>المبلغ</th></tr></thead><tbody>`;
-  (P.rows||[]).forEach(r=>{
-    h+=`<tr class="${r.side==='inv'?'stinv':''}${r.j===0?' st0':''}"><td>${r.j}</td><td dir="ltr">${stN(r.bp)}${r.side==='inv'?' <small>(من عملاتك)</small>':''}</td>
-      <td>${r.sells.map(s=>`<span class="stsl${s.skip?' skip':''}" dir="ltr">${stN(s.sp)} · <b class="${s.pr>0?'pos':'neg'}">${s.pr>0?'+':''}${(+s.pr).toFixed(4)}$</b></span>`).join(' ')}</td>
-      <td dir="ltr">${r.side==='inv'?stN(r.coins)+' '+B:d2(r.usd)+'$'}</td></tr>`});
+  const fp=v=>{v=+v||0;return (v>0?'+':'')+(Math.abs(v)<0.01?v.toFixed(6):v.toFixed(4))+'$'};   // 🪜 v3.36.17: بيعة لكل سطر (بالطول)
+  h+=`<div class="stwrap"><table class="sttab"><thead><tr><th>المستوى</th><th>الشراء الثابت</th><th>البيعة</th><th>سعر البيع</th><th>البعد عن الشراء</th><th>الربح الصافي</th><th>المبلغ</th></tr></thead><tbody>`;
+  (P.rows||[]).forEach(r=>{const L=(r.sells&&r.sells.length)?r.sells:[null],n=L.length,cls=`${r.side==='inv'?'stinv':''}`;
+    L.forEach((s,i)=>{const sk=s&&s.skip?' stsk':'';
+      h+=`<tr class="${cls}${i===0?' stg':''}${i===0&&r.j===0?' st0':''}" data-j="${r.j}"${s?` data-k="${s.k}"`:''}>`;
+      if(i===0)h+=`<td rowspan="${n}">${r.j}</td><td rowspan="${n}" dir="ltr">${stN(r.bp)}${r.side==='inv'?' <small>(من عملاتك)</small>':''}</td>`;
+      h+=s?`<td class="stk${sk}">${s.k}/${n}</td><td class="stsp${sk}" dir="ltr">${stN(s.sp)}</td><td class="stdi${sk}" dir="ltr">+${(((+s.sp)/(+r.bp)-1)*100).toFixed(3)}%</td><td class="stpr${sk}" dir="ltr"><b class="${s.pr>0?'pos':'neg'}">${fp(s.pr)}</b></td>`
+          :'<td></td><td></td><td></td><td></td>';
+      if(i===0)h+=`<td rowspan="${n}" dir="ltr">${r.side==='inv'?stN(r.coins)+' '+B:d2(r.usd)+'$'}</td>`;
+      h+='</tr>'})});
   h+='</tbody></table></div>';
   return h}
 async function openDeploy(pre){pre=pre||{};

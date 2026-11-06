@@ -35,13 +35,18 @@ function ok(name, cond, det) {
   ok('stBody sends step_first_pct (the first-sell field) and step_sell_pct (between sells)', sb.step_first_pct === '1' && sb.step_sell_pct === '0.5', sb);
   const last = JSON.parse(bodies[bodies.length - 1] || '{}');
   ok('the table request carries both distances', last.step_first_pct === '1' && last.step_sell_pct === '0.5', last);
-  const row0 = await pg.evaluate(() => {
-    const tr = [...document.querySelectorAll('#st_plan .sttab tbody tr')].find(t => t.cells[0].textContent.trim() === '0');
-    return tr ? [...tr.cells[2].querySelectorAll('.stsl')].map(s => s.textContent.trim()) : null;
-  });
-  ok('the table, the owner\'s example: level 0 sells at 1.01 · 1.015 · 1.02, each with a + profit', row0 && row0.length === 3
-     && ['1.01 ·', '1.015 ·', '1.02 ·'].every((p, i) => row0[i].startsWith(p)) && row0.every(t => t.includes('+')), row0);
-  if (SHOT) await (await pg.$('.modal') || pg).screenshot({ path: SHOT });
+  const row0 = await pg.evaluate(() => [...document.querySelectorAll('#st_plan tr[data-j="0"]')].map(tr => ({
+    k: tr.dataset.k, sp: ((tr.querySelector('.stsp') || {}).textContent || '').trim(), di: ((tr.querySelector('.stdi') || {}).textContent || '').trim(),
+    pr: ((tr.querySelector('.stpr') || {}).textContent || '').trim() })));
+  ok('the table is vertical (one row per sell) — the owner\'s example: level 0 = 3 rows · 1.01 · 1.015 · 1.02 · +1.000% · +1.500% · +2.000% '
+     + 'from the buy · each a + profit', row0.length === 3 && row0.map(r => r.sp).join('|') === '1.01|1.015|1.02'
+     && row0.map(r => r.di).join('|') === '+1.000%|+1.500%|+2.000%' && row0.every(r => r.pr.startsWith('+')), row0);
+  const per = await pg.evaluate(() => { const c = {}; document.querySelectorAll('#st_plan tr[data-j]').forEach(tr => { c[tr.dataset.j] = (c[tr.dataset.j] || 0) + 1 }); return c });
+  ok('every level has exactly its 3 sell rows (the level · buy · amount span them)', Object.keys(per).length > 5 && Object.values(per).every(n => n === 3), per);
+  if (SHOT) {                                    // (the brand splash covers the page for its first seconds)
+    await pg.evaluate(() => { const sp = document.getElementById('splash'); if (sp) sp.remove() });
+    await (await pg.$('.modal') || pg).screenshot({ path: SHOT });
+  }
   const err0 = await pg.evaluate(() => [...document.querySelectorAll('#st_plan .sterr')].map(e => e.textContent));
   ok('no refusal for the owner\'s example', err0.length === 0, err0);
   await fill({ st_d1: 0.1 });
