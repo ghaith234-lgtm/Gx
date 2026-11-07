@@ -7871,6 +7871,11 @@ def _gd_gather(W, prev, now):
                             q["bots_frozen"] += px_ * qt_
                         n_tr += 1
                 usd = float(cfg.get("usd_value") or 0)
+                if bt == "grid_step":                    # 🪜 usd_value = مبلغ المستوى كله ⇒ أمره الواحد = ÷ الأجزاء
+                    try:
+                        usd /= max(1, int(float(cfg.get("step_parts") or 1)))
+                    except Exception:
+                        pass
                 if usd > 0 and not st.get("destruct_done"):
                     q["min_next"] = usd if not q["min_next"] else min(q["min_next"], usd)
                 try:              # 🧮 v3.21.5: لقطة كميات البوت للتدقيق الدوري (قراءة فقط)
@@ -8433,6 +8438,9 @@ def _gd_apply(g, snap, now):
                     or (bb.get("type") == "grid_range" and ((bb.get("lo", 0) > 0 and cp < bb["lo"])
                                                              or (bb.get("hi", 0) > 0 and cp > bb["hi"]))))
             idle = now - float(bb["fill_ts"])
+            if not zone and bb.get("type") == "grid_step":    # 🪜 سلّمه ثابت: ولا أمر له بين آخر تنفيذ والسعر ⇒ ينتظر صح (مو ميت)
+                _rg = (bb.get("rungs") or {}).get("sell" if cp > fp else "buy") or []
+                zone = not any((fp < r < cp / 1.001) if cp > fp else (cp * 1.001 < r < fp) for r in _rg)
             if steps >= GUARD_STALL_STEPS and idle >= GUARD_STALL_MIN and not zone:
                 B["stall_strike"] = int(B.get("stall_strike") or 0) + 1
                 if B["stall_strike"] >= 2:
