@@ -2,7 +2,7 @@
 #   plus the reinvest suites · one line per suite · a table at the end (also written to --out=FILE)
 #   python3 devtests/step/run_all.py [Holy_Dashboard.pyw] [--only=group,...] [--names=suite,...] [--soak=HOURS] [--every=K] [--out=FILE]
 #     groups: off (no reinvest) · ri (the same suites with reinvest 60%) · reinvest (t_ri · t_inj · t_wd · t_rel · t_ri_dash) ·
-#             cut (t_cut · --move, without and with reinvest) · ui (the browser: ui_first · ui_card · ui_ri · ui_full) · soak (t_soak · t_osc) ·
+#             cut (t_cut · --move, without and with reinvest) · ui (the browser: ui_first · ui_card · ui_ri · ui_full · ui_lines) · soak (t_soak · t_osc) ·
 #             win (t_win: the strict window · the dashboard's real guard on the 🪜 · the accumulator receiving 🪜 handoffs — v3.36.19) ·
 #             deep (t_deep: the independent per-part ledger from OKX's fills · far memory · gaps · the matrix · reinvest ops · scale — v3.36.20)
 #   STEP_ENGINE=… tests another engine copy (default: the one extracted from the dashboard) · the browser tests need `unset TMPDIR`
@@ -45,6 +45,7 @@ SUITES = [   # (group, name, argv, env)
     ("ui", "ui_card", ["ui_card.py", DASH, "-q"], {}),
     ("ui", "ui_ri", ["ui_ri.py", DASH, "-q"], {}),
     ("ui", "ui_full", ["ui_full.py", DASH, "-q"], {}),
+    ("ui", "ui_lines", ["ui_lines.py", DASH, "-q"], {}),
     ("soak", "t_osc", ["t_osc.py", "-q"], {}),
     ("soak", "t_osc 💠60%", ["t_osc.py", "-q"], {"STEP_CFG": RI}),
     ("soak", f"t_soak {SOAK}h", ["t_soak.py", f"--hours={SOAK}", "-q"], {}),

@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.21"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.22"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -28618,8 +28618,10 @@ function skAR(x,y,t,side,fs,fill,extra){return `<text class="ar" x="${x}" y="${y
 /* 🪜 v3.36.18 (المالك 6-11): بطاقة الشبكي المتدرج لكل الأشكال — مسطرة سعر بالطول: كل خط بمكانه حسب بعده عن السعر الحالي ·
    شراء المستوى خط واحد بعدّاده (المنشور · اللي بالذاكرة) · كل بيعة خطها بلا رقم · المستوى وبيعاته نفس اللون (يبين التداخل) ·
    اضغط أي خط ⇒ تفاصيله · sl = [المستوى, الجزء, 'b'/'s', السعر, الكمية الباقية, 'L' منشور / 'P' بالطريق / 'M' بالذاكرة, الشراء, البيع, كمية البيع, الكلفة, من عملاتك] */
-const ST_PAL=['#38bdf8','#c084fc','#fbbf24','#34d399','#f472b6','#60a5fa','#a3e635','#fb923c','#2dd4bf','#e879f9','#facc15','#818cf8'];   // (بلا أحمر: الأحمر خسارة)
-function stCol(j){const n=ST_PAL.length;return ST_PAL[((+j%n)+n)%n]}
+/* 🪜🎨 v3.36.22: 12 لون متباعدة (المستويات المتجاورة أبعد شي) · بلا أحمر (الأحمر خسارة) ولا قريب من سماوي خط السعر · مجموعة أغمق للثيم الفاتح */
+const ST_PAL=['#d97706','#0891b2','#d8b4fe','#5eead4','#fdba74','#818cf8','#22c55e','#facc15','#93c5fd','#059669','#a3e635','#d946ef'],
+  ST_PAL_L=['#65a30d','#115e59','#86198f','#6366f1','#d97706','#166534','#0284c7','#6d28d9','#059669','#854d0e','#a855f7','#1e40af'];
+function stCol(j){const P=document.documentElement.dataset.theme==='light'?ST_PAL_L:ST_PAL,n=P.length;return P[((+j%n)+n)%n]}
 function stCount(b){const c={pb:0,ps:0,mb:0,ms:0};(b.sl||[]).forEach(x=>{c[(x[5]==='M'?'m':'p')+(x[2]==='b'?'b':'s')]++});
   (b.sl_far||[]).forEach(f=>{c.mb+=+f[2]||0;c.ms+=+f[3]||0});return c}
 const RIFULL={},STFULL={},RIF={};                  // 🪜 v3.36.20: السلّم الكامل وصفوف 💠 الكاملة (عند الطلب) · فلتر 💠
@@ -28641,11 +28643,22 @@ function stLad(b,cp,o){o=o||{};const W=o.w||SK_W,H=o.h||(o.mini?220:304),SL=b.sl
   for(let k=-Math.floor(pd/sp);k<=Math.floor(pu/sp);k++){if(!k)continue;const y=Y(cp*(1+k*sp/100));
     g+=`<line x1="${xl}" y1="${y}" x2="${xr}" y2="${y}" stroke="rgb(var(--ov-rgb)/.08)" stroke-dasharray="2 4"/><text x="3" y="${y+3.5}" font-size="9.5" fill="var(--mut2)" direction="ltr">${k>0?'+':'−'}${+(Math.abs(k)*sp).toFixed(2)}%</text>`}
   const used=[Y(cp)],free=y=>!used.some(u=>Math.abs(u-y)<12);     // (the price badge's place is kept free)
+  /* 🪜🎨 v3.36.22: سعر شراء كل مستوى داخل المدى — حتى لو ما عنده أمر شراء الآن (اشترى وبيعاته فوقه / ينتظر بالذاكرة) ⇒ يبين التداخل:
+     بيعات المستوى تطلع فوق أسعار شراء المستويات اللي فوقه · خط منقّط بلونه تحت الأوامر */
+  const rl={};SL.forEach(x=>{if(!(lv[x[0]]&&lv[x[0]].pub)&&!rl[x[0]])rl[x[0]]={j:x[0],p:+x[6]}});
+  (b.sl_far||[]).forEach(f=>{if(!rl[f[0]]&&!(lv[f[0]]&&lv[f[0]].pub))rl[f[0]]={j:f[0],p:+f[1]}});
+  const RF=Object.values(rl).filter(e=>e.p>=lo&&e.p<=hi).sort((a,z)=>z.p-a.p);
+  let gB='',gR='';
   B.forEach(gr=>{const y=Y(gr.p),c=stCol(gr.j),lab=free(y);if(lab)used.push(y);
-    g+=`<g class="stl" data-stl="b:${gr.j}"><rect x="0" y="${y-8}" width="${W}" height="16" fill="transparent"/>`+
+    gB+=`<g class="stl" data-stl="b:${gr.j}"><rect x="0" y="${y-8}" width="${W}" height="16" fill="transparent"/>`+
       `<line x1="${xl}" y1="${y}" x2="${xr}" y2="${y}" stroke="${c}" stroke-width="3.4" stroke-linecap="round"${gr.pend?' stroke-dasharray="7 4"':''}/>`+
       (lab?`<text x="${W-3}" y="${y+4}" text-anchor="end" font-size="11" font-weight="700" fill="${c}" direction="ltr">${f4(gr.p)}</text>`+
         skAR(xr-4,y-5,`🛒 ${gr.pub}${gr.mem?` · ${gr.mem} بالذاكرة`:''}`,'r',10.5,c):'')+`</g>`});
+  RF.forEach(e=>{const y=Y(e.p),c=stCol(e.j),lab=free(y);if(lab)used.push(y);
+    gR+=`<g class="stl" data-stl="r:${e.j}"><rect x="0" y="${y-5}" width="${W}" height="10" fill="transparent"/>`+
+      `<line x1="${xl}" y1="${y}" x2="${xr}" y2="${y}" stroke="${c}" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="1.5 4" opacity=".9"/>`+
+      (lab?`<text x="${W-3}" y="${y+4}" text-anchor="end" font-size="10.5" fill="${c}" direction="ltr">${f4(e.p)}</text>`:'')+`</g>`});
+  g+=gR+gB;
   S.forEach(x=>{const y=Y(+x[3]),c=stCol(x[0]),lab=free(y);if(lab)used.push(y);
     g+=`<g class="stl" data-stl="s:${x[0]}:${x[1]}"><rect x="0" y="${y-6}" width="${W}" height="12" fill="transparent"/>`+
       `<line x1="${xl+26}" y1="${y}" x2="${xr}" y2="${y}" stroke="${c}" stroke-width="2" stroke-linecap="round" opacity=".9"${x[5]==='P'?' stroke-dasharray="4 3"':''}/>`+
@@ -28655,15 +28668,17 @@ function stLad(b,cp,o){o=o||{};const W=o.w||SK_W,H=o.h||(o.mini?220:304),SL=b.sl
   g+=`<g class="stcp"><line x1="${xl-6}" y1="${yc}" x2="${xr+4}" y2="${yc}" stroke="var(--cyan)" stroke-width="1.8" stroke-dasharray="4 3"/>`+
     `<rect x="${W-68}" y="${yc-10}" width="66" height="20" rx="8" fill="rgb(var(--cyan-rgb)/.18)" stroke="rgb(var(--cyan-rgb)/.6)"/>`+
     `<text x="${W-35}" y="${yc+4.5}" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--cyan)" direction="ltr">${f4(cp)}${o.dn==null?'':(o.dn?' ▼':' ▲')}</text></g>`;
-  if(!o.mini)g+=skAR(W-4,H-3,'اللون = الشراء وبيعاته الخاصة · اضغط أي خط · 🪜 السلم = كل المستويات والذاكرة','r',9.5,'var(--mut2)');
+  if(!o.mini)g+=skAR(W-4,H-3,'اللون = الشراء وبيعاته الخاصة · المنقّط = سعر شراء بلا أمر الآن · اضغط أي خط','r',9.5,'var(--mut2)');
   return `<svg class="stlad" viewBox="0 0 ${W} ${H}" data-stl-bot="${dir}" role="img" aria-label="أوامر الشبكي المتدرج بالطول حسب بعدها عن السعر">${g}</svg>`}
 function stPop(b,key,ev){const SL=b.sl||[],N=+((b.scfg||{}).N)||1,f=+((b.scfg||{}).f)||0.0008,cp=+b.cp||0,W=+((b.scfg||{}).W)||8,P=key.split(':');
   const d=p=>cp?`${((p/cp-1)*100>=0?'+':'')}${((p/cp-1)*100).toFixed(3)}%`:'';let h='';
   const stt=s=>s==='L'?'منشور بالمنصة':s==='P'?'بالطريق للمنصة':'بذاكرة البوت';
   const up=x=>`+${((+x[7]/+x[6]-1)*100).toFixed(2)}%`;                // 🪜 v3.36.20: البيعة فوق شرائها الخاص
   const pot=x=>{const r=stRiRow(b,`${x[0]}:${x[1]}`);return r&&(r.g>0||r.k>0)?` · 💠 ${x[2]==='s'?'+'+stQ(r.g)+' عملة':'+'+stM(r.g*r.p+r.k)+'$'}`:''};
-  if(P[0]==='b'){const j=+P[1],L=SL.filter(x=>x[0]===j).sort((a,z)=>a[1]-z[1]),pb=L.find(x=>x[2]==='b'&&x[5]!=='M'),bp=pb?+pb[3]:(L.length?+L[0][6]:0);
-    h=`<b style="color:${stCol(j)}">🛒 المستوى ${j} — شراء ثابت ${f4(bp)}</b><div class="stpd">البعد عن السعر ${d(bp)} · بيعاته الخاصة ${L.map(up).join(' · ')} فوقه</div>`+L.map(x=>
+  if(P[0]==='b'||P[0]==='r'){const j=+P[1],L=SL.filter(x=>x[0]===j).sort((a,z)=>a[1]-z[1]),pb=L.find(x=>x[2]==='b'&&x[5]!=='M'),bp=pb?+pb[3]:(L.length?+L[0][6]:0);
+    const nsl=L.filter(x=>x[2]==='s').length;
+    h=`<b style="color:${stCol(j)}">🛒 المستوى ${j} — شراء ثابت ${f4(bp)}</b><div class="stpd">البعد عن السعر ${d(bp)} · بيعاته الخاصة ${L.map(up).join(' · ')} فوقه</div>`+
+      (pb?'':`<div class="stpd">لا يوجد له أمر شراء منشور الآن — الخط المنقّط هو سعر شرائه${nsl?` · اشترى ${nsl} جزء وبيعاتها فوقه`:''}</div>`)+L.map(x=>
       x[2]==='b'?`<div>الجزء ${x[1]}/${N}: 🟢 شراء ${stQ(x[4])} بـ${f4(+x[3])} · ${stt(x[5])}${pot(x)}</div>`
         :`<div>الجزء ${x[1]}/${N}: 🔴 يبيع ${stQ(x[4])} بـ${f4(+x[3])} (${up(x)} فوق شرائه · ${d(+x[3])} عن السعر) · ${stt(x[5])}${pot(x)}</div>`).join('')}
   else{const j=+P[1],k=+P[2],x=SL.find(y=>y[0]===j&&y[1]===k);if(!x)return;
