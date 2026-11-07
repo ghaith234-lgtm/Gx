@@ -560,8 +560,80 @@ def _inj_pending(d):
         return False
 
 
+def _step_ri_snapshot(b, st):
+    """🪜💠 لقطة إعادة الاستثمار للشبكي المتدرج — نفس شكل reinvest_snapshot (البطاقة · السلّم · الأزرار) لكن من الخانات:
+    صف لكل خانة (المستوى · الجزء) · kk = "j:k" مفتاح طلبات الحقن والسحب · io = النمو الموجود فعلاً داخل أمرها (البيع: العملة
+    فوق أساسه بعد العمولة · الشراء: كله داخل أمره) · اللي يتفكّك بعد التحرير بقائمته · desync = شراء حي حجمه ≠ الأساس + النمو"""
+    cfg = b.get("cfg") or {}
+    ri = st.get("reinvest")
+    if not isinstance(ri, dict):
+        if not cfg.get("reinvest"):
+            return None
+        return {"on": False, "cfg_on": True, "usd": 0.0, "coin": 0.0, "cycles": 0, "levels": 0, "days": 0.0, "rows": [], "top": [],
+                "desync": [], "handoff": None, "released": None, "file": True, "file_old": False, "pending_boot": True, "step": True}
+    S = st.get("slots") if isinstance(st.get("slots"), dict) else {}
+    lv = ri.get("levels") or {}
+    stp = st.get("step") or {}
+    N = int(stp.get("N") or cfg.get("step_parts") or 1)
+    fr = float(stp.get("f") or cfg.get("fee_rate") or 0.001)
+    uw = ri.get("unwind") or {}
+    usd = coin = 0.0
+    rows, uws, desync = [], [], []
+    for key, s in sorted(S.items(), key=lambda kv: (-float(kv[1].get("bp") or 0), int(kv[1].get("k") or 0))):
+        try:
+            e = lv.get(key) or {}
+            px = float(e.get("px") or s.get("bp") or 0)
+            gq, bk = float(e.get("grown_qty") or 0), float(e.get("usd_book") or 0)
+            bq = float(e.get("base_qty") or s.get("q") or 0)
+            sell = s.get("side") == "sell"
+            usd += bk
+            if gq > 0:
+                if sell:
+                    coin += gq
+                else:
+                    usd += gq * px
+            if sell:
+                io = round(min(gq, max(0.0, float(s.get("sq") or 0) - float(s.get("acc") or 0) - float(s.get("q") or 0) * (1.0 - fr))), 10)
+            else:
+                io = round(gq, 10)
+            tv = bk + gq * px
+            row = {"p": round(px, 10), "sp": round(float(s.get("sp") or 0), 10), "b": round(bq, 10), "g": round(gq, 10), "k": round(bk, 8),
+                   "s": "sell" if sell else "buy", "v": round(gq * px, 8), "kk": key, "io": io,
+                   "j": round(min(float(e.get("inj_book") or 0) + float(e.get("inj_grown") or 0), tv), 8), "tv": round(tv, 8),
+                   "c": int(e.get("cycles") or 0), "pct": round((gq / bq * 100) if bq > 0 else 0, 2),
+                   "lbl": f"{int(s.get('j') or 0)} · {int(s.get('k') or 0)}/{N}"}
+            if key in uw:
+                row.update(uw=True, s=str((uw.get(key) or {}).get("side") or row["s"]))
+                uws.append(row)
+            else:
+                rows.append(row)
+            o = s.get("o") or {}
+            if not sell and o.get("st") == "live" and not s.get("am"):
+                want = float(s.get("q") or 0) + gq - float(s.get("acc") or 0)
+                got = float(o.get("sz") or 0)
+                if want > 0 and abs(got - want) > max(1e-9, want * 0.02):
+                    desync.append({"p": float(o.get("px") or px), "want": round(want, 10), "got": round(got, 10), "kk": key})
+        except Exception:
+            continue
+    top = sorted([{"p": float(v.get("px") or 0), "b": float(v.get("base_qty") or 0), "g": float(v.get("grown_qty") or 0),
+                   "pct": round(float(v.get("grown_qty") or 0) / float(v.get("base_qty") or 1) * 100, 1)}
+                  for v in lv.values() if float(v.get("grown_qty") or 0) > 0], key=lambda x: -x["pct"])[:5]
+    started = float(ri.get("started_ts") or 0)
+    return {"on": bool(ri.get("on")), "desync": desync[:8], "top": top, "inj_total": round(float(ri.get("inj_total") or 0), 6),
+            "pct": 100.0 if ri.get("pct") is None else round(float(ri.get("pct") or 0), 2),
+            "pct_cfg": 100.0 if cfg.get("reinvest_pct") is None else round(float(cfg.get("reinvest_pct") or 0), 2),
+            "inj_pending": bool(_inj_pending(b.get("dir"))), "unwind": uws[:60], "n_unwind": len(uw),
+            "handoff": (_ri_pending_handoffs(st, 0.0) or [None])[0], "handoff_stuck": (_ri_pending_handoffs(st, 1800.0) or [None])[0],
+            "usd": round(usd, 4), "coin": round(coin, 8), "rows": rows[:300], "cycles": int(ri.get("cycles") or 0), "levels": len(lv),
+            "days": round(max(0.0, (time.time() - started) / 86400.0), 2) if started else 0.0, "file": True, "file_old": False,
+            "cfg_on": bool(cfg.get("reinvest")), "released": ri.get("released"), "broken": bool(ri.get("broken")), "step": True,
+            "credited": round(float(ri.get("credited") or 0), 8)}
+
+
 def reinvest_snapshot(b, st):
     """🔄 المتراكم داخل الأوامر: دولار (شراء معلّق) وعملة (ماسك عملة)."""
+    if str((b.get("cfg") or {}).get("bot_type") or "") == "grid_step":
+        return _step_ri_snapshot(b, st)
     ri = st.get("reinvest")
     if not isinstance(ri, dict):
         # البوت ما اشتغل باللفّة بعد — نرجّع قراءة من التهيئة حتى تعكس
@@ -1434,7 +1506,7 @@ def export_md(days=30):
             L.append(f"- 🗂️ ملف الحالة: **{_sz:.1f} ك.ب** · آخر كتابة قبل **{_age:.1f}** دقيقة"
                      + ("  ⚠️ **قديم — البوت ما يكتب**" if _age > 5 else ""))
             _rp2 = os.path.join(b["dir"], "reinvest.py")
-            _scr = "reinvest.py" if (b["cfg"].get("reinvest") and os.path.exists(_rp2)) else (
+            _scr = "reinvest.py" if (b["cfg"].get("reinvest") and os.path.exists(_rp2) and bt != "grid_step") else (
                    "reinvest.py (تصفية ناقصة)" if os.path.exists(
                        os.path.join(b["dir"], "reinvest_release.flag")) else eng_script_of(b))
             L.append(f"- ▶️ السكربت المتوقع عند التشغيل: **`{_scr}`**")
@@ -4853,6 +4925,9 @@ def _bt_ri_held(st):
 def _bt_cum(st, pk, rnf):
     """ربح البيع والشراء من دفتر المحرك · الشبكة بإعادة الاستثمار: الحصة العادية صافية + المعاد استثماره (يصعد بس — درجة بكل بيعة)"""
     v = float((st or {}).get(pk) or 0)
+    _sb = (st or {}).get("reinvest") if isinstance((st or {}).get("reinvest"), dict) else None
+    if rnf is None and _sb and "credited" in _sb:            # 🪜 v3.36.18: الربح الحقيقي = العادي + المعاد استثماره − اللي تحرر منه
+        return v + float(_sb.get("credited") or 0) - float(_sb.get("out_usd") or 0)
     if rnf is None or not ((st or {}).get("reinvest") or {}).get("on"):
         return v
     return v * rnf + _bt_ri_held(st)
@@ -4958,7 +5033,7 @@ def _bt_trade(kind, r, p0, result, base0):
     out = {"trade_coin": None, "od": {}, "tie": None}
     f_ = lambda v: float(v or 0)
     if kind == "grid_step":                   # 🪜 v3.36.15: دفتر المحرك صافٍ حقيقي (العمولتين من التنفيذ نفسه) ⇒ هو ربح البيع والشراء
-        trade = book
+        trade = _bt_cum(st, r.get("pkey") or "total_profit", None)     # 💠 v3.36.18: + المعاد استثماره
         out["od"] = {"k": "grid", "q": round(ex.bal[ex.base] - base0, 10)}
     elif kind in ("grid", "grid_range", "grid_plus"):
         if (st.get("reinvest") or {}).get("on"):
@@ -5007,8 +5082,19 @@ def _bt_ri_coin(kind, r):
     · الدوري البيعي: ربحه عملة أصلاً — الحصّالة (عملة) + حصة الربح المعاد داخل دفعاته المفتوحة"""
     st = r.get("state") or {}
     f_ = lambda v: float(v or 0)
-    if kind == "grid_step":
-        return None                           # 🪜 بلا 💠 بهذا الإصدار
+    if kind == "grid_step":                   # 🪜💠 v3.36.18: نمو الخانات بلا المحقون يدوياً (عملة) + الحصّالات (دولار)
+        rb = st.get("reinvest") if isinstance(st.get("reinvest"), dict) else None
+        if not rb or not (rb.get("on") or rb.get("levels")):
+            return None
+        q = u = 0.0
+        for lv in (rb.get("levels") or {}).values():
+            try:
+                px_ = f_(lv.get("px"))
+                q += max(0.0, f_(lv.get("grown_qty")) - (f_(lv.get("inj_grown")) / px_ if px_ > 0 else 0.0))
+                u += max(0.0, f_(lv.get("usd_book")) - f_(lv.get("inj_book")))
+            except Exception:
+                continue
+        return {"q": round(q, 10), "usd": round(u, 8)}
 
     def _lv(book):
         q = u = 0.0
@@ -5088,8 +5174,8 @@ def _bt_detail(r, dt, s=None):
     curve, pops = r["curve"], r["pops"]
     if s and s.get("od", {}).get("k") == "ri":
         pass                                      # 💠 v3.36.8: العيّنات نفسها (ربح الدورات صافياً) · علامة ربح لكل بيعة
-    elif s and s.get("od", {}).get("k") == "grid" and abs(float(r["realized"] or 0)) > 1e-12:
-        k = float(s["trade"]) / float(r["realized"])
+    elif s and s.get("od", {}).get("k") == "grid" and abs(_bt_cum(r.get("state") or {}, r.get("pkey") or "total_profit", None)) > 1e-12:
+        k = float(s["trade"]) / _bt_cum(r.get("state") or {}, r.get("pkey") or "total_profit", None)
         curve = [(c[0], c[1], c[2], c[3], round(c[4] * k, 8)) for c in curve]
         pops = [(i, round(v * k, 8)) for i, v in pops]
     return {"dt": dt, "n": r["n"], "c": [[c[0], round(c[1], 12), c[2], c[3], c[4]] for c in curve],
@@ -5248,7 +5334,7 @@ def bt_prep(data):
     if kind in ("grid", "grid_range", "grid_plus") and p0 < 0.01:
         warn.append("⚠️ محركات الشبكة تقرّب الأسعار إلى أربع خانات عشرية — عملة سعرها أقل من 0.01 لا تعمل عليها الشبكة كما ينبغي (سيظهر ذلك في الاختبار)")
     _rsrc = cfg if cfg is not None else (body or {})
-    if kind in ("grid", "grid_range", "grid_plus") and _rsrc.get("reinvest") and not _rsrc.get("demo"):   # 💠 v3.36.7
+    if kind in ("grid", "grid_range", "grid_plus", "grid_step") and _rsrc.get("reinvest") and not _rsrc.get("demo"):   # 💠 v3.36.7 · 🪜 v3.36.18
         try:
             _rp = float(_rsrc.get("reinvest_pct") if _rsrc.get("reinvest_pct") not in (None, "") else 100)
         except Exception:
@@ -6520,7 +6606,7 @@ def launch(b):
     eng_src, eng_script, _ = engine_for(b["cfg"])
     script = "demo.py" if b["cfg"].get("is_demo") and os.path.exists(os.path.join(b["dir"], "demo.py")) else eng_script
     # 🔄 إعادة الاستثمار: اللوحة تكتب الملف لحالها وتحدّثه — المحرك ما ينلمس
-    if script == eng_script and str(b["cfg"].get("bot_type") or "") not in _NONGRID:   # 💠 الغلاف لبوتات الشبكة بس
+    if script == eng_script and str(b["cfg"].get("bot_type") or "") not in _NONGRID + ("grid_step",):   # 💠 الغلاف لبوتات الشبكة بس (🪜 إعادة استثماره داخل محركه)
         _need = bool(b["cfg"].get("reinvest"))
         if not _need:
             # ⏹ البوت توقّف وعنده تصفية ناقصة (أُلغيت الإعادة وهو مطفي):
@@ -16598,7 +16684,7 @@ def _ri_orphans(b, st=None):
     st = st if st is not None else (_safe(load_json, paths_of(b)[0], default={}) or {})
     ri = st.get("reinvest") if isinstance(st.get("reinvest"), dict) else None
     usd = float((b.get("cfg") or {}).get("usd_value") or 0)
-    if not ri or ri.get("on") or usd <= 0:
+    if not ri or ri.get("on") or usd <= 0 or isinstance(st.get("slots"), dict):     # (🪜: كل خانة تحمل نموّها — ما بيه يتيم)
         return []
     upx = [float(e.get("px") or 0) for e in (ri.get("unwind") or {}).values() if isinstance(e, dict)]
     out = []
@@ -17858,6 +17944,14 @@ def deploy_step(data):
         if free + 1e-12 < need:
             return {"ok": False, "msg": f"⛔ مستويات عملاتك فوق السعر تحتاج {need:.8g} {a['base']} — الحر بمحفظتك {free:.8g} "
                                         f"(بعد ما تحتاجه بوتاتك الأخرى {claims:.8g}) · قلّل المستويات أو اجعلها 0"}
+    _ri = None                                    # 💠 v3.36.18: إعادة الاستثمار من أول بيعة (نموذج النشر — والاختبار التجريبي يقرأها منه)
+    if data.get("reinvest"):
+        try:
+            _ri = float(data.get("reinvest_pct") if data.get("reinvest_pct") not in (None, "") else 100)
+        except Exception:
+            _ri = -1.0
+        if not (0 <= _ri <= 100):
+            return {"ok": False, "msg": "نسبة إعادة الاستثمار يجب أن تكون من 0 إلى 100%"}
     folder = "step_" + a["base"].lower()
     base_folder, c = folder, 1
     while os.path.exists(os.path.join(ROOT, folder)):
@@ -17869,6 +17963,8 @@ def deploy_step(data):
            "grid_percentage": a["G"], "min_price": a["floor"], "up_groups": a["up"], "forced_base_price": float(P["P0"]),
            "fee_rate": P["fee"], "taker_rate": P["taker"], "step_window": STEP_WINDOW, "knife_guard": False, "is_demo": False,
            "auto_restart": bool(data.get("auto", True))}
+    if _ri is not None:
+        cfg["reinvest"], cfg["reinvest_pct"] = True, _ri          # 🪜 المحرك يعيد الاستثمار من أول بيعة (بلا غلاف)
     save_json_atomic(os.path.join(full, f"config_{a['sym']}.json"), cfg)
     eng_src, eng_script, _ = engine_for(cfg)
     with open(os.path.join(full, eng_script), "w", encoding="utf-8") as fh:
@@ -17879,7 +17975,7 @@ def deploy_step(data):
     if ok:
         tg_send(f"🪜 *تم نشر شبكي متدرج*\nالعملة: `{a['sym']}`\nالبداية: `{float(P['P0']):.8g}`\n"
                 f"`{a['N']}` بيعات لكل شراء · أول بيعة `{a['d1'] * 100:g}%` · بين البيعات `{a['d'] * 100:g}%` · "
-                f"الشراء `{a['G'] * 100:g}%` · `{a['Q']:g}$` لكل شراء")
+                f"الشراء `{a['G'] * 100:g}%` · `{a['Q']:g}$` لكل شراء" + (f"\n💠 إعادة استثمار `{_ri:g}%` من أول بيعة" if _ri is not None else ""))
     return {"ok": ok, "msg": (f"🪜 انتشر الشبكي المتدرج وانطلق — {a['sym']} · البداية {float(P['P0']):.8g}") if ok else msg, "dir": folder}
 
 
@@ -17914,7 +18010,7 @@ def _step_slots_view(st):
             live = bool(o.get("id")) and o.get("st") == "live"
             state = "L" if live else ("P" if o.get("st") == "send" else "M")
             px = float(o.get("px") or 0) if o and o.get("px") else float(s["bp"] if buy else s["sp"])
-            rem = max(0.0, (float(s.get("q") or 0) if buy else float(s.get("sq") or 0)) - float(s.get("acc") or 0))
+            rem = max(0.0, (float(s.get("q") or 0) + float(s.get("g") or 0) if buy else float(s.get("sq") or 0)) - float(s.get("acc") or 0))
             out.append([int(s["j"]), int(s["k"]), "b" if buy else "s", _pv_sig(px), round(rem, 10), state, float(s["bp"]), float(s["sp"]),
                         round(float(s.get("sq") or 0), 10), round(float(s.get("spent") or 0), 10),
                         1 if (not buy and float(s.get("cost") or 0) <= 0 and int(s["j"]) >= 0) else 0])
@@ -18286,8 +18382,25 @@ def control(d_rel, action, value):
     sp, hp, lp = paths_of(b)
 
     if b["cfg"].get("bot_type") == "grid_step":                 # 🪜 v3.36.15
-        if action in ("reinvest", "ri_inject", "ri_pct", "ri_withdraw"):
-            return {"ok": False, "msg": "🪜 إعادة الاستثمار غير متاحة للشبكي المتدرج في هذا الإصدار"}
+        if action == "reinvest":                                 # 💠 v3.36.18: داخل محركه — بلا غلاف وبلا إعادة تشغيل
+            if b["cfg"].get("is_demo"):
+                return {"ok": False, "msg": "💠 إعادة الاستثمار لا تعمل مع DEMO"}
+            newv = not b["cfg"].get("reinvest", False)
+            write_cfg_keys(b["cfg_path"], {"reinvest": newv})
+            fl = os.path.join(b["dir"], "reinvest_release.flag")
+            if not newv:
+                try:
+                    open(fl, "w").close()
+                except Exception:
+                    pass
+                tg_send(f"🔓 *تحرير إعادة الاستثمار* — `{b['symbol']}`")
+                return {"ok": True, "msg": "🔓 تحرير — الدولار يدخل الربح اليومي · العملة للمُراكِم · رأس مالك لمحفظتك (خلال ثوانٍ)"}
+            try:
+                os.remove(fl)
+            except Exception:
+                pass
+            tg_send(f"🔄 *إعادة الاستثمار مفعّلة* — `{b['symbol']}` · تبدأ من البيعة القادمة")
+            return {"ok": True, "msg": "🔄 مفعّلة — تبدأ من البيعة القادمة (بلا إعادة تشغيل)"}
         if action == "guard":
             return {"ok": False, "msg": "🪜 درع السكين غير متاح للشبكي المتدرج — استعمل ⏸ إيقاف الشراء بدلاً منه"}
         if action == "edit":
@@ -23192,7 +23305,7 @@ function updCard(el,b,bench){
   ch+=accChipsOf(b);
   if(b.launch_err)ch+=`<span class="chip" style="color:var(--hi);background:rgb(var(--red-rgb)/.25);border-color:var(--red)" title="${(b.launch_err||'').replace(/"/g,'')}">💥 ${b.launch_err.length>46?b.launch_err.slice(0,46)+'…':b.launch_err}</span>`;
   if(b.eng_old)ch+='<span class="chip" style="color:var(--red);border-color:rgb(var(--red-rgb)/.45)">🧬 محرك قديم</span>';
-  if(b.bot_type!=='dca'&&b.bot_type!=='dca_buy'&&b.bot_type!=='grid_step'){   // 🪜 v3.36.15: بلا 🔄 وبلا ⚔️ للشبكي المتدرج (محركه ما فيه الاثنين)
+  if(b.bot_type!=='dca'&&b.bot_type!=='dca_buy'){   // 🪜 v3.36.18: 🔄 داخل محركه (بلا ⚔️)
     const _ri=b.ri||{};const _on=!!(_ri.on||_ri.cfg_on);const _uwn=+_ri.n_unwind||0;
     ch+=`<span class="chip ck ${_on?'gOn':''}" onclick="askReinvest('${b.dir}')" title="${_on?'إلغاء إعادة الاستثمار وتحرير الأرباح فوراً':'تشغيل إعادة الاستثمار — البوت يُعاد تشغيله تلقائياً'}">🔄 إعادة استثمار ${_on?'شغالة':(_uwn?'تتفكّك '+_uwn:'مطفية')}</span>`;
   }
@@ -24978,7 +25091,7 @@ function askReinvest(dir){
        · ${I.cycles||0} دورة · ${I.days||0} يوم<br><br>
        💵 الدولار يروح <b>للربح اليومي</b> دفعة وحدة.<br>
        🪙 والعملة تنضاف <b>للمُراكِم</b> بمعدّلها.<br>
-       🔒 والأوامر المنشورة <b>ما تنلغى</b> — تتفكّك بدورتها الطبيعية.<br><br>
+       ${b.bot_type==='grid_step'?'✏️ والأوامر المنشورة المكبّرة <b>تتصغّر فوراً</b> بالمنصة (بلا إلغاء) — اللي ترفض المنصة تصغيره يكمل دورته.':'🔒 والأوامر المنشورة <b>ما تنلغى</b> — تتفكّك بدورتها الطبيعية.'}<br><br>
        <span style="color:var(--mut2)">السلّم يبقى معروضاً لحد ما يخلص التفكيك.</span>`,
       ()=>ctl(dir,'reinvest'));
   }else{
@@ -24986,7 +25099,7 @@ function askReinvest(dir){
       `ربح كل أوردر راح يرجع لشرائه هو بدل ما يطلع للمحفظة.<br><br>
        📉 الربح اليومي لهذا البوت يصير <b>صفر</b> — بالتصميم مو عطل.<br>
        🏧 والمُراكِم ما ياخذ منه شي لحد ما تلغيها.<br>
-       🔁 واللوحة راح <b>تعيد تشغيل البوت تلقائياً</b>.<br><br>
+       ${b.bot_type==='grid_step'?'🪜 تبدأ من <b>البيعة القادمة</b> — بلا إعادة تشغيل.':'🔁 واللوحة راح <b>تعيد تشغيل البوت تلقائياً</b>.'}<br><br>
        <span style="color:var(--mut2)">تگدر تلغيها بأي لحظة والأرباح تتحرر.</span>`,
       ()=>ctl(dir,'reinvest'));
   }
@@ -25950,7 +26063,8 @@ function riInject(dir,k,px,coinSide,cur){
   const now=+cur||0;
   const f4=v=>(+v).toFixed(4), f2=v=>(+v).toFixed(2);
   const quick=[10,25,50].map(q=>`<button onclick="$('#i_amt').value='${f4(now*q/100)}';riPrev(${now},${px},${coinSide?1:0},'${base}')" style="font-size:11px;padding:2px 10px;border-radius:6px">+${q}%</button>`).join('');
-  showModal(`<h2>💉 حقن رأس مال — الدرجة ${(+px).toFixed(4)}</h2>
+  const _sl=((b.ri||{}).rows||[]).find(x=>x.kk===String(k));
+  showModal(`<h2>💉 حقن رأس مال — ${_sl&&_sl.lbl?'🪜 المستوى '+_sl.lbl.replace(' · ',' · الجزء '):'الدرجة '+(+px).toFixed(4)}</h2>
    <p style="color:var(--mut);font-size:12.5px;line-height:1.8">
      ${coinSide?`عملة من محفظتك تنضاف <b>لأمر البيع نفسه فوراً</b> (منشور أو بالذاكرة).`:`الدولار يكبّر <b>أمر الشراء فوراً</b> — ولو ما گدر، يروح للحصّالة ويكبر بدورته.`}</p>
    <div style="background:var(--bg1);border:1px solid var(--line2);border-radius:10px;padding:10px;margin-top:6px">
@@ -26017,7 +26131,8 @@ function riWithdraw(dir,k,px,inj,total,coinSide,io){
   const capS=fl(cap).toFixed(dp), gainS=fl(gain).toFixed(dp);
   const BX='background:var(--bg1);border:1px solid var(--line2);border-radius:10px;padding:10px';
   const IN='width:100%;padding:8px;border-radius:8px;border:1px solid var(--line2);background:var(--bg0);color:var(--tx);font-size:14px';
-  showModal(`<h2>➖ سحب من الدرجة ${p.toFixed(4)} — ${cs?'جهة البيع (عملة)':'جهة الشراء (دولار)'}</h2>
+  const _sl=((b.ri||{}).rows||[]).find(x=>x.kk===String(k));
+  showModal(`<h2>➖ سحب من ${_sl&&_sl.lbl?'🪜 المستوى '+_sl.lbl.replace(' · ',' · الجزء '):'الدرجة '+p.toFixed(4)} — ${cs?'جهة البيع (عملة)':'جهة الشراء (دولار)'}</h2>
    <p style="color:var(--mut);font-size:12.5px;line-height:1.8">اسحب اللي تريده من كل جيب — الأساس المنشور ما ينلمس.</p>
     ${(bookOnly&&valD<=0)?'<div style="background:var(--bg1);border:1px solid var(--amber);border-radius:10px;padding:8px;font-size:11.5px;color:var(--amber)">⚠️ المعروض بالعملة بس الموجود فعلاً داخل الأمر.</div>':''}
    <div style="display:flex;flex-direction:column;gap:12px;margin-top:6px">
@@ -26104,7 +26219,7 @@ function openReinvestLadder(dir){
       tb+=q; tg+=ad; tk+=x.k; tc+=(x.c||0);
       const col=x.uw?'var(--amber)':(coinSide?'var(--green)':'var(--cyan)');
       h+=`<tr${x.uw?' title="بانتظار التفكيك — يرجع لحجمه الأصلي بدورته"':''}>
-        <td style="${TD};color:var(--tx)">${x.uw?'<span style="color:var(--amber)">⏳</span> ':''}<b>${f4(x.p)}</b></td>
+        <td style="${TD};color:var(--tx)">${x.uw?'<span style="color:var(--amber)">⏳</span> ':''}<b>${f4(x.p)}</b>${x.lbl?`<div style="color:var(--mut2);font-size:9.5px">🪜 ${x.lbl}</div>`:''}</td>
         <td style="${TD};color:var(--mut)">${sp(x)?f4(sp(x)):'—'}</td>
         <td style="${TD};color:var(--mut)">${m2(q)}</td>
         <td style="${TD};color:${col}" title="${gFormT(x)}"><b>+${m2(ad)}</b>${gForm(x)}</td>
@@ -28031,7 +28146,9 @@ async function openDeployStep(pre){pre=pre||{};
     <div class="fld"><label title="فارغ = سعر السوق لحظة النشر">🎯 سعر البداية (اختياري)</label><input id="st_p0" class="num" value="${+v('forced_base',0)||''}" oninput="stPreview()"></div>
     <div class="fld"><label>المحفظة</label><select id="st_wallet">${ws.map(w=>`<option>${gEsc(w.name)}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>
   </div>
-  <div class="cklist" style="margin-top:10px"><label class="ck"><input type="checkbox" id="st_auto" checked>🤖 يشمله الحارس</label></div>
+  <div class="cklist" style="margin-top:10px"><label class="ck"><input type="checkbox" id="st_auto" checked>🤖 يشمله الحارس</label>
+    <label class="ck" title="من أول بيعة: نسبة من ربح كل بيعة تعود إلى خانتها فيكبر شراؤها (تُغيَّر لاحقاً من البطاقة) — والاختبار على مسار تجريبي يعمل بها كذلك"><input type="checkbox" id="st_ri" ${pre.reinvest?'checked':''} onchange="stRiSync()">💠 إعادة الاستثمار من البداية</label></div>
+  <div class="frm" id="st_fri" style="display:${pre.reinvest?'':'none'};margin-top:8px"><div class="fld"><label>💠 نسبة ما يعود إلى الخانة من ربح كل بيعة (%)</label><input id="st_rip" class="num" value="${pre.reinvest_pct??100}"><small style="color:var(--mut2);font-size:10px">100% = الربح كله يكبّر شراء الخانة · 50% = نصفه يكبّره ونصفه ربح محرَّر</small></div></div>
   <div class="dnsec" style="margin-top:12px">📋 الجدول قبل النشر — كل مستوى وبيعاته وربح كل بيعة صافياً بعد العمولتين</div>
   <div id="st_plan"><div class="vach0">…</div></div>
   <div class="mbtns" style="margin-top:14px"><button class="primary" id="st_go" style="background:linear-gradient(94deg,var(--green),#16a34a)">🚀 انشر وشغّل</button><button id="st_bt" onclick="btFromForm('step')" title="يعمل المحرك نفسه على مسار سعري تجريبي بالإعدادات نفسها — بلا مفاتيح ولا أوامر حقيقية">🧪 جرّبه على مسار تجريبي</button><button onclick="hideModal()">إلغاء</button></div>`);
@@ -28043,7 +28160,9 @@ async function openDeployStep(pre){pre=pre||{};
   stPreview()}
 function stBody(){const g=k=>(($('#'+k)||{}).value||'').trim();
   return {symbol:g('st_sym').toUpperCase(),usd_value:g('st_q'),step_parts:g('st_n'),step_sell_pct:g('st_d'),step_first_pct:g('st_d1'),grid_pct:g('st_g'),
-    min_price:g('st_floor'),up_groups:g('st_up'),forced_base:g('st_p0'),wallet:g('st_wallet'),auto:!!($('#st_auto')||{}).checked}}
+    min_price:g('st_floor'),up_groups:g('st_up'),forced_base:g('st_p0'),wallet:g('st_wallet'),auto:!!($('#st_auto')||{}).checked,
+    reinvest:!!($('#st_ri')||{}).checked,reinvest_pct:g('st_rip')}}
+function stRiSync(){const c=$('#st_ri'),f=$('#st_fri');if(f)f.style.display=c&&c.checked?'':'none'}
 function stPreview(){clearTimeout(_stT);_stT=setTimeout(stPlan,350)}
 async function stPlan(){const box=$('#st_plan');if(!box)return;const b=stBody();
   if(!b.symbol.includes('-')){box.innerHTML='<div class="vach0">اكتب الرمز لعرض الجدول</div>';return}

@@ -75,6 +75,54 @@ for sym, Qv, N, d, G, fl, up in (("XRP-USDT", 15, 3, 1.0, 3.0, 1.0, 2), ("SOL-US
        and s_["od"]["k"] == "grid" and s_["ri_coin"] is None and s_["trade"] > 0, {k: s_[k] for k in ("trade", "open_usd", "result", "realized", "od")})
     det = m._bt_detail(r, dt, s_)
     ok(f"{sym}: the replay ends on the card's number (last sample profit = buy/sell profit)", abs(det["c"][-1][4] - s_["trade"]) < 1e-6, (det["c"][-1], s_["trade"]))
+# ── 💠 v3.36.18: the trial path with reinvest (the deploy form's box) — the engine reinvests inside the box
+if hasattr(m, "_step_ri_snapshot"):
+    for pct in (100, 50):
+        sym, p0 = "XRP-USDT", m.PX["XRP-USDT"]
+        body = {"symbol": sym, "usd_value": "15", "step_parts": "3", "step_sell_pct": "1.0", "grid_pct": "3.0", "min_price": "1.0",
+                "up_groups": "2", "reinvest": True, "reinvest_pct": str(pct)}
+        P = m.bt_prep({"kind": "grid_step", "body": body})
+        spec = P["spec"]
+        _keep = {k: getattr(m, k) for k in ("ROOT", "wallet_keys", "launch", "tg_send", "journal", "log_event", "_acc_spec", "_acc_price", "_okx_get", "bot_dirs")
+                 if hasattr(m, k)}
+        cfg, err = m._bt_dry_cfg("grid_step", body, sym, spec, p0)
+        for k, v in _keep.items():
+            setattr(m, k, v)
+        ok(f"💠 {pct}%: the box settings carry the form's reinvest (the note says so)", cfg and cfg.get("reinvest") is True and cfg.get("reinvest_pct") == pct
+           and any("💠" in w for w in P.get("warn") or []), (cfg and {k: cfg.get(k) for k in ("reinvest", "reinvest_pct")}, P.get("warn")))
+        if not cfg:
+            continue
+        days, dt = m._BT_PER["7d"] if "7d" in m._BT_PER else list(m._BT_PER.values())[0]
+        px = m._bt_path(p0, days, dt, 0.05, 11)
+        r = m._bt_run("grid_step", cfg, sym, px, dt, float(P["quote_def"]), float(P["base_def"]), spec)
+        st = r["state"] or {}
+        S = st.get("slots") or {}
+        rb = st.get("reinvest") or {}
+        ex = r["ex"]
+        fee = float(cfg.get("fee_rate") or 0.0008)
+        plan = m.step_plan(dict(body, forced_base=p0))
+        V0 = sum(round(x["qn"] * r_["bp"] / (1.0 - fee), 10) for r_ in plan["rows"] if r_["j"] >= 0 for x in r_["sells"] if not x["skip"])
+        held = sum(float(s.get("spent") or 0) for s in S.values() if s["side"] == "sell") + sum(float(s.get("dc") or 0) for s in S.values())
+        part_buy = sum(float(s.get("accv") or 0) for s in S.values() if s["side"] == "buy")
+        part_sell = sum(float(s.get("accv") or 0) - float(s.get("accf") or 0) for s in S.values() if s["side"] == "sell")
+        inflight = 0.0
+        for s in S.values():
+            o = s.get("o") or {}
+            eo = ex.orders.get(str(o.get("id") or "")) if o.get("id") else None
+            if eo and eo["acc"] > 0:
+                inflight += (-eo["acc"] * eo["avg"]) if eo["side"] == "buy" else (eo["acc"] * eo["avg"] - abs(eo.get("fee", 0)))
+        real = float(st.get("total_profit") or 0) + float(rb.get("credited") or 0) - float(rb.get("out_usd") or 0)
+        books = float(P["quote_def"]) + real + V0 - held - part_buy + part_sell + inflight
+        grown = sum(float(s.get("g") or 0) for s in S.values())
+        ok(f"💠 {pct}%: the engine reinvested in the box (pots grew · buys = base + growth) · dollars on the box = its books to the millime"
+           " (real profit = ordinary + reinvested)", float(rb.get("credited") or 0) > 0 and grown > 0 and abs(books - ex.bal[ex.quote]) < 1e-4
+           and (pct < 100 or abs(float(st.get("total_profit") or 0)) < 1e-12), (rb.get("credited"), grown, round(books, 8), round(ex.bal[ex.quote], 8)))
+        s_ = m._bt_summary("grid_step", r, float(P["quote_def"]), float(P["base_def"]), p0, dt)
+        det = m._bt_detail(r, dt, s_)
+        ok(f"💠 {pct}%: the card's buy/sell profit = ordinary + reinvested (not 0 at 100%) · its 💠 coins shown · open = the rest ·"
+           " the replay ends on it", abs(s_["trade"] - real) < 1e-6 and s_["ri_coin"] and s_["ri_coin"]["q"] > 0
+           and abs(s_["trade"] + s_["open_usd"] - s_["result"]) < 1e-6 and abs(det["c"][-1][4] - s_["trade"]) < 1e-6,
+           ({k: s_.get(k) for k in ("trade", "open_usd", "result", "ri_coin")}, real, det["c"][-1]))
 print(f"✅ bt3615_test: {sum(res)}/{len(res)}" if all(res) else f"❌ bt3615_test: {sum(res)}/{len(res)}", flush=True)
 shutil.rmtree(R, ignore_errors=True)
 sys.exit(0 if all(res) else 1)
