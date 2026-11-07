@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.19"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.20"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -560,7 +560,7 @@ def _inj_pending(d):
         return False
 
 
-def _step_ri_snapshot(b, st):
+def _step_ri_snapshot(b, st, full=False):
     """🪜💠 لقطة إعادة الاستثمار للشبكي المتدرج — نفس شكل reinvest_snapshot (البطاقة · السلّم · الأزرار) لكن من الخانات:
     صف لكل خانة (المستوى · الجزء) · kk = "j:k" مفتاح طلبات الحقن والسحب · io = النمو الموجود فعلاً داخل أمرها (البيع: العملة
     فوق أساسه بعد العمولة · الشراء: كله داخل أمره) · اللي يتفكّك بعد التحرير بقائمته · desync = شراء حي حجمه ≠ الأساس + النمو"""
@@ -579,6 +579,8 @@ def _step_ri_snapshot(b, st):
     uw = ri.get("unwind") or {}
     usd = coin = 0.0
     rows, uws, desync = [], [], []
+    keep = _step_keep_levels(st) if (not full and len(S) > STEP_SL_MAX) else None     # 🪜 v3.36.20: خانات كثيرة ⇒ اللي يهم بالبطاقة
+    n_rows = 0
     for key, s in sorted(S.items(), key=lambda kv: (-float(kv[1].get("bp") or 0), int(kv[1].get("k") or 0))):
         try:
             e = lv.get(key) or {}
@@ -606,7 +608,9 @@ def _step_ri_snapshot(b, st):
                 row.update(uw=True, s=str((uw.get(key) or {}).get("side") or row["s"]))
                 uws.append(row)
             else:
-                rows.append(row)
+                n_rows += 1
+                if keep is None or int(s.get("j") or 0) in keep or tv > 0 or row["c"] > 0 or io > 0:
+                    rows.append(row)
             o = s.get("o") or {}
             if not sell and o.get("st") == "live" and not s.get("am"):
                 want = float(s.get("q") or 0) + gq - float(s.get("acc") or 0)
@@ -624,7 +628,8 @@ def _step_ri_snapshot(b, st):
             "pct_cfg": 100.0 if cfg.get("reinvest_pct") is None else round(float(cfg.get("reinvest_pct") or 0), 2),
             "inj_pending": bool(_inj_pending(b.get("dir"))), "unwind": uws[:60], "n_unwind": len(uw),
             "handoff": (_ri_pending_handoffs(st, 0.0) or [None])[0], "handoff_stuck": (_ri_pending_handoffs(st, 1800.0) or [None])[0],
-            "usd": round(usd, 4), "coin": round(coin, 8), "rows": rows[:300], "cycles": int(ri.get("cycles") or 0), "levels": len(lv),
+            "usd": round(usd, 4), "coin": round(coin, 8), "rows": rows if full else rows[:2000], "n_rows": n_rows,
+            "cycles": int(ri.get("cycles") or 0), "levels": len(lv),
             "days": round(max(0.0, (time.time() - started) / 86400.0), 2) if started else 0.0, "file": True, "file_old": False,
             "cfg_on": bool(cfg.get("reinvest")), "released": ri.get("released"), "broken": bool(ri.get("broken")), "step": True,
             "credited": round(float(ri.get("credited") or 0), 8)}
@@ -947,6 +952,7 @@ def bot_snapshot(b):
             "wid": _safe(wallet_id, b, default=None),
             "ri": _safe(reinvest_snapshot, b, st, default=None),
             "sl": (_safe(_step_slots_view, st, default=None) if _bt == "grid_step" else None),     # 🪜 v3.36.18: البطاقة بالطول
+            "sl_far": (_safe(_step_sl_far, st, default=None) if _bt == "grid_step" else None),     # 🪜 v3.36.20: الباقي مختصر
             "ladder": {"sells": pack_levels(st.get("limit_sells"), "s"),
                        "buys": (_step_merge_lv if _bt == "grid_step" else (lambda x: x))(pack_levels(st.get("limit_buys"), "b")),
                        "vsells": pack_levels(st.get("virtual_sells"), "vs"),
@@ -961,7 +967,7 @@ def bot_snapshot(b):
                       "G": float(b["cfg"].get("grid_percentage") or 0), "Q": float(b["cfg"].get("usd_value") or 0),
                       "up": int(float(b["cfg"].get("up_groups") or 0)), "floor": float(b["cfg"].get("min_price") or 0), "f": float(b["cfg"].get("fee_rate") or 0.0008),
                       "P0": float(((st.get("step") or {}).get("P0")) or b["cfg"].get("forced_base_price") or 0),
-                      "slots": len(st.get("slots") or {})}
+                      "slots": len(st.get("slots") or {}), "W": int(float(b["cfg"].get("step_window") or 8))}
                      if b["cfg"].get("bot_type") == "grid_step" else None),
             "fee": float((_safe(okx_fee_rate, b, default=None) or {}).get("maker")
                          or b["cfg"].get("fee_rate") or FEE_RATE_DEFAULT),
@@ -18033,12 +18039,55 @@ def step_audit(b, st):
                                                                  "الأوامر الحية لا تطابق الخانات" if not same else ""])))}
 
 
-def _step_slots_view(st):
-    """🪜 v3.36.18: كل خانة للبطاقة (مسطرة السعر بالطول + التفاصيل) — [المستوى, الجزء, 'b'/'s', السعر, الكمية الباقية,
-    'L' منشور / 'P' بالطريق / 'M' بالذاكرة, سعر الشراء, سعر البيع, كمية البيع, الكلفة, من عملاتك]"""
-    out = []
+STEP_SL_MAX = 400          # 🪜 v3.36.20: فوقها البطاقة تاخذ المستويات المهمة كاملة والباقي مختصر (السلّم الكامل يجيبها كلها عند الطلب)
+
+
+def _step_keep_levels(st, near=10):
+    """🪜 v3.36.20: المستويات اللي تنعرض كاملة بالبطاقة لمن الخانات كثيرة — أي جزء عنده أمر (منشور · بالطريق) أو منفّذ جزئياً ·
+    + أقرب `near` مستوى للسعر (الباقي — شراء ينتظر أو عملة ماسكها بالذاكرة — مختصر بعدّاداته · السلّم الكامل يجيبه كله)"""
+    keep, lv = set(), {}
     for s in (st.get("slots") or {}).values():
         try:
+            j = int(s["j"])
+            lv[j] = float(s["bp"])
+            if s.get("o") or float(s.get("acc") or 0) > 0:
+                keep.add(j)
+        except Exception:
+            continue
+    cp = float(st.get("current_price") or 0)
+    if cp > 0:
+        keep.update(sorted(lv, key=lambda j: abs(math.log(lv[j] / cp)) if lv[j] > 0 else 1e9)[:near])
+    return keep
+
+
+def _step_sl_far(st):
+    """🪜 v3.36.20: المستويات اللي ما انعرضت كاملة (خانات كثيرة) — [المستوى, سعر الشراء, شراء ينتظر بالذاكرة, بيع ماسك عملة بالذاكرة]
+    (ولا واحد منهم عنده أمر بالمنصة) · None = كلها كاملة"""
+    S = st.get("slots") or {}
+    if len(S) <= STEP_SL_MAX:
+        return None
+    keep, out = _step_keep_levels(st), {}
+    for s in S.values():
+        try:
+            j = int(s["j"])
+            if j not in keep:
+                out.setdefault(j, [j, float(s["bp"]), 0, 0])[3 if s.get("side") == "sell" else 2] += 1
+        except Exception:
+            continue
+    return sorted(out.values(), key=lambda e: -e[1])
+
+
+def _step_slots_view(st, full=False):
+    """🪜 v3.36.18: كل خانة للبطاقة (مسطرة السعر بالطول + التفاصيل) — [المستوى, الجزء, 'b'/'s', السعر, الكمية الباقية,
+    'L' منشور / 'P' بالطريق / 'M' بالذاكرة, سعر الشراء, سعر البيع, كمية البيع, الكلفة, من عملاتك]
+    v3.36.20: خانات كثيرة (> STEP_SL_MAX) ⇒ المستويات المهمة بس (الباقي `_step_sl_far`) · full=True ⇒ كلها (السلّم الكامل)"""
+    S = st.get("slots") or {}
+    keep = _step_keep_levels(st) if (not full and len(S) > STEP_SL_MAX) else None
+    out = []
+    for s in S.values():
+        try:
+            if keep is not None and int(s["j"]) not in keep:
+                continue
             o = s.get("o") or {}
             buy = s.get("side") == "buy"
             live = bool(o.get("id")) and o.get("st") == "live"
@@ -18268,6 +18317,21 @@ def _arch_record(b):
     return {"key": key, "sym": b["symbol"], "type": str((b.get("cfg") or {}).get("bot_type") or "grid"), "started": started or None,
             "approx": approx, "deleted": time.time(), "trade": trade, "rel": float(ge.get("rel") or 0), "held": float(ge.get("held") or 0),
             "handoff": float(ge.get("handoff") or 0), "coin": ge.get("coin") or {}}
+
+
+def step_ladder_view(d_rel):
+    """🪜 v3.36.20: السلّم الكامل لبوت متدرج عند الطلب — كل الخانات (بلا اختصار) + كل صفوف إعادة الاستثمار · قراءة بس (بلا مفاتيح)"""
+    bots = bot_dirs()
+    full = os.path.realpath(os.path.join(ROOT, str(d_rel or "")))
+    if not full.startswith(os.path.realpath(ROOT)) or full not in bots:
+        return {"ok": False, "msg": "مجلد غير معروف"}
+    b = bots[full]
+    if (b.get("cfg") or {}).get("bot_type") != "grid_step":
+        return {"ok": False, "msg": "مو شبكي متدرج"}
+    st = load_json(paths_of(b)[0]) or {}
+    ri = _safe(_step_ri_snapshot, b, st, True, default=None) or {}
+    return {"ok": True, "sl": _step_slots_view(st, full=True), "ri": ri.get("rows") or [],
+            "cp": float(PX.get(b["symbol"]) or st.get("current_price") or 0)}
 
 
 def archive_view():
@@ -20968,6 +21032,8 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
         if u.path == "/api/coin_users":                   # ⚠️ v3.25.5: مين يستعمل نفس العملة بنفس المحفظة (قبل الإنشاء)
             return self._json(_safe(coin_users, q.get("sym", [""])[0], q.get("wallet", [None])[0], q.get("wid", [""])[0] or None,
                                     q.get("self", [""])[0] or None, default={"ok": False, "users": []}))
+        if u.path == "/api/step_ladder":                  # 🪜 v3.36.20: السلّم الكامل (كل الخانات · كل صفوف 💠) — قراءة بس
+            return self._json(_safe(step_ladder_view, q.get("dir", [""])[0], default={"ok": False}))
         if u.path == "/api/archive":                      # 🗄️ v3.36.18: البوتات المحذوفة (للعرض)
             return self._json(_safe(archive_view, default={"ok": False, "items": []}))
         if u.path == "/api/losses":                       # 📉 v3.25.4: سجل الخسائر (يحسب بس)
@@ -23483,7 +23549,7 @@ function updCard(el,b,bench){
       const m=v=>v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
       const base=(b.symbol||'').split('-')[0];
       const col=I.on?'var(--cyan)':'var(--mut2)';
-      const h=`<span style="color:${col}">${m(I.usd)}$</span>`+
+      const h=`<span style="color:${col}">${stM(I.usd)}$</span>`+
               (I.coin>0?`<span style="color:var(--mut2);font-weight:400"> · ${(+I.coin).toFixed(4)} ${base}</span>`:'');
       if(R.rinv._h!==h){R.rinv.innerHTML=h;R.rinv._h=h}
       const t=`${I.on?'شغّالة':'مطفية'} · ${I.levels} درجة · ${I.cycles} دورة · ${I.days} يوم\n`+
@@ -25154,7 +25220,7 @@ function dcaTable(b){
     <div class="mbtns"><button onclick="hideModal()">إغلاق</button></div>`);
 }
 function cfb(el,b){if(el.dataset.alt){el.src=el.dataset.alt;el.dataset.alt=''}else{const s=document.createElement('span');s.className='coinltr';s.textContent=(b||'?')[0];el.replaceWith(s)}}
-function openLadder(dir){const b=botOf(dir);if(!b)return;const L=b.ladder;
+function openLadder(dir){const b=botOf(dir);if(!b)return;if(b.bot_type==='grid_step')return stFull(dir);const L=b.ladder;
  const row=(x,c,t)=>`<div class="vrow"><span class="dot" style="background:${c}"></span><span class="p num">${f4(x.p)}</span><span class="q num">${x.q}</span><span class="tag">${t}</span></div>`;
  let h='';
  (L.vsells||[]).slice().sort((a,z)=>z.p-a.p).forEach(x=>h+=row(x,'rgb(var(--green-rgb)/.45)','ذاكرة بيع'));
@@ -26232,7 +26298,7 @@ function riInject(dir,k,px,coinSide,cur){
   const now=+cur||0;
   const f4=v=>(+v).toFixed(4), f2=v=>(+v).toFixed(2);
   const quick=[10,25,50].map(q=>`<button onclick="$('#i_amt').value='${f4(now*q/100)}';riPrev(${now},${px},${coinSide?1:0},'${base}')" style="font-size:11px;padding:2px 10px;border-radius:6px">+${q}%</button>`).join('');
-  const _sl=((b.ri||{}).rows||[]).find(x=>x.kk===String(k));
+  const _sl=stRiRow(b,k);
   showModal(`<h2>💉 حقن رأس مال — ${_sl&&_sl.lbl?'🪜 المستوى '+_sl.lbl.replace(' · ',' · الجزء '):'الدرجة '+(+px).toFixed(4)}</h2>
    <p style="color:var(--mut);font-size:12.5px;line-height:1.8">
      ${coinSide?`عملة من محفظتك تنضاف <b>لأمر البيع نفسه فوراً</b> (منشور أو بالذاكرة).`:`الدولار يكبّر <b>أمر الشراء فوراً</b> — ولو ما گدر، يروح للحصّالة ويكبر بدورته.`}</p>
@@ -26300,7 +26366,7 @@ function riWithdraw(dir,k,px,inj,total,coinSide,io){
   const capS=fl(cap).toFixed(dp), gainS=fl(gain).toFixed(dp);
   const BX='background:var(--bg1);border:1px solid var(--line2);border-radius:10px;padding:10px';
   const IN='width:100%;padding:8px;border-radius:8px;border:1px solid var(--line2);background:var(--bg0);color:var(--tx);font-size:14px';
-  const _sl=((b.ri||{}).rows||[]).find(x=>x.kk===String(k));
+  const _sl=stRiRow(b,k);
   showModal(`<h2>➖ سحب من ${_sl&&_sl.lbl?'🪜 المستوى '+_sl.lbl.replace(' · ',' · الجزء '):'الدرجة '+p.toFixed(4)} — ${cs?'جهة البيع (عملة)':'جهة الشراء (دولار)'}</h2>
    <p style="color:var(--mut);font-size:12.5px;line-height:1.8">اسحب اللي تريده من كل جيب — الأساس المنشور ما ينلمس.</p>
     ${(bookOnly&&valD<=0)?'<div style="background:var(--bg1);border:1px solid var(--amber);border-radius:10px;padding:8px;font-size:11.5px;color:var(--amber)">⚠️ المعروض بالعملة بس الموجود فعلاً داخل الأمر.</div>':''}
@@ -26354,10 +26420,16 @@ function openReinvestLadder(dir){
   const b=botOf(dir); if(!b)return;
   const I=b.ri||{}, base=(b.symbol||'').split('-')[0], cp=+b.cp||0;
   const g=(+b.grid_pct||0)/100;
-  const rows=(I.rows||[]).slice(), uw=(I.unwind||[]).slice();
+  const FR=RIFULL[dir],frOk=!!(FR&&Date.now()-FR.t<20000&&FR.rows.length);        // 🪜 v3.36.20: الصفوف كلها عند الطلب
+  if(I.step&&(+I.n_rows||0)>(I.rows||[]).length&&!frOk)
+    api('/api/step_ladder?dir='+encodeURIComponent(dir),null,1).then(V=>{if(V&&V.ok&&(V.ri||[]).length){RIFULL[dir]={t:Date.now(),rows:V.ri};openReinvestLadder(dir)}}).catch(()=>{});
+  const rows0=(frOk?FR.rows:(I.rows||[])).slice(), uw=(I.unwind||[]).slice();
+  const hasV=x=>(+x.tv||0)>0||(+x.c||0)>0||(+x.io||0)>0, ONLYV=!!RIF[dir], nV=rows0.filter(hasV).length;
+  const rows=ONLYV?rows0.filter(hasV):rows0;
   const m2=v=>(+v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const mS=v=>{const a=Math.abs(+v||0);return (a>0&&a<1)?(+v).toFixed(4):m2(v)};
   const m4=v=>(+v).toLocaleString('en-US',{minimumFractionDigits:4,maximumFractionDigits:4});
-  if(!rows.length&&!uw.length){
+  if(!rows0.length&&!uw.length){
     showModal(`<h2>💠 سلّم إعادة الاستثمار — ${b.symbol}</h2>
       <p style="color:var(--mut);font-size:13px">ما بعد تراكم شي على أي درجة.<br>
       كل درجة تبدي تجمع من ربحها بعد أول دورة بيع كاملة.</p>
@@ -26391,7 +26463,7 @@ function openReinvestLadder(dir){
         <td style="${TD};color:var(--tx)">${x.uw?'<span style="color:var(--amber)">⏳</span> ':''}<b>${f4(x.p)}</b>${x.lbl?`<div style="color:var(--mut2);font-size:9.5px">🪜 ${x.lbl}</div>`:''}</td>
         <td style="${TD};color:var(--mut)">${sp(x)?f4(sp(x)):'—'}</td>
         <td style="${TD};color:var(--mut)">${m2(q)}</td>
-        <td style="${TD};color:${col}" title="${gFormT(x)}"><b>+${m2(ad)}</b>${gForm(x)}</td>
+        <td style="${TD};color:${col}" title="${gFormT(x)}"><b>+${mS(ad)}</b>${gForm(x)}</td>
         <td style="${TD};color:${col}"><b>${m2(q+ad)}</b>
           <span style="color:var(--mut2);font-size:9.5px">${coinSide?base:'$'}</span></td>
         <td style="${TD};color:var(--mut2);font-size:10.5px">${m4(x.k)}$</td>
@@ -26412,7 +26484,7 @@ function openReinvestLadder(dir){
     h+=`</tbody><tfoot><tr style="border-top:2px solid var(--line2)">
       <td colspan="2" style="${TD};color:var(--mut2)">المجموع</td>
       <td style="${TD};color:var(--mut)">${m2(tb)}</td>
-      <td style="${TD};color:${coinSide?'var(--green)':'var(--cyan)'}"><b>+${m2(tg)}</b></td>
+      <td style="${TD};color:${coinSide?'var(--green)':'var(--cyan)'}"><b>+${mS(tg)}</b></td>
       <td style="${TD}"><b>${m2(tb+tg)}</b>
         <span style="color:var(--mut2);font-size:9.5px">${coinSide?base:'$'}</span></td>
       <td style="${TD};color:var(--mut2);font-size:10.5px">${m4(tk)}$</td>
@@ -26427,7 +26499,7 @@ function openReinvestLadder(dir){
       <span style="color:var(--vio)">⚡</span>
       <b style="color:var(--tx);font-size:14px"> ${cp?f4(cp):'—'}$ </b>
       <span style="color:var(--mut2);font-size:11px">السعر الآن</span></div>
-    <div style="font-size:12px;color:var(--cyan);margin:2px 0 4px">
+    <div id="riBelow" style="font-size:12px;color:var(--cyan);margin:2px 0 4px">
       💵 شراء معلّق — ينتظر نزول السعر</div>${tbl(B,false)}`;
   if(uw.length){
     let uc=0,ud=0;
@@ -26459,7 +26531,11 @@ function openReinvestLadder(dir){
          <span style="color:var(--cyan)">${pc}% للأمر نفسه</span> ·
          <span style="color:var(--green)">${(100-pc).toFixed(0)}% ربح عادي → المُراكِم</span></div></div>
      <button style="font-size:11.5px;padding:3px 11px;border-radius:7px">تغيير</button></div>
-   <div style="max-height:56vh;overflow:auto">${h}</div>
+   <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 6px;font-size:11.5px;color:var(--mut)">
+     <span>🪙 فوق السعر <b>${S.length}</b> · 💵 تحت السعر <b>${B.length}</b> · 💠 بيها إعادة <b>${nV}</b>${(+I.n_rows||0)>rows0.length?` · ⏳ أجيب الباقي (${I.n_rows})`:''}</span>
+     <button onclick="const e=document.getElementById('riBelow');if(e)e.scrollIntoView({block:'start'})" style="font-size:11px;padding:2px 9px;border-radius:7px">⬇️ تحت السعر</button>
+     <button onclick="RIF['${dir}']=!RIF['${dir}'];openReinvestLadder('${dir}')" style="font-size:11px;padding:2px 9px;border-radius:7px;${ONLYV?'background:var(--cyan);color:var(--on-acc)':''}">💠 اللي بيها إعادة بس</button></div>
+   <div>${h}</div>
    <p style="color:var(--mut2);font-size:10.5px;margin-top:8px">
      السعران هوية الأوردر — يتابعانه بالجدولين. الحصّالة ملازمة له وتزيد عند كل بيعة.</p>
    <div class="mbtns"><button onclick="hideModal()">إغلاق</button></div>`);
@@ -28532,9 +28608,14 @@ function skAR(x,y,t,side,fs,fill,extra){return `<text class="ar" x="${x}" y="${y
    اضغط أي خط ⇒ تفاصيله · sl = [المستوى, الجزء, 'b'/'s', السعر, الكمية الباقية, 'L' منشور / 'P' بالطريق / 'M' بالذاكرة, الشراء, البيع, كمية البيع, الكلفة, من عملاتك] */
 const ST_PAL=['#38bdf8','#c084fc','#fbbf24','#34d399','#f472b6','#60a5fa','#a3e635','#fb923c','#2dd4bf','#e879f9','#facc15','#818cf8'];   // (بلا أحمر: الأحمر خسارة)
 function stCol(j){const n=ST_PAL.length;return ST_PAL[((+j%n)+n)%n]}
-function stCount(b){const c={pb:0,ps:0,mb:0,ms:0};(b.sl||[]).forEach(x=>{c[(x[5]==='M'?'m':'p')+(x[2]==='b'?'b':'s')]++});return c}
+function stCount(b){const c={pb:0,ps:0,mb:0,ms:0};(b.sl||[]).forEach(x=>{c[(x[5]==='M'?'m':'p')+(x[2]==='b'?'b':'s')]++});
+  (b.sl_far||[]).forEach(f=>{c.mb+=+f[2]||0;c.ms+=+f[3]||0});return c}
+const RIFULL={},STFULL={},RIF={};                  // 🪜 v3.36.20: السلّم الكامل وصفوف 💠 الكاملة (عند الطلب) · فلتر 💠
+const stM=v=>{v=+v||0;const a=Math.abs(v);return (a>0&&a<1)?v.toFixed(4):v.toFixed(2)};     // المبالغ الصغيرة كاملة
+const stQ=q=>fmtCoin(q).replace(/^\+/,'');                     // الكمية بلا «+»
+function stRiRow(b,k){const kk=String(k),dir=b&&b.dir;return (((b&&b.ri)||{}).rows||[]).find(r=>r.kk===kk)||(((RIFULL[dir]||{}).rows)||[]).find(r=>r.kk===kk)||null}
 function stCap(b){const c=stCount(b);return `على المنصة ${c.pb} شراء · ${c.ps} بيع — بالذاكرة ${c.mb} شراء · ${c.ms} بيع`}
-function stLad(b,cp,o){o=o||{};const W=o.w||SK_W,H=o.h||(o.mini?220:290),SL=b.sl||[],dir=SKE(b.dir||'');cp=+cp||0;
+function stLad(b,cp,o){o=o||{};const W=o.w||SK_W,H=o.h||(o.mini?220:304),SL=b.sl||[],dir=SKE(b.dir||'');cp=+cp||0;
   const lv={};
   SL.forEach(x=>{if(x[2]!=='b')return;const g=lv[x[0]]||(lv[x[0]]={j:x[0],p:+x[6],pub:0,mem:0,pend:0});
     if(x[5]==='M')g.mem++;else{g.pub++;if(x[5]==='P')g.pend++;g.p=+x[3]}});
@@ -28542,7 +28623,7 @@ function stLad(b,cp,o){o=o||{};const W=o.w||SK_W,H=o.h||(o.mini?220:290),SL=b.sl
   if(!cp||(!B.length&&!S.length))return `<svg class="stlad" viewBox="0 0 ${W} 54" data-stl-bot="${dir}">${skAR(W-8,32,'لا أوامر منشورة بالمنصة الآن','r',12,'var(--mut)')}</svg>`;
   const ps=[cp].concat(B.map(g=>g.p),S.map(x=>+x[3]));let lo=Math.min(...ps),hi=Math.max(...ps);
   const span=Math.max(hi-lo,cp*0.008),pad=span*0.07;lo-=pad;hi+=pad;       // من أوطى أمر لأعلى أمر — البعد بنسبته الحقيقية
-  const t0=14,t1=H-14,Y=p=>t0+(t1-t0)*(hi-p)/(hi-lo),pu=(hi/cp-1)*100,pd=(1-lo/cp)*100,xl=44,xr=W-70;
+  const t0=14,t1=H-(o.mini?14:26),Y=p=>t0+(t1-t0)*(hi-p)/(hi-lo),pu=(hi/cp-1)*100,pd=(1-lo/cp)*100,xl=44,xr=W-70;
   const sp=[0.1,0.25,0.5,1,2,5,10,20,50].find(s=>Math.max(pu,pd)/s<=3)||100;
   let g='';
   for(let k=-Math.floor(pd/sp);k<=Math.floor(pu/sp);k++){if(!k)continue;const y=Y(cp*(1+k*sp/100));
@@ -28562,20 +28643,28 @@ function stLad(b,cp,o){o=o||{};const W=o.w||SK_W,H=o.h||(o.mini?220:290),SL=b.sl
   g+=`<g class="stcp"><line x1="${xl-6}" y1="${yc}" x2="${xr+4}" y2="${yc}" stroke="var(--cyan)" stroke-width="1.8" stroke-dasharray="4 3"/>`+
     `<rect x="${W-68}" y="${yc-10}" width="66" height="20" rx="8" fill="rgb(var(--cyan-rgb)/.18)" stroke="rgb(var(--cyan-rgb)/.6)"/>`+
     `<text x="${W-35}" y="${yc+4.5}" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--cyan)" direction="ltr">${f4(cp)}${o.dn==null?'':(o.dn?' ▼':' ▲')}</text></g>`;
+  if(!o.mini)g+=skAR(W-4,H-3,'اللون = الشراء وبيعاته الخاصة · اضغط أي خط · 🪜 السلم = كل المستويات والذاكرة','r',9.5,'var(--mut2)');
   return `<svg class="stlad" viewBox="0 0 ${W} ${H}" data-stl-bot="${dir}" role="img" aria-label="أوامر الشبكي المتدرج بالطول حسب بعدها عن السعر">${g}</svg>`}
-function stPop(b,key,ev){const SL=b.sl||[],N=+((b.scfg||{}).N)||1,f=+((b.scfg||{}).f)||0.0008,cp=+b.cp||0,P=key.split(':');
+function stPop(b,key,ev){const SL=b.sl||[],N=+((b.scfg||{}).N)||1,f=+((b.scfg||{}).f)||0.0008,cp=+b.cp||0,W=+((b.scfg||{}).W)||8,P=key.split(':');
   const d=p=>cp?`${((p/cp-1)*100>=0?'+':'')}${((p/cp-1)*100).toFixed(3)}%`:'';let h='';
+  const stt=s=>s==='L'?'منشور بالمنصة':s==='P'?'بالطريق للمنصة':'بذاكرة البوت';
+  const up=x=>`+${((+x[7]/+x[6]-1)*100).toFixed(2)}%`;                // 🪜 v3.36.20: البيعة فوق شرائها الخاص
+  const pot=x=>{const r=stRiRow(b,`${x[0]}:${x[1]}`);return r&&(r.g>0||r.k>0)?` · 💠 ${x[2]==='s'?'+'+stQ(r.g)+' عملة':'+'+stM(r.g*r.p+r.k)+'$'}`:''};
   if(P[0]==='b'){const j=+P[1],L=SL.filter(x=>x[0]===j).sort((a,z)=>a[1]-z[1]),pb=L.find(x=>x[2]==='b'&&x[5]!=='M'),bp=pb?+pb[3]:(L.length?+L[0][6]:0);
-    h=`<b style="color:${stCol(j)}">🛒 المستوى ${j} — شراء ثابت ${f4(bp)}</b><div class="stpd">البعد عن السعر ${d(bp)}</div>`+L.map(x=>{
-      const st=x[5]==='L'?'منشور بالمنصة':x[5]==='P'?'بالطريق للمنصة':'بذاكرة البوت';
-      return x[2]==='b'?`<div>الجزء ${x[1]}/${N}: 🟢 شراء ${fmtCoin(x[4])} بـ${f4(+x[3])} · ${st}</div>`
-        :`<div>الجزء ${x[1]}/${N}: 🔴 يبيع ${fmtCoin(x[4])} بـ${f4(+x[3])} · ${st}</div>`}).join('')}
+    h=`<b style="color:${stCol(j)}">🛒 المستوى ${j} — شراء ثابت ${f4(bp)}</b><div class="stpd">البعد عن السعر ${d(bp)} · بيعاته الخاصة ${L.map(up).join(' · ')} فوقه</div>`+L.map(x=>
+      x[2]==='b'?`<div>الجزء ${x[1]}/${N}: 🟢 شراء ${stQ(x[4])} بـ${f4(+x[3])} · ${stt(x[5])}${pot(x)}</div>`
+        :`<div>الجزء ${x[1]}/${N}: 🔴 يبيع ${stQ(x[4])} بـ${f4(+x[3])} (${up(x)} فوق شرائه · ${d(+x[3])} عن السعر) · ${stt(x[5])}${pot(x)}</div>`).join('')}
   else{const j=+P[1],k=+P[2],x=SL.find(y=>y[0]===j&&y[1]===k);if(!x)return;
-    const px=+x[3],q=+x[4],sq=+x[8]||q,sp=+x[9]||0,cost=sq>0?sp*q/sq:0,pr=q*px*(1-f)-cost;
+    const px=+x[3],q=+x[4],sq=+x[8]||q,sp=+x[9]||0,cost=sq>0?sp*q/sq:0,pr=q*px*(1-f)-cost,bp=+x[6];
+    const L=SL.filter(y=>y[0]===j),nb=L.filter(y=>y[2]==='b'),pbn=nb.filter(y=>y[5]!=='M').length,r=stRiRow(b,`${j}:${k}`);
     h=`<b style="color:${stCol(j)}">🔴 بيعة الجزء ${k}/${N} من المستوى ${j}</b>`+
-      `<div>السعر ${f4(px)} · البعد ${d(px)} · ${x[5]==='L'?'منشور بالمنصة':x[5]==='P'?'بالطريق للمنصة':'بذاكرة البوت'}</div>`+
-      `<div>الكمية ${fmtCoin(q)} · ${x[10]?`من عملاتك (كأنها اشتُريت بـ${f4(+x[6])})`:`اشتراها بكلفة ${f4(q>0?cost/q:0)}`}</div>`+
-      `<div>ربحها لو باعت بسعرها ≈ <b style="color:${pr>0?'var(--green)':'var(--red)'}">${pr>0?'+':''}${pr.toFixed(4)}$</b> (بعد العمولة)</div>`}
+      `<div>السعر ${f4(px)} · البعد ${d(px)} · ${stt(x[5])}</div>`+
+      `<div>الكمية ${stQ(q)} · ${x[10]?`من عملاتك (كأنها اشتُريت بـ${f4(bp)})`:`اشتراها بكلفة ${f4(q>0?cost/q:0)}`}</div>`+
+      `<div>ربحها لو باعت بسعرها ≈ <b style="color:${pr>0?'var(--green)':'var(--red)'}">${pr>0?'+':''}${pr.toFixed(4)}$</b> (بعد العمولة)</div>`+
+      `<div style="border-top:1px dashed ${stCol(j)};margin-top:6px;padding-top:5px">🛒 <b>شراؤها الخاص: المستوى ${j}</b> بسعر <b>${f4(bp)}</b> (${d(bp)} عن السعر · البيعة ${up(x)} فوقه)</div>`+
+      `<div style="color:var(--mut)">لمن تبيع يرجع نفس الجزء يشتري بـ${f4(bp)} — ينشر لمن يصير من أقرب ${W} شراء للسعر، وقبلها ينتظر بذاكرة البوت مهما بعد.</div>`+
+      `<div style="color:var(--mut2)">أجزاء هالمستوى: 🟢 ${nb.length} شراء (${pbn} منشور) · 🔴 ${L.length-nb.length} بيع</div>`+
+      (r&&(r.g>0||r.k>0)?`<div>💠 حصّالة هالجزء: +${stQ(r.g)} عملة داخل البيعة${r.k>=0.00005?' · '+stM(r.k)+'$':''} · ${r.c||0} دورة — ربحها يرجع لشرائها هذا</div>`:'')}
   let e=document.getElementById('stpop');if(!e){e=document.createElement('div');e.id='stpop';document.body.appendChild(e)}
   e.innerHTML=h;e.style.display='block';const r=e.getBoundingClientRect(),vw=innerWidth,vh=innerHeight;
   e.style.left=Math.max(8,Math.min(vw-r.width-8,(ev.clientX||vw/2)-r.width/2))+'px';e.style.top=Math.max(8,Math.min(vh-r.height-8,(ev.clientY||vh/2)+14))+'px';
@@ -28585,6 +28674,43 @@ document.addEventListener('click',e=>{const p=document.getElementById('stpop');
   if(!t){if(p&&p.style.display==='block'&&!(e.target.closest&&e.target.closest('#stpop')))p.style.display='none';return}
   const sv=t.closest('[data-stl-bot]'),dir=sv&&sv.getAttribute('data-stl-bot'),bot=((DATA&&DATA.bots)||[]).find(x=>x.dir===dir);
   if(!bot)return;e.stopPropagation();e.preventDefault();stPop(bot,t.getAttribute('data-stl'),e)},true);
+async function stFull(dir){const b=botOf(dir);if(!b)return;              // 🪜 v3.36.20: السلّم الكامل بالمستوى (حتى الذاكرة البعيدة)
+  showModal(`<h2>🪜 السلّم الكامل — ${gEsc(b.symbol)}</h2><p style="color:var(--mut);font-size:12px">⏳ أجيب كل المستويات…</p>`);
+  let V=null;try{V=await api('/api/step_ladder?dir='+encodeURIComponent(dir),null,1)}catch(e){V=null}
+  if(V&&V.ok){STFULL[dir]=Object.assign(STFULL[dir]||{},{t:Date.now(),sl:V.sl||[],cp:+V.cp||0});RIFULL[dir]={t:Date.now(),rows:V.ri||[]}}
+  stFullDraw(dir,(STFULL[dir]||{}).flt||'own')}
+function stFullDraw(dir,flt){const b=botOf(dir);if(!b)return;const F=STFULL[dir]||(STFULL[dir]={});F.flt=flt;
+  const fresh=F.sl&&F.sl.length&&Date.now()-(F.t||0)<120000,SL=fresh?F.sl:(b.sl||[]),cp=+b.cp||+F.cp||0,sc=b.scfg||{};
+  const N=+sc.N||1,W=+sc.W||8,G=+sc.G||0,far=fresh?[]:(b.sl_far||[]);
+  const d=p=>cp?`${((p/cp-1)*100>=0?'+':'')}${((p/cp-1)*100).toFixed(2)}%`:'';
+  const stt=s=>s==='L'?'<span style="color:var(--green)">منشور</span>':s==='P'?'<span style="color:var(--amber)">بالطريق</span>':'<span style="color:var(--mut2)">بالذاكرة</span>';
+  const lv={};SL.forEach(x=>{(lv[x[0]]||(lv[x[0]]={j:x[0],bp:+x[6],p:[]})).p.push(x)});
+  far.forEach(e=>{if(!lv[e[0]])lv[e[0]]={j:e[0],bp:+e[1],p:[],far:+e[2]||0,fars:+e[3]||0}});
+  let L=Object.values(lv).sort((a,z)=>z.bp-a.bp);
+  const own=g=>g.fars>0||g.p.some(x=>x[2]==='s'||x[5]!=='M'),dist=g=>cp>0&&g.bp>0?Math.abs(Math.log(g.bp/cp)):0;
+  const near=new Set(L.slice().sort((a,z)=>dist(a)-dist(z)).slice(0,10).map(g=>g.j)),all=L.length,nOwn=L.filter(own).length;
+  if(flt==='own')L=L.filter(own);else if(flt==='near')L=L.filter(g=>near.has(g.j));
+  const c={pb:0,ps:0,mb:0,ms:0};SL.forEach(x=>{c[(x[5]==='M'?'m':'p')+(x[2]==='b'?'b':'s')]++});far.forEach(e=>{c.mb+=+e[2]||0;c.ms+=+e[3]||0});
+  const dd=Array.from({length:N},(_,i)=>((+(sc.d1!=null?sc.d1:sc.d)||0)+i*(+sc.d||0))*100);
+  const dtxt=N>6?dd.slice(0,3).map(v=>'+'+v.toFixed(2)+'%').join(' · ')+' … +'+dd[N-1].toFixed(2)+'%':dd.map(v=>'+'+v.toFixed(2)+'%').join(' · ');
+  const bar=`<div style="text-align:center;margin:8px 0;padding:6px;border-radius:10px;background:rgb(var(--vio-rgb)/.10);border:1px solid var(--line)"><span style="color:var(--vio)">⚡</span> <b class="num">${cp?f4(cp):'—'}</b> <span style="color:var(--mut2);font-size:11px">السعر الآن</span></div>`;
+  let h='',cpd=false;
+  L.forEach(g=>{if(!cpd&&cp&&g.bp<cp){h+=bar;cpd=true}
+    const C=stCol(g.j),P=g.p.slice().sort((a,z)=>a[1]-z[1]),nb=P.filter(x=>x[2]==='b').length+(g.far||0),ns=P.filter(x=>x[2]==='s').length+(g.fars||0);
+    h+=`<div style="border-inline-start:4px solid ${C};background:var(--bg1);border-radius:9px;padding:6px 9px;margin:6px 0">
+      <div style="display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap"><b style="color:${C}">🛒 المستوى ${g.j} — شراء ${f4(g.bp)}</b><span style="font-size:11px;color:var(--mut)">${d(g.bp)} · 🟢 ${nb} · 🔴 ${ns}</span></div>`+
+      (g.far||g.fars?`<div style="font-size:11.5px;color:var(--mut2)">بالذاكرة (بعيد · ولا أمر بالمنصة): ${g.far?`🟢 ${g.far} شراء ينتظر`:''}${g.far&&g.fars?' · ':''}${g.fars?`🔴 ${g.fars} بيع ماسك عملته`:''}</div>`:'')+
+      P.map(x=>{const r=stRiRow(b,`${x[0]}:${x[1]}`),pt=r&&(r.g>0||r.k>0)?` · <span style="color:var(--vio)">💠 ${x[2]==='s'?'+'+stQ(r.g):'+'+stM(r.g*r.p+r.k)+'$'}</span>`:'';
+        return x[2]==='b'?`<div style="font-size:11.5px;line-height:1.75">الجزء ${x[1]}/${N}: 🟢 شراء ${stQ(x[4])} · ${stt(x[5])}${pt}</div>`
+          :`<div style="font-size:11.5px;line-height:1.75">الجزء ${x[1]}/${N}: 🔴 بيع ${stQ(x[4])} بـ<b class="num">${f4(+x[3])}</b> (+${((+x[7]/+x[6]-1)*100).toFixed(2)}% فوق شرائه · ${d(+x[3])}) · ${stt(x[5])}${pt}</div>`}).join('')+`</div>`});
+  if(!cpd&&L.length)h+=bar;
+  const B=(k,t)=>`<button onclick="stFullDraw('${dir}','${k}')" style="font-size:11.5px;padding:3px 10px;border-radius:7px;${flt===k?'background:var(--cyan);color:var(--on-acc)':''}">${t}</button>`;
+  showModal(`<h2>🪜 السلّم الكامل — ${gEsc(b.symbol)}</h2>
+   <p style="color:var(--mut);font-size:12px;line-height:1.8;margin:0 0 6px">كل مستوى = <b>شراء ثابت</b>${G?` (بينه وبين اللي فوقه ${(G*100).toFixed(2)}%)`:''} و<b>${N} بيعات خاصة بيه</b>: ${dtxt} فوق سعر شرائه — كل بيعة تبيع عملات شرائها هي بس، ولمن تبيع يرجع نفس الجزء يشتري بنفس السعر.<br>
+   على المنصة ${c.pb} شراء · ${c.ps} بيع (الأقرب ${W} لكل جهة) — بالذاكرة ${c.mb} شراء · ${c.ms} بيع${fresh?'':' · ⚠️ ما وصل السلّم الكامل — المعروض من البطاقة'}</p>
+   <div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 4px">${B('own',`ماسكة عملة أو منشورة (${nOwn})`)}${B('near','قرب السعر (10)')}${B('all',`الكل (${all})`)}</div>
+   ${h||'<p style="color:var(--mut2);font-size:12px">— ولا مستوى بهالفلتر —</p>'}
+   <div class="mbtns"><button onclick="hideModal()">إغلاق</button></div>`)}
 function stLadOld(R,b,cp){const w=Math.max(280,Math.min(560,(R.mlad.clientWidth||380)));const h=stLad(b,cp,{w,dn:null});
   if(R.mlad._h!==h){R.mlad.innerHTML=h;R.mlad._h=h}
   const ps=R.mlad.parentElement&&R.mlad.parentElement.querySelector('.pstrip');if(ps&&ps.style.display!=='none')ps.style.display='none';
