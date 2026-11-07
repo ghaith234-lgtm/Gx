@@ -11,6 +11,7 @@ function ok(name, cond, det) { res.push(!!cond); if (!Q || !cond) console.log((c
   const pg = await br.newPage({ viewport: { width: 430, height: 900 } });
   const errs = []; pg.on('pageerror', e => errs.push(String(e)));
   await pg.route('**/*', rt => (/^https?:\/\/127\.0\.0\.1[:/]/.test(rt.request().url()) ? rt.continue() : rt.abort()));
+  await pg.routeWebSocket(/.*/, () => {});      // the page's OKX live-price socket: answered here, never the network
   await pg.goto(URL, { waitUntil: 'domcontentloaded' });
   await pg.waitForFunction(() => typeof DATA !== 'undefined' && DATA && DATA.bots && DATA.bots.filter(b => b.bot_type === 'grid_step' && b.ri).length === 2, null, { timeout: 60000 });
   await pg.evaluate(() => { const sp = document.getElementById('splash'); if (sp) sp.remove() });

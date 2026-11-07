@@ -12,6 +12,7 @@ function ok(name, cond, det) {
   const pg = await br.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: SHOT ? 2 : 1 });
   const out = [];
   await pg.route('**/*', rt => (/^https?:\/\/127\.0\.0\.1[:/]/.test(rt.request().url()) ? rt.continue() : (out.push(rt.request().url()), rt.abort())));
+  await pg.routeWebSocket(/.*/, () => {});      // the page's OKX live-price socket: answered here, never the network
   const bodies = [];
   pg.on('request', rq => { if (rq.url().includes('/api/step_plan')) bodies.push(rq.postData()); });
   const errs = [];

@@ -10,6 +10,7 @@ const W = 1440, H = 900;
   await ctx.addInitScript(() => { try { localStorage.setItem('dash_stick', 'off') } catch (e) {} });
   const pg = await ctx.newPage();
   await pg.route('**/*', rt => (/^https?:\/\/127\.0\.0\.1[:/]/.test(rt.request().url()) ? rt.continue() : rt.abort()));
+  await pg.routeWebSocket(/.*/, () => {});      // the page's OKX live-price socket: answered here, never the network
   await pg.goto(DASH, { waitUntil: 'domcontentloaded' });
   await pg.waitForSelector('.card[data-dir]', { timeout: 30000 });
   await pg.evaluate(() => { const sp = document.getElementById('splash'); if (sp) sp.remove() });
