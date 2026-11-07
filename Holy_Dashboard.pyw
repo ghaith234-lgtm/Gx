@@ -953,10 +953,12 @@ def bot_snapshot(b):
             "ri": _safe(reinvest_snapshot, b, st, default=None),
             "sl": (_safe(_step_slots_view, st, default=None) if _bt == "grid_step" else None),     # 🪜 v3.36.18: البطاقة بالطول
             "sl_far": (_safe(_step_sl_far, st, default=None) if _bt == "grid_step" else None),     # 🪜 v3.36.20: الباقي مختصر
+            "vbuy_usd": (round(sum(float(v.get("target_price") or 0) * float(v.get("locked_qty") or 0)
+                                   for v in (st.get("virtual_buys") or {}).values()), 6) if _bt == "grid_step" else None),
             "ladder": {"sells": pack_levels(st.get("limit_sells"), "s"),
                        "buys": (_step_merge_lv if _bt == "grid_step" else (lambda x: x))(pack_levels(st.get("limit_buys"), "b")),
-                       "vsells": pack_levels(st.get("virtual_sells"), "vs"),
-                       "vbuys": (_step_merge_lv if _bt == "grid_step" else (lambda x: x))(pack_levels(st.get("virtual_buys"), "vb")),
+                       "vsells": _step_near(pack_levels(st.get("virtual_sells"), "vs"), st, False, _bt),
+                       "vbuys": _step_near((_step_merge_lv if _bt == "grid_step" else (lambda x: x))(pack_levels(st.get("virtual_buys"), "vb")), st, True, _bt),
                        "asells": pack_levels(st.get("accum_sells"), "as"), "abuys": pack_levels(st.get("accum_buys"), "ab")},
             "bot_type": b["cfg"].get("bot_type", "grid"),
             "gcfg": ({"lower_price": b["cfg"].get("lower_price"), "upper_price": b["cfg"].get("upper_price"),
@@ -18060,6 +18062,13 @@ def _step_keep_levels(st, near=10):
     return keep
 
 
+def _step_near(lst, st, buy, bt, n=40):
+    """🪜 v3.36.20: قائمة الشبكة العامة (ذاكرة بيع/شراء) لبوت متدرج كبير — الأقرب `n` بس (أدنى بيع · أعلى شراء · أقرب 14 بالدرج)"""
+    if bt != "grid_step" or len(st.get("slots") or {}) <= STEP_SL_MAX or len(lst) <= n:
+        return lst
+    return sorted(lst, key=lambda x: -float(x.get("p") or 0) if buy else float(x.get("p") or 0))[:n]
+
+
 def _step_sl_far(st):
     """🪜 v3.36.20: المستويات اللي ما انعرضت كاملة (خانات كثيرة) — [المستوى, سعر الشراء, شراء ينتظر بالذاكرة, بيع ماسك عملة بالذاكرة]
     (ولا واحد منهم عنده أمر بالمنصة) · None = كلها كاملة"""
@@ -23613,7 +23622,7 @@ function sortBots(bots){
    نفس الرقم على كل بطاقاته؛ ومن عنده حسابان يشوف رقم كل حساب على بطاقاته. */
 let FUND=new Map(),FKEY=new Map();
 function walletKey(b){return b.wid!=null?'w'+b.wid:'b'+(+((b.cover||{}).have_usdt)||0).toFixed(2)}
-function vbuyCost(b){let v=0;for(const x of (b.ladder&&b.ladder.vbuys)||[])if(x.p>0&&x.q>0)v+=x.p*x.q;return v}
+function vbuyCost(b){if(b.vbuy_usd!=null)return +b.vbuy_usd||0;let v=0;for(const x of (b.ladder&&b.ladder.vbuys)||[])if(x.p>0&&x.q>0)v+=x.p*x.q;return v}
 function calcFund(all){
   FUND=new Map();FKEY=new Map();
   const gs=(all||[]).filter(b=>b.bot_type!=='dca'&&b.bot_type!=='dca_buy'&&!b.demo
