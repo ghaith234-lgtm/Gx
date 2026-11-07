@@ -36,6 +36,7 @@ SUITES = [   # (group, name, argv, env)
     ("reinvest", "t_ri_dash", ["t_ri_dash.py", DASH, "-q"], {}),
     ("win", "t_win", ["t_win.py", DASH, "-q"], {}),
     ("deep", "t_deep", ["t_deep.py", DASH, "-q"], {}),
+    ("deep", "t_pair", ["t_pair.py", DASH, "-q"], {}),
     ("cut", "t_cut", ["t_cut.py", "-q"], {}),
     ("cut", "t_cut --move", ["t_cut.py", "--move", "-q"], {}),
     ("cut", "t_cut 💠60%", ["t_cut.py", "-q"], {"STEP_CFG": RI}),
