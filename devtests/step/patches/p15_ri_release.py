@@ -21,7 +21,7 @@ R = [
 ''',
      '''    _ri_am_tick(state, b)
     if b.get("rel_open"):
-        _ri_release_end(state, b)                         # (انقطاع بنص التحرير ⇒ يكمل)
+        _ri_release_go(state, b)                          # (انقطاع بنص التحرير ⇒ يكمل من وين ما وقف)
     want = bool(config.get("reinvest"))
     if os.path.exists(RELEASE_FLAG) or (b.get("on") and not want):
         if b.get("on") or b.get("broken") or _ri_has(b):
@@ -243,22 +243,36 @@ def _ri_release(state, b):
                      "days": round(max(0.0, (time.time() - float(b.get("started_ts") or time.time())) / 86400.0), 2)}
     if not _commit(state, []):                             # أول شي: ما بيه تراكم جديد
         return
+    _ri_release_go(state, b)
+
+
+def _ri_release_go(state, b):
+    """🔓 التحرير خطوة خطوة — ويكمل بعد انقطاع من وين ما وقف (rel_open بالدفتر): ① الخطة (اللي برّه الأوامر يتحرر هسه ·
+    قيود التصغير) على القرص قبل أي طلب ② العلم ينشال ③ كل تصغير ينرسل ويتأكد من المنصة ④ سطر الملخّص الواحد"""
+    ro = b["rel_open"]
     S = _slots(state)
-    sends = []
-    for key, lv in list((b.get("levels") or {}).items()):
-        s = S.get(key)
-        if s is None or s.get("am"):
-            if s is not None:
-                b.setdefault("unwind", {}).setdefault(key, {"side": s.get("side"), "ts": time.time(), "tries": 0})
-            continue
-        if _ri_rel_plan(state, b, key, s, lv)[0]:
-            sends.append(key)
-    if not _commit(state, []):                             # القيود + اللي تحرر هسه — على القرص قبل أي طلب للمنصة
-        return
+    if not ro.get("planned"):
+        for key, lv in list((b.get("levels") or {}).items()):
+            s = S.get(key)
+            if s is None or s.get("am"):
+                if s is not None:
+                    b.setdefault("unwind", {}).setdefault(key, {"side": s.get("side"), "ts": time.time(), "tries": 0})
+                continue
+            _ri_rel_plan(state, b, key, s, lv)
+        ro["planned"] = True
+        if not _commit(state, []):                         # القيود + اللي تحرر هسه — على القرص قبل أي طلب للمنصة
+            ro["planned"] = False
+            for s in S.values():                          # (ما انحفظت ⇒ ولا تصغير ينرسل · الخطة تنعاد — اللي تحرر بالذاكرة ما يتكرر)
+                if s.get("am") and (s["am"].get("op") or {}).get("rel") and not int(s["am"].get("n") or 0):
+                    s.pop("am", None)
+            return
     _ri_drop(RELEASE_FLAG)
-    for key in sends:
-        _ri_am_send(state, key, S[key])
-        _ri_am_check(state, key, S[key], tries=5)
+    for key, s in S.items():
+        am = s.get("am")
+        if am and (am.get("op") or {}).get("rel"):
+            if not int(am.get("n") or 0):
+                _ri_am_send(state, key, s)
+            _ri_am_check(state, key, s, tries=5)
     _ri_release_end(state, b)
 
 
