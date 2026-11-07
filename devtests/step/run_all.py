@@ -2,7 +2,8 @@
 #   plus the reinvest suites · one line per suite · a table at the end (also written to --out=FILE)
 #   python3 devtests/step/run_all.py [Holy_Dashboard.pyw] [--only=group,...] [--names=suite,...] [--soak=HOURS] [--every=K] [--out=FILE]
 #     groups: off (no reinvest) · ri (the same suites with reinvest 60%) · reinvest (t_ri · t_inj · t_wd · t_rel · t_ri_dash) ·
-#             cut (t_cut · --move, without and with reinvest) · ui (the browser: ui_first · ui_card · ui_ri) · soak (t_soak · t_osc)
+#             cut (t_cut · --move, without and with reinvest) · ui (the browser: ui_first · ui_card · ui_ri) · soak (t_soak · t_osc) ·
+#             win (t_win: the strict window · the dashboard's real guard on the 🪜 · the accumulator receiving 🪜 handoffs — v3.36.19)
 #   STEP_ENGINE=… tests another engine copy (default: the one extracted from the dashboard) · the browser tests need `unset TMPDIR`
 import json, os, subprocess, sys, time
 
@@ -32,6 +33,7 @@ SUITES = [   # (group, name, argv, env)
     ("reinvest", "t_wd", ["t_wd.py", "-q", f"--every={EVERY}"], {}),
     ("reinvest", "t_rel", ["t_rel.py", "-q", f"--every={EVERY}"], {}),
     ("reinvest", "t_ri_dash", ["t_ri_dash.py", DASH, "-q"], {}),
+    ("win", "t_win", ["t_win.py", DASH, "-q"], {}),
     ("cut", "t_cut", ["t_cut.py", "-q"], {}),
     ("cut", "t_cut --move", ["t_cut.py", "--move", "-q"], {}),
     ("cut", "t_cut 💠60%", ["t_cut.py", "-q"], {"STEP_CFG": RI}),

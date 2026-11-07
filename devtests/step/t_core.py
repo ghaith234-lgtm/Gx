@@ -140,12 +140,12 @@ if want("random"):
         b.run(walk(market(rng, p0, 160, rng.choice([0.004, 0.01, 0.02])), hold=rng.choice([3.0, 6.0, 12.0])))
         dis = discipline(b)
         W = cfg["step_window"]
-        okk = not b.errors and not dis and live_max[0] <= W + 2 and b.audits > 50
+        okk = not b.errors and not dis and live_max[0] <= W and b.audits > 50       # 🪟 v3.36.19: strict like ♾️ (was W + 2)
         if not okk:
             worst.append((seed, sym, cfg, b.errors[:3], dis[:3], live_max[0]))
     ok(f"random: {SEEDS} markets × 4 coin kinds (XRP · BTC · DOGE lot 1 · PEPE) · N 1–5 · partial fills · short/plenty coins — "
-       "books = wallet every loop · buys never above their price · sells never under · every sell profitable · window ≤ W+2 "
-       "(orders nothing filled yet)", not worst, worst[:2])
+       "books = wallet every loop · buys never above their price · sells never under · every sell profitable · window ≤ W "
+       "(orders nothing filled yet · strict like ♾️ since v3.36.19)", not worst, worst[:2])
     if DUST:
         print(f"ℹ️  finding F2: {len(DUST)} sells booked under zero only by the coarse quantity step (coins kept back, sold later) — e.g. {DUST[:2]}")
 
