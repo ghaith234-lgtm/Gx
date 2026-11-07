@@ -84,9 +84,12 @@ async function until(f, ms) { const t0 = Date.now(); let v; while (Date.now() - 
   const s4 = await until(async () => { const s = await sim(); return s.rb && s.rb.on === false && (s.lines || []).some(l => /^🔄 \[تحرير ربح داخلي\]/.test(l)) ? s : null }, 30000);
   ok('🔄 off (its dialog: the published orders shrink now) ⇒ the engine releases: on = off · «🔄 [تحرير ربح داخلي]» · books = wallet',
      ah && s4 && !s4.errors.length, { ah, rb: s4 && { on: s4.rb.on, rel: s4.rb.released }, lines: s4 && s4.lines.slice(0, 3) });
-  await pg.waitForTimeout(2500);
+  await pg.waitForFunction(d => { const b = DATA.bots.find(x => x.dir === d); return b && b.ri && !b.ri.on && !b.ri.cfg_on && b.ri.usd < 1e-6 }, dir,
+                           { timeout: 15000 }).catch(() => null);      // (the card refreshes from the bot's file every second or so)
   const after = await pg.evaluate(d => { const b = DATA.bots.find(x => x.dir === d); return b && b.ri && { on: b.ri.on, cfg_on: b.ri.cfg_on, usd: b.ri.usd } }, dir);
-  ok('… the card follows: 🔄 off · nothing held in the orders any more', after && !after.on && !after.cfg_on && after.usd < 1e-6, after);
+  const s5 = await sim();
+  ok('… the card follows: 🔄 off · nothing held in the orders any more', after && !after.on && !after.cfg_on && after.usd < 1e-6,
+     { after, engine: { on: s5.rb.on, unwind: s5.rb.unwind, released: s5.rb.released, rel_open: s5.rb.rel_open, lines: s5.lines.slice(0, 6) } });
   ok('no page error', errs.length === 0, errs.slice(0, 3));
   await br.close();
   console.log(`${res.filter(Boolean).length} ok · ${res.length - res.filter(Boolean).length} failed`);
