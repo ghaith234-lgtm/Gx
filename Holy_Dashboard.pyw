@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.23"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.24"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -23932,7 +23932,7 @@ function buildRecCard(b,i){
    حجم (ResizeObserver: لما يبين وين ما كان بالصفحة · لما يتغير العرض) · لما تتغير الأوامر · بعد ما تكمّل الخطوط — ما يقرأ التخطيط بكل تحديث حي */
 let RCF_RO=null;
 function rcFit3(n){if(!n)return;
-  if(!n._ro&&typeof ResizeObserver==='function'){RCF_RO=RCF_RO||new ResizeObserver(es=>es.forEach(e=>rcFit3(e.target)));RCF_RO.observe(n);n._ro=1}   // يراقبه حتى قبل ما ينحط بالصفحة
+  if(!n._ro&&typeof ResizeObserver==='function'){RCF_RO=RCF_RO||new ResizeObserver(es=>requestAnimationFrame(()=>es.forEach(e=>rcFit3(e.target))));RCF_RO.observe(n);n._ro=1}   // يراقبه حتى قبل ما ينحط بالصفحة
   const k=(n._k||'')+'|'+innerWidth;if(n._f3===k||!n.isConnected||!n.offsetParent)return;
   const r=n.children;let h='none';
   if(r.length>3){const d=r[3].offsetTop-r[0].offsetTop;if(!(d>0))return;h=d+'px'}
@@ -29004,7 +29004,8 @@ async function openWalletView(){let s={wallets:[]};try{s=await api('/api/setting
   <p style="color:var(--mut2);font-size:10.5px;margin:-2px 0 8px">مو مضاف كمحفظة — عملات البوتات بس (كل عملة مرة وحدة). أضفه من 🔗 الارتباط حتى تشوف كل عملاته.</p>
   <div style="display:flex;flex-direction:column;gap:6px">${(a.coins||[]).map(fxRow).join('')}</div></div>`});
  showModal(`<h2>💰 محفظتي في المنصة</h2>${h}<div class="mbtns"><button onclick="(async()=>{toast('🔄 أجلب من OKX…',true);await api('/api/control',{action:'refresh_bal'});openWalletView()})()">🔄 تحديث</button><button onclick="hideModal()">إغلاق</button></div>`)}
-window.addEventListener('error',e=>{try{toast('⚠️ خلل واجهة: '+e.message,false)}catch(_){}});
+window.addEventListener('error',e=>{try{if(/ResizeObserver loop/.test(String((e&&e.message)||'')))return;   // ⚠️ v3.36.24: ملاحظة المتصفح (مو خلل) — تنعرض الجاية بالإطار التالي
+  toast('⚠️ خلل واجهة: '+e.message,false)}catch(_){}});
 /* ↔️ v3.21.7: صف البوتات/الصفحات — يبين إن بيه سحب (حافة باهتة + سهم) · الضغط على السهم يسحب */
 /* ↔️ v3.21.9: صف الأزرار — تلميح سحب خفيف (ما ينلمس) بجهة الأزرار الباقية · يظهر بعد ثانيتين */
 function navSync(){const n=$('#navAct'),w=$('#navwrap');if(!n||!w)return;
