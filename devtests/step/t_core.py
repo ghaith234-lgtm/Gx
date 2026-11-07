@@ -80,7 +80,10 @@ if want("owner"):
        and min(s["bp"] for s in S.values()) >= 0.7, (len(S), min(s["bp"] for s in S.values())))
     ok("owner: price 1.0101 ⇒ the first part of level 0 sells 4.996 coins (5 × (1 − fee), from the wallet) at 1.01",
        f[0] == ("sell", 1.01, 4.996), f[:2])
-    ok("owner: back to 1.00 ⇒ that part buys back THE SAME 5 coins at its fixed price 1.00 (not dollars)", f[1] == ("buy", 1.0, 5.0), f[:3])
+    g01 = float(((b.st.get("reinvest") or {}).get("levels") or {}).get("0:1", {}).get("grown_qty") or 0) if b.st.get("reinvest") else 0.0
+    ok("owner: back to 1.00 ⇒ that part buys back THE SAME 5 coins at its fixed price 1.00 (not dollars) — with reinvest (STEP_CFG):"
+       " the 5 + its growth", f[1][:2] == ("buy", 1.0) and abs(f[1][2] - (5.0 + g01)) < 1e-9 and (g01 > 0) == bool(b.st.get("reinvest")),
+       (f[:3], g01))
     lv1 = [x for x in f if x[0] == "buy" and abs(x[1] - 0.9708) < 1e-9]
     ok("owner: 0.97 ⇒ level −1 buys its 3 parts as 3 separate orders at 0.9708, equal coins", len(lv1) == 3 and len({x[2] for x in lv1}) == 1, lv1)
     s1 = [x for x in f if x[0] == "sell" and x[1] in (0.9806, 0.9903, 1.0)]
