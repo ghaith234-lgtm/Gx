@@ -448,10 +448,10 @@ if want("scale"):
     card_kb = len(json.dumps({k: snap.get(k) for k in ("sl", "sl_far", "ri", "ladder")}, ensure_ascii=False)) / 1024
     t0 = time.perf_counter(); full = m.step_ladder_view("step_big"); t_full = time.perf_counter() - t0
     shutil.rmtree(R, ignore_errors=True)
-    ok(f"scale: {n} parts (20 × 243 levels) — the engine's loop {per * 1000:.0f} ms (≤ 400, every 3 s · {loops[0]} loops) · its state {kb:.0f} KB · the dashboard builds the "
+    ok(f"scale: {n} parts (20 × 243 levels) — the engine's loop {per * 1000:.0f} ms (≤ 250, every 3 s · {loops[0]} loops) · its state {kb:.0f} KB · the dashboard builds the "
        f"card in {t_snap * 1000:.0f} ms (≤ 1500) carrying {card_kb:.0f} KB (≤ 150) · the full ladder {len(full.get('sl') or [])} parts in "
        f"{t_full * 1000:.0f} ms · books = wallet · never W+1",
-       n > 4000 and loops[0] > 50 and per <= 0.4 and t_snap <= 1.5 and card_kb <= 150 and len(full.get("sl") or []) == n and not b.errors and not b.over,
+       n > 4000 and loops[0] > 50 and per <= 0.25 and t_snap <= 1.5 and card_kb <= 150 and len(full.get("sl") or []) == n and not b.errors and not b.over,
        (n, per, kb, t_snap, card_kb, t_full, b.errors[:2], b.over[:2]))
 
 print(f"{'✅' if all(res) else '❌'} t_deep: {sum(res)}/{len(res)}")
