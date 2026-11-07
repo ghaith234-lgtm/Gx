@@ -311,7 +311,9 @@ class Guard:
 
 # ─────────────── ② the guard ───────────────
 if want("guard"):
-    for name, extra, race in (("plain", {}, False), ("race", {}, True), ("reinvest 60%", {"reinvest": True, "reinvest_pct": 60}, True)):
+    for name, extra, race in (("plain", {}, False), ("race", {}, True), ("reinvest 60%", {"reinvest": True, "reinvest_pct": 60}, True),
+                              ("20 parts · 0.3% then 1% · 💠100%", {"usd_value": 100.0, "step_parts": 20, "step_first": 0.003, "step_sell": 0.01,
+                                                                   "reinvest": True, "reinvest_pct": 100}, True)):
         c = Clock()
         ex = Ex(c, sym="XRP-USDT", price=P0, base=0, quote=2000)
         b = Bot(ex, dict(OWNER, **extra))
