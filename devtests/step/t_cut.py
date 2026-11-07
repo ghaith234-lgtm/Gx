@@ -18,6 +18,14 @@ EVERY = int(next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--every=
 STORY = [1.0, 1.0101, 1.0101, 1.0, 1.0, 0.97, 0.9705, 0.95, 0.9806, 0.9903, 1.0, 1.0205, 1.0305, 1.0, 1.0, 1.0, 1.0]
 
 
+def _ri_view(rb):
+    if not rb:
+        return None
+    return (round(float(rb.get("credited") or 0), 9), int(rb.get("cycles") or 0), bool(rb.get("on")),
+            sorted((k, round(float(lv.get("usd_book") or 0), 9), round(float(lv.get("grown_qty") or 0), 12), int(lv.get("cycles") or 0))
+                   for k, lv in (rb.get("levels") or {}).items()))
+
+
 def story(cuts=(), move=False):
     c = Clock(); ex = Ex(c, base=100, quote=1000, partial=0.5)
     b = Bot(ex, {"step_window": 4})
@@ -30,7 +38,8 @@ def story(cuts=(), move=False):
     out = {"fills": sorted((x[2], str(x[3]), str(x[4])) for x in ex.fills),
            "profit": round(float(b.st.get("total_profit") or 0), 9) if b.st else None,
            "slots": sorted((k, s["side"], s["cyc"], s.get("n", 0)) for k, s in (b.st or {}).get("slots", {}).items()),
-           "log": sorted(m for m in b.hist() if m.startswith(("🟢", "🔴"))),
+           "log": sorted(m for m in b.hist() if m.startswith(("🟢", "🔴", "💠"))),
+           "ri": _ri_view((b.st or {}).get("reinvest")),     # 💠 the pots too (STEP_CFG='{"reinvest": true, ...}')
            "errors": b.errors, "cuts": b.cuts, "moments": b.moments, "restarts": b.restarts}
     shutil.rmtree(b.dir, ignore_errors=True)
     return out
@@ -60,7 +69,7 @@ if __name__ == "__main__":
             if r["errors"]:
                 bad.append((k, "books", r["errors"][:2])); continue
             if not MOVE:
-                for key in ("fills", "profit", "slots", "log"):
+                for key in ("fills", "profit", "slots", "log", "ri"):
                     if r[key] != ref[key]:
                         bad.append((k, key, "differs from the run with no cut")); break
                 else:

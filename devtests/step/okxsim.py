@@ -12,7 +12,7 @@
 #     orders  : every live order with the bot's id belongs to exactly one slot · no slot points at an order OKX doesn't have
 #     cross   : the bot's own buys stay under its own sells
 #     log     : one 🟢 line per completed buy · one 🔴 line per completed sell · Σ profit in the 🔴 lines = booked profit
-import contextlib, importlib.util, io, json, os, random, shutil, string, sys, tempfile, types, urllib.parse, urllib.request
+import contextlib, importlib.util, io, json, os, random, re, shutil, string, sys, tempfile, types, urllib.parse, urllib.request
 from collections import Counter
 from datetime import datetime as _RealDT, timezone
 from decimal import Decimal, ROUND_FLOOR
@@ -29,6 +29,9 @@ class Cut(BaseException):
 
 class Stop(BaseException):
     """the scenario is over"""
+
+
+SALE_MARK = re.compile(r"المستوى (-?\d+) · الجزء (\d+)/\d+.*· البيعة (\d+)")
 
 
 def D(x):
@@ -124,6 +127,7 @@ class Ex:
         self.rng = random.Random(seed)
         self.orders, self.by_cl, self.n = {}, {}, 0
         self.pub_fail = self.req_spec_fail = False     # F11 tests: the library's PublicAPI / requests to the spec fail
+        self.amend_lag, self.amends = 0.0, []          # 💠 amend-order: seconds until a size change lands · (ordId, old, new)
         self.spec_via = None
         self.open = {}                           # oid → the orders still live / partly filled (pending())
         self.fills = []                        # (ordId, clOrdId, side, px, sz, maker)
@@ -257,6 +261,36 @@ class Ex:
         o["state"] = "canceled"
         return {"code": "0", "data": [{"ordId": oid, "sCode": "0"}]}
 
+    def _amend(self, p):
+        """OKX amend-order (size): accepted ⇒ code 0 and the new size lands (now, or `amend_lag` s later — OKX applies it after
+        answering) · a finished / unknown order ⇒ 51503 · not on the lot ⇒ 51121 · the same size ⇒ 51508 · a bigger size needs the
+        free balance (51008) · a size at or under what already filled ⇒ the order is done (filled)"""
+        oid = str(p.get("ordId") or self.by_cl.get(str(p.get("clOrdId") or "")) or "")
+        o = self.orders.get(oid)
+        bad = lambda sc, msg: {"code": "1", "msg": "", "data": [{"ordId": oid, "clOrdId": "", "reqId": "", "sCode": sc, "sMsg": msg}]}
+        if not o or o["state"] not in ("live", "partially_filled"):
+            return bad("51503", "Order modification failed as the order does not exist or is completed")
+        nsz = D(str(p.get("newSz") or 0))
+        if nsz <= 0 or not self._mult(nsz, self.lot):
+            return bad("51121", "Order quantity must be a multiple of the lot size")
+        if nsz == o["sz"]:
+            return bad("51508", "Order modification failed as the size has not changed")
+        d = nsz - o["sz"]
+        if d > 0 and ((o["side"] == "buy" and d * o["px"] > self.avail(self.quote)) or (o["side"] == "sell" and d > self.avail(self.base))):
+            return bad("51008", "Order failed. Insufficient balance")
+        self.amends.append((oid, str(o["sz"]), str(nsz)))
+
+        def apply():
+            if o["state"] in ("live", "partially_filled"):
+                o["sz"] = nsz
+                if o["acc"] >= nsz:
+                    o["state"] = "filled"
+        if self.amend_lag > 0:
+            self.late.append([self.clock.t + self.amend_lag, "amend_apply", apply])
+        else:
+            apply()
+        return {"code": "0", "msg": "", "data": [{"ordId": oid, "clOrdId": o["cl"], "reqId": "", "sCode": "0", "sMsg": ""}]}
+
     def _land(self):
         due = [x for x in self.late if x[0] <= self.clock.t]
         self.late = [x for x in self.late if x[0] > self.clock.t]
@@ -265,6 +299,10 @@ class Ex:
                 self._place(p)
             elif kind == "cancel":
                 self._cancel(p)
+            elif kind == "amend":
+                self._amend(p)
+            elif kind == "amend_apply":
+                p()
 
     def call(self, op, p, act):
         """every API call goes through here: latency · internet down · injected faults · power cut before/after"""
@@ -280,7 +318,7 @@ class Ex:
         if f == "drop":
             raise TimeoutError(f"{op}: no answer (never reached OKX)")
         if isinstance(f, tuple) and f[0] == "late":
-            self.late.append([self.clock.t + f[1], op, dict(p) if op == "place" else p])
+            self.late.append([self.clock.t + f[1], op, dict(p) if op in ("place", "amend") else p])
             raise TimeoutError(f"{op}: timed out (reaches OKX later)")
         if isinstance(f, tuple) and f[0] == "code":
             return {"code": str(f[1]), "msg": "injected", "data": []}
@@ -375,6 +413,9 @@ class _Requests:
         if url.endswith("/trade/cancel-order"):
             b = json.loads(data)
             return _Resp(ex.call("cancel", b["ordId"], lambda: ex._cancel(b["ordId"])))
+        if url.endswith("/trade/amend-order"):
+            b = json.loads(data)
+            return _Resp(ex.call("amend", b, lambda: ex._amend(b)))
         raise AssertionError("unknown POST " + url)
 
 
@@ -402,6 +443,8 @@ class Bot:
         self.W0 = None                          # coins the wallet slots took at birth
         self.fill_lines = []                    # every 🟢/🔴 line the engine wrote (its file trims to 1000)
         self.n_bl = self.n_sl = 0                # their counts (the audit runs every loop: no rescan of a long run)
+        self.sales_seen, self.red_seen, self.ri_seen = set(), set(), set()   # 💠 a sale's lines by their «البيعة n» mark
+        self.dup_lines = []                      # a sale line written twice (a cut between a sale's lines)
         self.legacy, self.V0 = True, D(0)       # v3.36.17 engines: the wallet slots' «as if bought» basis at birth
         self.virt = {}                          # (slot, cyc) → virtual basis booked for a wallet slot's first sell
         self.unbooked = {}                      # (slot, cyc) → basis not booked when a sell ended short (coins went to fee dust)
@@ -458,12 +501,23 @@ class Bot:
         def log_trade_history(sym, msg):
             me._moment("log", "before")
             log0(sym, msg)
-            if str(msg).startswith(("🟢", "🔴")):     # every fill line as written — the engine's file keeps only its newest 1000
+            if str(msg).startswith(("🟢", "🔴", "💠")):     # every fill line as written — the engine's file keeps only its newest 1000
                 me.fill_lines.append(msg)
+                mk = SALE_MARK.search(str(msg))
+                sid = (int(mk.group(1)), int(mk.group(2)), int(mk.group(3))) if mk else None
                 if str(msg).startswith("🟢 [شراء"):
                     me.n_bl += 1
-                elif str(msg).startswith("🔴 [بيع"):
-                    me.n_sl += 1
+                elif str(msg).startswith(("🔴 [بيع", "💠 [ربح داخلي]")):
+                    if sid is None:
+                        me.n_sl += 1                 # (an engine before the mark: one 🔴 line per sale)
+                    else:
+                        seen = me.red_seen if str(msg).startswith("🔴") else me.ri_seen
+                        if sid in seen:
+                            me.dup_lines.append(str(msg)[:160])
+                        seen.add(sid)
+                        if sid not in me.sales_seen:
+                            me.sales_seen.add(sid)
+                            me.n_sl += 1
             me._moment("log", "after")
 
         def _book(key, pre, od):                  # a sale's basis the books need: wallet coins «as if bought» · coins kept back
@@ -607,6 +661,31 @@ class Bot:
             return
         L = D(st.get("fee_dust") or 0)
         U = D(st.get("total_profit") or 0)
+        rb = st.get("reinvest") or {}
+        W0 = self.W0
+        if rb:                                   # 💠 the real profit = the ordinary (total_profit) + what was reinvested
+            g_ = lambda f: D(str(rb.get(f) or 0))
+            U += g_("credited") - g_("out_usd")             # ➖ reinvested profit moved to total_profit is not new money
+            W0 += g_("inj_coin") - g_("cap_coin_out") - g_("out_coin")   # 💉 coins the bot took · ➖ gave back / handed over …
+            U += g_("inj_coin_basis") - g_("cap_coin_out_basis") - g_("out_coin_basis")   # … «as if bought» at their basis
+            sub = sum(D(str(lv.get("usd_book") or 0)) + D(str(lv.get("grown_qty") or 0)) * D(str(lv.get("px") or 0))
+                      for lv in (rb.get("levels") or {}).values())
+            want_ = g_("credited") + g_("inj_total") - g_("out_gain")
+            if abs(sub - want_) > D("1e-7"):
+                self.err(f"reinvest: pots {sub} ≠ credited + injected − taken out {want_}")
+            ho = sum(D(str(h.get("coin") or 0)) for h in (rb.get("handoffs") or []))
+            if len(rb.get("handoffs") or []) < 200 and abs(ho - g_("out_coin")) > D("1e-9"):
+                self.err(f"reinvest: handed to the accumulator {ho} ≠ booked {rb.get('out_coin')}")
+            for k, lv in (rb.get("levels") or {}).items():
+                s = S.get(k)
+                if s is None:
+                    self.err(f"reinvest: a pot for slot {k} the bot doesn't have")
+                elif abs(float(s.get("g") or 0) - float(lv.get("grown_qty") or 0)) > 1e-12:
+                    self.err(f"reinvest: slot {k} grows {s.get('g')} ≠ its pot's {lv.get('grown_qty')}")
+                elif float(lv.get("usd_book") or 0) < -1e-9:
+                    self.err(f"reinvest: slot {k} pot below zero {lv.get('usd_book')}")
+        if self.dup_lines:
+            self.err(f"a sale line written twice: {self.dup_lines[:2]}")
         if not self.legacy:                      # v3.36.17: every basis dollar is either still held (a selling slot's spent ·
             U += self.V0                         # any slot's leftover dc) or was used by a sale ⇒ usd = usd0 + profit + V0 − held
         refd = {}
@@ -646,8 +725,8 @@ class Bot:
                 U -= D(v)
         coins, usd = ex.bal[ex.base], ex.bal[ex.quote]
         tol_c = max(D("1e-9"), abs(coins) * D("1e-10")) + ex.lot * D("1e-6")
-        if abs(coins - (self.coin0 - self.W0 + L)) > tol_c:
-            self.err(f"coins: wallet {coins} ≠ books {self.coin0 - self.W0 + L} (Δ {coins - (self.coin0 - self.W0 + L)})")
+        if abs(coins - (self.coin0 - W0 + L)) > tol_c:
+            self.err(f"coins: wallet {coins} ≠ books {self.coin0 - W0 + L} (Δ {coins - (self.coin0 - W0 + L)})")
         if abs(usd - (self.usd0 + U)) > D("1e-6") + abs(usd) * D("1e-10"):
             self.err(f"dollars: wallet {usd} ≠ books {self.usd0 + U} (Δ {usd - (self.usd0 + U)})")
         for o in self.mine_open():               # every live order of the bot belongs to a slot
