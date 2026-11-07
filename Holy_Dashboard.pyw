@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.22"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.23"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -26450,7 +26450,7 @@ function openReinvestLadder(dir){
   }
   const sp=x=>x.sp>0?x.sp:(x.p>0&&g>0?x.p*(1+g):0);
   const all=rows.concat(uw);
-  const S=all.filter(x=>x.s==='sell').sort((a,z)=>z.p-a.p);
+  const S=all.filter(x=>x.s==='sell').sort((a,z)=>(sp(z)-sp(a))||(z.p-a.p));   // 💠↕️ v3.36.23: بسعر البيع — الأقرب لاصق بخط السعر
   const B=all.filter(x=>x.s==='buy').sort((a,z)=>z.p-a.p);
   const O=rows.filter(x=>x.s==='orphan');
   const TH=`background:var(--bg1);color:var(--mut2);font-size:10.5px;

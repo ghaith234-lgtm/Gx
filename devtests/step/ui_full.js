@@ -50,6 +50,11 @@ function ok(name, cond, det) { res.push(!!cond); if (!Q || !cond) console.log((c
      nLv === t.levels && nParts === t.slots && m.includes('السعر الآن') && m.includes('بالذاكرة'), { nLv, nParts, t: { levels: t.levels, slots: t.slots } });
   await pg.evaluate(() => hideModal());
 
+  const riOrder = () => pg.evaluate(() => {          // 💠↕️ the rows of «💠 سلّم الإعادة» as shown: [buy, sell] — coins table · buys table
+    const T = [...document.querySelectorAll('#modal table')], num = e => parseFloat(String(e ? e.textContent : '').replace(/,/g, '')) || 0;
+    const rd = t => [...t.querySelectorAll('tbody tr')].map(r => { const td = r.querySelectorAll('td'); return [num(td[0].querySelector('b') || td[0]), num(td[1])] });
+    return { s: T[0] ? rd(T[0]) : [], b: T[1] ? rd(T[1]) : [] } });
+  const desc = a => a.every((v, i) => !i || v <= a[i - 1] + 1e-12);
   // ── ③ «💠 سلّم الإعادة»: one page · below the price reachable · only with reinvest · small amounts in full
   await pg.evaluate(d => openReinvestLadder(d), X); await pg.waitForTimeout(500);
   const ri = await pg.evaluate(() => { const M = document.getElementById('modal');
@@ -63,6 +68,9 @@ function ok(name, cond, det) { res.push(!!cond); if (!Q || !cond) console.log((c
      !ri.box && ri.below && /🪙 فوق السعر 3 · 💵 تحت السعر \d+ · 💠 بيها إعادة 4/.test(ri.txt) && vis, { box: ri.box, vis, head: ri.txt.slice(0, 400) });
   ok("… small amounts in full: level −1's reinvest «+0.0493 · +0.0737 · +0.0996» (was «0.05 · 0.07 · 0.10»)",
      /\+0\.049\d/.test(ri.txt) && /\+0\.073\d/.test(ri.txt) && /\+0\.099\d/.test(ri.txt), ri.txt.slice(0, 1500));
+  const o1 = await riOrder();
+  ok(`… 💠↕️ the coins table by its SELL price, high to low: the farthest on top, the nearest right above the price bar (${o1.s.map(x => x[1]).join(' · ')}) · `
+     + 'the buys table: the highest buy first, right under the price bar', o1.s.length >= 2 && desc(o1.s.map(x => x[1])) && o1.b.length >= 2 && desc(o1.b.map(x => x[0])), o1);
   await pg.evaluate(() => document.querySelector('#modal button[onclick*="RIF"]').click()); await pg.waitForTimeout(300);
   const only = await pg.evaluate(() => document.getElementById('modal').innerText);
   const rowsOnly = (only.match(/🪜 -?\d+ · \d\/3/g) || []);
@@ -91,6 +99,10 @@ function ok(name, cond, det) { res.push(!!cond); if (!Q || !cond) console.log((c
   const mm = rb.match(/🪙 فوق السعر (\d+) · 💵 تحت السعر (\d+)/);
   ok(`… «💠 سلّم الإعادة» loads every slot (${ta.slots}): above + below = all · the far ones under the price too`,
      mm && (+mm[1]) + (+mm[2]) === ta.slots && !rb.includes('⏳ أجيب الباقي'), mm && mm.slice(1));
+  const o2 = await riOrder(), lv2 = new Set(o2.s.map(x => x[0])).size;
+  ok(`… 💠↕️ the big bot's coins table (${o2.s.length} parts of ${lv2} levels, their sells overlapping) in sell order, high to low — the nearest `
+     + `(${o2.s.length ? o2.s[o2.s.length - 1][1] : '—'}) right above the price bar · its buys the highest first`,
+     o2.s.length > 20 && lv2 >= 3 && desc(o2.s.map(x => x[1])) && desc(o2.b.map(x => x[0])), { s: o2.s.slice(0, 30), b: o2.b.slice(0, 10) });
   await pg.evaluate(() => hideModal());
 
   // ── ⑤ the endpoint: read only · its own folders only
