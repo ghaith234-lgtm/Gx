@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.20"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.21"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -4163,10 +4163,7 @@ def deploy_va(data):
         "passphrase": str(data.get("passphrase", "")).strip()}
     if not keys["api_key"]:
         return {"ok": False, "msg": "اختر محفظة أو أدخل مفاتيح API"}
-    folder = "va_" + base.lower()
-    base_folder, c = folder, 1
-    while os.path.exists(os.path.join(ROOT, folder)):
-        folder = f"{base_folder}_{c}"; c += 1
+    folder = _new_bot_folder("va_" + base.lower())               # 🆔 v3.36.20: كود عشوائي لكل بوت
     full = os.path.join(ROOT, folder)
     os.makedirs(full, exist_ok=True)
     cfg = {**keys, "symbol": sym, "bot_type": "rec_va", "mode": "avg", "start_usd": start, "step_usd": step, "every": every, "unit": unit,
@@ -17448,6 +17445,24 @@ def reports_loop():
         time.sleep(60)
 
 # ───────────── النشر والاستنساخ والتعديل والحذف ─────────────
+def _new_bot_folder(prefix):
+    """🆔 v3.36.20 (طلب المالك 7-11): مجلد بوت جديد = البادئة + كود عشوائي من 6 حروف — المجلد هو هوية البوت بكل الدفاتر (الربح اليومي ·
+    إعادة الاستثمار · العملات · تاريخ التشغيل · الأرشيف · بادئة أوامره) ⇒ بوت جديد ما يورث أبداً دفاتر بوت محذوف كان بنفس الاسم
+    (قبل: «step_xrp» ينعاد بعد الحذف ⇒ ربح القديم يطلع للجديد بالويدجت والسجل) · ما يكرر مجلد موجود ولا مفتاح بالدفتر ولا مؤرشف"""
+    import secrets
+    led = _safe(load_json, LEDGER, default={}) or {}
+    used = set(led) if isinstance(led, dict) else set()
+    try:
+        arch = os.listdir(os.path.join(ROOT, "_archive"))
+    except Exception:
+        arch = []
+    for _ in range(200):
+        folder = f"{prefix}_{secrets.token_hex(3)}"
+        if not os.path.exists(os.path.join(ROOT, folder)) and folder not in used and not any(a.endswith("_" + folder) for a in arch):
+            return folder
+    return f"{prefix}_{secrets.token_hex(8)}"
+
+
 def find_script(name):
     cand = os.path.join(ROOT, name)
     if os.path.exists(cand):
@@ -17659,10 +17674,7 @@ def deploy_dca(data):
         "passphrase": str(data.get("passphrase", "")).strip()}
     if not keys["api_key"]:
         return {"ok": False, "msg": "اختر محفظة أو أدخل مفاتيح API"}
-    folder = "dca_" + sym.split("-")[0].lower()
-    base_folder, c = folder, 1
-    while os.path.exists(os.path.join(ROOT, folder)):
-        folder = f"{base_folder}_{c}"; c += 1
+    folder = _new_bot_folder("dca_" + sym.split("-")[0].lower())   # 🆔 v3.36.20: كود عشوائي لكل بوت
     full = os.path.join(ROOT, folder)
     os.makedirs(full, exist_ok=True)
     dn_type = str(data.get("dca_type", "dca")).strip()
@@ -17744,10 +17756,7 @@ def deploy_rec(data):
         "passphrase": str(data.get("passphrase", "")).strip()}
     if not keys["api_key"]:
         return {"ok": False, "msg": "اختر محفظة أو أدخل مفاتيح API"}
-    folder = "rec_" + base.lower()
-    base_folder, c = folder, 1
-    while os.path.exists(os.path.join(ROOT, folder)):
-        folder = f"{base_folder}_{c}"; c += 1
+    folder = _new_bot_folder("rec_" + base.lower())              # 🆔 v3.36.20: كود عشوائي لكل بوت
     full = os.path.join(ROOT, folder)
     os.makedirs(full, exist_ok=True)
     cfg = {**keys, "symbol": sym, "bot_type": bt, "mode": mode, "amount": amount, "every": every, "unit": unit, "at": at,
@@ -17994,10 +18003,7 @@ def deploy_step(data):
             _ri = -1.0
         if not (0 <= _ri <= 100):
             return {"ok": False, "msg": "نسبة إعادة الاستثمار يجب أن تكون من 0 إلى 100%"}
-    folder = "step_" + a["base"].lower()
-    base_folder, c = folder, 1
-    while os.path.exists(os.path.join(ROOT, folder)):
-        folder = f"{base_folder}_{c}"; c += 1
+    folder = _new_bot_folder("step_" + a["base"].lower())        # 🆔 v3.36.20: كود عشوائي لكل بوت
     full = os.path.join(ROOT, folder)
     os.makedirs(full, exist_ok=True)
     cfg = {**keys, "symbol": a["sym"], "bot_type": "grid_step", "usd_value": a["Q"], "step_parts": a["N"], "step_sell": a["d"],
@@ -18155,10 +18161,7 @@ def deploy(data):
             "passphrase": str(data.get("passphrase", "")).strip()}
         if not keys["api_key"]:
             return {"ok": False, "msg": "اختر محفظة أو أدخل مفاتيح API"}
-    folder = ("demo_" if is_demo else "") + sym.split("-")[0].lower()
-    base_folder, c = folder, 1
-    while os.path.exists(os.path.join(ROOT, folder)):
-        folder = f"{base_folder}_{c}"; c += 1
+    folder = _new_bot_folder(("demo_" if is_demo else "") + sym.split("-")[0].lower())   # 🆔 v3.36.20: كود عشوائي لكل بوت
     full = os.path.join(ROOT, folder)
     os.makedirs(full, exist_ok=True)
     try:
