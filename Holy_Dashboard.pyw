@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.24"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.25"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -4317,6 +4317,7 @@ _BT_MOOD = {"calm": 0.6, "normal": 1.0, "wild": 1.6}
 _BT_PER = {"week": (7, 60), "month": (30, 300), "year": (365, 3600)}       # (أيام، ثوانٍ بين نقطتي سعر) ≈ 9–10 آلاف نقطة لكل مدة
 _BT_PATHS = (1, 5, 10, 20)
 _BT_T0 = 1798761600.0                                                       # تقويم ثابت للصندوق (2027-01-01 UTC)
+_BT_SETTLE = 6.0      # 🪜 v3.36.25: ثواني بالوتيرة الحية بعد كل نقطة سعر للمتدرج (دورتين فحص) — بعدها النقطة التالية (السعر ثابت بينهما)
 _BT_JOBS = {}
 _BT_LK = threading.Lock()
 _BT_SPEC = {}
@@ -4583,6 +4584,7 @@ class _BtClock:
     """وقت المحرك: sleep() يقدّم الوقت. انتظار المحرك بين نظرتين للسوق (≥ 2 ث، أو انتظار حدث) يقفز لنقطة السعر التالية —
     السعر ثابت بينهما فلا قرار يتغيّر ⇒ المحرك ينظر للسوق عند كل نقطة من المسار مثل البوت الحي · الانتظار القصير داخل الأمر دقيق."""
     JUMP = 2.0
+    settle = 0.0              # 🪜 v3.36.25: محرك يدور كل ثانية (المتدرج) — بعد `settle` ثانية من النقطة نومة الثانية تقفز للتالية
 
     def __init__(self, ex, px, t0, dt, on_point):
         self.ex, self.px, self.t0, self.dt, self.on_point = ex, px, float(t0), float(dt), on_point
@@ -4598,7 +4600,7 @@ class _BtClock:
             s = 0.0
         with self.lk:
             t = self.t + s
-            if s >= self.JUMP:
+            if s >= self.JUMP or (self.settle and s >= 1.0 and t - (self.t0 + self.i * self.dt) >= self.settle):
                 t = max(t, self._next())
             self._go(t)
 
@@ -4963,7 +4965,7 @@ def _bt_cum(st, pk, rnf):
     return v * rnf + _bt_ri_held(st)
 
 
-def _bt_run(kind, cfg, sym, px, dt, quote, base, spec, maker=0.0008, taker=0.001, slip=0.0005, samples=1200, stop=None):
+def _bt_run(kind, cfg, sym, px, dt, quote, base, spec, maker=0.0008, taker=0.001, slip=0.0005, samples=1200, stop=None, prog=None):
     """محرك واحد على مسار واحد ⇒ الصفقات · المحفظة على طول المسار · ربح دفتر المحرك نفسه · النتيجة (بداية = نهاية ⇒ الفرق = ما صنعه البوت)"""
     shm = "/dev/shm" if os.path.isdir("/dev/shm") and os.access("/dev/shm", os.W_OK) else None
     folder = _bt_tmp.mkdtemp(prefix="holy_bt_", dir=shm)
@@ -4971,6 +4973,7 @@ def _bt_run(kind, cfg, sym, px, dt, quote, base, spec, maker=0.0008, taker=0.001
         ex = _BtEx(sym, px[0], quote, base, spec["tickSz"], spec["lotSz"], spec["minSz"], maker, taker, slip)
         n = len(px) - 1
         every = max(1, n // max(1, samples))
+        pev = max(1, n // 400)                            # ⏳ v3.36.25: تقدّم المسار (العامل يكتبه للوحة)
         pk, spre = _bt_pkey(kind)
         sp_file = os.path.join(folder, f"{spre}{sym}.json")
         S = {"nf": 0, "pr": 0.0, "w": 0}
@@ -5003,11 +5006,15 @@ def _bt_run(kind, cfg, sym, px, dt, quote, base, spec, maker=0.0008, taker=0.001
 
         def on_point(i):
             _pop_check(i)
+            if prog is not None and i % pev == 0:
+                prog(i, n)
             if i % every == 0 or i == n:
                 curve.append((i, ex.p, round(ex.bal[ex.quote], 8), round(ex.bal[ex.base], 10), round(S["pr"], 8)))
 
         clock = _BtClock(ex, px, _BT_T0, dt, on_point)
         clock.stop = stop
+        if kind == "grid_step":
+            clock.settle = _BT_SETTLE                     # 🪜 v3.36.25: نفس التنفيذات بالضبط · أسرع ×10 (أسبوع) ×38 (شهر)
         curve.append((0, px[0], round(quote, 8), round(base, 10), 0.0))
         c = dict(cfg)
         c.update({"api_key": "backtest", "secret_key": "backtest", "passphrase": "backtest", "symbol": sym, "is_demo": False,
@@ -5496,6 +5503,20 @@ def bt_status(data):
     if state == "run" and secs:
         w = len(j["procs"]) if j else 1
         eta = round(sum(secs) / len(secs) * (int(job.get("paths") or 0) - len(paths)) / max(1, w), 0)
+    prog = None
+    if state == "run":                                     # ⏳ v3.36.25: المسارات الجارية من ملف تقدّمها (العامل يكتبه كل ثانية)
+        tot, part, got = int(job.get("paths") or 0), 0.0, {p.get("n") for p in paths}
+        for n in range(tot):
+            if n in got:
+                continue
+            g = load_json(os.path.join(jd, f"g_{n}.json")) or {}
+            try:
+                part += min(1.0, max(0.0, float(g.get("i") or 0) / max(1.0, float(g.get("n") or 1))))
+            except Exception:
+                pass
+        prog = round((len(paths) + part) / max(1, tot), 4)
+        if eta is None and prog >= 0.02:
+            eta = round((time.time() - float(job.get("t") or time.time())) * (1 - prog) / prog, 0)
     agg = None
     if paths:
         rs = sorted(p["sum"]["result"] for p in paths)
@@ -5505,7 +5526,7 @@ def bt_status(data):
                "mean": sum(rs) / len(rs), "pos": sum(1 for x in rs if x > 0), "pmed": pcs[len(pcs) // 2], "pmin": pcs[0], "pmax": pcs[-1],
                "tmed": ts[len(ts) // 2] if len(ts) % 2 else (ts[len(ts) // 2 - 1] + ts[len(ts) // 2]) / 2, "tmin": ts[0], "tmax": ts[-1]}
     cfg_view = load_json(os.path.join(jd, "cfg.json"))
-    return {"ok": True, "id": job.get("id"), "state": state, "err": err, "done": len(paths), "total": int(job.get("paths") or 0), "eta": eta,
+    return {"ok": True, "id": job.get("id"), "state": state, "err": err, "done": len(paths), "total": int(job.get("paths") or 0), "eta": eta, "prog": prog,
             "paths": sorted(paths, key=lambda p: p["n"]), "agg": agg, "job": {k: job.get(k) for k in ("kind", "sym", "period", "mood", "paths", "seed", "p0", "quote",
                                                                                                     "base", "maker", "taker", "slip", "vol", "spec")},
             "cfg": cfg_view}
@@ -5619,8 +5640,18 @@ def _bt_child(jd, k, w):
             break
         seed = int(job["seed"]) + n
         px = _bt_path(p0, days, dt, float(job["vol"]), seed)
+        _pg = {"t": 0.0}
+
+        def _prog(i, nn, _n=n):                           # ⏳ v3.36.25: تقدّم المسار الجاري كل ثانية (اللوحة تعرض النسبة والمتبقي)
+            if time.time() - _pg["t"] >= 1.0:
+                _pg["t"] = time.time()
+                try:
+                    save_json_atomic(os.path.join(jd, f"g_{_n}.json"), {"i": int(i), "n": int(nn)})
+                except Exception:
+                    pass
         try:
-            r = _bt_run(kind, cfg, sym, px, dt, float(job["quote"]), float(job["base"]), spec, job["maker"], job["taker"], job["slip"], stop=stop)
+            r = _bt_run(kind, cfg, sym, px, dt, float(job["quote"]), float(job["base"]), spec, job["maker"], job["taker"], job["slip"], stop=stop,
+                        prog=_prog)
         except Exception as e:
             save_json_atomic(os.path.join(jd, f"err_{k}.json"), {"msg": f"تعذّر تشغيل المحرك في الصندوق: {type(e).__name__}: {e}"})
             return 3
@@ -24684,9 +24715,9 @@ async function btGo(){
   BT.job=r.id;BT.sel=0;BT.cache={};BT.scrolled=false;btProg({state:'prep',done:0,total:body.paths});btPoll()}
 function btProg(s){const el=$('#bt_prog');if(!el)return;
   if(s.state==='done'||s.state==='error'||s.state==='stopped'||s.state==='lost'){el.innerHTML=s.state==='error'?`<p class="btwarn">❌ ${gEsc(s.err||'خطأ')}</p>`:s.state==='stopped'?`<p class="btnote">⏹ أُوقف الاختبار — ${s.done} من ${s.total} مسار انتهى</p>`:s.state==='lost'?`<p class="btwarn">توقّف عامل الاختبار قبل أن ينتهي (${s.done} من ${s.total})</p>`:'';return}
-  const pc=s.total?Math.round(s.done/s.total*100):0;
+  const pc=Math.round((s.prog!=null?+s.prog:(s.total?s.done/s.total:0))*100),go=+s.prog>0;   // ⏳ v3.36.25: داخل المسار أيضاً
   el.innerHTML=`<div class="btprog"><div class="btbar"><i style="width:${Math.max(3,pc)}%"></i></div>
-   <span>${s.state==='prep'||!s.done?'⏳ يحضّر المحرك ويشغّل أول مسار…':`✅ ${s.done} من ${s.total} مسار`}${s.eta!=null?` · المتبقي ≈ <span class="num">${btT(s.eta)}</span>`:''}</span>
+   <span>${s.state==='prep'||(!s.done&&!go)?'⏳ يحضّر المحرك ويشغّل أول مسار…':!s.done?`⏳ يعمل المحرك على ${s.total>1?'المسارات':'المسار'} — <span class="num">${pc}%</span>`:`✅ ${s.done} من ${s.total} مسار · <span class="num">${pc}%</span>`}${s.eta!=null?` · المتبقي ≈ <span class="num">${btT(s.eta)}</span>`:''}</span>
    <button onclick="btStop()">⏹ إيقاف</button></div>`}
 async function btStop(){if(!BT.job)return;try{await api('/api/bt_stop',{id:BT.job})}catch(e){}}
 async function btPoll(){clearTimeout(BT.poll);if(!BT.job||!$('#btov'))return;
