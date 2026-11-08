@@ -1,0 +1,24 @@
+# 💸 Holy funding-arbitrage vs grid check (v3.36.29 · the owner's question 8-11): the last 3 months of REAL OKX funding (USDT- and
+#    coin-margined perpetuals · 10 coins) against a ♾️ grid on the same 3 months of real candles through the dashboard's trial path.
+#    Results: lines HOLYFUND.
+# Public market data only — no keys, no orders, no notifications. Runs only when the check, ci/RUN_FUND or this file changes.
+name: Holy funding vs grid check
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/fund_check.py', 'ci/RUN_FUND', '.github/workflows/holy-fund-check.yml']
+permissions:
+  contents: read
+jobs:
+  real-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Funding arbitrage vs grid on real OKX data (public data · no keys · no orders · no notifications)
+        run: |
+          pip install -q requests
+          python3 ci/fund_check.py Holy_Dashboard.pyw
