@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.28"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.29"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -4313,8 +4313,8 @@ _BT_VOL = {"BTC": 0.028, "ETH": 0.036, "BNB": 0.030, "XRP": 0.045, "SOL": 0.050,
            "APT": 0.055, "ARB": 0.055, "OP": 0.055, "UNI": 0.050, "ATOM": 0.045, "FIL": 0.050, "ETC": 0.045, "OKB": 0.035, "WIF": 0.075,
            "BONK": 0.075, "FLOKI": 0.070, "XLM": 0.045, "HBAR": 0.050, "ICP": 0.055, "AAVE": 0.050, "INJ": 0.060, "SEI": 0.065, "TIA": 0.065}
 _BT_VOL_DEF = 0.050
-_BT_MOOD = {"calm": 0.6, "normal": 1.0, "wild": 1.6}
-_BT_PER = {"week": (7, 60), "month": (30, 300), "year": (365, 3600)}       # (أيام، ثوانٍ بين نقطتي سعر) ≈ 9–10 آلاف نقطة لكل مدة
+_BT_MOOD = {"calm": 0.6, "normal": 1.0, "wild": 1.6, "real": 1.0}      # 📈 v3.36.29: «real» = شموع OKX الحقيقية
+_BT_PER = {"week": (7, 60), "month": (30, 300), "q3": (91, 900), "h6": (182, 1800), "year": (365, 3600)}   # 📈 + 3 و6 أشهر       # (أيام، ثوانٍ بين نقطتي سعر) ≈ 9–10 آلاف نقطة لكل مدة
 _BT_PATHS = (1, 5, 10, 20)
 _BT_T0 = 1798761600.0                                                       # تقويم ثابت للصندوق (2027-01-01 UTC)
 _BT_SETTLE = 6.0      # 🪜 v3.36.25: ثواني بالوتيرة الحية بعد كل نقطة سعر للمتدرج (دورتين فحص) — بعدها النقطة التالية (السعر ثابت بينهما)
@@ -5395,7 +5395,7 @@ def _bt_clean(keep=4):
     try:
         ds = sorted((d for d in os.listdir(BT_DIR) if d.startswith("bt_")), reverse=True)
         for d in ds[keep:]:
-            if d not in _BT_JOBS or not any(p.poll() is None for p in _BT_JOBS[d]["procs"]):
+            if d not in _BT_JOBS or not (any(p.poll() is None for p in _BT_JOBS[d]["procs"]) or _BT_JOBS[d].get("fetch")):
                 shutil.rmtree(os.path.join(BT_DIR, d), ignore_errors=True)
                 _BT_JOBS.pop(d, None)
     except Exception:
@@ -5408,7 +5408,7 @@ def bt_start(data):
         return {"ok": False, "msg": "الاختبار يحتاج نسخة بايثون من اللوحة"}
     with _BT_LK:
         for jid, j in list(_BT_JOBS.items()):
-            if any(p.poll() is None for p in j["procs"]) and not _bt_finished(j["dir"]):
+            if (any(p.poll() is None for p in j["procs"]) or j.get("fetch")) and not _bt_finished(j["dir"]):
                 return {"ok": False, "msg": "يوجد اختبار يعمل الآن — انتظره أو أوقفه أولاً", "id": jid}
     kind, sym, cfg, body, err = _bt_src(data)
     if err:
@@ -5443,26 +5443,137 @@ def bt_start(data):
     os.makedirs(jd, exist_ok=True)
     job = {"id": jid, "v": 1, "kind": kind, "sym": sym, "cfg": cfg, "body": body, "period": per, "mood": mood, "paths": npaths, "seed": seed,
            "p0": p0, "quote": q0, "base": b0, "spec": spec, "maker": maker, "taker": taker, "slip": slip,
-           "vol": _BT_VOL.get(base, _BT_VOL_DEF) * _BT_MOOD[mood], "t": time.time(), "app": APP_VERSION}
+           "vol": _BT_VOL.get(base, _BT_VOL_DEF) * _BT_MOOD[mood], "t": time.time(), "app": APP_VERSION,
+           "real": mood == "real", "bar": _BT_BAR[per][0] if mood == "real" else None}
     save_json_atomic(os.path.join(jd, "job.json"), job)
     w = min(_bt_workers(), npaths)
+    if mood == "real":                                    # 📈 v3.36.29: الشموع الحقيقية أولاً (اللوحة · بالخلفية) ثم العمّال
+        with _BT_LK:
+            _BT_JOBS[jid] = {"procs": [], "t": time.time(), "dir": jd, "fetch": True}
+            _BT_FETCH[jid] = {"done": 0, "total": npaths, "pg": 0}
+        threading.Thread(target=_safe, args=(_bt_real_prep, jid, jd, w), daemon=True).start()
+    else:
+        procs = _bt_spawn(jd, w)
+        with _BT_LK:
+            _BT_JOBS[jid] = {"procs": procs, "t": time.time(), "dir": jd}
+    _bt_clean()
+    journal("bot", f"🧪 اختبار تجريبي بدأ — {sym} · {(_BOT_KINDS.get(kind) or {}).get('lbl', kind)} · {per} · {npaths} مسار", sym=sym)
+    return {"ok": True, "id": jid, "workers": w}
+
+
+# ═══════════ 📈 v3.36.29: الأسعار الحقيقية (شموع OKX العامة · تجيبها اللوحة قبل العامل — العامل بلا شبكة) ═══════════
+_BT_BAR = {"week": ("1m", 60), "month": ("5m", 300), "q3": ("15m", 900), "h6": ("30m", 1800), "year": ("1H", 3600)}
+BT_CANDLES = os.path.join(BT_DIR, "candles")
+_BT_FETCH = {}
+
+
+def _bt_hist(sym, bar, sec, t0, t1, stop_fp=None, on_page=None):
+    """📈 شموع OKX الحقيقية المسكّرة بين t0 و t1 (الأقدم أول) — من التخزين المحلي أولاً، والناقص صفحة صفحة للخلف"""
+    os.makedirs(BT_CANDLES, exist_ok=True)
+    fp = os.path.join(BT_CANDLES, re.sub(r"[^A-Z0-9-]", "", sym.upper()) + f"_{bar}.json")
+    have = {}
+    try:
+        for r_ in (load_json(fp) or {}).get("r") or []:
+            have[int(r_[0])] = r_
+    except Exception:
+        have = {}
+    cur, got_new = t1, False
+    while cur > t0:
+        if stop_fp and os.path.exists(stop_fp):
+            break
+        lo = max(t0, cur - 100 * sec)
+        if all(t in have for t in range(lo // sec * sec if lo % sec == 0 else (lo // sec + 1) * sec, cur, sec)):
+            cur = lo
+            continue
+        pg = [c for c in _fc_okx_rows(sym, bar, after=cur * 1000, hist=True, limit=100) if c[6] and c[0] < cur]
+        if on_page:
+            on_page()
+        if not pg:
+            break
+        for c in pg:
+            have[int(c[0])] = [int(c[0]), c[1], c[2], c[3], c[4]]
+        got_new = True
+        cur = min(int(c[0]) for c in pg)
+        time.sleep(0.11)                                  # حد OKX العام
+    if got_new:
+        try:
+            keep = sorted(have)[-300000:]
+            save_json_atomic(fp, {"r": [have[t] for t in keep]})
+        except Exception:
+            pass
+    return [have[t] for t in sorted(have) if t0 <= t < t1]
+
+
+def _bt_ohlc(W):
+    """🕯️ كل شمعة ⇒ 4 نقاط: الفتح ← الأدنى ← الأعلى ← الإغلاق (الصاعدة) أو الفتح ← الأعلى ← الأدنى ← الإغلاق (الهابطة)"""
+    out = []
+    for o, h, l, c in zip(W.get("o") or [], W.get("h") or [], W.get("l") or [], W.get("c") or []):
+        out.extend((o, l, h, c) if c >= o else (o, h, l, c))
+    return [float(x) for x in out]
+
+
+def _bt_spawn(jd, w):
     procs = []
     flags = (0x08000000 | 0x00004000) if os.name == "nt" else 0          # بلا نافذة · أولوية أقل من العادية (ويندوز)
     for k in range(w):
         lf = open(os.path.join(jd, f"w{k}.log"), "w", encoding="utf-8")
         procs.append(subprocess.Popen([PYTHON_EXE, "-u", os.path.abspath(__file__), "--holy-bt", jd, str(k), str(w)], cwd=jd,
                                       stdout=lf, stderr=lf, creationflags=flags, env={**os.environ, "PYTHONIOENCODING": "utf-8"}))
-    with _BT_LK:
-        _BT_JOBS[jid] = {"procs": procs, "t": time.time(), "dir": jd}
-    _bt_clean()
-    journal("bot", f"🧪 اختبار تجريبي بدأ — {sym} · {(_BOT_KINDS.get(kind) or {}).get('lbl', kind)} · {per} · {npaths} مسار", sym=sym)
-    return {"ok": True, "id": jid, "workers": w}
+    return procs
+
+
+def _bt_real_prep(jid, jd, w):
+    """📈 بالخلفية: لكل مسار فترته من الماضي (1 = الأخيرة · 2 = التي قبلها …) ⇒ px_n.json ⇒ ثم العمّال"""
+    job = load_json(os.path.join(jd, "job.json")) or {}
+    sym, per, n = job["sym"], job["period"], int(job.get("paths") or 1)
+    bar, sec = _BT_BAR[per]
+    days = _BT_PER[per][0]
+    t_end = int(time.time()) // sec * sec
+    stop_fp = os.path.join(jd, "stop.flag")
+    got = 0
+    F = _BT_FETCH.setdefault(jid, {"done": 0, "total": n, "pg": 0})
+    try:
+        for k in range(n):
+            if os.path.exists(stop_fp):
+                break
+            t1 = t_end - k * days * 86400
+            t0 = t1 - days * 86400
+
+            def _pg():
+                F["pg"] = int(F.get("pg") or 0) + 1
+            rows = _bt_hist(sym, bar, sec, t0, t1, stop_fp, _pg)
+            if len(rows) < 0.9 * (t1 - t0) / sec:
+                break                                     # العملة أحدث من الفترة (أو المنصة ما عندها) ⇒ نكتفي بما قبلها
+            save_json_atomic(os.path.join(jd, f"px_{k}.json"), {"t0": t0, "t1": t1, "sec": sec, "bar": bar,
+                                                                "o": [r_[1] for r_ in rows], "h": [r_[2] for r_ in rows],
+                                                                "l": [r_[3] for r_ in rows], "c": [r_[4] for r_ in rows]})
+            got += 1
+            F["done"] = got
+        if os.path.exists(stop_fp):
+            return
+        if not got:
+            save_json_atomic(os.path.join(jd, "err_f.json"), {"msg": "ما وصلت أسعار حقيقية كافية لهذه المدة — العملة أحدث من الفترة أو تعذّر الاتصال بالمنصة"})
+            return
+        if got < n:
+            job["paths"] = got
+            job["note"] = f"تاريخ العملة الحقيقي يكفي {got} من {n} مسار"
+            save_json_atomic(os.path.join(jd, "job.json"), job)
+        procs = _bt_spawn(jd, min(w, got))
+        with _BT_LK:
+            _BT_JOBS[jid] = {"procs": procs, "t": time.time(), "dir": jd}
+    except Exception as e:
+        save_json_atomic(os.path.join(jd, "err_f.json"), {"msg": f"تعذّر جلب الأسعار الحقيقية: {type(e).__name__}: {e}"})
+    finally:
+        with _BT_LK:
+            j = _BT_JOBS.get(jid)
+            if j and j.get("fetch"):
+                j["fetch"] = False
 
 
 def _bt_finished(jd):
     """كل المسارات انتهت (أو أُوقف) — العامل قد يكون ما زال يغلق ملفاته"""
     try:
-        if os.path.exists(os.path.join(jd, "stop.flag")):
+        if os.path.exists(os.path.join(jd, "stop.flag")) or os.path.exists(os.path.join(jd, "err_f.json")):   # 📈 جلب الأسعار فشل ⇒ لا عمّال بعده
             return True
         n = int((load_json(os.path.join(jd, "job.json")) or {}).get("paths") or 0)
         return n > 0 and sum(1 for f in os.listdir(jd) if f.startswith("s_")) >= n
@@ -5495,9 +5606,10 @@ def bt_status(data):
             err = e.get("msg") or "خطأ"
     j = _BT_JOBS.get(job.get("id"))
     alive = bool(j and any(p.poll() is None for p in j["procs"]))
+    fetching = bool(j and j.get("fetch"))                 # 📈 v3.36.29: يجيب الشموع الحقيقية
     stopped = os.path.exists(os.path.join(jd, "stop.flag"))
     done = len(paths) >= int(job.get("paths") or 0)
-    state = "error" if err else ("done" if done else ("stopped" if stopped and not alive else ("run" if alive else "lost")))
+    state = "error" if err else ("prep" if fetching else ("done" if done else ("stopped" if stopped and not alive else ("run" if alive else "lost"))))
     secs = [p["sum"]["secs"] for p in paths if p.get("sum")]
     eta = None
     if state == "run" and secs:
@@ -5525,11 +5637,15 @@ def bt_status(data):
         agg = {"n": len(rs), "med": rs[len(rs) // 2] if len(rs) % 2 else (rs[len(rs) // 2 - 1] + rs[len(rs) // 2]) / 2, "min": rs[0], "max": rs[-1],
                "mean": sum(rs) / len(rs), "pos": sum(1 for x in rs if x > 0), "pmed": pcs[len(pcs) // 2], "pmin": pcs[0], "pmax": pcs[-1],
                "tmed": ts[len(ts) // 2] if len(ts) % 2 else (ts[len(ts) // 2 - 1] + ts[len(ts) // 2]) / 2, "tmin": ts[0], "tmax": ts[-1]}
+    if agg and paths and all((p.get("sum") or {}).get("real") for p in paths):          # 📈 v3.36.29: الحقيقي · المسك · البوت مقابل المسك
+        pn, hv, vs = sorted(p["sum"]["pnl"] for p in paths), sorted(p["sum"]["hold"] for p in paths), sorted(p["sum"]["vs"] for p in paths)
+        md = lambda a: a[len(a) // 2] if len(a) % 2 else (a[len(a) // 2 - 1] + a[len(a) // 2]) / 2
+        agg["real"] = {"pnl_med": md(pn), "pnl_min": pn[0], "pnl_max": pn[-1], "hold_med": md(hv), "vs_med": md(vs), "vs_pos": sum(1 for x in vs if x > 0)}
     cfg_view = load_json(os.path.join(jd, "cfg.json"))
     return {"ok": True, "id": job.get("id"), "state": state, "err": err, "done": len(paths), "total": int(job.get("paths") or 0), "eta": eta, "prog": prog,
-            "paths": sorted(paths, key=lambda p: p["n"]), "agg": agg, "job": {k: job.get(k) for k in ("kind", "sym", "period", "mood", "paths", "seed", "p0", "quote",
+            "paths": sorted(paths, key=lambda p: p["n"]), "agg": agg, "job": {k: job.get(k) for k in ("kind", "sym", "period", "mood", "paths", "seed", "p0", "quote", "real", "bar",
                                                                                                     "base", "maker", "taker", "slip", "vol", "spec")},
-            "cfg": cfg_view}
+            "cfg": cfg_view, "fetch": _BT_FETCH.get(job.get("id")) if fetching else None, "note": job.get("note")}
 
 
 def bt_path(data):
@@ -5627,19 +5743,52 @@ def _bt_child(jd, k, w):
     threading.Thread(target=_watch, daemon=True).start()
     kind, sym, spec, p0 = job["kind"], job["sym"], job["spec"], float(job["p0"])
     cfg = job.get("cfg")
-    if cfg is None:
+    real = bool(job.get("real"))                          # 📈 v3.36.29: أسعار OKX الحقيقية (الشموع جابتها اللوحة قبل العامل — العامل بلا شبكة)
+    if cfg is None and not real:
         cfg, err = _bt_dry_cfg(kind, job.get("body") or {}, sym, spec, p0)
         if cfg is None:
             save_json_atomic(os.path.join(jd, f"err_{k}.json"), {"msg": err})
             return 2
-    if k == 0:
+    if k == 0 and not real:
         save_json_atomic(os.path.join(jd, "cfg.json"), {kk: v for kk, v in cfg.items() if kk not in ("api_key", "secret_key", "passphrase", "bot_id")})
     days, dt = _BT_PER[job["period"]]
     for n in range(k, int(job["paths"]), w):
         if stop.is_set():
             break
         seed = int(job["seed"]) + n
-        px = _bt_path(p0, days, dt, float(job["vol"]), seed)
+        q_n, b_n, p_n, cfg_n, W_ = float(job["quote"]), float(job["base"]), p0, cfg, None
+        if real:
+            W_ = load_json(os.path.join(jd, f"px_{n}.json")) or {}
+            px = _bt_ohlc(W_)
+            if len(px) < 8:
+                save_json_atomic(os.path.join(jd, f"err_{k}.json"), {"msg": "أسعار الفترة الحقيقية ناقصة"})
+                return 2
+            dt = float(W_["sec"]) / 4.0
+            p_n, seed = px[0], n
+            if job.get("cfg") is not None:                # كأنك نشرته ببداية الفترة: حدود السعر المطلقة تنتقل بنفس نسبتها إلى سعر أول الفترة
+                cfg_n = dict(job["cfg"])
+                ref = float(cfg_n.get("forced_base_price") or 0) or p0
+                for kk in ("forced_base_price", "min_price", "lower_price", "upper_price", "lo", "hi"):
+                    if float(cfg_n.get(kk) or 0) > 0 and ref > 0:
+                        cfg_n[kk] = float(cfg_n[kk]) * p_n / ref
+            else:
+                body_n = dict(job.get("body") or {})
+                for kk in ("forced_base", "min_price", "lower_price", "upper_price", "lo", "hi"):
+                    try:
+                        if float(body_n.get(kk) or 0) > 0 and p0 > 0:
+                            body_n[kk] = repr(float(body_n[kk]) * p_n / p0)
+                    except Exception:
+                        pass
+                cfg_n, err = _bt_dry_cfg(kind, body_n, sym, spec, p_n)
+                if cfg_n is None:
+                    save_json_atomic(os.path.join(jd, f"err_{k}.json"), {"msg": err})
+                    return 2
+            if n == 0:
+                save_json_atomic(os.path.join(jd, "cfg.json"), {kk: v for kk, v in cfg_n.items() if kk not in ("api_key", "secret_key", "passphrase", "bot_id")})
+            if p0 > 0 and p_n > 0:
+                b_n = b_n * p0 / p_n                              # نفس قيمة العملات بالدولار ببداية الفترة
+        else:
+            px = _bt_path(p0, days, dt, float(job["vol"]), seed)
         _pg = {"t": 0.0}
 
         def _prog(i, nn, _n=n):                           # ⏳ v3.36.25: تقدّم المسار الجاري كل ثانية (اللوحة تعرض النسبة والمتبقي)
@@ -5650,14 +5799,22 @@ def _bt_child(jd, k, w):
                 except Exception:
                     pass
         try:
-            r = _bt_run(kind, cfg, sym, px, dt, float(job["quote"]), float(job["base"]), spec, job["maker"], job["taker"], job["slip"], stop=stop,
+            r = _bt_run(kind, cfg_n, sym, px, dt, q_n, b_n, spec, job["maker"], job["taker"], job["slip"], stop=stop,
                         prog=_prog)
         except Exception as e:
             save_json_atomic(os.path.join(jd, f"err_{k}.json"), {"msg": f"تعذّر تشغيل المحرك في الصندوق: {type(e).__name__}: {e}"})
             return 3
         if r["why"] == "stopped":
             break
-        s = {"n": n, "seed": seed, "sum": _bt_summary(kind, r, float(job["quote"]), float(job["base"]), p0, dt)}
+        s = {"n": n, "seed": seed, "sum": _bt_summary(kind, r, q_n, b_n, p_n, dt)}
+        if real:                                          # 📈 الربح الحقيقي بسعر النهاية · لو مسكت المحفظة · البوت مقابل المسك
+            ex_ = r["ex"]
+            pe = float(r["curve"][-1][1]) if r["curve"] else px[-1]
+            v0_ = q_n + b_n * p_n
+            pnl = ex_.bal[ex_.quote] + ex_.bal[ex_.base] * pe - v0_
+            hold = b_n * (pe - p_n)
+            s["sum"].update(real=True, p_end=pe, pnl=round(pnl, 8), pnl_pct=round(pnl / v0_ * 100, 4) if v0_ > 0 else 0.0, hold=round(hold, 8),
+                            vs=round(pnl - hold, 8), t0=int(W_.get("t0") or 0), t1=int(W_.get("t1") or 0), bar=job.get("bar"))
         save_json_atomic(os.path.join(jd, f"p_{n}.json"), _bt_detail(r, dt, s["sum"]))
         save_json_atomic(os.path.join(jd, f"s_{n}.json"), s)
     return 0
@@ -24824,8 +24981,15 @@ function vaPlanFetch(B){
     vaPlanPut($('#vd_plan'),vaPlanHTML(P,{known:!!(P&&P.px_known),ctx:'pre',at,A:at?P:null,err:at&&!(P&&P.up_at)}));if(at)vaPlanJump($('#vd_plan'))},250)}
 // ═══════════ 🧪 v3.36.0: الاختبار على مسار تجريبي — محرك البوت نفسه داخل صندوق مغلق · إعادة متحرّكة مثل الفيديو (بلا تسجيل) ═══════════
 const BT={src:null,prep:null,job:null,poll:0,pl:null,sel:0,st:null,cache:{}};
-const BT_PER={week:['أسبوع',7,'نقطة سعر كل دقيقة'],month:['شهر',30,'نقطة سعر كل 5 دقائق'],year:['سنة',365,'نقطة سعر كل ساعة']};
-const BT_MOOD={calm:'هادئ',normal:'عادي',wild:'عنيف'};
+const BT_PER={week:['أسبوع',7,'نقطة سعر كل دقيقة','دقيقة'],month:['شهر',30,'نقطة سعر كل 5 دقائق','5 دقائق'],q3:['3 أشهر',91,'نقطة سعر كل 15 دقيقة','15 دقيقة'],
+  h6:['6 أشهر',182,'نقطة سعر كل 30 دقيقة','30 دقيقة'],year:['سنة',365,'نقطة سعر كل ساعة','ساعة']};
+const BT_MOOD={calm:'هادئ',normal:'عادي',wild:'عنيف',real:'حقيقي'};
+function btWin(m){const f=t=>{const d=new Date(t*1000);return d.getUTCDate()+'/'+(d.getUTCMonth()+1)+'/'+String(d.getUTCFullYear()).slice(2)};   // 📈 v3.36.29
+  return m&&m.t0?`${f(m.t0)} ← ${f(m.t1-1)}`:''}
+function btRealRows(S,B){return `<div class="btendl btri"><span>📈 الربح الحقيقي بسعر النهاية</span><b class="num ${S.pnl>=0?'g':'r'}">${btS(S.pnl)}$ · ${btS(S.pnl_pct)}%</b></div>
+   <div class="btendl"><span>🤲 لو مسكت محفظتك بلا بوت</span><b class="num ${S.hold>=0?'g':'r'}">${btS(S.hold)}$</b></div>
+   <div class="btendl"><span>⚖️ البوت مقابل المسك</span><b class="num ${S.vs>=0?'g':'r'}">${btS(S.vs)}$</b></div>
+   <p class="btopen">أسعار OKX الحقيقية من ${btWin(S)} (شمعة كل ${gEsc((BT_PER[(BT.st&&BT.st.job||{}).period]||[])[3]||'')}) — السعر لا يعود إلى البداية، فالربح الحقيقي = ما صنعه البوت + حركة السوق على ما بقي معك.</p>`}
 function btN(v,d=2){v=+v||0;return (v<0?'−':'')+Math.abs(v).toFixed(d)}
 function btS(v,d=2){v=+v||0;return (v>=0?'+':'−')+Math.abs(v).toFixed(d)}
 function btQ(v){v=+v||0;const a=Math.abs(v);return a>=1000?v.toFixed(2):a>=1?v.toFixed(4):v.toPrecision(5)}
@@ -24864,12 +25028,12 @@ function btSeg(k,opts,v){return `<div class="btseg" data-k="${k}">${opts.map(([v
 function btForm(){
   const P=BT.prep,B=P.base,seed=Math.floor(Math.random()*900000)+100000;
   $('#bt_in').innerHTML=`<h2 class="bth">🧪 اختبار على مسار تجريبي — <span class="num">${gEsc(P.sym)}</span> · ${P.ico} ${gEsc(P.label)}</h2>
-  <p class="btintro">يعمل <b>محرك البوت الحقيقي نفسه</b> على سوق تجريبي: يتذبذب السعر ثم يعود في النهاية إلى <b>سعر البداية نفسه</b> — فأيّ فرق في المحفظة هو ما صنعه البوت وحده.
+  <p class="btintro">يعمل <b>محرك البوت الحقيقي نفسه</b> على سوق تجريبي: يتذبذب السعر ثم يعود في النهاية إلى <b>سعر البداية نفسه</b> — فأيّ فرق في المحفظة هو ما صنعه البوت وحده. أو على <b>📈 الأسعار الحقيقية</b> لآخر أسبوع أو شهر أو 3 أو 6 أشهر أو سنة.
    ${P.src==='bot'?'الإعدادات هي إعدادات البوت الحالية.':'الإعدادات هي ما في نموذج النشر الآن.'} لا مفاتيح ولا أوامر حقيقية، ولا يمسّ بوتاتك ولا دفاترك.</p>
   ${(P.warn||[]).map(w=>`<p class="btwarn">${gEsc(w)}</p>`).join('')}
   <div class="btset">
-    <div class="fld"><label>⏳ المدة</label>${btSeg('period',[['week','أسبوع'],['month','شهر'],['year','سنة']],'month')}</div>
-    <div class="fld"><label>🌊 طبيعة السوق</label>${btSeg('mood',[['calm','هادئ'],['normal','عادي'],['wild','عنيف']],'normal')}</div>
+    <div class="fld"><label>⏳ المدة</label>${btSeg('period',[['week','أسبوع'],['month','شهر'],['q3','3 أشهر'],['h6','6 أشهر'],['year','سنة']],'month')}</div>
+    <div class="fld"><label>🌊 طبيعة السوق</label>${btSeg('mood',[['calm','هادئ'],['normal','عادي'],['wild','عنيف'],['real','📈 حقيقي']],'normal')}</div>
     <div class="fld"><label>🧭 عدد المسارات</label>${btSeg('paths',[[1,'1'],[5,'5'],[10,'10'],[20,'20']],5)}</div>
     <div class="fld"><label title="الرقم نفسه يعيد المسار نفسه بالضبط — غيّره لمسار آخر">🔢 رقم المسار</label><div class="btrow"><input id="bt_seed" class="num" value="${seed}"><button type="button" onclick="$('#bt_seed').value=Math.floor(Math.random()*900000)+100000" title="رقم عشوائي">🎲</button></div></div>
     <div class="fld"><label>💲 سعر البداية (وهو سعر النهاية)</label><input id="bt_p0" class="num" value="${btP(P.p0)}"></div>
@@ -24887,6 +25051,7 @@ function btForm(){
 function btVal(k){const b=document.querySelector(`#btov .btseg[data-k="${k}"] button.on`);return b?b.dataset.v:''}
 function btNote(){const P=BT.prep,per=BT_PER[btVal('period')]||BT_PER.month,mo=btVal('mood'),m={calm:0.6,normal:1,wild:1.6}[mo]||1;
   const n=$('#bt_note');if(!n)return;
+  if(mo==='real'){n.innerHTML=`📈 <b>أسعار OKX الحقيقية</b> لـ${per[0]} (شمعة كل ${per[3]}، تُقرأ كل شمعة بأعلاها وأدناها) · المسار 1 = آخر ${per[0]} والمسار 2 = الذي قبله… · السعر لا يعود إلى البداية: تظهر النتيجة الحقيقية ومقارنتها بمسك المحفظة · البداية = سعر أول الفترة (رقم المسار وسعر البداية هنا لا يُستعملان) · حدود السعر في الإعدادات (الأرضية والنطاق وسعر البداية وحدود الدوري) تنتقل بنفس نسبتها إلى سعر أول الفترة · قيمة العملات بالدولار كما كتبتها`;return}
   n.innerHTML=`تقلّب ${gEsc(P.base)} اليومي في هذا الاختبار ≈ <span class="num">${(P.vol*m*100).toFixed(1)}%</span> (${P.vol_known?'متوسط العملة المعروف':'قيمة عامة — العملة ليست في الجدول'} · سوق ${BT_MOOD[mo]||''})
    · ${per[0]} = ${per[2]} · كل مسار يبدأ وينتهي عند السعر نفسه`}
 async function btGo(){
@@ -24900,9 +25065,9 @@ async function btGo(){
   BT.job=r.id;BT.sel=0;BT.cache={};BT.scrolled=false;btProg({state:'prep',done:0,total:body.paths});btPoll()}
 function btProg(s){const el=$('#bt_prog');if(!el)return;
   if(s.state==='done'||s.state==='error'||s.state==='stopped'||s.state==='lost'){el.innerHTML=s.state==='error'?`<p class="btwarn">❌ ${gEsc(s.err||'خطأ')}</p>`:s.state==='stopped'?`<p class="btnote">⏹ أُوقف الاختبار — ${s.done} من ${s.total} مسار انتهى</p>`:s.state==='lost'?`<p class="btwarn">توقّف عامل الاختبار قبل أن ينتهي (${s.done} من ${s.total})</p>`:'';return}
-  const pc=Math.round((s.prog!=null?+s.prog:(s.total?s.done/s.total:0))*100),go=+s.prog>0;   // ⏳ v3.36.25: داخل المسار أيضاً
+  const pc=Math.round((s.fetch?0.05*(s.fetch.done/Math.max(1,s.fetch.total)):(s.prog!=null?+s.prog:(s.total?s.done/s.total:0)))*100),go=+s.prog>0;   // ⏳ v3.36.25: داخل المسار أيضاً
   el.innerHTML=`<div class="btprog"><div class="btbar"><i style="width:${Math.max(3,pc)}%"></i></div>
-   <span>${s.state==='prep'||(!s.done&&!go)?'⏳ يحضّر المحرك ويشغّل أول مسار…':!s.done?`⏳ يعمل المحرك على ${s.total>1?'المسارات':'المسار'} — <span class="num">${pc}%</span>`:`✅ ${s.done} من ${s.total} مسار · <span class="num">${pc}%</span>`}${s.eta!=null?` · المتبقي ≈ <span class="num">${btT(s.eta)}</span>`:''}</span>
+   <span>${s.fetch?`⏳ يجلب أسعار OKX الحقيقية… ${s.fetch.done} من ${s.fetch.total} ${s.fetch.total>1?'فترات':'فترة'} (${s.fetch.pg||0} صفحة)`:s.state==='prep'||(!s.done&&!go)?'⏳ يحضّر المحرك ويشغّل أول مسار…':!s.done?`⏳ يعمل المحرك على ${s.total>1?'المسارات':'المسار'} — <span class="num">${pc}%</span>`:`✅ ${s.done} من ${s.total} مسار · <span class="num">${pc}%</span>`}${s.eta!=null?` · المتبقي ≈ <span class="num">${btT(s.eta)}</span>`:''}</span>
    <button onclick="btStop()">⏹ إيقاف</button></div>`}
 async function btStop(){if(!BT.job)return;try{await api('/api/bt_stop',{id:BT.job})}catch(e){}}
 async function btPoll(){clearTimeout(BT.poll);if(!BT.job||!$('#btov'))return;
@@ -24925,10 +25090,11 @@ function btResults(s){const el=$('#bt_res');if(!el||!s.paths.length||(s.job&&BT.
       <div><span>رابح في</span><b class="num">${A.pos} / ${A.n}</b><small>مسار</small></div></div>
      ${A.tmed!=null?`<div class="bttrd"><span>💰 ربح البيع والشراء (صافي العمولة)</span><span>الوسيط <b class="num ${A.tmed>=0?'g':'r'}">${btS(A.tmed)}$</b></span><span>الأسوأ <b class="num ${A.tmin>=0?'g':'r'}">${btS(A.tmin)}$</b></span><span>الأفضل <b class="num ${A.tmax>=0?'g':'r'}">${btS(A.tmax)}$</b></span></div>`:''}
      <div class="btbars">${s.paths.map(p=>`<button class="${p.n===BT.sel?'on ':''}${p.sum.result>=0?'g':'r'}" onclick="btPick(${p.n})" title="المسار ${p.n+1}: ${btS(p.sum.result)}$"><i style="height:${Math.max(4,Math.round(Math.abs(p.sum.result)/mx*100))}%"></i></button>`).join('')}</div>
+     ${A.real?`<div class="bttrd"><span>📈 على الأسعار الحقيقية</span><span>الربح الحقيقي الوسيط <b class="num ${A.real.pnl_med>=0?'g':'r'}">${btS(A.real.pnl_med)}$</b></span><span>لو مسكت المحفظة <b class="num">${btS(A.real.hold_med)}$</b></span><span>البوت مقابل المسك <b class="num ${A.real.vs_med>=0?'g':'r'}">${btS(A.real.vs_med)}$</b> (أفضل في ${A.real.vs_pos} من ${A.n})</span></div>`:''}${s.note?`<small class="btnote">${gEsc(s.note)}</small>`:''}
      <small class="btnote">اضغط عموداً لتشاهد مساره يتحرّك.</small></div>`}
   h+=`<div id="bt_pl"></div>`;
-  h+=`<details class="btdet"><summary>🧮 أرقام كل المسارات</summary><div class="tblwrap"><table class="dntbl bttbl"><thead><tr><th>المسار</th><th>النتيجة</th><th>%</th><th>شراء · بيع</th><th>ربح البيع والشراء</th>${s.paths.some(p=>p.sum.ri_coin)?'<th>🪙 ربح العملات</th>':''}<th>المفتوح عند النهاية</th><th>العمولات</th><th>أسوأ هبوط للمحفظة</th></tr></thead><tbody>
-   ${s.paths.map(p=>{const m=p.sum;return `<tr class="${p.n===BT.sel?'on':''}" onclick="btPick(${p.n})"><td class="num">${p.n+1} <small>#${p.seed}</small></td><td class="num ${m.result>=0?'g':'r'}">${btS(m.result)}$</td><td class="num">${btS(m.pct)}%</td><td class="num">${m.buys} · ${m.sells}</td><td class="num ${btTr(m)>=0?'g':'r'}">${btTrTxt(m,B)}</td>${s.paths.some(p=>p.sum.ri_coin)?`<td class="num">${m.ri_coin?'+'+btQ(+m.ri_coin.q||0)+' '+gEsc(B):'—'}</td>`:''}<td class="num">${m.open_usd!=null?btS(m.open_usd)+'$':'—'}</td><td class="num">${btN(m.fee_usd)}$</td><td class="num">${btN(m.mdd)}$</td></tr>`}).join('')}</tbody></table></div></details>`;
+  h+=`<details class="btdet"><summary>🧮 أرقام كل المسارات</summary><div class="tblwrap"><table class="dntbl bttbl"><thead><tr><th>المسار</th><th>النتيجة</th><th>%</th>${s.paths.some(p=>p.sum.real)?'<th>📈 الحقيقي · المسك</th>':''}<th>شراء · بيع</th><th>ربح البيع والشراء</th>${s.paths.some(p=>p.sum.ri_coin)?'<th>🪙 ربح العملات</th>':''}<th>المفتوح عند النهاية</th><th>العمولات</th><th>أسوأ هبوط للمحفظة</th></tr></thead><tbody>
+   ${s.paths.map(p=>{const m=p.sum;return `<tr class="${p.n===BT.sel?'on':''}" onclick="btPick(${p.n})"><td class="num">${p.n+1} <small>${m.real?btWin(m):'#'+p.seed}</small></td><td class="num ${m.result>=0?'g':'r'}">${btS(m.result)}$</td><td class="num">${btS(m.pct)}%</td>${s.paths.some(p=>p.sum.real)?`<td class="num ${(+m.pnl||0)>=0?'g':'r'}">${m.real?btS(m.pnl)+'$ · '+btS(m.hold)+'$':'—'}</td>`:''}<td class="num">${m.buys} · ${m.sells}</td><td class="num ${btTr(m)>=0?'g':'r'}">${btTrTxt(m,B)}</td>${s.paths.some(p=>p.sum.ri_coin)?`<td class="num">${m.ri_coin?'+'+btQ(+m.ri_coin.q||0)+' '+gEsc(B):'—'}</td>`:''}<td class="num">${m.open_usd!=null?btS(m.open_usd)+'$':'—'}</td><td class="num">${btN(m.fee_usd)}$</td><td class="num">${btN(m.mdd)}$</td></tr>`}).join('')}</tbody></table></div></details>`;
   if(s.cfg)h+=`<details class="btdet"><summary>⚙️ الإعدادات التي اختُبرت (كما يكتبها النشر نفسه)</summary><div class="btcfg num">${Object.entries(s.cfg).map(([k,v])=>`<span>${gEsc(k)}: <b>${gEsc(typeof v==='object'?JSON.stringify(v):v)}</b></span>`).join('')}</div></details>`;
   const keep=$('#bt_pl')&&BT.pl&&BT.pl.n===BT.sel?$('#bt_pl'):null;
   if(keep){const tmp=document.createElement('div');tmp.innerHTML=h;tmp.querySelector('#bt_pl').replaceWith(keep);el.innerHTML='';while(tmp.firstChild)el.appendChild(tmp.firstChild)}
@@ -24949,7 +25115,7 @@ function btPlayer(el,d,s){
   const C=d.c,F=d.f,POPS=d.pops||[],N=d.n;
   const V=C.map(c=>c[2]+c[3]*c[1]);
   el.innerHTML=`<div class="btpl">
-   <div class="btplh"><b>🎞️ المسار ${s.n+1}</b> <small class="num">#${s.seed}</small><span class="btplr ${S.result>=0?'g':'r'} num">${btS(S.result)}$ · ${btS(S.pct)}%</span></div>
+   <div class="btplh"><b>🎞️ المسار ${s.n+1}</b> <small class="num">${S.real?btWin(S):'#'+s.seed}</small><span class="btplr ${S.result>=0?'g':'r'} num">${btS(S.result)}$ · ${btS(S.pct)}%</span></div>
    <div class="btgrid">
     <div class="btcv"><canvas id="btc1"></canvas><div class="btct">📈 السعر — <span class="g">▲ شراء</span> · <span class="r">▼ بيع</span></div></div>
     <div class="btside">
@@ -25012,16 +25178,16 @@ function btPlayer(el,d,s){
     $('#bt_scr').value=Math.round(PL.u*1000)}
   function pop(v){const box=$('#bt_pops');if(!box)return;const p=document.createElement('i');p.className='btpop '+(v>=0?'g':'r');p.textContent=(coin?btS(v,6)+' '+B:btS(v)+'$');box.appendChild(p);setTimeout(()=>p.remove(),1600)}
   function end(){const E=$('#bt_end');if(!E)return;E.hidden=false;
-    E.innerHTML=`<div class="btendc"><h3>🏁 نهاية ${per[0]} — السعر عاد إلى <span class="num">${btP(S.p0)}</span></h3>
+    E.innerHTML=`<div class="btendc"><h3>${S.real?`🏁 النهاية — ${per[0]} على الأسعار الحقيقية · السعر من <span class="num">${btP(S.p0)}</span> إلى <span class="num">${btP(S.p_end)}</span>`:`🏁 نهاية ${per[0]} — السعر عاد إلى <span class="num">${btP(S.p0)}</span>`}</h3>${S.real?btRealRows(S,B):''}
      <div class="btaggr"><div><span>بدأت المحفظة</span><b class="num">${btN(S.v0)}$</b></div><div><span>انتهت</span><b class="num">${btN(S.v1)}$</b></div>
-      <div><span>الفرق = ما صنعه البوت</span><b class="num ${S.result>=0?'g':'r'}">${btS(S.result)}$</b><small class="num">${btS(S.pct)}%</small></div>
+      <div><span>${S.real?'ما صنعه البوت (بسعر البداية — بلا حركة السوق)':'الفرق = ما صنعه البوت'}</span><b class="num ${S.result>=0?'g':'r'}">${btS(S.result)}$</b><small class="num">${btS(S.pct)}%</small></div>
       <div><span>💰 ربح البيع والشراء</span><b class="num ${btTr(S)>=0?'g':'r'}">${btTrTxt(S,B)}</b><small>صفقات اكتملت · صافي العمولة</small></div></div>
      ${S.open_usd!=null?`<div class="btendl"><span>📦 مفتوح عند النهاية (بسعر البداية)</span><b class="num ${S.open_usd>=0?'g':'r'}">${btS(S.open_usd)}$</b></div>
      <p class="btopen">${btOpenTxt(S,B)}</p>
      <div class="btendl btsum"><span>🧮 ربح البيع والشراء + المفتوح = الفرق في المحفظة</span><b class="num">${btS(btTr(S))} ${S.open_usd>=0?'+':'−'} ${Math.abs(S.open_usd).toFixed(2)} = ${btS(S.result)}$</b></div>`:''}
      <div class="btendl"><span>💵 الدولار ⇄ 🪙 ${gEsc(B)} (من البداية للنهاية)</span><b class="num"><span class="${(S.q1-S.q0)>=0?'g':'r'}">${btS(S.q1-S.q0)}$</span> · <span class="${(S.b1-S.b0)>=0?'g':'r'}">${(S.b1-S.b0)>=0?'+':'−'}${btQ(Math.abs(S.b1-S.b0))} ${gEsc(B)}</span></b></div>
      ${S.ri_coin?`<div class="btendl btri"><span>🪙 ربح العملات (إعادة الاستثمار)</span><b class="num g">+${btQ(+S.ri_coin.q||0)} ${gEsc(B)} ≈ ${btN((+S.ri_coin.q||0)*(+S.p0||0))}$</b></div>
-     <p class="btopen">عملات اشتراها الربح المعاد استثماره وما زالت داخل البوت${(+S.ri_coin.usd||0)>=0.005?` · و<span class="num">${btN(S.ri_coin.usd)}$</span> ربح في الحصّالة ينتظر الشراء`:''} — لهذا قد ينقص الدولار في المحفظة بينما تزيد العملات (قيمتها هنا بسعر البداية = سعر النهاية)</p>`:''}
+     <p class="btopen">عملات اشتراها الربح المعاد استثماره وما زالت داخل البوت${(+S.ri_coin.usd||0)>=0.005?` · و<span class="num">${btN(S.ri_coin.usd)}$</span> ربح في الحصّالة ينتظر الشراء`:''} — لهذا قد ينقص الدولار في المحفظة بينما تزيد العملات (قيمتها هنا بسعر البداية${S.real?'':' = سعر النهاية'})</p>`:''}
      <div class="btendl"><span>🛒 شراء · 💰 بيع</span><b class="num">${S.buys} · ${S.sells}</b></div>
      <div class="btendl"><span>🧾 العمولات المدفوعة</span><b class="num">${btN(S.fee_usd)}$</b></div>
      <div class="btendl"><span>📉 أسوأ هبوط للمحفظة · أقل قيمة</span><b class="num">${btN(S.mdd)}$ · ${btN(S.low)}$</b></div>
