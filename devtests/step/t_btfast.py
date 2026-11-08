@@ -108,7 +108,8 @@ scfg, _ = dry("grid_step", BODY)
 run("grid_step", scfg, 0.02, 60, 7, slow=False)
 m._BtClock.__init__ = _init
 ok("② only the 🪜 gets the live-pace window: a ♾️ grid in the box keeps settle 0 (one look per point, as before) · the 🪜 6 s",
-   len(seen) == 2 and seen[0].settle == 0 and seen[1].settle == m._BT_SETTLE == 6.0 and g.get("why") == "end", [(getattr(c, "settle", None)) for c in seen])
+   len(seen) == 2 and getattr(seen[0], "settle", None) == 0 and getattr(seen[1], "settle", None) == getattr(m, "_BT_SETTLE", None) == 6.0
+   and g.get("why") == "end", [(getattr(c, "settle", None)) for c in seen])
 
 # ── ③ a real trial through the worker process
 S = m.bt_start({"kind": "grid_step", "body": BODY, "period": "week", "mood": "normal", "paths": 1, "seed": "7", "p0": PREP["p0"],
