@@ -15624,7 +15624,20 @@ import bisect, heapq
 FC = {"ts": 0.0, "coins": {}, "order": [], "err": ""}
 _XC_BTC = {"m": {}}              # 💪 v3.32.0: إغلاقات البيتكوين اليومية (مرجع «القوة مقابل البيتكوين»)
 FC_FILE = os.path.join(ROOT, "Holy_Forecast.json")
-FC_VER = 4                       # 🧮 نسخة الحساب — لو تتغيّر ينعاد فحص الماضي مرة وحدة
+FC_VER = 5                       # 🧮 نسخة الحساب — لو تتغيّر ينعاد فحص الماضي مرة وحدة (v3.36.27: + ما تبع كل ميل على هذه العملة)
+# 🔬 v3.36.27: ما تبع ميل المؤشرات على الأسعار الحقيقية (ci/sig_check2.py · OKX · كل شمعة ماضية بلا نظر لما بعدها): % المرات التي كان
+#   السعر فيها أعلى بعد المدة — لكل ميل (هابط بقوة · هابط · محايد · صاعد · صاعد بقوة) مقابل العادي. «ok» = ثبت على العملات والسنوات.
+FC_REAL = {
+    "d": {"base": 47.8, "b": {"sd": 52.1, "d": 49.7, "f": 45.2, "u": 45.1, "su": 44.9}, "ok": True,
+          "src": "28 عملة · شموع 4 ساعات 2024–2026 · ثبت في 28 عملة من 28 وفي كل سنة"},
+    "w": {"base": 46.3, "b": {"sd": 48.4, "d": 46.8, "f": 42.9, "u": 44.7, "su": 47.0}, "ok": True,
+          "src": "28 عملة · شموع يومية 2021–2026 · أضعف من اليوم: ثبت في 26 عملة من 28 ولم يثبت في كل سنة"},
+    "m": {"base": 45.2, "b": {"sd": 45.0, "d": 45.8, "f": 44.5, "u": 47.0, "su": 44.3}, "ok": False,
+          "src": "28 عملة · شموع 3 أيام — لا فرق واضح عن العادي"},
+    "q": {"base": 45.7, "b": {"sd": 50.9, "d": 47.5, "f": 44.9, "u": 49.1, "su": 37.2}, "ok": False,
+          "src": "22 عملة · شموع أسبوعية — الفترات المستقلة قليلة فلا يُعتمد عليها"},
+}
+FC_EDGE = 2.0                    # فرق نقطتين فأكثر عن العادي ⇒ سهم
 FC_H = (("d", "يوم", "4H", 6, 1), ("w", "أسبوع", "1D", 7, 7), ("m", "شهر", "3D", 10, 30), ("q", "3 أشهر", "1W", 13, 91))   # (مفتاح · اسم · الشموع · كم شمعة قدّام · كم يوم)
 FC_TFS = {"4H": 4 * 3600, "1D": 86400, "3D": 3 * 86400, "1W": 7 * 86400}
 FC_TFN = {"4H": "4 ساعات", "1D": "يوم", "3D": "3 أيام", "1W": "أسبوع"}
@@ -15978,6 +15991,9 @@ def _fc_bt(db, sym, k, tf, P, X, nc):
         if P["sq"][t]:
             sq[0] += abs(ret); sq[1] += 1
         _, _, _, vk, _ = _fc_vote(sig)
+        bk = e.setdefault("bk", {}).setdefault(vk, [0, 0])        # 🔬 v3.36.27: ما تبع هذا الميل على هذه العملة
+        bk[0] += 1
+        bk[1] += 1 if upm else 0
         items = [(kk, s) for kk, (s, _) in sig.items()] + [("vote", 1.0 if vk in ("su", "u") else -1.0 if vk in ("sd", "d") else 0.0)]
         for kk, s in items:
             if abs(s) < 0.15:
@@ -16174,6 +16190,14 @@ def fc_coin(sym, db, fng=None):
         up, dn, n_, vk, vt = _fc_vote(sig)
         u = (e["U"] / e["N"]) if e["N"] else 0.5
         rel = _fc_grade(e["a"].get("vote"), u, H, FC_TFS[tf])
+        G_ = FC_REAL.get(k) or {}
+        pg = (G_.get("b") or {}).get(vk)
+        own = (e.get("bk") or {}).get(vk) or [0, 0]
+        d_ = (pg - G_["base"]) if pg is not None and G_.get("base") is not None else 0.0
+        rk = ("up" if d_ >= FC_EDGE else "dn" if d_ <= -FC_EDGE else "eq") if G_.get("ok") else "na"
+        real = {"k": rk, "t": {"up": "↗️ أعلى مرجّح", "dn": "↘️ أدنى مرجّح", "eq": "↔️ مثل العادي", "na": "↔️ غير مؤكد"}[rk],
+                "p": pg, "base": G_.get("base"), "src": G_.get("src", ""), "own_n": own[0],
+                "own_p": round(own[1] / own[0] * 100) if own[0] >= 20 else None, "own_base": round(u * 100) if e["N"] else None}
         parts = []
         for kk in [x[0] for x in _IND2_K] + [x[0] for x in _FC_X]:
             if kk not in sig:
@@ -16192,7 +16216,7 @@ def fc_coin(sym, db, fng=None):
                       hi50=float(f"{pnow * math.exp(q[3]):.8g}"), hi=float(f"{pnow * math.exp(q[4]):.8g}"))
         sqs = e["sq"]
         sq_x = round((sqs[0] / sqs[1]) / (sqs[2] / sqs[3]), 2) if sqs[1] >= 10 and sqs[3] and sqs[2] else None
-        hz.update(up=up, dn=dn, n=n_, fl=n_ - up - dn, vk=vk, vt=vt, rel=rel, rng={"cov": rc.get("cov"), "n": rc.get("n"), "f": rc.get("f")},
+        hz.update(up=up, dn=dn, n=n_, fl=n_ - up - dn, vk=vk, vt=vt, rel=rel, real=real, rng={"cov": rc.get("cov"), "n": rc.get("n"), "f": rc.get("f")},
                   sig=parts, lv=_fc_levels(lv, Pn["D"]["c"][t]), sq={"on": bool(Pn["sq"][t]), "x": sq_x}, tested=e["N"],
                   since=e["first"] or None)
         out["h"][k] = hz
@@ -22893,7 +22917,7 @@ button.warn{border-color:rgb(var(--amber-rgb)/.55);color:var(--amber);box-shadow
 @media(max-width:380px){.fc-r{grid-template-columns:38px minmax(0,1.2fr) minmax(0,1.3fr) 46px;gap:4px;padding:5px 5px;font-size:11.5px}.fc-r .fg{font-size:10.5px}.fc-r .fb{font-size:10.5px}.fc-r .fh{font-size:10.5px}}
 .fc-r.fc-hd{background:none;padding-top:0;padding-bottom:0;font-size:10.5px;color:var(--mut2);font-weight:600}
 .fc-r.fc-hd span{font-weight:600;font-size:10.5px;color:var(--mut2)}
-.fb.g{color:var(--green)}.fb.y{color:var(--amber)}.fb.n{color:var(--mut)}.fb.r{color:var(--red)}.fb.short{color:var(--mut2)}
+.fc-r .fv.rk-up{color:var(--green)}.fc-r .fv.rk-dn{color:var(--red)}.fc-r .fv.rk-eq,.fc-r .fv.rk-na{color:var(--mut)}.fc-r .fv small{color:var(--mut2);font-weight:400}.fb.g{color:var(--green)}.fb.y{color:var(--amber)}.fb.n{color:var(--mut)}.fb.r{color:var(--red)}.fb.short{color:var(--mut2)}
 i.fb{font-style:normal;font-weight:600;margin:0 7px;font-size:11px;direction:ltr;unicode-bidi:isolate;display:inline-block}
 .fc-sq{font-size:12px;color:var(--amber)}
 .fc-tabs{display:flex;gap:5px;flex-wrap:wrap;margin:2px 0 8px}
@@ -25675,7 +25699,7 @@ function indRender(){
       [['VAL',L.val],['POC',L.poc],['VAH',L.vah],['VWAP القاع',L.avwap_lo],['VWAP القمة',L.avwap_hi],['سوبرترند',L.st],['آخر قاع',L.sw_lo],['آخر قمة',L.sw_hi]]
         .forEach(([n,v])=>{if(v==null||!isFinite(+v))return;(+v<=px?sup:res).push([n,+v])});
       sup.sort((a,b)=>b[1]-a[1]);res.sort((a,b)=>a[1]-b[1]);
-      det=`<div class="ind-det" onclick="event.stopPropagation()">${parts.map(p=>{const w=word(+p.s);return `<div class="ind-row" onclick="openGuide('${gEsc(p.k)}','ind')"><span>${p.ico} <b>${gEsc(p.name)}</b> <small class="gd-i">ⓘ</small></span><span class="w ${w[1]}">${w[0]}</span>
+      det=`<div class="ind-det" onclick="event.stopPropagation()">${parts.slice().sort((a,b)=>((b.acc??-1)-(a.acc??-1))).map(p=>{const w=word(+p.s);return `<div class="ind-row" onclick="openGuide('${gEsc(p.k)}','ind')"><span>${p.ico} <b>${gEsc(p.name)}</b> <small class="gd-i">ⓘ</small></span><span class="w ${w[1]}">${w[0]}</span>
         <small>${gEsc(p.txt)}${p.acc!=null?` · 🎯 دقته على ${gEsc(r.base)}: ${p.acc}% (${p.n})`:''}${p.live&&p.live.pct!=null?` · حيّة ${p.live.pct}% (${p.live.n})`:''}</small></div>`}).join('')}
         <div class="ind-lv">🛡️ دعم تحت السعر: ${sup.slice(0,3).map(x=>`${x[0]} <b>${fmtPx(x[1])}</b>`).join(' · ')||'—'}<br>🚧 مقاومة فوقه: ${res.slice(0,3).map(x=>`${x[0]} <b>${fmtPx(x[1])}</b>`).join(' · ')||'—'}</div>
         ${r.of_src!=='okx'?'<div class="ind-sub">🌊 تدفق الأوامر: لم تُعطِ OKX حجم الشراء والبيع لهذه العملة ⇒ تقدير من الشموع</div>':''}${indXDet(r)}${indPDet(r)}</div>`}
@@ -25719,6 +25743,11 @@ function fcN(v){v=+v||0;const a=Math.abs(v);            // رقم قصير لل�
 function fcB(a){a=a||{};const g=a.g||'short';return{g,t:g==='short'?'⏳':`${{g:'🟢',y:'🟡',n:'⚪\uFE0F',r:'🔴'}[g]||'⚪\uFE0F'} ${a.hit}%`}}
 function fcBW(a){a=a||{};if(!a.g||a.g==='short')return `⏳ تاريخ قليل للفحص (${a.n||0} مرة)`;
   return `${{g:'🟢 أفضل من الصدفة بوضوح',y:'🟡 أفضل من الصدفة قليلاً',n:'⚪\uFE0F مثل الصدفة',r:'🔴 أسوأ من الصدفة'}[a.g]} — صدقت ${a.hit}% من ${a.n} مرة (الصدفة ${a.ch}%)`}
+function fcRealW(q,nm){q=q||{};if(q.p==null)return 'لم يُقَس بعد';                // 🔬 v3.36.27: السطر بالكلام
+  return `على الأسعار الحقيقية كان السعر بعد ${nm} أعلى في ${Math.round(q.p)}% من المرات بعد هذا الميل (العادي ${Math.round(q.base)}%)${q.k==='na'?' — غير مؤكد':''} · ${q.src||''}`
+    +(q.own_p!=null?` · على هذه العملة: ${q.own_p}% من ${q.own_n} مرة (العادي ${q.own_base}%)`:'')}
+function fcRank(a,b){const o={g:0,y:1,n:2,short:3,r:4},A=a.acc||{},B=b.acc||{};               // 🔬 الصادق أولاً
+  return ((o[A.g]??3)-(o[B.g]??3))||((+B.edge||0)-(+A.edge||0))}
 function fcVote(z){if(['su','u'].includes(z.vk))return `${z.up} من ${z.n}`;if(['sd','d'].includes(z.vk))return `${z.dn} من ${z.n}`;return 'محايد'}
 function fcRender(){
   const el=$('#fc_body');if(!el)return;const V=FCV;
@@ -25735,9 +25764,9 @@ function fcRender(){
     const op=!!FCO[r.sym],H=r.h||{},sq=Object.values(H).some(z=>z&&z.sq&&z.sq.on);
     const rows=HZ.map(z=>{const x=H[z.k]||{};
       if(x.short||!x.vk)return `<div class="fc-r short"><span class="fh">${gEsc(z.name)}</span><span class="fv">⏳ تاريخ قليل</span><span class="fg">—</span><span class="fb short">⏳</span></div>`;
-      const b=fcB(x.rel);
-      return `<div class="fc-r v-${gEsc(x.vk)}"><span class="fh">${gEsc(z.name)}</span><span class="fv">${FCI[x.vk]||''} ${gEsc(fcVote(x))}</span>
-        <span class="fg">${x.lo!=null?fcN(x.lo)+' – '+fcN(x.hi):'—'}</span><span class="fb ${b.g}">${b.t}</span></div>`}).join('');
+      const q=x.real||{},qa={up:'↗️',dn:'↘️'}[q.k]||'↔️';         // 🔬 v3.36.27: ما تبع هذا الميل على الأسعار الحقيقية
+      return `<div class="fc-r v-${gEsc(x.vk)}"><span class="fh">${gEsc(z.name)}</span><span class="fv rk-${gEsc(q.k||'na')}" title="${gEsc(fcRealW(q,z.name))}">${qa} ${q.k==='na'||q.p==null?'غير مؤكد':Math.round(q.p)+'% <small>/'+Math.round(q.base)+'</small>'}</span>
+        <span class="fg">${x.lo!=null?fcN(x.lo)+' – '+fcN(x.hi):'—'}</span><span class="fb" title="ميل المؤشرات الآن: ${gEsc(x.vt)}">${FCI[x.vk]||''}${['su','u'].includes(x.vk)?x.up:['sd','d'].includes(x.vk)?x.dn:x.fl}/${x.n}</span></div>`}).join('');
     let det='';
     if(op){const k=FCS[r.sym]||(HZ[0]||{}).k,x=H[k]||{};
       const tabs=`<div class="fc-tabs">${HZ.map(z=>`<button class="${z.k===k?'on':''}" onclick="fcSel('${gEsc(r.sym)}','${gEsc(z.k)}')">${gEsc(z.name)}</button>`).join('')}</div>`;
@@ -25745,17 +25774,18 @@ function fcRender(){
       else{const lv=x.lv||{},lvT=a=>(a||[]).map(q=>`<b class="rg">${fcN(q[1])}</b> <small>(${gEsc(q[0])})</small>`).join(' · ')||'—',L=x.live||{};
         det=`<div class="ind-det" onclick="event.stopPropagation()">${tabs}<div class="fc-sum">
           <div><b style="color:var(${['su','u'].includes(x.vk)?'--green':['sd','d'].includes(x.vk)?'--red':'--mut'})">${gEsc(x.vt)}</b> — ${x.up} صاعدة · ${x.dn} هابطة · ${x.fl} محايدة <small>(على شموع ${gEsc(x.tfn)} · بعد ${gEsc(x.name)})</small></div>
-          <div>🎯 ${fcBW(x.rel)}</div>
+          <div>🔬 <b>${gEsc((x.real||{}).t||'')}</b> — ${gEsc(fcRealW(x.real||{},x.name))}</div>
+          <div><small>🎯 ميل المؤشرات وحده كتوقّع على ${gEsc(r.base)}: ${fcBW(x.rel)}</small></div>
           ${x.lo!=null?`<div>📏 النطاق 80%: <b class="rg">${fcN(x.lo)} – ${fcN(x.hi)}</b> <small>(الأرجح ${fcN(x.mid)}${(x.rng||{}).cov!=null?` · صدق ${x.rng.cov}% على الماضي`:''})</small></div>`:''}
           <div>🧱 دعم: ${lvT(lv.sup)}<br>🧱 مقاومة: ${lvT(lv.res)}</div>
           ${x.sq&&x.sq.on?`<div style="color:var(--amber)">⚡ هدوء غير معتاد (انضغاط) — يشيع أن بعده حركة كبيرة، والقياس العام لا يؤكد ذلك${x.sq.x?` · في تاريخ ${gEsc(r.base)}: الحركة بعده ×${x.sq.x} من المعتاد`:''}</div>`:''}
           <div><small>📒 ${L.n||L.done?`منذ بدء التسجيل: صدقت ${L.hit||0} من ${L.n||0}${L.cov!=null?` · داخل النطاق ${L.cov}%`:''}${L.wait?` · ${L.wait} تنتظر وقتها`:''}`:'يبدأ السجل الحي الآن — تُحكم كل قراءة حين يحلّ وقتها'}</small></div></div>
-          ${(x.sig||[]).map(p=>{const b=fcB(p.acc);return `<div class="ind-row" onclick="openGuide('${gEsc(p.k)}','fc')"><span>${p.ico} <b>${gEsc(p.name)}</b> <small class="gd-i">ⓘ</small></span><span class="w ${p.w}">${{p:'⬆️ صاعد',n:'⬇️ هابط',z:'↔️ محايد'}[p.w]}<i class="fb ${b.g}" title="${gEsc(fcBW(p.acc))}">${b.t}</i></span><small>${gEsc(p.txt)}</small></div>`}).join('')}</div>`}}
+          ${(x.sig||[]).slice().sort(fcRank).map(p=>{const b=fcB(p.acc);return `<div class="ind-row" onclick="openGuide('${gEsc(p.k)}','fc')"><span>${p.ico} <b>${gEsc(p.name)}</b> <small class="gd-i">ⓘ</small></span><span class="w ${p.w}">${{p:'⬆️ صاعد',n:'⬇️ هابط',z:'↔️ محايد'}[p.w]}<i class="fb ${b.g}" title="${gEsc(fcBW(p.acc))}">${b.t}</i></span><small>${gEsc(p.txt)}</small></div>`}).join('')}</div>`}}
     const v0=(H.w&&H.w.vk)||(H.d&&H.d.vk)||'f';
     return `<div class="ind-c fc-c ${['su','u'].includes(v0)?'up':['sd','d'].includes(v0)?'down':''}${op?' open':''}" onclick="fcTog('${gEsc(r.sym)}')">
       <div class="ind-h"><span class="cn">${gEsc(r.base)}</span><span class="px">${fmtPx(r.px)}</span><span class="chg ${(+r.chg||0)>=0?'up':'dn'}">${(+r.chg||0)>=0?'▲':'▼'}${Math.abs(+r.chg||0).toFixed(2)}%</span>
         ${sq?`<span class="fc-sq" title="هدوء غير معتاد على مدى أو أكثر — لا يعني بالضرورة حركة كبيرة (انظر التفاصيل)">⚡</span>`:''}<span class="ind-sub" style="margin-inline-start:auto">${op?'':'اضغط للتفاصيل ←'}</span></div>
-      <div class="fc-rows"><div class="fc-r fc-hd"><span>المدى</span><span>المؤشرات</span><span>النطاق المتوقع</span><span>صدقها</span></div>${rows}</div>${det}</div>`}).join('')}</div>`;
+      <div class="fc-rows"><div class="fc-r fc-hd"><span>المدى</span><span title="كم مرة كان السعر أعلى بعد المدة على الأسعار الحقيقية / العادي">أعلى بعدها</span><span>النطاق المتوقع</span><span>المؤشرات</span></div>${rows}</div>${det}</div>`}).join('')}</div>`;
   h+=`<details class="ind-help"><summary>كيف أقرأ هذه النافذة؟</summary>
     <div>• كل سطر مدى زمني: <b>ماذا تقول المؤشرات</b> (كم مؤشراً صاعداً أو هابطاً من العدد كله: المؤشرات العشرة نفسها وأربعة إضافية) · <b>النطاق المتوقع</b> (يقع السعر في نهاية المدة بين الرقمين بنسبة 80%) · <b>صدقها</b>.</div>
     <div>• تُحسب المؤشرات على شموع أطول بحسب المدى: اليوم على شموع 4 ساعات · الأسبوع على اليومية · الشهر على شموع 3 أيام · الأشهر الثلاثة على الأسبوعية.</div>
