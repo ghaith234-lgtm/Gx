@@ -13468,7 +13468,27 @@ def indic_view():
     c = indic_cfg()
     return {"on": c["on"], "rows": INDIC["rows"], "fng": INDIC["fng"], "err": INDIC["err"],
             "age": round(time.time() - (INDIC["ts"] or 0), 1), "every": _IND_EVERY,
-            "sum": (globals().get("IND2") or {}).get("summary") or {}}          # 📊 v3.26.6: ⬆️/⬇️ على زر المؤشرات
+            "sum": (globals().get("IND2") or {}).get("summary") or {},          # 📊 v3.26.6: ⬆️/⬇️ على زر المؤشرات
+            "cs": _safe(_tape_sum, default={})}                                  # 🎞️ v3.36.27: ملخص كل عملة للشريط
+
+
+def _tape_sum():
+    """🎞️ v3.36.27: لكل عملة بالشريط: معدل المؤشرات الآن (📊) + ما تبع هذا الميل غداً على الأسعار الحقيقية (🔮 لو فيه فرق مقيس) + مؤشر القاع"""
+    out = {}
+    I2, F = globals().get("IND2") or {}, globals().get("FC") or {}
+    for s, R_ in (I2.get("coins") or {}).items():
+        ps = R_.get("parts") or []
+        e = {"sc": int(R_.get("score") or 0), "up": sum(1 for p in ps if float(p.get("s") or 0) >= 0.15),
+             "dn": sum(1 for p in ps if float(p.get("s") or 0) <= -0.15), "n": len(ps)}
+        Fc = (F.get("coins") or {}).get(s) or {}
+        b = Fc.get("bot") or {}
+        if b.get("lv") in ("watch", "zone", "strong"):
+            e["bot"] = {"lv": b["lv"], "s": b.get("score"), "t": b.get("lbl")}
+        q = ((Fc.get("h") or {}).get("d") or {}).get("real") or {}
+        if q.get("k") in ("up", "dn"):
+            e["nx"] = {"k": q["k"], "p": q.get("p"), "b": q.get("base")}
+        out[s] = e
+    return out
 
 
 def indic_loop():
@@ -16388,7 +16408,7 @@ def fc_loop():
     time.sleep(90)
     while True:
         try:
-            if indic_cfg()["on"] and ticker_cfg()["coins"]:
+            if (indic_cfg()["on"] or ina_cfg()["on"]) and ticker_cfg()["coins"]:      # 🟢 v3.36.27: مؤشر القاع للتنبيهات حتى لو الشريط مطفي
                 _fc_run()
         except Exception:
             pass
@@ -16619,11 +16639,13 @@ def pxa_view():
 #   حركة كبيرة) أو خرج من الانضغاط · 🧱 السعر قرب دعم/مقاومة · كل تنبيه بيه صدق المؤشرات على نفس العملة (مقابل الصدفة ~50%).
 #   الحساسية (هادئة · متوسطة · حساسة) ووين توصل (تيليغرام · التطبيق) لحالها · حد يومي لحالها · الكتم 🔕 يكتمها. قراءة عامة بس — ولا أمر.
 INA_FILE = os.path.join(ROOT, "Holy_IndAlerts.json")
-INA_SENS = {   # turn: أقل معدل للانقلاب · conf: أقل ثقة · near: قرب الدعم/المقاومة % (0 = بلا) · sq_on: تنبيه بداية الانضغاط
-    "low":  {"lbl": "هادئة",  "turn": 45, "conf": 70, "near": 0.0,  "sq_on": False},
-    "mid":  {"lbl": "متوسطة", "turn": 30, "conf": 60, "near": 0.35, "sq_on": False},
-    "high": {"lbl": "حساسة",  "turn": 15, "conf": 0,  "near": 0.7,  "sq_on": True},
+INA_SENS = {   # 🟢 v3.36.27: «min» = أقل نقاط مؤشر القاع يُبلَّغ بها (هادئة 🟢 فقط · متوسطة 🟡 فأقوى · حساسة 👀 فأقوى) — turn/conf/near/sq_on
+    #   بقيت للقياس فقط (ci/sig_check.py): الانقلاب والانضغاط انقاسا على الأسعار الحقيقية بلا قيمة فانطفأت تنبيهاتهما
+    "low":  {"lbl": "هادئة",  "min": 60, "turn": 45, "conf": 70, "near": 0.0,  "sq_on": False},
+    "mid":  {"lbl": "متوسطة", "min": 50, "turn": 30, "conf": 60, "near": 0.35, "sq_on": False},
+    "high": {"lbl": "حساسة",  "min": 30, "turn": 15, "conf": 0,  "near": 0.7,  "sq_on": True},
 }
+_BOT_RK = {"none": 0, "watch": 1, "zone": 2, "strong": 3}
 INA_COOL_TURN = 3 * 3600          # نفس العملة ونفس الاتجاه ما ينعاد قبل 3 ساعات (حتى لو المعدل تذبذب حول العتبة)
 INA_COOL_SQ = 6 * 3600            # الانضغاط لنفس العملة مرة كل 6 ساعات
 INA_COOL_NEAR = 6 * 3600          # نفس المستوى لنفس العملة مرة كل 6 ساعات
@@ -16719,55 +16741,29 @@ def ina_tick(now=None, rows=None, send=True):
             continue
         fresh = sym not in last                          # 🆕 أول مرة نشوف العملة (تشغيل أول · عملة جديدة) ⇒ نسجّل حالتها بصمت (بلا سيل تنبيهات)
         L = last.setdefault(sym, {})
-        parts = R.get("parts") or []
-        nz = [p for p in parts if abs(float(p.get("s") or 0)) >= 0.15]
-        lvu, lvd = _ina_levels(R, px)
-        tail = f"السعر {_px_s(px)}$ · فوق: {_ina_lvtxt(px, lvu)} · تحت: {_ina_lvtxt(px, lvd)}"
-        conf = R.get("conf")
         a = None
-        # 🔄 الانقلاب: المعدل عبر العتبة باتجاه جديد (وينعاد يتسلّح لما يرجع لنص العتبة)
-        d = "up" if sc >= S["turn"] else ("dn" if sc <= -S["turn"] else None)
-        if abs(sc) < S["turn"] * 0.5:
-            L["dir"] = None
-        if d and L.get("dir") != d and (conf is None or conf >= S["conf"]) \
-                and now - float(L.get(d + "_ts") or 0) >= INA_COOL_TURN:
-            agree = sum(1 for p in nz if (float(p["s"]) > 0) == (d == "up"))
-            a = {"k": "turn", "d": d, "t": f"📊 {base}: المؤشرات {'تميل للصعود ↗️' if d == 'up' else 'تميل للنزول ↘️'}" + (" بقوة" if abs(sc) >= 45 else "")
-                 + f" ({agree} من {len(parts)} · المعدل {sc:+d}" + (f" · ثقة {conf}%" if conf is not None else "") + ")",
-                 "b": tail, "r": _ina_rel(R)}
-            L["dir"] = d
-            if not fresh:
-                L[d + "_ts"] = now                       # أول نظرة صامتة ما تبدي التهدئة (حتى أول انقلاب حقيقي يوصل)
-        # ⚡ الانضغاط: خرج منه هسه (كل الحساسيات) · بدأ (الحساسة)
-        q = R.get("sq") or {}
-        if a is None and q:
-            if q.get("rel") and L.get("sq_rel_t") != q.get("t") and now - float(L.get("sqr_ts") or 0) >= 3600:
-                a = {"k": "sq_rel", "d": q.get("d"), "t": f"⚡ {base}: خرج من الانضغاط بعد {q.get('rel_n')} ساعات هدوء — حركة كبيرة بدت "
-                     + ("للصعود" if q.get("d") == "up" else "للنزول") + f" (المؤشرات: {R.get('txt')})", "b": tail, "r": _ina_rel(R)}
-                L["sq_rel_t"], L["sqr_ts"] = q.get("t"), now      # الخروج له وقته (بداية الانضغاط ما تأخّره)
-            elif S["sq_on"] and q.get("on") and int(q.get("n") or 0) >= INA_SQ_MIN and not L.get("sq_on") \
-                    and now - float(L.get("sq_ts") or 0) >= INA_COOL_SQ:
-                a = {"k": "sq_on", "d": None, "t": f"⚡ {base}: السوق هادي ومنضغط من {q.get('n')} ساعات — حركة كبيرة قريبة"
-                     + f" (المؤشرات: {R.get('txt')})", "b": tail, "r": _ina_rel(R)}
-                L["sq_ts"] = now
-            L["sq_on"] = bool(q.get("on") and int(q.get("n") or 0) >= INA_SQ_MIN)
-        # 🧱 قرب دعم/مقاومة (المتوسطة والحساسة)
-        if a is None and S["near"] > 0:
-            near = [(abs(lv[0] / px - 1) * 100, lv, kind) for lv, kind in ((lvu, "res"), (lvd, "sup")) if lv]
-            near = [x for x in near if x[0] <= S["near"]]
-            if near:
-                dist, lv, kind = min(near)
-                key = f"{kind}:{lv[0]:.6g}"
-                seen = L.setdefault("near", {})
-                if now - float(seen.get(key) or 0) >= INA_COOL_NEAR:
-                    a = {"k": "near", "d": "up" if kind == "res" else "dn",
-                         "t": f"🧱 {base} قرب {'مقاومة' if kind == 'res' else 'دعم'} {_px_s(lv[0])} ({dist:.1f}% · {lv[1]}) — المؤشرات: {R.get('txt')}",
-                         "b": f"السعر {_px_s(px)}$ · " + (f"إذا كسرها فوق: {_ina_lvtxt(px, _ina_levels(R, lv[0] * 1.003)[0])}" if kind == "res"
-                                                          else f"إذا كسرته تحت: {_ina_lvtxt(px, _ina_levels(R, lv[0] * 0.997)[1])}"),
-                         "r": _ina_rel(R)}
-                    seen[key] = now
-                    for k0 in [k0 for k0, t0 in seen.items() if now - float(t0 or 0) > 2 * INA_COOL_NEAR]:
-                        seen.pop(k0, None)
+        b = ((globals().get("FC") or {}).get("coins") or {}).get(sym, {}).get("bot") or {}   # 🟢 v3.36.27: تنبيهات مؤشر القاع فقط
+        if b.get("day"):
+            ep = int(b["day"]) - int(b.get("since") or 0) * 86400        # يوم بداية النوبة (الإشارة تتغير مرة باليوم: إغلاق يومي)
+            if L.get("bot_ep") != ep:
+                L["bot_ep"], L["bot_lv"] = ep, 0
+            rk = _BOT_RK.get(b.get("lv"), 0)
+            if rk and int(b.get("score") or 0) >= S["min"] and rk > int(L.get("bot_lv") or 0):
+                L["bot_lv"] = rk
+                if fresh and int(b.get("since") or 0) <= 1:
+                    fresh = False                                         # نوبة جديدة ⇒ تنبيه حتى بعد التشغيل مباشرة (القديمة تبقى صامتة)
+                Rr, Nn, up_ = b.get("real") or {}, b.get("normal") or {}, b.get("btc_up")
+                own = (b.get("own") or {}).get(b.get("lv"))
+                ctx = ""
+                if up_ is not None and Rr.get("up"):
+                    ctx = (f"₿ البيتكوين فوق متوسط 200 يوم — في هذا الجو كانت النتيجة أقوى ({Rr['up'][0]}%)" if up_
+                           else f"₿ البيتكوين تحت متوسط 200 يوم — في هذا الجو كانت النتيجة أضعف ({Rr['down'][0]}%)")
+                a = {"k": "bot", "d": "up", "t": f"{b.get('lbl')} — {base}: مؤشر القاع {int(b.get('score') or 0)}/100 (لأيام إلى أسبوعين)",
+                     "b": " · ".join(p["txt"] for p in (b.get("parts") or []) if p.get("on")) + f" · السعر {_px_s(px)}$",
+                     "r": (f"🔬 تاريخياً (28 عملة · 2021–2026): أعلى بعد 14 يوماً في {Rr.get('p14')}% من المرات (العادي {Nn.get('p14')}%) · "
+                           f"الوسيط {float(Rr.get('m14') or 0):+.1f}%" + (f" · {ctx}" if ctx else "")
+                           + (f" · على {base}: {own['p14']}% من {own['n']} مرة" if own else "")
+                           + " · قد ينزل أكثر قبل الارتداد — الشراء على دفعات أسلم")}
         if a and not fresh:
             a.update(sym=sym, px=px, sc=sc)
             al.append(a)
@@ -16797,7 +16793,7 @@ def _ina_send(al, note, cfg):
     if len(al) == 1:
         text = al[0]["t"] + "\n" + al[0]["b"] + "\n" + al[0]["r"] + (("\n" + note) if note else "")
     elif al:
-        text = f"📊 تنبيهات المؤشرات ({len(al)})\n" + "\n".join(f"{a['t']} · {a['b'].split(' · ')[0]}" for a in al) + (("\n" + note) if note else "")
+        text = f"🟢 تنبيهات مؤشر القاع ({len(al)})\n" + "\n".join(f"{a['t']} · {a['b'].split(' · ')[0]}" for a in al) + (("\n" + note) if note else "")
     else:
         text = note
     for a in al:
@@ -16833,8 +16829,9 @@ def ina_test():
     """🧪 تنبيه تجربة بنفس الطريق (تيليغرام + قناة المؤشرات بالموبايل)"""
     cfg = ina_cfg()
     R = next(iter((IND2.get("coins") or {}).values()), None) or {"base": "BTC", "sym": "BTC-USDT", "px": 0}
-    a = {"sym": R.get("sym") or "BTC-USDT", "t": f"🧪 تجربة — 📊 {R.get('base') or 'BTC'}: المؤشرات تميل للصعود ↗️ (7 من 10 · المعدل +32)",
-         "b": f"هيج راح توصلك تنبيهات المؤشرات ({INA_SENS[cfg['sens']]['lbl']} · {PXA_CH[cfg['ch']]})", "r": "📏 كل تنبيه بيه صدق المؤشرات على نفس العملة"}
+    a = {"sym": R.get("sym") or "BTC-USDT", "t": f"🧪 تجربة — 🟡 منطقة شراء — {R.get('base') or 'BTC'}: مؤشر القاع 70/100 (لأيام إلى أسبوعين)",
+         "b": f"هكذا تصلك تنبيهات مؤشر القاع ({INA_SENS[cfg['sens']]['lbl']} · {PXA_CH[cfg['ch']]})",
+         "r": "🔬 كل تنبيه معه سجله على الأسعار الحقيقية: كم مرة كان السعر أعلى بعد 14 يوماً مقابل الأيام العادية"}
     if TG_MUTED["v"]:
         return {"ok": False, "msg": "🔕 الكتم شغّال (زر 🔔 فوق) — ما ينرسل شي لحد ما تفكّه"}
     sent = _ina_send([a], "", dict(cfg, on=True))
@@ -16846,10 +16843,9 @@ def ina_view():
     st = _safe(load_json, INA_FILE, default={}) or {}
     today = datetime.now().strftime("%Y-%m-%d")
     S = INA_SENS[c["sens"]]
-    rule = (f"🔄 المؤشرات تنقلب تميل للصعود/النزول (معدل ≥ {S['turn']}" + (f" · ثقة ≥ {S['conf']}%" if S["conf"] else "") + ")"
-            + " · ⚡ خروج من الانضغاط" + (" · وبدايته" if S["sq_on"] else "")
-            + (f" · 🧱 قرب دعم/مقاومة (≤ {S['near']:g}%)" if S["near"] else "")
-            + (f" · حد {c['cap']} باليوم" if c["cap"] else " · بلا حدّ يومي"))   # 📊 v3.36.4: 0 = بلا حد
+    rule = ("🟢 مؤشر القاع: حين تدخل عملة " + {60: "«🟢 قاع قوي» (60 فأكثر)", 50: "«🟡 منطقة شراء» (50 فأكثر) أو أقوى", 30: "«👀 راقب» (30 فأكثر) أو أقوى"}[S["min"]]
+            + " — مرة لكل مستوى في كل نوبة" + (f" · حد {c['cap']} باليوم" if c["cap"] else " · بلا حدّ يومي")
+            + " · تنبيهات الانقلاب والانضغاط والدعم/المقاومة متوقفة: لم تثبت لها قيمة على الأسعار الحقيقية")
     return {**c, "sens_lbl": S["lbl"], "ch_lbl": PXA_CH[c["ch"]], "muted": bool(TG_MUTED["v"]),
             "n_today": int(st.get("n") or 0) if st.get("day") == today else 0, "log": (st.get("log") or [])[:15], "rule": rule,
             "sens_opts": {k: v["lbl"] for k, v in INA_SENS.items()}, "ch_opts": PXA_CH,
@@ -25750,13 +25746,13 @@ function pxaPanel(P){if(!P||P.on==null)return '';                               
     ${(P.log||[]).length?`<details><summary>آخر الإشعارات (${P.log.length})</summary>${P.log.map(x=>`<div class="ind-sub">${new Date(x.ts*1000).toLocaleString('ar',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})} · ${gEsc(x.t)} · ${gEsc(x.b)}</div>`).join('')}</details>`:''}</div>`}
 function inaPanel(P){if(!P||P.on==null)return '';                                    // 📊 v3.31.0: تنبيهات المؤشرات — لحالها (قبل الحركة)
   const o=(m,k,cur)=>Object.entries(m||{}).map(([a,l])=>`<button class="${cur===a?'on':''}" onclick="inaSet({${k}:'${a}'})">${gEsc(l)}</button>`).join('');
-  return `<div class="ind-al${P.on?'':' off'}" style="margin-top:10px"><div class="ind-al-h"><b>📊 تنبيهات المؤشرات — قبل الحركة <small style="color:var(--mut2);font-weight:400">${P.on?gEsc(P.sens_lbl)+' · '+gEsc(P.ch_lbl):'مطفية'}</small></b>
+  return `<div class="ind-al${P.on?'':' off'}" style="margin-top:10px"><div class="ind-al-h"><b>🟢 تنبيهات مؤشر القاع — متى أشتري <small style="color:var(--mut2);font-weight:400">${P.on?gEsc(P.sens_lbl)+' · '+gEsc(P.ch_lbl):'مطفية'}</small></b>
     <span style="display:flex;gap:6px"><button id="ina_on" class="${P.on?'on':''}" onclick="inaSet({on:${P.on?'false':'true'}})">${P.on?'✅ شغّالة':'⏸️ مطفية'}</button>
     <button onclick="INAO=!INAO;pxaRender()">${INAO?'▲':'⚙️'} الخيارات</button></span></div>
     ${P.muted?'<div class="ind-sub" style="color:var(--amber)">🔕 كتم الإشعارات شغّال (زر 🔔 فوق) — ما يوصل شي لحد ما تفكّه</div>':''}
     ${INAO?`<div class="ind-al-o">الحساسية: ${o(P.sens_opts,'sens',P.sens)}</div><div class="ind-al-o">وين توصل: ${o(P.ch_opts,'ch',P.ch)}</div>
     <div class="ind-al-o"><button onclick="inaTest()">🧪 جرّب تنبيه</button></div>`:''}
-    <div class="ind-sub" style="margin-top:6px">تتفاعل كل 5 دقائق (حتى لو شريط المؤشرات مطفي) · ${gEsc(P.rule||'')} · كل تنبيه بيه صدق المؤشرات على نفس العملة · رسالة لحالها (مو ويّا الأسعار) · بالموبايل قناة «📊 تنبيهات المؤشرات» والضغط يفتح 📊 · اليوم ${P.n_today||0}</div>
+    <div class="ind-sub" style="margin-top:6px">${gEsc(P.rule||'')} · كل تنبيه معه سجله على الأسعار الحقيقية وحالة البيتكوين · رسالة مستقلة عن تنبيهات الأسعار · في الهاتف قناة «📊 تنبيهات المؤشرات» · اليوم ${P.n_today||0}</div>
     ${(P.log||[]).length?`<details><summary>آخر التنبيهات (${P.log.length})</summary>${P.log.map(x=>`<div class="ind-sub">${new Date(x.ts*1000).toLocaleString('ar',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})} · ${gEsc(x.t)} · ${gEsc(x.b)}</div>`).join('')}</details>`:''}</div>`}
 function pxaRender(){const el=$('#tk_pxa');if(el)el.innerHTML=(PXAV?pxaPanel(PXAV):'')+(INAV?inaPanel(INAV):'')}
 async function pxaLoad(){try{const r=await api('/api/control',{action:'pxa_get'});PXAV=r&&r.pxa||null;INAV=r&&r.ina||null}catch(e){PXAV=null;INAV=null}pxaRender()}
@@ -26052,27 +26048,25 @@ function indicSync(d){
   const sig=rows.map(r=>r.sym).join(',');
   if(inn.dataset.sig!==sig){
     const one=rows.map(r=>`<span class="ik" data-s="${gEsc(r.sym)}"><b class="ikb">${gEsc(r.base)}</b>
-      <i class="iv itr">—</i><span class="iv">RSI <b class="irsi">—</b></span>
-      <span class="iv">تذبذب <b class="iatr">—</b></span><span class="iv">بالمدى <b class="ipos">—</b></span></span>`).join('');
+      <i class="iv isum">—</i><i class="iv inx"></i><i class="iv ibot"></i></span>`).join('');
     inn.innerHTML=one+one; inn.dataset.sig=sig;
   }
   if(!TAPES.i)TAPES.i=new Tape($('#tape2 .tapewrap')||el,inn);
   indBtnSync(d);
   TAPES.i.setLoop(Math.max(30,(+((DATA||{}).ticker||{}).speed||45)*1.4));
-  const TR={up:['📈 صاعد','var(--green)'],down:['📉 هابط','var(--red)'],flat:['➖ عرضي','var(--mut)']};
+  const CS=I.cs||{},TR={up:['📈 صاعد','var(--green)'],down:['📉 هابط','var(--red)'],flat:['➖ عرضي','var(--mut)']};   // 🎞️ v3.36.27
   for(const r of rows){
-    const sel=(window.CSS&&CSS.escape)?CSS.escape(r.sym):r.sym;
+    const sel=(window.CSS&&CSS.escape)?CSS.escape(r.sym):r.sym,c=CS[r.sym];
     inn.querySelectorAll(`.ik[data-s="${sel}"]`).forEach(e=>{
-      const t=TR[r.trend]||TR.flat, tr=e.querySelector('.itr');
-      tr.textContent=t[0]; tr.style.color=t[1];
-      const rs=e.querySelector('.irsi'); rs.textContent=gN(r.rsi,1);
-      rs.style.color=r.rsi>=70?'var(--red)':r.rsi<=30?'var(--green)':'var(--tx)';
-      rs.parentElement.title=r.rsi>=70?'مشترى زايد — احتمال تصحيح':r.rsi<=30?'مباع زايد — منطقة شراء تاريخياً':'متوازن';
-      const at=e.querySelector('.iatr'); at.textContent=gN(r.atr,2)+'%';
-      at.parentElement.title=`متوسط حركة الساعة ${gN(r.atr,2)}% — كل ما زادت، الشبكة تاكل درجات أكثر`;
-      const po=e.querySelector('.ipos'); po.textContent=gN(r.pos,0)+'%';
-      po.style.color=r.pos>=80?'var(--amber)':r.pos<=20?'var(--cyan)':'var(--tx)';
-      po.parentElement.title=`موقع السعر بمدى 7 أيام: القاع ${fmtPx(r.lo)} · القمة ${fmtPx(r.hi)}`;
+      const su=e.querySelector('.isum'),nx=e.querySelector('.inx'),bo=e.querySelector('.ibot');
+      if(c&&c.n){const s=+c.sc||0,w=s>=45?['⬆️ صاعدة بقوة','var(--green)',c.up]:s>=15?['↗️ تميل للصعود','var(--green)',c.up]:s>-15?['↔️ محايدة','var(--mut)',null]:s>-45?['↘️ تميل للهبوط','var(--red)',c.dn]:['⬇️ هابطة بقوة','var(--red)',c.dn];
+        su.textContent=w[0]+(w[2]!=null?` ${w[2]}/${c.n}`:'');su.style.color=w[1];
+        su.title=`معدل المؤشرات الآن (للساعات القادمة): ${s>0?'+':''}${s} من 100 — ${c.up} صاعدة · ${c.dn} هابطة · ${c.n-c.up-c.dn} محايدة`;
+        const q=c.nx;nx.textContent=q?(q.k==='up'?'· غداً ↗️':'· غداً ↘️'):'';nx.style.color=q?(q.k==='up'?'var(--green)':'var(--red)'):'';
+        nx.title=q?`على الأسعار الحقيقية (28 عملة): بعد مثل هذا الميل كان السعر أعلى بعد يوم في ${Math.round(q.p)}% من المرات (العادي ${Math.round(q.b)}%)`:'';
+        const bt=c.bot;bo.textContent=bt?`· ${bt.t} ${bt.s}`:'';bo.style.color=bt?(bt.lv==='strong'?'var(--green)':bt.lv==='zone'?'var(--amber)':'var(--mut)'):'';
+        bo.title=bt?'مؤشر القاع (شموع يومية · لأيام إلى أسبوعين) — التفاصيل في 🔮 التوقعات':''}
+      else{const t=TR[r.trend]||TR.flat;su.textContent=t[0];su.style.color=t[1];su.title='الاتجاه — معدل المؤشرات يظهر بعد أول حساب';nx.textContent='';bo.textContent=''}
       e.title=`${r.base} · ${fmtPx(r.px)}`;
     });
   }
