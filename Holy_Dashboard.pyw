@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.27"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.28"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -10627,6 +10627,12 @@ def _rep_map_svg(fv):
         out.append("".join(g))
         y0 += hb + 12
     return (f'<svg viewBox="0 0 {W} {y0}" class="mapsvg" style="direction:rtl" role="img" aria-label="لقطة خريطة الأرباح">' + "".join(out) + "</svg>")
+
+
+def _prev_week():
+    """🖼️ v3.36.28: الأسبوع السابق — (الأحد آخر يوم بيه · 7 أيام من الاثنين)"""
+    t = datetime.now().date()
+    return t - timedelta(days=t.weekday() + 1), 7
 
 
 def _prev_month():
@@ -21285,12 +21291,16 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
             except Exception:
                 pdays = 30
             _per = str((q.get("per") or [""])[0])
-            _per = _per if _per in ("month", "prev") else ""
+            _per = _per if _per in ("month", "prev", "yday", "pweek") else ""
             _end = None
             if _per == "month":                            # 📅 v3.36.10: هذا الشهر = من أول الشهر لليوم (بتاريخ اللوحة نفسها)
                 pdays = datetime.now().day
             elif _per == "prev":                           # ⏮️ v3.36.12: الشهر السابق كاملاً (من 1 لآخر يوم بيه — ما يتغيّر)
                 _end, pdays = _prev_month()
+            elif _per == "yday":                           # 🖼️ v3.36.28: البارحة (يوم واحد)
+                _end, pdays = datetime.now().date() - timedelta(days=1), 1
+            elif _per == "pweek":                          # 🖼️ v3.36.28: الأسبوع السابق كاملاً (الاثنين ← الأحد)
+                _end, pdays = _prev_week()
             _pv = _safe(profit_view, max(1, min(365, pdays)), True, None, _end, default={"ok": False, "days": [], "bots": [], "tot": {}})
             if isinstance(_pv, dict):
                 _n = _end or datetime.now().date()
@@ -27123,20 +27133,20 @@ function pcTable(v){
   el.appendChild(t)}
 /* ── 🖼️ v3.23.3: بطاقة الأرباح — صورة حديثة بس لما تطلبها (تنرسم بالمتصفح · ولا مكتبة بالسيرفر) ── */
 const CARD={days:7,opt:{coins:true,acc:true,fin:true,all:true,priv:false},v:null,flow:null,url:'',blob:null,busy:false};
-const CARD_P=[[1,'اليوم'],[7,'آخر 7 أيام'],[30,'آخر 30 يوم'],[90,'آخر 90 يوم'],[365,'آخر سنة']];
+const CARD_P=[[1,'اليوم'],['yday','البارحة'],[7,'آخر 7 أيام'],['pweek','الأسبوع السابق'],['month','الشهر الحالي'],['prev','الشهر السابق'],[30,'آخر 30 يوم'],[90,'آخر 90 يوم'],[365,'آخر سنة']];   // 🖼️ v3.36.28: + البارحة · الأسبوع السابق · الشهر الحالي · الشهر السابق
 const CARD_OPTS=[['coins','🪙 العملات المحرّرة'],['acc','🪙 المُراكِمات'],['fin','💰 الصندوق النهائي'],['all','📈 الإجمالي الكلي'],['priv','🔒 وضع المشاركة (يخفي المبالغ)']];
 function cardOpen(){
-  try{const s=JSON.parse(localStorage.getItem('holy_card')||'null');if(s){if(s.days)CARD.days=s.days;Object.assign(CARD.opt,s.opt||{})}}catch(e){}
+  try{const s=JSON.parse(localStorage.getItem('holy_card')||'null');if(s){if(s.days&&CARD_P.some(p=>String(p[0])===String(s.days)))CARD.days=s.days;Object.assign(CARD.opt,s.opt||{})}}catch(e){}
   showModal(`<h2>🖼️ بطاقة الأرباح</h2>
   <p style="font-size:11.5px;color:var(--mut);margin:-4px 0 10px">صورة تحفظها أو تشاركها — تطلع بس لما تطلبها · ولا مفتاح ولا اسم محفظة ينكتب بيها.</p>
-  <div class="cd-row" id="cd_p">${CARD_P.map(([d,l])=>`<button data-d="${d}" class="${d===CARD.days?'primary':''}" onclick="cardSet('days',${d})">${l}</button>`).join('')}</div>
+  <div class="cd-row" id="cd_p">${CARD_P.map(([d,l])=>`<button data-d="${d}" class="${String(d)===String(CARD.days)?'primary':''}" onclick="cardSet('days','${d}')">${l}</button>`).join('')}</div>
   <div class="cd-row cd-opts">${CARD_OPTS.map(([k,l])=>`<label><input type="checkbox" id="cd_${k}" ${CARD.opt[k]?'checked':''} onchange="cardSet('${k}',this.checked)"> ${l}</label>`).join('')}</div>
   <div class="cd-prev"><img id="cd_img" alt="بطاقة الأرباح"><div id="cd_wait">⏳ ترسم البطاقة…</div></div>
   <div class="mbtns" style="margin-top:10px"><button class="primary" onclick="cardSave()">⬇️ حفظ الصورة</button>
     <button onclick="cardTg()">📤 أرسلها تيليغرام</button><button id="cd_share" onclick="cardShare()" style="display:none">📲 مشاركة</button>
     <button onclick="hideModal()">إغلاق</button></div>`);
   cardRender()}
-function cardSet(k,v){if(k==='days'){CARD.days=v;CARD.v=null;document.querySelectorAll('#cd_p button').forEach(b=>b.className=(+b.dataset.d===v)?'primary':'')}
+function cardSet(k,v){if(k==='days'){v=/^\d+$/.test(String(v))?+v:String(v);CARD.days=v;CARD.v=null;document.querySelectorAll('#cd_p button').forEach(b=>b.className=(b.dataset.d===String(v))?'primary':'')}
   else CARD.opt[k]=v;
   try{localStorage.setItem('holy_card',JSON.stringify({days:CARD.days,opt:CARD.opt}))}catch(e){}
   cardRender()}
@@ -27144,7 +27154,7 @@ async function cardRender(){
   if(CARD.busy){CARD.again=true;return}CARD.busy=true;
   try{
     const w=$('#cd_wait');if(w)w.style.display='';
-    if(!CARD.v||CARD.v._d!==CARD.days){CARD.v=await api('/api/profit?days='+CARD.days);if(CARD.v)CARD.v._d=CARD.days}
+    if(!CARD.v||CARD.v._d!==CARD.days){CARD.v=await api('/api/profit?'+(typeof CARD.days==='number'?'days='+CARD.days:'per='+CARD.days));if(CARD.v)CARD.v._d=CARD.days}
     if(CARD.opt.fin&&!CARD.opt.priv&&(!CARD.flow||Date.now()-CARD.flow.t>60000)){try{const f=await api('/api/flow');CARD.flow={t:Date.now(),f}}catch(e){CARD.flow=null}}
     try{await Promise.all([document.fonts.load('700 120px "IBM Plex Mono"'),document.fonts.load('700 40px "IBM Plex Sans Arabic"'),document.fonts.load('500 30px "IBM Plex Sans Arabic"')])}catch(e){}
     const M=cardModel(CARD.v,CARD.opt,DATA||{},CARD.flow&&CARD.flow.f);
@@ -27164,7 +27174,7 @@ function cardModel(v,o,D,F){
   const mn=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'],now=new Date();
   const dm=s=>{const p=String(s||'').split('-');return p.length===3?`${+p[2]}/${+p[1]}`:'—'};
   const L=t=>'\u2066'+t+'\u2069',usd=x=>L((+x||0).toFixed(2)+'$'),coin=(q,c)=>L(`${fmtCoin(+q||0)} ${c}`),fq=q=>fmtCoin(+q||0).replace(/^\+/,'');   // ⁦…⁩ = الرقم ووحدته يبقون سوا داخل النص العربي
-  const rq=v._d||v.req||v.span||n,lab=(CARD_P.find(p=>p[0]===rq)||[0,`آخر ${rq} يوم`])[1];   // الفترة اللي اخترتها (الأيام من أول ربح بيها)
+  const rq=v._d||v.req||v.span||n,lab=(CARD_P.find(p=>String(p[0])===String(rq))||[0,`آخر ${rq} يوم`])[1];   // الفترة اللي اخترتها (الأيام من أول ربح بيها)
   const M={priv:P,brand:'The Holy Dashboard',date:`${now.getDate()} ${mn[now.getMonth()]} ${now.getFullYear()}`,
     period:n>1?`📅 ${lab} · ${L(dm(v.from))} ← ${L(dm(v.to))}`:`📅 ${lab} · ${L(dm(v.to))}`,
     heroLabel:P?'أيام رابحة':'ربح التداول',hero:P?`${win}/${n}`:`${(+T.t||0)>=0?'+':''}${(+T.t||0).toFixed(2)}$`,
