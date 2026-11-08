@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.26"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.27"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -13496,16 +13496,16 @@ IND2_FILE = os.path.join(ROOT, "Holy_Indic.json")
 IND2_H = 4                       # ⏱️ الإشارة تُحكم بعد كم ساعة
 IND2_MIN_MOVE = 0.0015           # حركة أصغر من 0.15% = «ما تحرّك» (ما تنحسب صح ولا غلط)
 _IND2_K = [   # (المفتاح · الاسم · الأيقونة · الوزن الأساسي · شنو يفحص بسطر)
-    ("vp", "Volume Profile", "📊", 1.0, "وين انتداول أكثر حجم — السعر فوق منطقة القيمة صعود، تحتها نزول"),
-    ("avwap", "Anchored VWAP", "⚓", 1.0, "متوسط سعر الشراء من آخر قاع وآخر قمة — فوقهم المشترين مسيطرين"),
-    ("of", "Order Flow", "🌊", 1.2, "مين أقوى: صفقات الشراء لو البيع (آخر 24 ساعة) + دفتر الأوامر"),
-    ("pa", "Price Action", "🕯️", 1.2, "شكل الحركة: قمم وقيعان أعلى صعود · أوطى نزول · كسر قمة/قاع"),
+    ("vp", "Volume Profile", "📊", 1.0, "أين تركّز أكبر حجم تداول — السعر فوق منطقة القيمة يميل للصعود، وتحتها يميل للهبوط"),
+    ("avwap", "Anchored VWAP", "⚓", 1.0, "متوسط سعر التداول منذ آخر قاع ومنذ آخر قمة — السعر فوقهما يعني أن المشترين مسيطرون"),
+    ("of", "Order Flow", "🌊", 1.2, "أيهما أقوى: صفقات الشراء أم البيع (آخر 24 ساعة) مع دفتر الأوامر"),
+    ("pa", "Price Action", "🕯️", 1.2, "شكل الحركة: قمم وقيعان أعلى = صعود · أدنى = هبوط · وكسر آخر قمة أو قاع"),
     ("trend", "الاتجاه العام (EMA 50/200)", "📈", 1.2, "السعر فوق متوسط 200 على 4 ساعات = اتجاه عام صاعد"),
-    ("st", "Supertrend", "🟩", 1.0, "مؤشر اتجاه بخط وقف متحرك — أخضر صعود · أحمر نزول"),
-    ("macd", "MACD", "⚡", 0.8, "الزخم: يقوى لو يضعف"),
+    ("st", "Supertrend", "🟩", 1.0, "مؤشر اتجاه بخط وقف متحرك — الأخضر صعود والأحمر هبوط"),
+    ("macd", "MACD", "⚡", 0.8, "قوة الدفع: هل تزداد أم تضعف"),
     ("rsi", "RSI", "💪", 0.6, "قوة الشراء/البيع — فوق 70 تشبّع شراء · تحت 30 تشبّع بيع"),
-    ("adx", "ADX (قوة الاتجاه)", "🧭", 0.6, "اكو اتجاه حقيقي لو السوق متذبذب — فوق 25 الإشارات أوثق"),
-    ("cmf", "تدفق السيولة (CMF)", "💧", 0.6, "الفلوس داخلة للعملة لو طالعة منها"),
+    ("adx", "ADX (قوة الاتجاه)", "🧭", 0.6, "هل يوجد اتجاه حقيقي أم أن السوق متذبذب — فوق 25 تكون الإشارات أوثق"),
+    ("cmf", "تدفق السيولة (CMF)", "💧", 0.6, "هل الأموال تدخل إلى العملة أم تخرج منها"),
 ]
 
 
@@ -13664,7 +13664,7 @@ def _i2_signals(D, S, t, T4=None, tv=None, book=None, px=None):
     if vp:
         lv.update(poc=vp["poc"], vah=vp["vah"], val=vp["val"])
         if p > vp["vah"]:
-            out["vp"] = (0.8, f"فوق منطقة القيمة ({f(vp['vah'])}) — المشترين قبلوا سعر أعلى")
+            out["vp"] = (0.8, f"فوق منطقة القيمة ({f(vp['vah'])}) — المشترون قبلوا سعراً أعلى")
         elif p < vp["val"]:
             out["vp"] = (-0.8, f"تحت منطقة القيمة ({f(vp['val'])}) — ضغط بيع")
         else:
@@ -13675,13 +13675,13 @@ def _i2_signals(D, S, t, T4=None, tv=None, book=None, px=None):
         lv.update(avwap_lo=av["lo"], avwap_hi=av["hi"], sw_lo=L[av["ilo"]], sw_hi=H[av["ihi"]])
         a_lo, a_hi = p > av["lo"], p > av["hi"]
         if a_lo and a_hi:
-            out["avwap"] = (1.0, f"فوق VWAP من آخر قاع ({f(av['lo'])}) ومن آخر قمة ({f(av['hi'])}) — المشترين مسيطرين")
+            out["avwap"] = (1.0, f"فوق VWAP من آخر قاع ({f(av['lo'])}) ومن آخر قمة ({f(av['hi'])}) — المشترون مسيطرون")
         elif not a_lo and not a_hi:
-            out["avwap"] = (-1.0, f"تحت VWAP من آخر قاع ({f(av['lo'])}) ومن آخر قمة ({f(av['hi'])}) — البايعين مسيطرين")
+            out["avwap"] = (-1.0, f"تحت VWAP من آخر قاع ({f(av['lo'])}) ومن آخر قمة ({f(av['hi'])}) — البائعون مسيطرون")
         else:
             rec_low = av["ilo"] > av["ihi"]          # آخر حدث قاع ⇒ السوق طالع منه
             s = 0.3 if (a_lo and rec_low) else (-0.3 if (not a_hi and not rec_low) else 0.0)
-            out["avwap"] = (s, f"بين VWAP القاع ({f(av['lo'])}) و VWAP القمة ({f(av['hi'])}) — {'طالع من القاع' if rec_low else 'نازل من القمة'}")
+            out["avwap"] = (s, f"بين VWAP القاع ({f(av['lo'])}) و VWAP القمة ({f(av['hi'])}) — {'صاعد من القاع' if rec_low else 'هابط من القمة'}")
     sg = None
     if tv:
         ts_t = D["t"][t]
@@ -13697,7 +13697,7 @@ def _i2_signals(D, S, t, T4=None, tv=None, book=None, px=None):
         a = max(0, t - 23)
         num = sum(((C[i] - L[i]) - (H[i] - C[i])) / (H[i] - L[i]) * V[i] for i in range(a, t + 1) if H[i] > L[i])
         den = sum(V[a:t + 1]) or 1.0
-        sg = (cl(num / den * 3), f"تقدير من الشموع: {'الشراء' if num >= 0 else 'البيع'} أقوى آخر 24 ساعة")
+        sg = (cl(num / den * 3), f"تقدير من الشموع: {'الشراء' if num >= 0 else 'البيع'} أقوى خلال آخر 24 ساعة")
     if book is not None:
         bi = cl(book * 2)
         out["of"] = (cl(0.7 * sg[0] + 0.3 * bi), sg[1] + f" · دفتر الأوامر: {'طلبات الشراء' if book >= 0 else 'عروض البيع'} أكثر بـ{abs(book) * 100:.0f}%")
@@ -13709,12 +13709,12 @@ def _i2_signals(D, S, t, T4=None, tv=None, book=None, px=None):
         base = 1.0 if (hh and hl) else (-1.0 if (not hh and not hl) else 0.0)
         bos = 1 if p > hs[-1][1] else (-1 if p < ls[-1][1] else 0)
         if bos and base and (bos > 0) != (base > 0):          # 🔄 كسر عكس الاتجاه = تغيّر الاتجاه (CHoCH)
-            out["pa"] = (0.6 * bos, f"كان {'صاعد' if base > 0 else 'نازل'} بس كسر آخر {'قمة' if bos > 0 else 'قاع'} "
+            out["pa"] = (0.6 * bos, f"كان {'صاعداً' if base > 0 else 'هابطاً'} لكنه كسر آخر {'قمة' if bos > 0 else 'قاع'} "
                                     f"({f(hs[-1][1] if bos > 0 else ls[-1][1])}) — بداية تغيّر الاتجاه")
         elif base:
-            txt = "قمم وقيعان أعلى — اتجاه صاعد" if base > 0 else "قمم وقيعان أوطى — اتجاه نازل"
+            txt = "قمم وقيعان أعلى — اتجاه صاعد" if base > 0 else "قمم وقيعان أدنى — اتجاه هابط"
             if bos:
-                txt += f" · كسر آخر {'قمة' if bos > 0 else 'قاع'} {f(hs[-1][1] if bos > 0 else ls[-1][1])} (يأكّد)"
+                txt += f" · كسر آخر {'قمة' if bos > 0 else 'قاع'} {f(hs[-1][1] if bos > 0 else ls[-1][1])} (تأكيد)"
             out["pa"] = (base * (1.0 if bos else 0.8), txt)
         else:
             out["pa"] = (0.5 * bos, "قمم وقيعان مختلطة — متذبذب" + (f" · كسر آخر {'قمة' if bos > 0 else 'قاع'}" if bos else ""))
@@ -13725,42 +13725,42 @@ def _i2_signals(D, S, t, T4=None, tv=None, book=None, px=None):
             if p > e200 and e50 > e200:
                 out["trend"] = (1.0, f"فوق متوسط 200 ({f(e200)}) والمتوسط 50 فوقه — الاتجاه العام صاعد")
             elif p < e200 and e50 < e200:
-                out["trend"] = (-1.0, f"تحت متوسط 200 ({f(e200)}) والمتوسط 50 تحته — الاتجاه العام نازل")
+                out["trend"] = (-1.0, f"تحت متوسط 200 ({f(e200)}) والمتوسط 50 تحته — الاتجاه العام هابط")
             else:
-                out["trend"] = (0.3 if p > e200 else -0.3, f"{'فوق' if p > e200 else 'تحت'} متوسط 200 ({f(e200)}) بس المتوسطات ما متّفقة")
+                out["trend"] = (0.3 if p > e200 else -0.3, f"{'فوق' if p > e200 else 'تحت'} متوسط 200 ({f(e200)}) لكن المتوسطات غير متفقة")
     if S["st"][t] is not None:
         k = 0
         while t - k - 1 >= 0 and S["st"][t - k - 1] == S["st"][t]:
             k += 1
         lv["st"] = S["stl"][t]
         _d = f"{(k + 1) // 24} يوم" if k + 1 >= 48 else f"{k + 1} ساعة"
-        out["st"] = (1.0 if S["st"][t] > 0 else -1.0, f"{'أخضر (صعود)' if S['st'][t] > 0 else 'أحمر (نزول)'} من {_d} · خطّه {f(S['stl'][t])}")
+        out["st"] = (1.0 if S["st"][t] > 0 else -1.0, f"{'أخضر (صعود)' if S['st'][t] > 0 else 'أحمر (هبوط)'} منذ {_d} · خطه {f(S['stl'][t])}")
     if t >= 1 and S["hist"][t] is not None and S["hist"][t - 1] is not None:
         h0, h1 = S["hist"][t - 1], S["hist"][t]
         if h1 > 0:
-            out["macd"] = (1.0 if h1 >= h0 else 0.4, "الزخم صاعد " + ("ويقوى" if h1 >= h0 else "بس يضعف"))
+            out["macd"] = (1.0 if h1 >= h0 else 0.4, "الزخم صاعد " + ("ويقوى" if h1 >= h0 else "لكنه يضعف"))
         else:
-            out["macd"] = (-1.0 if h1 <= h0 else -0.4, "الزخم نازل " + ("ويقوى" if h1 <= h0 else "بس يضعف"))
+            out["macd"] = (-1.0 if h1 <= h0 else -0.4, "الزخم هابط " + ("ويقوى" if h1 <= h0 else "لكنه يضعف"))
     r = S["rsi"][t]
     if r is not None:
         if r >= 70:
-            out["rsi"] = (0.0, f"RSI {r:.0f} — تشبّع شراء (ممكن تصحيح)")
+            out["rsi"] = (0.0, f"RSI {r:.0f} — تشبّع شراء (تصحيح محتمل)")
         elif r <= 30:
-            out["rsi"] = (0.0, f"RSI {r:.0f} — تشبّع بيع (ممكن ارتداد)")
+            out["rsi"] = (0.0, f"RSI {r:.0f} — تشبّع بيع (ارتداد محتمل)")
         else:
             out["rsi"] = (cl((r - 50) / 20), f"RSI {r:.0f} — {'زخم شراء' if r >= 50 else 'زخم بيع'}")
     a_ = S["adx"][t]
     if a_ is not None and S["pdi"][t] is not None:
         lv["adx"] = a_
         if a_ < 20:
-            out["adx"] = (0.0, f"ADX {a_:.0f} — ماكو اتجاه واضح (السوق متذبذب) · الإشارات أضعف")
+            out["adx"] = (0.0, f"ADX {a_:.0f} — لا يوجد اتجاه واضح (السوق متذبذب) · الإشارات أضعف")
         else:
             bull = S["pdi"][t] > S["ndi"][t]
             out["adx"] = ((0.7 if bull else -0.7) * (1.0 if a_ >= 25 else 0.6),
-                          f"ADX {a_:.0f} — اتجاه {'قوي' if a_ >= 25 else 'متوسط'} لصالح {'المشترين' if bull else 'البايعين'}")
+                          f"ADX {a_:.0f} — اتجاه {'قوي' if a_ >= 25 else 'متوسط'} لصالح {'المشترين' if bull else 'البائعين'}")
     cm = S["cmf"][t]
     if cm is not None:
-        out["cmf"] = (cl(cm * 6), f"CMF {cm:+.2f} — السيولة {'داخلة' if cm > 0.02 else 'طالعة' if cm < -0.02 else 'متوازنة'}")
+        out["cmf"] = (cl(cm * 6), f"CMF {cm:+.2f} — السيولة {'داخلة' if cm > 0.02 else 'خارجة' if cm < -0.02 else 'متوازنة'}")
     return out, lv
 
 
@@ -15640,9 +15640,9 @@ _FC_EPOCH = datetime(1970, 1, 1)     # يوم UTC بلا utcfromtimestamp (مه�
 _FC_RUN = {"busy": False}
 _FC_X = [   # ➕ الإضافات (حسابات بس) — (مفتاح · الاسم · الأيقونة · شنو يفحص)
     ("lc", "Lorentzian (أقرب الحالات)", "🧠", "يدوّر بماضي نفس العملة على أقرب 8 حالات تشبه هسه (RSI · CCI · WaveTrend · ADX) وشنو صار بعدها"),
-    ("nw", "Nadaraya-Watson", "〰️", "خط ناعم للسعر (النسخة اللي ما تعيد رسم الماضي) — طالع لو نازل"),
-    ("fng", "الخوف والطمع (بأطرافه)", "😨", "خوف شديد عادةً قريب من قاع · طمع شديد قريب من قمة — بالوسط ما يميل"),
-    ("fund", "التمويل (Funding)", "💸", "المشترين بالعقود يدفعون هواية ⇒ الشراء مزدحم (عكسه للبيع) — لليوم والأسبوع"),
+    ("nw", "Nadaraya-Watson", "〰️", "خط ناعم للسعر (النسخة التي لا تعيد رسم الماضي) — صاعد أم هابط"),
+    ("fng", "الخوف والطمع (بأطرافه)", "😨", "الخوف الشديد يكون عادةً قرب القاع، والطمع الشديد قرب القمة — وفي الوسط لا يميل"),
+    ("fund", "التمويل (Funding)", "💸", "حين يدفع المشترون في العقود رسوماً عالية يكون الشراء مزدحماً (والعكس للبيع) — لليوم والأسبوع"),
 ]
 _FC_NWW = [(1.0 + i * i / (2.0 * 8.0 * 8.0 * 8.0)) ** -8.0 for i in range(26)]   # 〰️ Rational Quadratic: نافذة 8 · وزن 8 · 25 شمعة
 
@@ -15888,18 +15888,18 @@ def _fc_read(P, t, k, X):
         while t - kk - 1 >= 0 and S["st"][t - kk - 1] == S["st"][t]:
             kk += 1
         dd = (kk + 1) * P["dx"] / 86400.0
-        sig["st"] = (sig["st"][0], f"{'أخضر (صعود)' if S['st'][t] > 0 else 'أحمر (نزول)'} من {('%.0f' % dd) if dd >= 1 else '<1'} يوم · خطّه {_i2_f(S['stl'][t])}")
+        sig["st"] = (sig["st"][0], f"{'أخضر (صعود)' if S['st'][t] > 0 else 'أحمر (هبوط)'} منذ {('%.0f' % dd) if dd >= 1 else '<1'} يوم · خطه {_i2_f(S['stl'][t])}")
     H = X["H"]
     lc = _fc_lc(P, t, H)
     if lc is not None:
-        sig["lc"] = (lc, f"أقرب 8 حالات: {round((lc + 1) * 4)} صعدت · {8 - round((lc + 1) * 4)} نزلت بعد {X['hn']}")
+        sig["lc"] = (lc, f"أقرب 8 حالات: {round((lc + 1) * 4)} صعدت · {8 - round((lc + 1) * 4)} هبطت بعد {X['hn']}")
     nw = P["nw"]
     if t >= 1 and nw[t] is not None and nw[t - 1] is not None:
         s = 1.0 if nw[t] > nw[t - 1] else -1.0
         atr = S["atr"][t] or 0.0
         px = D["c"][t]
-        ex = " · السعر ممطوط فوق الخط (ممكن يرجع)" if atr and px > nw[t] + 2.5 * atr else (" · السعر ممطوط جوه الخط (ممكن يرتد)" if atr and px < nw[t] - 2.5 * atr else "")
-        sig["nw"] = (s, f"الخط الناعم {'طالع' if s > 0 else 'نازل'} ({_i2_f(nw[t])}){ex}")
+        ex = " · السعر بعيد فوق الخط (قد يعود إليه)" if atr and px > nw[t] + 2.5 * atr else (" · السعر بعيد تحت الخط (قد يرتد)" if atr and px < nw[t] - 2.5 * atr else "")
+        sig["nw"] = (s, f"الخط الناعم {'صاعد' if s > 0 else 'هابط'} ({_i2_f(nw[t])}){ex}")
     tcl = D["t"][t] + P["dx"]
     if X.get("fng"):
         v = _fc_at(X["fng"][0], X["fng"][1], tcl)
@@ -25646,7 +25646,7 @@ async function inaTest(){try{const r=await api('/api/control',{action:'ina_test'
 async function pxaSet(v){try{const r=await api('/api/control',{action:'pxa_set',value:v});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok));if(r&&r.pxa)PXAV=r.pxa}catch(e){toast('تعذر الاتصال',false)}pxaRender()}
 async function pxaTest(){try{const r=await api('/api/control',{action:'pxa_test'});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok))}catch(e){toast('تعذر الاتصال',false)}pxaLoad()}
 async function openInd(){
-  showModal(`<h2>📊 المؤشرات — العملة راح تصعد لو تنزل؟</h2><div id="ind_body" style="color:var(--mut);font-size:12.5px;padding:16px;text-align:center">${LDR('جاري الحساب…')}</div>
+  showModal(`<h2>📊 المؤشرات — هل تصعد العملة أم تهبط؟</h2><div id="ind_body" style="color:var(--mut);font-size:12.5px;padding:16px;text-align:center">${LDR('جاري الحساب…')}</div>
     <div class="mbtns"><button onclick="openGuide('','ind')">📖 الدليل</button><button onclick="openTicker()">⚙️ العملات</button><button onclick="hideModal()">إغلاق</button></div>`);
   await indLoad()}
 async function indLoad(){clearTimeout(INDT);try{INDV=await api('/api/indicators')}catch(e){INDV=null}indRender();
@@ -25657,13 +25657,13 @@ function indRender(){
   if(!V||V.ok===false){el.innerHTML='⚠️ تعذّر حساب المؤشرات';return}
   if(!V.on){el.innerHTML='المؤشرات مطفية — شغّلها من ⚙️ الإعدادات ← 📈 شريط الأسعار';return}
   const R=V.rows||[];
-  if(!R.length){el.innerHTML=(V.busy?LDR('⏳ أول حساب للمؤشرات — ثواني…'):('ماكو عملات بالشريط — ضيفها من ⚙️ ← 📈 شريط الأسعار'+(V.err?'<br><small>'+gEsc(V.err)+'</small>':'')))
+  if(!R.length){el.innerHTML=(V.busy?LDR('⏳ أول حساب للمؤشرات — ثواني…'):('لا توجد عملات في الشريط — أضفها من ⚙️ ← 📈 شريط الأسعار'+(V.err?'<br><small>'+gEsc(V.err)+'</small>':'')))
     +`<div style="text-align:right">${indFng(V.fng)}${indMkt(V.mkt)}</div>`;return}
   el.style.cssText='text-align:right';
   const S=V.summary||{}, f=V.fng||{}, H=V.h||4;
-  const word=s=>s>=0.15?['صعود','p']:s<=-0.15?['نزول','n']:['محايد','z'];
+  const word=s=>s>=0.15?['صعود','p']:s<=-0.15?['هبوط','n']:['محايد','z'];
   const pc=a=>a&&a.pct!=null?`${a.pct}% <small>(${a.n})</small>`:'—';
-  let h=`<div class="ind-top"><span class="ind-chip">⏱ للساعات الجاية (~${H} ساعات)</span>
+  let h=`<div class="ind-top"><span class="ind-chip">⏱ للساعات القادمة (~${H} ساعات)</span>
     <span class="ind-chip">السوق: <b style="color:var(--green)">⬆️ ${S.up||0}</b> · <b style="color:var(--red)">⬇️ ${S.down||0}</b> · <b>↔️ ${S.flat||0}</b></span>
     <span class="ind-chip">🔄 ${V.ts?gAgo(V.ts):'—'} · كل ${Math.round((V.every||300)/60)} د</span></div>${indFng(f)}${indMkt(V.mkt)}`;
   h+=indPro(V.pro);                                  // 🏦🗞️🌋 v3.33.0
@@ -25678,7 +25678,7 @@ function indRender(){
       det=`<div class="ind-det" onclick="event.stopPropagation()">${parts.map(p=>{const w=word(+p.s);return `<div class="ind-row" onclick="openGuide('${gEsc(p.k)}','ind')"><span>${p.ico} <b>${gEsc(p.name)}</b> <small class="gd-i">ⓘ</small></span><span class="w ${w[1]}">${w[0]}</span>
         <small>${gEsc(p.txt)}${p.acc!=null?` · 🎯 دقته على ${gEsc(r.base)}: ${p.acc}% (${p.n})`:''}${p.live&&p.live.pct!=null?` · حيّة ${p.live.pct}% (${p.live.n})`:''}</small></div>`}).join('')}
         <div class="ind-lv">🛡️ دعم تحت السعر: ${sup.slice(0,3).map(x=>`${x[0]} <b>${fmtPx(x[1])}</b>`).join(' · ')||'—'}<br>🚧 مقاومة فوقه: ${res.slice(0,3).map(x=>`${x[0]} <b>${fmtPx(x[1])}</b>`).join(' · ')||'—'}</div>
-        ${r.of_src!=='okx'?'<div class="ind-sub">🌊 Order Flow: OKX ما عطت حجم الشراء/البيع لهالعملة ⇒ تقدير من الشموع</div>':''}${indXDet(r)}${indPDet(r)}</div>`}
+        ${r.of_src!=='okx'?'<div class="ind-sub">🌊 تدفق الأوامر: لم تُعطِ OKX حجم الشراء والبيع لهذه العملة ⇒ تقدير من الشموع</div>':''}${indXDet(r)}${indPDet(r)}</div>`}
     return `<div class="ind-c ${gEsc(r.verdict)}${op?' open':''}" onclick="indTog('${gEsc(r.sym)}')">
       <div class="ind-h"><span class="cn">${gEsc(r.base)}</span><span class="px">${fmtPx(r.px)}</span><span class="chg ${(+r.chg24||0)>=0?'up':'dn'}">${(+r.chg24||0)>=0?'▲':'▼'}${Math.abs(+r.chg24||0).toFixed(2)}%</span>
         <span class="ind-v ${gEsc(r.verdict)}">${gEsc(r.txt)}</span></div>
@@ -25718,20 +25718,20 @@ function fcN(v){v=+v||0;const a=Math.abs(v);            // رقم قصير لل�
   if(a>=1)return v.toFixed(2).replace(/0+$/,'').replace(/\.$/,'');return v.toPrecision(3).replace(/0+$/,'').replace(/\.$/,'')}
 function fcB(a){a=a||{};const g=a.g||'short';return{g,t:g==='short'?'⏳':`${{g:'🟢',y:'🟡',n:'⚪\uFE0F',r:'🔴'}[g]||'⚪\uFE0F'} ${a.hit}%`}}
 function fcBW(a){a=a||{};if(!a.g||a.g==='short')return `⏳ تاريخ قليل للفحص (${a.n||0} مرة)`;
-  return `${{g:'🟢 أحسن من الصدفة بوضوح',y:'🟡 أحسن من الصدفة شوية',n:'⚪\uFE0F مثل الصدفة',r:'🔴 أسوأ من الصدفة'}[a.g]} — صدقت ${a.hit}% من ${a.n} مرة (الصدفة ${a.ch}%)`}
+  return `${{g:'🟢 أفضل من الصدفة بوضوح',y:'🟡 أفضل من الصدفة قليلاً',n:'⚪\uFE0F مثل الصدفة',r:'🔴 أسوأ من الصدفة'}[a.g]} — صدقت ${a.hit}% من ${a.n} مرة (الصدفة ${a.ch}%)`}
 function fcVote(z){if(['su','u'].includes(z.vk))return `${z.up} من ${z.n}`;if(['sd','d'].includes(z.vk))return `${z.dn} من ${z.n}`;return 'محايد'}
 function fcRender(){
   const el=$('#fc_body');if(!el)return;const V=FCV;
   if(!V||V.ok===false){el.innerHTML='⚠️ تعذّر حساب التوقعات';return}
-  if(!V.on){el.innerHTML='المؤشرات مطفية — شغّلها من ⚙️ الإعدادات ← 📈 شريط الأسعار (التوقعات تمشي ويّاها)';return}
+  if(!V.on){el.innerHTML='المؤشرات متوقفة — شغّلها من ⚙️ الإعدادات ← 📈 شريط الأسعار (التوقعات تعمل معها)';return}
   const R=V.rows||[],HZ=V.hz||[];
-  if(!R.length){el.innerHTML=V.busy?LDR('⏳ أول حساب: يجيب تاريخ كل عملة ويفحص مؤشراتها على ماضيها — مرة وحدة بس (بعدها خفيف)…'):('ماكو عملات بالشريط — ضيفها من ⚙️ ← 📈 شريط الأسعار'+(V.err?'<br><small>'+gEsc(V.err)+'</small>':''));return}
+  if(!R.length){el.innerHTML=V.busy?LDR('⏳ أول حساب: يجلب تاريخ كل عملة ويفحص مؤشراتها على ماضيها — مرة واحدة فقط (بعدها يصبح خفيفاً)…'):('لا توجد عملات في الشريط — أضفها من ⚙️ ← 📈 شريط الأسعار'+(V.err?'<br><small>'+gEsc(V.err)+'</small>':''));return}
   el.style.cssText='text-align:right';
   let h=`<div class="ind-top"><span class="ind-chip">📊 نفس مؤشرات «المؤشرات» + 4 إضافات</span><span class="ind-chip">🔄 ${V.ts?gAgo(V.ts):'—'} · كل ${Math.round((V.every||1800)/60)} د</span>
-    <span class="ind-chip">🔕 بلا إشعارات</span></div>${V.busy?`<div class="ind-sub">⏳ يكمّل حساب باقي العملات…</div>`:''}`;
+    <span class="ind-chip">🔕 بلا إشعارات</span></div>${V.busy?`<div class="ind-sub">⏳ يُكمل حساب بقية العملات…</div>`:''}`;
   h+=`<div class="ind-list">${R.map(r=>{
     if(r.short)return `<div class="ind-c"><div class="ind-h"><span class="cn">${gEsc(r.base)}</span><span class="ind-v flat">⏳ تاريخها قصير (${r.days||0} يوم)</span></div>
-      <div class="ind-sub">تحتاج 120 يوم شموع على الأقل.</div></div>`;
+      <div class="ind-sub">تحتاج 120 يوماً من الشموع على الأقل.</div></div>`;
     const op=!!FCO[r.sym],H=r.h||{},sq=Object.values(H).some(z=>z&&z.sq&&z.sq.on);
     const rows=HZ.map(z=>{const x=H[z.k]||{};
       if(x.short||!x.vk)return `<div class="fc-r short"><span class="fh">${gEsc(z.name)}</span><span class="fv">⏳ تاريخ قليل</span><span class="fg">—</span><span class="fb short">⏳</span></div>`;
@@ -25741,16 +25741,16 @@ function fcRender(){
     let det='';
     if(op){const k=FCS[r.sym]||(HZ[0]||{}).k,x=H[k]||{};
       const tabs=`<div class="fc-tabs">${HZ.map(z=>`<button class="${z.k===k?'on':''}" onclick="fcSel('${gEsc(r.sym)}','${gEsc(z.k)}')">${gEsc(z.name)}</button>`).join('')}</div>`;
-      if(x.short||!x.vk)det=`<div class="ind-det" onclick="event.stopPropagation()">${tabs}<div class="ind-sub">⏳ تاريخ قليل لهالمدى (${x.have||0} شمعة من ${x.need||'—'}).</div></div>`;
+      if(x.short||!x.vk)det=`<div class="ind-det" onclick="event.stopPropagation()">${tabs}<div class="ind-sub">⏳ تاريخ قليل لهذا المدى (${x.have||0} شمعة من ${x.need||'—'}).</div></div>`;
       else{const lv=x.lv||{},lvT=a=>(a||[]).map(q=>`<b class="rg">${fcN(q[1])}</b> <small>(${gEsc(q[0])})</small>`).join(' · ')||'—',L=x.live||{};
         det=`<div class="ind-det" onclick="event.stopPropagation()">${tabs}<div class="fc-sum">
-          <div><b style="color:var(${['su','u'].includes(x.vk)?'--green':['sd','d'].includes(x.vk)?'--red':'--mut'})">${gEsc(x.vt)}</b> — ${x.up} صاعدة · ${x.dn} نازلة · ${x.fl} محايدة <small>(على شموع ${gEsc(x.tfn)} · بعد ${gEsc(x.name)})</small></div>
+          <div><b style="color:var(${['su','u'].includes(x.vk)?'--green':['sd','d'].includes(x.vk)?'--red':'--mut'})">${gEsc(x.vt)}</b> — ${x.up} صاعدة · ${x.dn} هابطة · ${x.fl} محايدة <small>(على شموع ${gEsc(x.tfn)} · بعد ${gEsc(x.name)})</small></div>
           <div>🎯 ${fcBW(x.rel)}</div>
           ${x.lo!=null?`<div>📏 النطاق 80%: <b class="rg">${fcN(x.lo)} – ${fcN(x.hi)}</b> <small>(الأرجح ${fcN(x.mid)}${(x.rng||{}).cov!=null?` · صدق ${x.rng.cov}% على الماضي`:''})</small></div>`:''}
           <div>🧱 دعم: ${lvT(lv.sup)}<br>🧱 مقاومة: ${lvT(lv.res)}</div>
           ${x.sq&&x.sq.on?`<div style="color:var(--amber)">⚡ هدوء غير معتاد (انضغاط) — يشيع أن بعده حركة كبيرة، والقياس العام لا يؤكد ذلك${x.sq.x?` · في تاريخ ${gEsc(r.base)}: الحركة بعده ×${x.sq.x} من المعتاد`:''}</div>`:''}
-          <div><small>📒 ${L.n||L.done?`من بدأ التسجيل: صدقت ${L.hit||0} من ${L.n||0}${L.cov!=null?` · داخل النطاق ${L.cov}%`:''}${L.wait?` · ${L.wait} تنتظر وقتها`:''}`:'السجل الحي يبدي هسه — كل قراءة تنحكم لما يجي وقتها'}</small></div></div>
-          ${(x.sig||[]).map(p=>{const b=fcB(p.acc);return `<div class="ind-row" onclick="openGuide('${gEsc(p.k)}','fc')"><span>${p.ico} <b>${gEsc(p.name)}</b> <small class="gd-i">ⓘ</small></span><span class="w ${p.w}">${{p:'⬆️ صاعد',n:'⬇️ نازل',z:'↔️ محايد'}[p.w]}<i class="fb ${b.g}" title="${gEsc(fcBW(p.acc))}">${b.t}</i></span><small>${gEsc(p.txt)}</small></div>`}).join('')}</div>`}}
+          <div><small>📒 ${L.n||L.done?`منذ بدء التسجيل: صدقت ${L.hit||0} من ${L.n||0}${L.cov!=null?` · داخل النطاق ${L.cov}%`:''}${L.wait?` · ${L.wait} تنتظر وقتها`:''}`:'يبدأ السجل الحي الآن — تُحكم كل قراءة حين يحلّ وقتها'}</small></div></div>
+          ${(x.sig||[]).map(p=>{const b=fcB(p.acc);return `<div class="ind-row" onclick="openGuide('${gEsc(p.k)}','fc')"><span>${p.ico} <b>${gEsc(p.name)}</b> <small class="gd-i">ⓘ</small></span><span class="w ${p.w}">${{p:'⬆️ صاعد',n:'⬇️ هابط',z:'↔️ محايد'}[p.w]}<i class="fb ${b.g}" title="${gEsc(fcBW(p.acc))}">${b.t}</i></span><small>${gEsc(p.txt)}</small></div>`}).join('')}</div>`}}
     const v0=(H.w&&H.w.vk)||(H.d&&H.d.vk)||'f';
     return `<div class="ind-c fc-c ${['su','u'].includes(v0)?'up':['sd','d'].includes(v0)?'down':''}${op?' open':''}" onclick="fcTog('${gEsc(r.sym)}')">
       <div class="ind-h"><span class="cn">${gEsc(r.base)}</span><span class="px">${fmtPx(r.px)}</span><span class="chg ${(+r.chg||0)>=0?'up':'dn'}">${(+r.chg||0)>=0?'▲':'▼'}${Math.abs(+r.chg||0).toFixed(2)}%</span>
