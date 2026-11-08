@@ -1,0 +1,24 @@
+# 🔬 Holy signals check, second pass (v3.36.27 phase 1): the dashboard's own 🔮 forecast readings on every horizon, the 📊 hourly
+#    readings and the indicator alerts, and the 🟢 bottom research — on public OKX candles for 25 coins, every past candle seeing only what
+#    came before it · right% vs chance · walk-forward (learn on the first 60% of time, judge on the last 40%). Results: lines HOLYSIG2 (the bounce by lean strength and by year · bottom candidates in uptrends and downtrends).
+# Public market data only — no keys, no orders, no notifications. Runs only when the check, ci/RUN_SIG or this file changes.
+name: Holy signals check 2
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/sig_check2.py', 'ci/RUN_SIG2', '.github/workflows/holy-sig2-check.yml']
+permissions:
+  contents: read
+jobs:
+  real-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Signals on real OKX prices (public data · no keys · no orders · no notifications)
+        run: |
+          pip install -q requests
+          python3 ci/sig_check2.py Holy_Dashboard.pyw
