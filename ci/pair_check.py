@@ -26,14 +26,16 @@ for c in ("XRP", "SOL"):
 
 
 def cycles(series, step):
-    lv0 = math.floor(math.log(series[0]) / math.log(1 + step))
-    cur, open_, done = lv0, 0, 0
+    """a real grid: a buy needs the price a whole step under the last trade, its sell a whole step above that buy"""
+    k = math.log(1 + step)
+    a = round(math.log(series[0]) / k)              # the level of the last trade
+    open_, done = 0, 0
     for v in series[1:]:
-        lv = math.floor(math.log(v) / math.log(1 + step))
-        while lv < cur:
-            cur -= 1; open_ += 1
-        while lv > cur:
-            cur += 1
+        x = math.log(v) / k
+        while x <= a - 1:
+            a -= 1; open_ += 1
+        while x >= a + 1:
+            a += 1
             if open_ > 0:
                 open_ -= 1; done += 1
     return done, open_
