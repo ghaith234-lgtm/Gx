@@ -1,0 +1,22 @@
+# 🧺 Holy basket check (the owner 9-11: «وعاء sui xrp xlm»): rebalancing a 3-coin basket vs holding, real OKX prices · lines HOLYBASKET.
+# Public market data only — no keys, no orders, no notifications. Runs only when the check, ci/RUN_BASKET or this file changes.
+name: Holy basket check
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/basket_check.py', 'ci/RUN_BASKET', '.github/workflows/holy-basket-check.yml']
+permissions:
+  contents: read
+jobs:
+  real-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Funding arbitrage vs grid on real OKX data (public data · no keys · no orders · no notifications)
+        run: |
+          pip install -q requests
+          python3 ci/basket_check.py Holy_Dashboard.pyw
