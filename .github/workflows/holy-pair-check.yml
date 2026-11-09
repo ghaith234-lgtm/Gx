@@ -1,0 +1,22 @@
+# 🔀 Holy pair-grid check (the owner 9-11: «sol مع xrp»): is there a direct pair · grid cycles on the SOL/XRP ratio vs XRP-USDT · lines HOLYPAIR.
+# Public market data only — no keys, no orders, no notifications. Runs only when the check, ci/RUN_PAIR or this file changes.
+name: Holy pair-grid check
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/pair_check.py', 'ci/RUN_PAIR', '.github/workflows/holy-pair-check.yml']
+permissions:
+  contents: read
+jobs:
+  real-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Funding arbitrage vs grid on real OKX data (public data · no keys · no orders · no notifications)
+        run: |
+          pip install -q requests
+          python3 ci/pair_check.py Holy_Dashboard.pyw
