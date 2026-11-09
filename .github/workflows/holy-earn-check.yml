@@ -4,7 +4,7 @@ name: Holy simple-earn check
 on:
   push:
     branches: [claude/eager-brown-jf08ur]
-    paths: ['ci/earn_check.py', 'ci/RUN_EARN', '.github/workflows/holy-fund-check.yml']
+    paths: ['ci/earn_check.py', 'ci/RUN_EARN', '.github/workflows/holy-earn-check.yml']
 permissions:
   contents: read
 jobs:
