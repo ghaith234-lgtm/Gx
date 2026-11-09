@@ -1,0 +1,22 @@
+# 🏦 Holy Simple Earn check (the owner 9-11: «ايهم يربح اكثر»): OKX lending rates for XRP and USDT, last ~3 months · lines HOLYEARN.
+# Public market data only — no keys, no orders, no notifications. Runs only when the check, ci/RUN_EARN or this file changes.
+name: Holy simple-earn check
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/earn_check.py', 'ci/RUN_EARN', '.github/workflows/holy-fund-check.yml']
+permissions:
+  contents: read
+jobs:
+  real-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Funding arbitrage vs grid on real OKX data (public data · no keys · no orders · no notifications)
+        run: |
+          pip install -q requests
+          python3 ci/earn_check.py Holy_Dashboard.pyw
