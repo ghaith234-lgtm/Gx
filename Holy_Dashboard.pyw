@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.29"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.30"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -18147,7 +18147,8 @@ def deploy_rec(data):
 #   · الكمية بالعملة: (المبلغ ÷ عدد البيعات) ÷ القاعدة — كل بيعة تعيد شراء كميتها نفسها بالقاعدة ⇒ الربح بالدولار
 #   · فوق البداية up مستوى من عملاتك (كأنها اشتُريت بقاعدتها) · تحتها شراءات ثابتة لحد الأرضية
 STEP_MIN_PART = 2.0          # 💵 أقل قيمة لكل بيعة (طلب المالك: «خلي اقل اوردر بيع دولارين»)
-STEP_MAX_SLOTS = 1500        # حد الخانات (أوامر بالذاكرة) — أكثر ⇒ الجدول يرفض (مسافة شراء أكبر أو أرضية أعلى) · ملف الحالة يبقى صغير
+STEP_MAX_SLOTS = 3000        # حد الخانات (أوامر بالذاكرة) — أكثر ⇒ الجدول يرفض (مسافة شراء أكبر أو أرضية أعلى) · 🪜 v3.36.30: 1500 ⇒ 3000 (t_deep «scale»: ≈4,900 خانة ⇐ دورة ≤ 250 ms)
+STEP_MAX_UP = 500            # ⬆️ v3.36.30 (المالك 10-11 «اريد مثلا 500»): مستويات فوق السعر من عملاتك — كانت 200 (المحرك نفسه بلا حد)
 STEP_MAX_PARTS = 20
 STEP_WINDOW = 8              # 🪟 الأقرب فقط على المنصة لكل جهة (المحرك step_window)
 STEP_TAKER_FEE = 0.001       # 🧾 v3.36.18: taker OKX 0.10% — الجدول يحسب ربح كل بيعة بالأسوأ (المالك 6-11) · التنفيذ الحقيقي بعمولته
@@ -18216,8 +18217,8 @@ def _step_args(data):
         return None, "المبلغ ومسافة أول بيعة والمسافة بين البيعات ومسافة الشراء يجب أن تكون أكبر من صفر"
     if not (1 <= N <= STEP_MAX_PARTS):
         return None, f"عدد البيعات لكل شراء من 1 إلى {STEP_MAX_PARTS}"
-    if up < 0 or up > 200:
-        return None, "مستويات عملاتك فوق السعر من 0 إلى 200"
+    if up < 0 or up > STEP_MAX_UP:
+        return None, f"مستويات عملاتك فوق السعر من 0 إلى {STEP_MAX_UP}"
     if floor < 0 or p0 < 0:
         return None, "الأرضية وسعر البداية لا يكونان سالبين"
     return {"sym": sym, "base": sym.split("-")[0], "Q": Q, "N": N, "d": d, "d1": d1, "G": G, "floor": floor, "up": up, "p0": p0}, None
@@ -28821,7 +28822,7 @@ async function openDeployStep(pre){pre=pre||{};
     <div class="fld"><label title="المسافة بين كل بيعة والتي بعدها — متساوية بين كل بيعتين">↔️ المسافة بين البيعات (%)</label><input id="st_d" class="num" value="${v('step_sell_pct',1)}" oninput="stPreview()"></div>
     <div class="fld"><label title="المسافة بين مستوى شراء والمستوى الذي تحته">📉 مسافة الشراء (%)</label><input id="st_g" class="num" value="${v('grid_pct',3)}" oninput="stPreview()"></div>
     <div class="fld"><label title="لا شراء تحت هذا السعر">🧱 سعر الأرضية</label><input id="st_floor" class="num" value="${v('min_price','')}" oninput="stPreview()"></div>
-    <div class="fld"><label title="عدد المستويات فوق سعر البداية التي تبيع من عملاتك الحرة كأنها اشتُريت بسعر مستواها (0 = لا شيء)">⬆️ مستويات فوق السعر من عملاتك</label><input id="st_up" class="num" value="${v('up_groups',1)}" oninput="stPreview()"></div>
+    <div class="fld"><label title="عدد المستويات فوق سعر البداية التي تبيع من عملاتك الحرة كأنها اشتُريت بسعر مستواها (0 = لا شيء · حتى 500)">⬆️ مستويات فوق السعر من عملاتك <small>(0–500)</small></label><input id="st_up" class="num" value="${v('up_groups',1)}" oninput="stPreview()"></div>
     <div class="fld"><label title="فارغ = سعر السوق لحظة النشر">🎯 سعر البداية (اختياري)</label><input id="st_p0" class="num" value="${+v('forced_base',0)||''}" oninput="stPreview()"></div>
     <div class="fld"><label>المحفظة</label><select id="st_wallet">${ws.map(w=>`<option>${gEsc(w.name)}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>
   </div>
