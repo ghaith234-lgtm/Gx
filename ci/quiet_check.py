@@ -57,7 +57,9 @@ BK = [(0, 2, "dead (<2%)"), (2, 3, "quiet (2–3%)"), (3, 5, "normal (3–5%)"),
 P_("days by their range: " + " · ".join(f"{lb} {sum(1 for x in rng if a <= x < b)}" for a, b, lb in BK) + f" · median range {statistics.median(rng):.2f}%")
 KEEP = {k: getattr(m, k) for k in ("ROOT", "wallet_keys", "launch", "tg_send", "journal", "log_event", "_acc_spec", "_acc_price", "_okx_get", "bot_dirs")}
 dt = sec / 4.0
-for nm, q, g, up in (("A 25$ · buys every 0.6%", "25", "0.6", 31), ("B 12.5$ · buys every 0.3%", "12.5", "0.3", 61)):
+HI = max(W["h"]) * 1.02                          # the levels above cover the whole period (the bot never leaves its range)
+for nm, q, g in (("A 25$ · buys every 0.6%", "25", "0.6"), ("B 12.5$ · buys every 0.3%", "12.5", "0.3")):
+    up = int(math.ceil(math.log(HI / p0) / math.log(1 + float(g) / 100)))
     body = {"symbol": SYM, "usd_value": q, "step_parts": "3", "step_first_pct": "0.3", "step_sell_pct": "0.2", "grid_pct": g, "up_groups": str(up),
             "min_price": repr(round(p0 * 0.75, 4)), "forced_base": "", "wallet": "main", "auto": False}
     m.PX[SYM] = p0
@@ -83,14 +85,14 @@ for nm, q, g, up in (("A 25$ · buys every 0.6%", "25", "0.6", 31), ("B 12.5$ ·
         if 0 <= d < len(rng):
             prof_d[d] += v
     tot = sum(prof_d) or 1e-9
-    P_(f"{nm}: wallet {q0:.0f}$ + {b0:.1f} XRP · {S['buys']} buys / {S['sells']} sells · trading profit {float(S['trade']):+.2f}$ "
+    P_(f"{nm}: {up} levels above (to {HI:.3f}) · wallet {q0:.0f}$ + {b0:.1f} XRP · {S['buys']} buys / {S['sells']} sells · trading profit {float(S['trade']):+.2f}$ "
        f"(≈ {float(S['trade']) / DAYS * 30:+.2f}$ a month) · real {pnl:+.2f}$ · holding {b0 * (pe - p0):+.2f}$ · most dollars in use {S['used_max']:.0f}$ · "
        f"fees {S['fee_usd']:.2f}$ · {time.time() - a0:.0f}s")
     for a, b, lb in BK:
         ix = [d for d, x in enumerate(rng) if a <= x < b]
         if not ix:
             continue
-        P_(f"   {nm} · {lb}: {len(ix)} days · sells/day {statistics.mean(sells_d[d] for d in ix):.1f} · profit/day {statistics.mean(prof_d[d] for d in ix):+.3f}$ "
+        P_(f"   {nm} · {lb}: {len(ix)} days ({sum(1 for d in ix if not sells_d[d])} without a sell) · sells/day {statistics.mean(sells_d[d] for d in ix):.1f} · profit/day {statistics.mean(prof_d[d] for d in ix):+.3f}$ "
            f"(median {statistics.median(prof_d[d] for d in ix):+.3f}$) · {sum(prof_d[d] for d in ix) / tot * 100:.0f}% of the profit")
 P_("RESULT done")
 shutil.rmtree(R, ignore_errors=True)
