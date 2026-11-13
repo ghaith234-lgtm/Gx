@@ -26092,7 +26092,9 @@ function openSettings(){
   const SB=SKS.map(x=>`<button class="${sk===x[0]?'on':''}" onclick="setSkin('${x[0]}')">${x[1]}</button>`).join('');
   const FN=HFONTS.map(x=>`<button class="${fnT[0]===x[0]?'on':''}" data-font="${x[0]}" style="font-family:${x[1]==='system-ui'?'system-ui':`'${x[1]}'`},system-ui" onmouseenter="hFontPre('${x[0]}')" onclick="setFont('${x[0]}')">${x[2]}</button>`).join('');
   const AB=HW_ANIMS.map(x=>`<button class="${an===x[0]?'on':''}" data-anim="${x[0]}" onclick="setAnim('${x[0]}')">${x[1]}</button>`).join('');
-  const anN=((HW_ANIMS.find(x=>x[0]===an)||[])[1]||'')+(an!=='none'&&hwStyle()==='none'?' · متوقفة':'');
+  const anN=((HW_ANIMS.find(x=>x[0]===an)||[])[1]||'')+(an!=='none'&&hwStyle()==='none'?(uiLite()?' · متوقفة (الوضع الخفيف)':' · متوقفة (إعداد الجهاز)'):'');
+  const rmN=hwDevRm()?`<div class="snote" style="color:var(--amber)">⚠️ هذا الجهاز مضبوط على «تقليل الحركة» — ويندوز: الإعدادات ⇐ إمكانية الوصول ⇐ التأثيرات المرئية ⇐ «تأثيرات الحركة» · أندرويد: إمكانية الوصول ⇐ «إزالة الرسوم المتحركة».
+    ${hwForce()?'الحركة تعمل هنا رغم ذلك.':'لذلك اللوحة أوقفت الحركة.'}</div><div class="pollrow" style="margin-bottom:8px"><button id="motForce" class="${hwForce()?'on':''}" onclick="setMotionForce(${!hwForce()})">${hwForce()?'↩️ اتبع إعداد الجهاز':'▶️ شغّل الحركة رغم إعداد الجهاز'}</button></div>`:'';
   const ff=fnT[1]==='system-ui'?'system-ui':`'${fnT[1]}',system-ui`;
   showModal(`<h2>⚙️ الإعدادات والأدوات</h2>
    <div class="sgrid">
@@ -26103,7 +26105,7 @@ function openSettings(){
         `<button class="bgb ${uiBg()===x[0]?'on':''}" data-bg="${x[0]}" title="${x[2]}" onclick="setBg('${x[0]}')"><canvas data-bg="${x[0]}" width="132" height="80"></canvas><span>${x[1]}${uiBg()===x[0]?' ✓':''}</span></button>`).join('')}</div>`)
      +X('skin','🃏','شكل البطاقات',(SKS.find(x=>x[0]===sk)||SKS[0])[1],`<div class="snote">الأرقام والأزرار نفسها في كل الأشكال.</div><div class="pollrow" id="skinRow">${SB}</div>`)
      +X('font','🔤','خط الكتابة',`<span style="font-family:${ff}">${fnT[2]}</span>`,`<div class="snote">كل زر مكتوب بخطّه · الكلمات والأرقام كلها تأخذه («IBM Plex» = الأرقام بخطّها الثابت القديم).</div><div class="pollrow" id="fontRow">${FN}</div>`)
-     +X('anim','🎬','حركة فتح النوافذ',anN,`<div class="snote">الإغلاق بعكسها · «⚡ الوضع الخفيف» بلا حركة.</div><div class="pollrow" id="animRow">${AB}</div>`)
+     +X('anim','🎬','حركة فتح النوافذ',anN,`${rmN}<div class="snote">الإغلاق بعكسها · «⚡ الوضع الخفيف» بلا حركة.</div><div class="pollrow" id="animRow">${AB}</div>`)
      +T('📌','الشريط المصغّر','uiMbarToggle()','bMbar',uiMbar(),'يظهر — أرقام اليوم أعلى الشاشة حين تنزل للأسفل','مخفي')
      +T('🕺','رجل العصا','STK.toggle();openSettings()','bStk',STK.on(),'يعمل — يمشي ويلعب فوق الأيقونات · اسحبه','متوقف'))}
    ${G('⚡ الأداء',
@@ -28377,7 +28379,11 @@ function uiAnim(){const v=_ls('dash_anim');return HW_ANIMS.some(x=>x[0]===v)?v:'
 function setAnim(v){if(!HW_ANIMS.some(x=>x[0]===v))v='zoom';_ls('dash_anim',v==='zoom'?null:v);const n=(HW_ANIMS.find(x=>x[0]===v)||[])[1]||'';
   hideModal();setTimeout(()=>{openSettings();toast('🎬 حركة النوافذ: '+n,true)},v==='none'?0:Math.round((HW_MS[v]||0)*.6)+80)}   // تنفتح من جديد ⇒ تشوف الحركة
 function hwStyle(){try{if(document.documentElement.classList.contains('lite'))return 'none';
-  if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)return 'none'}catch(e){}return uiAnim()}
+  if(hwDevRm()&&!hwForce())return 'none'}catch(e){}return uiAnim()}
+function hwDevRm(){try{return !!(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)}catch(e){return false}}   // 🎬 v3.36.38
+function hwForce(){return _ls('dash_motion_force')==='on'}            // شغّل الحركة رغم «تقليل الحركة» بالجهاز (لهذا الجهاز)
+function setMotionForce(on){_ls('dash_motion_force',on?'on':null);try{hbgApply()}catch(e){}openSettings();
+  toast(on?'🎬 الحركة تعمل رغم إعداد الجهاز':'🎬 اللوحة تتبع إعداد الجهاز (تقليل الحركة)',true)}
 document.addEventListener('pointerdown',e=>{HW.pt={x:e.clientX,y:e.clientY,t:Date.now()}},true);
 function hwKF(s,el,small,pt){
   if(s==='up')return [{transform:'translateY('+(small?Math.round(innerHeight*.4)+'px':'100%')+')'},{transform:'none'}];
@@ -28411,7 +28417,7 @@ function hwLight(o,c){                                            // 🎬 v3.36.
   }catch(e){}}
 /* 🎬 v3.36.36: فحص سلاسة الحركة على الجهاز نفسه — يفتح ويسد ⚙️ والتأكيد و📊 بالحركة المختارة ويعدّ الإطارات (عرض فقط · لا يرسل شيئاً) */
 async function motionCheck(){const s=hwStyle(),nm=(HW_ANIMS.find(x=>x[0]===uiAnim())||[])[1]||'';
-  if(s==='none'){toast(uiLite()?'⚡ الوضع الخفيف مفعّل — لا حركة لقياسها':'📴 الهاتف مضبوط على تقليل الحركة — لا حركة لقياسها',false);return}
+  if(s==='none'){toast(uiLite()?'⚡ الوضع الخفيف مفعّل — لا حركة لقياسها':uiAnim()==='none'?'🎬 الحركة المختارة «بلا حركة» — لا شيء لقياسه':'📴 هذا الجهاز مضبوط على «تقليل الحركة» — ⚙️ ⇐ حركة فتح النوافذ ⇐ «شغّل الحركة رغم إعداد الجهاز»',false);return}
   const W=ms=>new Promise(r=>setTimeout(r,ms)),hz=await new Promise(r=>hzProbe(r)),fr=hz>0?1000/hz:16.7;
   for(let i=0;i<8&&holyBack();i++);await W(500);toast('🎬 أقيس الحركة… لا تلمس الشاشة (10 ثوانٍ تقريباً)',true);await W(900);
   const T=[['⚙️ الإعدادات',()=>openSettings(),()=>hideModal()],['تأكيد',()=>askConfirm('🧪 نافذة قياس','لا تضغط شيئاً — تنسدّ وحدها.',()=>{}),()=>hideModal()],
@@ -29503,7 +29509,7 @@ const HB={c:null,x:null,k:'orig',draw:null,raf:0,last:0,col:null,rt:0,spr:{}};
 function uiBg(){const v=_ls('dash_bg');return HBG.some(x=>x[0]===v)?v:'orig'}
 function setBg(v){if(!HBG.some(x=>x[0]===v))v='orig';_ls('dash_bg',v==='orig'?null:v);hbgApply();openSettings();
   toast('🌌 الخلفية: '+HBG.find(x=>x[0]===v)[1],true)}
-function hbStill(){try{return uiLite()||!!(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)}catch(e){return false}}
+function hbStill(){try{return uiLite()||(hwDevRm()&&!hwForce())}catch(e){return false}}
 function hbRgb(v){v=String(v||'').trim();if(v[0]==='#'){let h=v.slice(1);if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h.slice(0,6),16);
   return [(n>>16)&255,(n>>8)&255,n&255].join(',')}const m=v.match(/[\d.]+/g);return m&&m.length>=3?m.slice(0,3).map(x=>Math.round(+x)).join(','):'167,139,250'}
 function hbCol(){const cs=getComputedStyle(document.documentElement),g=n=>cs.getPropertyValue(n).trim();const bg0=g('--bg0')||'#070210';
