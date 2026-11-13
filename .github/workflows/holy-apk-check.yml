@@ -1,4 +1,4 @@
-# 📱 Holy APK check on real Android emulators (Android 9 · 11 · 14): install · open · connect · auto-link · app closed (swipe · kill · Doze) · 🔐 lock + fingerprint opens the dashboard (14) · 📱 home-screen widget (1.9) ·
+# 📱 Holy APK check on real Android emulators (Android 9 · 11 · 14): install · open · connect · auto-link · app closed (swipe · kill · Doze) · 🔐 lock + fingerprint opens the dashboard (14) · 📱 the move 1.9 → 2.0 (a new signing key: refused in place · no update offered · the panel saves 2.0 · remove · install) · the purple home-screen widget (2.0) ·
 #    notifications · tap-to-place · back button · full screen · self-update · no crash. Results are printed in the job log.
 # Runs only when ci/ or this file changes (bump ci/RUN to test the APK embedded in Holy_Dashboard.pyw).
 name: Holy APK check

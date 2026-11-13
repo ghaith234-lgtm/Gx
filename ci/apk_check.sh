@@ -30,16 +30,44 @@ API=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
 ssz=$(adb shell wm size | grep -oE "[0-9]+x[0-9]+" | tail -1); SW=${ssz%x*}; SH=${ssz#*x}
 say "android api $API · webview $(adb shell dumpsys package com.google.android.webview 2>/dev/null | grep -m1 versionName | tr -d '\r ')"
 adb logcat -c
-# ── start from the previous app (1.8 — taken from the v3.36.12 release commit) ⇒ the real update path to 1.9 (📱 the home-screen widget · 📊 indicator alerts · 🔐 fingerprint · tone · lock · 120 fps) ──
-OLDC=0ea043c8a8bc1816f70bb5791cf699d5c6e67b7d
+# ── 2.0: start from the previous app 1.9 (the OLD signing key — taken from the v3.36.31 release) ⇒ the owner's one-time move to 2.0 (a new key):
+#    Android refuses 2.0 over 1.9 · the dashboard offers 1.9 no update · inside 1.9 the 📱 panel opens by itself with «⬇️ احفظها» ⇒ the very 2.0
+#    file lands in Downloads/Holy · 1.9 removed · THAT saved file installed · the old phone unlinked (step 4 of the panel) ──
+OLDC=5f434fa97e2701c379569074bd1e67fdc276f228
+NEWSHA=$(sha256sum holy.apk | cut -d' ' -f1); INST=holy.apk
+devs(){ curl -s -X POST localhost:8099/api/app/devices -H 'Content-Type: application/json' -d '{"act":"list"}' | python3 -c "import sys,json;print(' '.join(d['id'] for d in json.load(sys.stdin)['devs']))"; }
 if git fetch -q --depth=1 origin $OLDC 2>/dev/null && git show FETCH_HEAD:Holy_Dashboard.pyw | python3 ci/ci_tools.py apk > old.apk 2>/dev/null && [ -s old.apk ]; then
   adb install old.apk 2>&1 | tail -1 | sed 's/^/HOLYCI install previous: /'
-  adb shell dumpsys package $P | grep -m1 versionName | tr -d '\r' | sed 's/^/HOLYCI before update: /'
-  adb shell am start -n $P/.MainActivity >/dev/null; sleep 8
-  adb shell dumpsys notification --noredact | grep -oE "mId='(trade2|alert2|price|info|watch)'[^}]{0,40}" | sort -u | head -5 | sed 's/^/HOLYCI previous channel: /'
-  adb shell am force-stop $P
-else say "INFO couldn't fetch the 1.8 app ⇒ fresh install only"; fi
-adb install -r holy.apk 2>&1 | tail -1 | sed 's/^/HOLYCI install: /'
+  adb shell dumpsys package $P | grep -m1 versionName | tr -d '\r' | sed 's/^/HOLYCI before the move: /'
+  r=$(adb install -r holy.apk 2>&1 | tail -1 | tr -d '\r')
+  echo "$r" | grep -q "UPDATE_INCOMPATIBLE" && say "PASS 2.0: Android refuses 2.0 over 1.9 (a new signing key) ⇒ the move is manual, once" || say "INFO 2.0 over 1.9: $r"
+  ci=$(curl -s localhost:8099/api/app/info -A "HolyApp/1.9" | python3 -c "import sys,json;print(json.load(sys.stdin)['apk']['code'])")
+  cn=$(curl -s localhost:8099/api/app/info -A "HolyApp/2.0" | python3 -c "import sys,json;print(json.load(sys.stdin)['apk']['code'])")
+  [ "$ci" = 0 ] && [ "$cn" = 11 ] && say "PASS 2.0: /api/app/info offers 1.9 no update (code $ci) · 2.0 sees code $cn" || say "FAIL 2.0: /api/app/info — 1.9 gets $ci · 2.0 gets $cn"
+  [ "$API" -ge 33 ] && adb shell pm grant $P android.permission.POST_NOTIFICATIONS
+  [ "$API" -le 28 ] && adb shell pm grant $P android.permission.WRITE_EXTERNAL_STORAGE      # saving into Downloads on Android 9 (the app asks; granted here ahead)
+  adb shell am start -n $P/.MainActivity --es url http://10.0.2.2:8099 >/dev/null
+  sleep 7; for i in 1 2 3 4 5 6; do dump old0 >/dev/null; grep -q "اتصال" $OUT/ui_old0.xml && break
+    adb shell am start -n $P/.MainActivity --es url http://10.0.2.2:8099 >/dev/null; sleep 6; done
+  tap "اتصال" old0
+  mv=""; for i in $(seq 1 10); do sleep 4; dump old1 >/dev/null; grep -q "الانتقال إلى Holy" $OUT/ui_old1.xml && { mv=1; break; }
+    grep -q "بعدين" $OUT/ui_old1.xml && tap "بعدين" old1; done
+  shot old1
+  WV0=$(adb shell dumpsys package com.google.android.webview 2>/dev/null | grep -m1 versionName | grep -oE '[0-9]+' | head -1)
+  if [ -n "$mv" ]; then say "PASS 2.0: inside 1.9 the 📱 panel opened by itself with «الانتقال إلى Holy 2.0 — مرة واحدة»"
+    if seek "⬇️ احفظها" old2; then
+      got=""; for i in $(seq 1 20); do sleep 1; adb pull /sdcard/Download/Holy/Holy-2.0.apk moved.apk >/dev/null 2>&1 && [ -s moved.apk ] && { got=1; break; }; done
+      if [ -n "$got" ] && [ "$(sha256sum moved.apk | cut -d' ' -f1)" = "$NEWSHA" ]; then say "PASS 2.0: «⬇️ احفظها» saved Downloads/Holy/Holy-2.0.apk = the dashboard's 2.0 (sha256)"; INST=moved.apk
+      else say "FAIL 2.0: «⬇️ احفظها» — no Holy-2.0.apk in Downloads/Holy, or not the same file ($(adb shell ls /sdcard/Download/Holy 2>&1 | tr -d '\r' | tr '\n' ' '))"; fi
+      dump old3 >/dev/null; shot old3
+    fi
+  elif [ "${WV0:-0}" -lt 87 ]; then say "INFO 2.0: this system WebView (${WV0:-?}) can't open the dashboard's windows ⇒ the 1.9 panel isn't checked here (Android 11/14 run it)"
+  else say "FAIL 2.0: inside 1.9 the move panel never opened ($(python3 ci/ci_tools.py texts $OUT/ui_old1.xml old1 | cut -c1-200))"; fi
+  old=$(devs); adb uninstall $P 2>&1 | tail -1 | sed 's/^/HOLYCI 1.9 removed: /'
+  for id in $old; do api /api/app/devices "{\"act\":\"del\",\"id\":\"$id\"}" >/dev/null; done
+  [ -n "$old" ] && say "INFO the 1.9 phone ($old) unlinked from the dashboard (the panel's step 4)"
+else say "INFO couldn't fetch the 1.9 app ⇒ fresh install only"; fi
+adb install -r $INST 2>&1 | tail -1 | sed "s/^/HOLYCI install ($INST): /"
 adb shell pm list packages | grep -q "$P" && say "PASS installed" || { say "FAIL install"; exit 1; }
 adb shell dumpsys package $P | grep -E "versionCode|versionName|targetSdk|signatures|pkgFlags" | head -6 | sed 's/^/HOLYCI pkg: /'
 [ "$API" -ge 33 ] && adb shell pm grant $P android.permission.POST_NOTIFICATIONS
@@ -207,6 +235,7 @@ if [ "${nw:-0}" -ge 1 ]; then
   adb shell input keyevent KEYCODE_HOME; sleep 10
   wj=$(adb shell cat /data/data/$P/shared_prefs/holy_widget.xml 2>/dev/null | tr -d '\r')
   if [ -n "$wj" ]; then echo "$wj" | grep -qE '&quot;ok&quot;: ?true' && say "PASS 1.9: the widget fetched /api/app/widget with the phone's key (its last answer kept for no-connection)" || say "FAIL 1.9: the widget has no answer saved"; fi
+  if [ -n "$wj" ]; then echo "$wj" | grep -q '&quot;kb&quot;' && say "PASS 2.0: the widget's answer carries the six numbers «kb» (today · yesterday · 7 days · 30 days · month · total)" || say "FAIL 2.0: no «kb» in the widget's answer"; fi
   dump wd4; shot wd4
   wd=$(python3 ci/ci_tools.py desc $OUT/ui_wd4.xml "Holy —")
   for pg in 2 3; do      # the launcher puts a new widget where there is room — not always the first home page (run 71, Android 14)

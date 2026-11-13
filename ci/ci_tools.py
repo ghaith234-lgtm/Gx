@@ -90,9 +90,9 @@ elif cmd == "imgc":              # 1.9: a part of a screenshot (the widget) at a
     try:
         x1, y1, x2, y2 = map(int, sys.argv[4:8])
         im = Image.open(sys.argv[2]).convert("RGB").crop((x1, y1, x2, y2))
-        im = im.resize((480, max(1, int(im.height * 480 / max(1, im.width)))))
+        im = im.resize((720, max(1, int(im.height * 720 / max(1, im.width)))))     # 2.0: larger and sharper — the new widget is shown to the owner
         bo = io.BytesIO()
-        im.save(bo, "JPEG", quality=70)
+        im.save(bo, "JPEG", quality=88)
         print(f"HOLYIMG {sys.argv[3]} " + base64.b64encode(bo.getvalue()).decode())
     except Exception as e:
         print(f"HOLYIMG {sys.argv[3]} ERROR {e}")
