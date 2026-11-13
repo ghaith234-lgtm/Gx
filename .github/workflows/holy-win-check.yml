@@ -2,23 +2,27 @@
 #    unreachable-address warning · first run (address saved · Desktop + Start shortcuts) · Edge app mode on the dashboard (1.2: a normal
 #    maximized window — minimize · maximize · close · resizable · F11 = full screen) ·
 #    screenshots (base64 lines HOLYSHOT in the log). Results: lines HOLYWIN in the job log.
-# Runs only when ci/win* or this file changes (bump ci/RUN_WIN to test the app embedded in Holy_Dashboard.pyw).
+# v3.36.41: the program 2.0 (windows/holy_win.c · WebView2 · no title bar) is BUILT here first (ci/win_build.ps1 · MSVC x86) and put into
+#    the dashboard, then checked. Runs when ci/win* · windows/** or this file changes (bump ci/RUN_WIN).
 name: Holy Windows app check
 on:
   push:
     branches: [claude/eager-brown-jf08ur]
-    paths: ['ci/RUN_WIN', 'ci/win_check.ps1', '.github/workflows/holy-win-check.yml']
+    paths: ['ci/RUN_WIN', 'ci/win_check.ps1', 'ci/win_build.ps1', 'windows/**', '.github/workflows/holy-win-check.yml']
 permissions:
   contents: read
 jobs:
   windows:
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Build the Windows program 2.0 (MSVC x86 · static · WebView2 loader) and put it into the dashboard
+        shell: pwsh
+        run: ./ci/win_build.ps1
       - name: Windows app (starts the dashboard itself — a step's processes die when the step ends)
         shell: pwsh
         run: ./ci/win_check.ps1

@@ -1,4 +1,6 @@
-# 💻 Holy Windows app check on a real Windows machine (GitHub windows-latest):
+# 💻 Holy Windows app check on a real Windows machine (GitHub windows-latest) — v3.36.41: the program 2.0 (built just before by
+#   ci/win_build.ps1 · WebView2 · its own window with no title bar · — ☐ ✕ drawn by the dashboard beside 🔔 · the top bar moves it — real
+#   mouse clicks and a real drag below). The rest as 1.2:
 #   the dashboard serves the app (1.1: 32-bit · runs on every Windows) with its address + a device key inside · first run ⇒
 #   shortcuts + saved address · Edge opens the dashboard in app mode (1.2: a normal maximized window — minimize · maximize · close ·
 #   resizable · no address bar · F11 = full screen) · the app stays as a tray icon (notifications) ·
@@ -22,6 +24,15 @@ public class W {
   [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr h);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] public static extern void mouse_event(uint f, int dx, int dy, uint d, UIntPtr e);
+  public static int[] R4(IntPtr h) { RECT r; GetWindowRect(h, out r); return new int[] { r.L, r.T, r.R, r.B }; }
+  public static int[] C4(IntPtr h) { RECT r; GetClientRect(h, out r); return new int[] { r.L, r.T, r.R, r.B }; }
+  public static void Down(int x, int y) { SetCursorPos(x, y); System.Threading.Thread.Sleep(60); mouse_event(2, 0, 0, 0, UIntPtr.Zero); }
+  public static void Up() { mouse_event(4, 0, 0, 0, UIntPtr.Zero); }
+  public static void Click(int x, int y) { Down(x, y); System.Threading.Thread.Sleep(60); Up(); }
   public static string Rect(IntPtr h) { RECT r; GetWindowRect(h, out r); return r.L + "," + r.T + "," + r.R + "," + r.B; }
   public delegate bool EnumProc(IntPtr h, IntPtr l);
   public struct RECT { public int L, T, R, B; }
@@ -65,7 +76,7 @@ for ($k = 0; $k -lt 90; $k++) { try { if ((Invoke-WebRequest "$base/" -UseBasicP
 Check "dashboard up (python $((Get-Command python).Version))" (-not $dash.HasExited) "pid=$($dash.Id)"
 # 1) the dashboard serves the app (logged in: a fresh dashboard has no password)
 $info = Invoke-RestMethod "$base/api/app/info"
-Check "the dashboard knows the Windows app" ($info.win.size -gt 50000 -and $info.win.name -eq "1.2") "size=$($info.win.size) name=$($info.win.name) apk=$($info.apk.name)"
+Check "the dashboard knows the Windows app 2.0" ($info.win.size -gt 50000 -and $info.win.name -eq "2.0") "size=$($info.win.size) name=$($info.win.name) apk=$($info.apk.name)"
 Invoke-WebRequest "$base/app/holy.exe?u=$([uri]::EscapeDataString($base))" -OutFile "$A\TheHolyDashboard.exe" -UseBasicParsing
 $bytes = [IO.File]::ReadAllBytes("$A\TheHolyDashboard.exe")
 $txt = [Text.Encoding]::ASCII.GetString($bytes)
@@ -82,7 +93,7 @@ Check "the download linked a computer (💻 · not opened yet)" (($devs0 | Where
 $sig = Get-AuthenticodeSignature "$A\TheHolyDashboard.exe"
 Write-Host "HOLYWIN ℹ️ signature: $($sig.Status) (unsigned ⇒ SmartScreen asks once)"
 $vi = (Get-Item "$A\TheHolyDashboard.exe").VersionInfo
-Check "version info" ($vi.ProductName -eq "The Holy Dashboard" -and $vi.ProductVersion -eq "1.2") "$($vi.ProductName) $($vi.ProductVersion)"
+Check "version info" ($vi.ProductName -eq "The Holy Dashboard" -and $vi.ProductVersion -eq "2.0") "$($vi.ProductName) $($vi.ProductVersion)"
 $fav = Invoke-WebRequest "$base/favicon.ico" -UseBasicParsing
 Check "favicon.ico served (no login needed)" ($fav.StatusCode -eq 200 -and $fav.RawContentLength -gt 10000) "len=$($fav.RawContentLength)"
 
@@ -110,7 +121,7 @@ Remove-Item "$env:APPDATA\HolyDashboard\holy.ini" -ErrorAction SilentlyContinue 
 $L = "$env:APPDATA\HolyDashboard\holy.log"
 $p = Start-Process "$A\TheHolyDashboard.exe" -PassThru
 $tray = [IntPtr]::Zero
-for ($k = 0; $k -lt 60 -and $tray -eq [IntPtr]::Zero; $k++) { Start-Sleep -Milliseconds 500; $tray = [W]::FindWindow("HolyTray", [NullString]::Value) }
+for ($k = 0; $k -lt 60 -and $tray -eq [IntPtr]::Zero; $k++) { Start-Sleep -Milliseconds 500; $tray = [W]::FindWindow("HolyTray2", [NullString]::Value) }
 Check "the app stays running as the notifications icon (tray)" ((-not $p.HasExited) -and $tray -ne [IntPtr]::Zero) "pid=$($p.Id) tray=$tray"
 $ini = Get-Content "$env:APPDATA\HolyDashboard\holy.ini" -Raw -ErrorAction SilentlyContinue
 Check "address saved to %APPDATA%\HolyDashboard\holy.ini" ($ini -match [regex]::Escape("url=$base")) (($ini -replace "token=[^\r\n]*", "token=(hidden)") -replace "`r?`n", " ")
@@ -123,37 +134,66 @@ foreach ($lnk in @("$([Environment]::GetFolderPath('Desktop'))\The Holy Dashboar
 }
 $run = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -ErrorAction SilentlyContinue).TheHolyDashboard
 Check "starts with Windows (notifications after a restart)" ($run -eq "`"$A\TheHolyDashboard.exe`" --tray") $run
-$title = ""; $win = $null
-for ($k = 0; $k -lt 60; $k++) {
-  Start-Sleep -Milliseconds 500
-  $rows = [W]::List() -split "`n" | Where-Object { $_ -match "\|Chrome_WidgetWin_1\|" }
-  $win = $rows | Where-Object { $_ -match "Holy Dashboard" } | Select-Object -First 1
-  if ($win) { break }
-}
-$cl = (Get-CimInstance Win32_Process -Filter "name='msedge.exe'" | Where-Object { $_.CommandLine -match "holyapp=win" } | Select-Object -First 1).CommandLine
-Check "Edge started in app mode (no address bar) · a normal maximized window (not full screen) · own profile · the dashboard address" ($cl -match "--app=" -and $cl -match "--start-maximized" -and $cl -notmatch "--start-fullscreen" -and $cl -match "HolyDashboard\\Browser" -and $cl -match [regex]::Escape("127.0.0.1:8099/?holyapp=win&hv=1.2")) $cl
-Check "the window is the dashboard (title «The Holy Dashboard»)" ($win -ne $null) $win
+$h = [IntPtr]::Zero
+for ($k = 0; $k -lt 60 -and $h -eq [IntPtr]::Zero; $k++) { Start-Sleep -Milliseconds 500; $h = [W]::FindWindow("HolyDash", [NullString]::Value) }
+$edge = Get-CimInstance Win32_Process -Filter "name='msedge.exe'" | Where-Object { $_.CommandLine -match "holyapp=win" }
+$wv = @(Get-Process msedgewebview2 -ErrorAction SilentlyContinue).Count
+Check "2.0: the dashboard in the program's own window (WebView2 · no Edge window)" ($h -ne [IntPtr]::Zero -and -not $edge -and $wv -gt 0) "hwnd=$h webview2 processes=$wv"
+function Hello($after) {      # the page says where it drew — ☐ ✕ (screen points) · the newest line after $after
+  for ($k = 0; $k -lt 60; $k++) {
+    $l = (Get-Content $L -ErrorAction SilentlyContinue | Select-String "page: buttons drawn" | Select-Object -Last 1)
+    if ($l -and ($after -eq $null -or $l.LineNumber -gt $after)) {
+      $m = [regex]::Match($l.Line, "min=(-?\d+),(-?\d+) max=(-?\d+),(-?\d+) close=(-?\d+),(-?\d+) drag=(-?\d+),(-?\d+)")
+      if ($m.Success) { return @{ n = $l.LineNumber; min = @([int]$m.Groups[1].Value, [int]$m.Groups[2].Value); max = @([int]$m.Groups[3].Value, [int]$m.Groups[4].Value);
+        cls = @([int]$m.Groups[5].Value, [int]$m.Groups[6].Value); drag = @([int]$m.Groups[7].Value, [int]$m.Groups[8].Value); line = $l.Line } } }
+    Start-Sleep -Milliseconds 500 }
+  return $null }
 Start-Sleep -Seconds 6     # the opening animation ends, the numbers load
-if ($win) {
-  $f = $win -split "\|"; $rc = $f[4] -split ","
-  $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-  $h = [IntPtr][long]$f[0]; $st = [W]::GetWindowLong($h, -16)
+if ($h -ne [IntPtr]::Zero) {
+  $st = [W]::GetWindowLong($h, -16)
   $btn = (($st -band 0x20000) -ne 0) -and (($st -band 0x10000) -ne 0) -and (($st -band 0x80000) -ne 0) -and (($st -band 0x40000) -ne 0)
-  Check "1.2: the window has its own buttons — minimize · maximize · close — and resizable edges" $btn ("style=0x{0:X8}" -f $st)
-  $wa = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
-  Check "…opens maximized (the screen minus the taskbar · not full screen)" ([W]::IsZoomed($h)) "window=$($f[4]) work=$($wa.Width)x$($wa.Height) screen=$($b.Width)x$($b.Height)"
-  [W]::ShowWindow($h, 9) | Out-Null; Start-Sleep -Seconds 2; $r1 = [W]::Rect($h) -split ","
-  Check "…«restore» ⇒ a smaller window (you size it)" (-not [W]::IsZoomed($h) -and ([int]$r1[2] - [int]$r1[0]) -lt $b.Width) ([W]::Rect($h))
-  Shot "window-restored"
+  Check "the window keeps Windows' minimize · maximize · close · resizable edges (taskbar · Alt+Space · snapping)" $btn ("style=0x{0:X8}" -f $st)
+  Check "…opens maximized" ([W]::IsZoomed($h)) ([W]::Rect($h))
+  $hz = Hello $null
+  Check "the dashboard drew — ☐ ✕ beside 🔔 and told the program where" ($hz -ne $null) $(if ($hz) { $hz.line } else { "no «page: buttons drawn» in holy.log" })
+  [W]::ShowWindow($h, 9) | Out-Null; Start-Sleep -Seconds 2
+  $r = [W]::R4($h); $c = [W]::C4($h); $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+  Check "…«restore» ⇒ a smaller window" (-not [W]::IsZoomed($h) -and ($r[2] - $r[0]) -lt $b.Width) ([W]::Rect($h))
+  Check "no title bar: the whole window is the dashboard" (($c[2] - $c[0]) -eq ($r[2] - $r[0]) -and ($c[3] - $c[1]) -eq ($r[3] - $r[1])) "window=$($r -join ',') client=$($c -join ',')"
+  Shot "window-2.0"
+  $hr = Hello $hz.n
+  if ($hr) {
+    [W]::SetForegroundWindow($h) | Out-Null; Start-Sleep -Milliseconds 400
+    $r0 = [W]::R4($h); $dx = $hr.drag[0]; $dy = $hr.drag[1]
+    [W]::Down($dx, $dy); for ($s = 1; $s -le 20; $s++) { [W]::SetCursorPos($dx + 10 * $s, $dy + 6 * $s) | Out-Null; Start-Sleep -Milliseconds 30 }; Start-Sleep -Milliseconds 300; [W]::Up(); Start-Sleep -Seconds 1
+    $r1 = [W]::R4($h)
+    Check "🖱️ press the dashboard's top bar and drag ⇒ the whole window moves" ((($r1[0] - $r0[0]) -gt 120) -and (($r1[1] - $r0[1]) -gt 60) -and -not [W]::IsZoomed($h)) "before=$($r0 -join ',') after=$($r1 -join ',')"
+    Shot "moved"
+    $ox = $r1[0] - $r0[0]; $oy = $r1[1] - $r0[1]
+    [W]::Click($dx + $ox, $dy + $oy); Start-Sleep -Milliseconds 90; [W]::Click($dx + $ox, $dy + $oy); Start-Sleep -Seconds 2
+    Check "🖱️ double-click on the top bar ⇒ maximized" ([W]::IsZoomed($h)) ([W]::Rect($h))
+    $hm = Hello $hr.n
+    if ($hm) { [W]::Click($hm.max[0], $hm.max[1]); Start-Sleep -Seconds 2
+      Check "🖱️ ☐ (now ❐) ⇒ back to the window" (-not [W]::IsZoomed($h) -and -not [W]::IsIconic($h)) ([W]::Rect($h))
+      $hn = Hello $hm.n
+      if ($hn) { [W]::Click($hn.max[0], $hn.max[1]); Start-Sleep -Seconds 2; Check "🖱️ ☐ ⇒ maximized" ([W]::IsZoomed($h)) ([W]::Rect($h)) }
+      $hq = Hello $(if ($hn) { $hn.n } else { $hm.n }); if (-not $hq) { $hq = $hm }
+      [W]::Click($hq.min[0], $hq.min[1]); Start-Sleep -Seconds 2
+      Check "🖱️ — ⇒ minimized (to the taskbar)" ([W]::IsIconic($h)) ""
+      [W]::ShowWindow($h, 9) | Out-Null; Start-Sleep -Seconds 2 }
+  } else { Check "the page re-told the buttons after «restore»" $false "" }
   [W]::ShowWindow($h, 3) | Out-Null; Start-Sleep -Seconds 2
-  Check "…«maximize» ⇒ big again" ([W]::IsZoomed($h)) ([W]::Rect($h))
   [W]::SetForegroundWindow($h) | Out-Null; Start-Sleep -Milliseconds 800
-  [System.Windows.Forms.SendKeys]::SendWait("{F11}"); Start-Sleep -Seconds 3; $r2 = [W]::Rect($h) -split ","
-  if ([int]$r2[0] -le 0 -and [int]$r2[1] -le 0 -and [int]$r2[2] -ge $b.Width -and [int]$r2[3] -ge $b.Height) {
-    Check "…F11 ⇒ full screen (the dashboard's ⛶ does the same · Esc returns — checked in the browser tests)" $true ([W]::Rect($h)); Shot "fullscreen"
+  [System.Windows.Forms.SendKeys]::SendWait("{F11}"); Start-Sleep -Seconds 3; $r2 = [W]::R4($h)
+  if ($r2[0] -le 0 -and $r2[1] -le 0 -and $r2[2] -ge $b.Width -and $r2[3] -ge $b.Height) {
+    Check "…F11 ⇒ full screen (the dashboard's ⛶ does the same)" $true ([W]::Rect($h)); Shot "fullscreen"
     [System.Windows.Forms.SendKeys]::SendWait("{F11}"); Start-Sleep -Seconds 3
-    Check "…F11 again ⇒ back to the window" (-not ((([W]::Rect($h) -split ",")[1] -as [int]) -le 0 -and (([W]::Rect($h) -split ",")[3] -as [int]) -ge $b.Height) -or [W]::IsZoomed($h)) ([W]::Rect($h))
+    Check "…F11 again ⇒ back to the window" ([W]::IsZoomed($h)) ([W]::Rect($h))
   } else { Write-Host "HOLYWIN ℹ️ F11 not delivered to the window on this runner (focus) — window=$([W]::Rect($h))" }
+  Shot "dashboard-2.0"
+  $hc = Hello $null
+  if ($hc) { [W]::Click($hc.cls[0], $hc.cls[1]); Start-Sleep -Seconds 3
+    Check "🖱️ ✕ ⇒ the window closes · the notifications icon stays" ([W]::FindWindow("HolyDash", [NullString]::Value) -eq [IntPtr]::Zero -and [W]::FindWindow("HolyTray2", [NullString]::Value) -ne [IntPtr]::Zero -and (Get-Process TheHolyDashboard -ErrorAction SilentlyContinue).Count -eq 1) "" }
 }
 Shot "dashboard"
 Write-Host "HOLYWIN windows: $(([W]::List() -split "`n" | Select-Object -First 12) -join ' ;; ')"
@@ -173,6 +213,8 @@ Check "the dashboard sees this computer connected (💻 in ⚙️)" ($pc -ne $nu
 $p2 = Start-Process "$A\TheHolyDashboard.exe" -PassThru; $p2.WaitForExit(15000) | Out-Null
 $n = (Get-Process TheHolyDashboard -ErrorAction SilentlyContinue).Count
 Check "second start ⇒ hands over and exits · still one watcher" ($p2.HasExited -and $p2.ExitCode -eq 0 -and $n -eq 1) "exit=$($p2.ExitCode) running=$n"
+$back = [IntPtr]::Zero; for ($k = 0; $k -lt 30 -and $back -eq [IntPtr]::Zero; $k++) { Start-Sleep -Milliseconds 500; $back = [W]::FindWindow("HolyDash", [NullString]::Value) }
+Check "…and the running one opened the window again" ($back -ne [IntPtr]::Zero) "hwnd=$back"
 $p3 = Start-Process "$A\TheHolyDashboard.exe" -ArgumentList "--tray" -PassThru; $p3.WaitForExit(10000) | Out-Null
 Check "--tray while running ⇒ quits at once" ($p3.HasExited -and (Get-Process TheHolyDashboard -ErrorAction SilentlyContinue).Count -eq 1) ""
 

@@ -1,0 +1,31 @@
+// 💻 The Holy Dashboard — Windows program 2.0: icon · version · manifest (DPI per monitor · common controls 6)
+#include <windows.h>
+1 ICON "holy.ico"
+1 RT_MANIFEST "holy_win.manifest"
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 2,0,0,0
+ PRODUCTVERSION 2,0,0,0
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE 0x0L
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904b0"
+    BEGIN
+      VALUE "CompanyName", "The Holy Dashboard"
+      VALUE "FileDescription", "The Holy Dashboard"
+      VALUE "FileVersion", "2.0.0.0"
+      VALUE "InternalName", "TheHolyDashboard"
+      VALUE "OriginalFilename", "TheHolyDashboard.exe"
+      VALUE "ProductName", "The Holy Dashboard"
+      VALUE "ProductVersion", "2.0"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END
