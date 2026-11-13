@@ -84,6 +84,22 @@ const SMALL = [
   await pg.evaluate(() => document.querySelector('#modal>.hwx').click()); await pg.waitForTimeout(400);
   const hx = await pg.evaluate(() => ({ m: !document.getElementById('mbg').hidden, hs: history.state }));
   ok('↩️ closed with ✕ ⇒ its browser entry goes too (the next back is not wasted)', !hx.m && !(hx.hs && hx.hs.hw), hx);
+  // ↩️ v3.36.35: a close and an open in one step (a confirmation whose «تأكيد» opens a window) — the browser stays on the dashboard
+  //   (v3.36.34: the closing's back took the new window's entry ⇒ closing that window went back out of the dashboard)
+  await pg.evaluate(() => askConfirm('🧪', 'x', () => openSettings())); await pg.waitForTimeout(300);
+  await pg.evaluate(() => document.getElementById('cf_y').click()); await pg.waitForTimeout(400);
+  const cw1 = await pg.evaluate(() => ({ m: !document.getElementById('mbg').hidden, st: HW.st.map(x => x.k + (x.h ? '*' : '')).join(), hs: history.state && history.state.hw }));
+  await pg.goBack().catch(() => null); await pg.waitForTimeout(400);
+  const cw2 = await pg.evaluate(() => ({ m: !document.getElementById('mbg').hidden, url: location.href })).catch(() => ({ gone: true }));
+  await pg.evaluate(() => openSettings()).catch(() => null); await pg.waitForTimeout(300);
+  await pg.evaluate(() => { hideModal(); setTimeout(openSettings, 1) }).catch(() => null); await pg.waitForTimeout(400);
+  const cw3 = await pg.evaluate(() => ({ m: !document.getElementById('mbg').hidden, st: HW.st.map(x => x.k + (x.h ? '*' : '')).join() })).catch(() => ({ gone: true }));
+  await pg.evaluate(() => hideModal()).catch(() => null); await pg.waitForTimeout(400);
+  const cw4 = await pg.evaluate(() => ({ url: location.href, st: HW.st.length, skip: HW.skip, pend: HW.pend })).catch(() => ({ gone: true }));
+  const home = u => !!u && u.startsWith(URL.replace(/\/$/, ''));
+  ok('↩️ «تأكيد» that opens a window · back closes that window · close-then-open a moment later · close: the browser stays on the dashboard every time',
+    cw1.m && cw1.st === 'modal*' && cw1.hs === 'modal' && !cw2.gone && !cw2.m && home(cw2.url) && cw3.m && cw3.st === 'modal*' && !cw4.gone && home(cw4.url) && cw4.st === 0 && !cw4.skip && !cw4.pend,
+    { cw1, cw2, cw3, cw4 });
   await pg.evaluate(() => btOpen({ dir: DATA.bots.find(b => b.bot_type === 'grid').dir })); await pg.waitForTimeout(600);
   const bt0 = await pg.evaluate(() => ({ on: !!document.getElementById('btov'), st: HW.st.map(x => x.k) }));
   const btb = await pg.evaluate(() => holyBack()); await pg.waitForTimeout(250);

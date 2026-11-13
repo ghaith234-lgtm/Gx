@@ -28285,7 +28285,7 @@ async function exOrdOpen(refresh){
    نافذة جديدة بـshowModal / showDialog تاخذ كل هذا وحدها */
 const HW_ANIMS=[['none','بلا حركة'],['up','انزلاق من الأسفل'],['zoom','تكبير ناعم'],['side','انزلاق جانبي'],['btn','تتوسّع من الزر'],['blur','تلاشٍ مع ضبابية'],['spring','ارتداد خفيف']];
 const HW_MS={up:320,zoom:260,side:300,btn:420,blur:300,spring:440};
-const HW={st:[],pt:null,skip:0,popping:0};
+const HW={st:[],pt:null,skip:0,popping:0,pend:0,q:[]};   // ↩️ v3.36.35: pend = رجوعات هذه الخطوة · q = نوافذ تنتظر وصول رجوعنا
 function uiAnim(){const v=_ls('dash_anim');return HW_ANIMS.some(x=>x[0]===v)?v:'zoom'}
 function setAnim(v){if(!HW_ANIMS.some(x=>x[0]===v))v='zoom';_ls('dash_anim',v==='zoom'?null:v);const n=(HW_ANIMS.find(x=>x[0]===v)||[])[1]||'';
   hideModal();setTimeout(()=>{openSettings();toast('🎬 حركة النوافذ: '+n,true)},v==='none'?0:Math.round((HW_MS[v]||0)*.75)+80)}   // تنفتح من جديد ⇒ تشوف الحركة
@@ -28344,14 +28344,21 @@ function hwPush(x){const top=HW.st[HW.st.length-1];
   if(top&&x.el&&top.el&&top.el.isConnected){x.el.style.zIndex='';const base=+getComputedStyle(x.el).zIndex||0,tz=+getComputedStyle(top.el).zIndex||0;
     if(tz>=base)x.el.style.zIndex=String(tz+3)}                        // المفتوحة فوق غيرها تنرسم فوقها دائماً
   const it={k:x.k,el:x.el,close:x.close,pt:hwPt(),h:0};HW.st.push(it);
-  if(!IN_APP){try{history.pushState({hw:x.k,n:HW.st.length},'');it.h=1}catch(e){}}   // 📱 رجوع المتصفح يسكّرها (التطبيق: holyBack)
+  if(!IN_APP){if(HW.pend>0){HW.pend--;try{history.replaceState({hw:x.k,n:HW.st.length},'');it.h=1}catch(e){}}   // ↩️ v3.36.35: سكّرت وانفتحت بنفس الخطوة ⇒ نفس الخانة
+    else if(HW.skip>0)HW.q.push(it);                                  // رجوع منّا بالطريق ⇒ خانتها بعد ما يوصل
+    else{try{history.pushState({hw:x.k,n:HW.st.length},'');it.h=1}catch(e){}}}   // 📱 رجوع المتصفح يسكّرها (التطبيق: holyBack)
   hwIn(x.panel,x.scrim,x.small,it.pt)}
 function hwPop(k){const i=HW.st.findIndex(s=>s.k===k);if(i<0)return;const it=HW.st.splice(i,1)[0];
   if(it.el&&it.el.style)it.el.style.zIndex='';
-  if(it.h&&!HW.popping){HW.skip++;try{history.back()}catch(e){HW.skip--}}}
+  const qi=HW.q.indexOf(it);if(qi>=0)HW.q.splice(qi,1);
+  if(it.h&&!HW.popping){HW.pend++;if(HW.pend===1)setTimeout(hwFlush,0)}}   // ↩️ v3.36.35: الرجوع بعد الخطوة (لو انفتحت نافذة بنفس الخطوة تاخذ الخانة)
+function hwFlush(){const n=HW.pend;HW.pend=0;if(n<=0)return;HW.skip++;
+  try{history.go(-n)}catch(e){HW.skip--;hwDrain();return}
+  clearTimeout(HW.sto);HW.sto=setTimeout(()=>{if(HW.skip>0){HW.skip=0;hwDrain()}},2500)}   // احتياط: متصفح ما بلّغ بوصوله
+function hwDrain(){const q=HW.q.splice(0);for(const it of q)if(HW.st.includes(it)&&!it.h){try{history.pushState({hw:it.k,n:HW.st.length},'');it.h=1}catch(e){}}}
 function hwSync(){for(const x of hwLayers()){const i=HW.st.findIndex(s=>s.k===x.k);if(x.on&&i<0)hwPush(x);else if(!x.on&&i>=0)hwPop(x.k)}
   try{coverSync()}catch(e){}}
-window.addEventListener('popstate',()=>{if(HW.skip>0){HW.skip--;return}const t=HW.st[HW.st.length-1];if(!t)return;
+window.addEventListener('popstate',()=>{if(HW.skip>0){HW.skip--;if(!HW.skip){clearTimeout(HW.sto);hwDrain()}return}const t=HW.st[HW.st.length-1];if(!t)return;
   t.h=0;HW.popping=1;try{t.close()}catch(e){}HW.popping=0;hwSync()});
 function hwWatch(){if(HW.mo)return;HW.mo=new MutationObserver(()=>hwSync());
   ['#mbg','#drawer','#notifPanel'].forEach(q=>{const e=$(q);if(e)HW.mo.observe(e,{attributes:true,attributeFilter:['hidden','class']})});
