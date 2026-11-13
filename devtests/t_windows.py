@@ -28,7 +28,7 @@ page = s[s.index("<html", s.index("HTML_PAGE")):]
 css = "".join(re.findall(r"<style>(.*?)</style>", page, re.S))
 js = "".join(re.findall(r"<script>(.*?)</script>", page, re.S))
 
-FULL_OK = {"#splash", ".btov", ".page", ".mbg", "#notifPanel", "#npScrim"}
+FULL_OK = {"#splash", ".btov", ".page", ".mbg", "#notifPanel", "#npScrim", "#hbg"}   # #hbg (v3.36.37) = the moving background, behind everything — not a window
 over = set()
 for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css):
     b = body.replace(" ", "")
