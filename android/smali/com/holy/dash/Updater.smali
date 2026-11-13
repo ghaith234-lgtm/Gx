@@ -546,7 +546,7 @@
 
     move-result-object v0
 
-    const-string v2, "1.9"
+    const-string v2, "2.0"
 
     invoke-virtual {v0, v2}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
 

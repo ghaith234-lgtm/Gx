@@ -607,7 +607,7 @@
     .line 58
     const-string v1, "User-Agent"
 
-    const-string v2, "HolyApp/1.9"
+    const-string v2, "HolyApp/2.0"
 
     invoke-virtual {v0, v1, v2}, Ljava/net/HttpURLConnection;->setRequestProperty(Ljava/lang/String;Ljava/lang/String;)V
 
