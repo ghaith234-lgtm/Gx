@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.32"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.33"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -927,7 +927,7 @@ def bot_snapshot(b):
             "forced_base": b["cfg"].get("forced_base_price", 0),
             "guard": bool(b["cfg"].get("knife_guard")), "auto": bool(b["cfg"].get("auto_restart")),
             "alive": alive, "alive_src": src, "status": st.get("status", "—"),
-            "age_days": round(age_days, 4), "started": round(_started, 1),
+            "age_days": round(age_days, 4), "started": round(_started, 1), "rate_days": round(rate_days, 4),
             "rate_daily": (round(float(st.get("total_coin_profit") or 0) / rate_days, 8) if _bt in ("dca", "dca_buy")   # 🔧 v3.25.3: DCA ربحه هنا (كان +0)
                            else round((float(st.get("total_profit") or 0) * _safe(net_factor, b, default=1.0) / rate_days), 4))
             if rate_days >= 0.5 else None,
@@ -6578,9 +6578,62 @@ def global_daily(days=14):
     keys = sorted(out)[-days:]
     return [{"d": k, "v": out[k]} for k in keys]
 
+_BTA_CACHE = {"t": 0.0, "v": None}
+
+
+def _bot_trade_all(force=False):
+    """📈 v3.36.33: ربح التداول لكل بوت بكل أيامه (عادي + 💠 — نفس `trade_period` للويدجت والتقارير والأرشيف) · يتحدّث كل دقيقة
+    من أقدم يوم لأي بوت حي (دفتره أو تاريخ تشغيله) لليوم"""
+    c = _BTA_CACHE
+    if not force and c["v"] is not None and time.time() - c["t"] < 60:
+        return c["v"]
+    today = datetime.now().strftime("%Y-%m-%d")
+    d0 = today
+    led = load_json(LEDGER) or {}
+    meta = _safe(bot_meta, default={}) or {}
+    for b in bot_dirs().values():
+        key = os.path.relpath(b["dir"], ROOT)
+        days = [d for d in (((led.get(key) or {}) if isinstance(led, dict) else {}).get("daily") or {}) if isinstance(d, str) and len(d) == 10]
+        if days:
+            d0 = min(d0, min(days))
+        s = float((meta.get(key) or {}).get("started") or 0)
+        if s > 0:
+            d0 = min(d0, datetime.fromtimestamp(s).strftime("%Y-%m-%d"))
+    tb = trade_period(d0, today).get("by_bot") or {}
+    v = {k: round(float(x.get("n") or 0) + float(x.get("r") or 0), 8) for k, x in tb.items()}
+    c.update(t=time.time(), v=v)
+    return v
+
+
+def _rate_fix(b, ta):
+    """📈 v3.36.33 (المالك 13-11): معدل الربح لكل بطاقة من تداولها هي ÷ أيام تشغيلها — بدل عدّاد الربح (يبقى قرب الصفر بإعادة
+    الاستثمار) · عدّاد الربح نفسه ما يتغيّر · DCA والدوري البيعي ربحهم بالعملة = تداولهم"""
+    bt = b.get("bot_type") or "grid"
+    days = float(b.get("age_days") or 0) or float(b.get("rate_days") or 0)
+    if bt in ("dca", "dca_buy"):
+        d = b.get("dca") or {}
+        tot, unit = float(d.get("coin_profit") or 0), ("$" if (bt == "dca_buy" or d.get("is_buy")) else (d.get("base_coin") or ""))
+    elif bt == "rec_sell":
+        r = b.get("rec") or {}
+        tot, unit = float(r.get("profit") or 0), (r.get("base") or b["symbol"].split("-")[0])
+    else:
+        unit = "$"
+        if ta is not None and b.get("dir") in ta:
+            tot = float(ta[b["dir"]])
+        elif ta is not None:
+            tot = 0.0                                    # لا تداول مسجّل بعد
+        else:                                            # تعذّرت قراءة الدفاتر ⇒ ربح البطاقة نفسه (كما كان)
+            tot = float((b.get("rec") or {}).get("profit") or 0) if bt in _REC_T else float(b.get("profit") or 0)
+    b["rate_unit"], b["rate_trade"], b["rate_days"] = unit, round(tot, 8), round(days, 4)
+    b["rate_daily"] = round(tot / days, 8) if days >= 0.5 else None
+
+
 def overview():
     bots = [bot_snapshot(b) for b in bot_dirs().values()]
     bots.sort(key=lambda x: x["symbol"])
+    _ta = _safe(_bot_trade_all, default=None)          # 📈 v3.36.33: معدل كل بطاقة من تداولها هي (عادي + 💠)
+    for _b in bots:
+        _safe(_rate_fix, _b, _ta)
     # ربح الدولار: فقط بوتات الجرد الحقيقية (DCA ربحه بالعملة، والديمو معزول تماماً)
     grid_bots = [b for b in bots if b.get("bot_type") not in _NONGRID and not b.get("demo")]
     # 📉 v3.21.7: «أثر السعر» انتقل لنافذة 💰 محفظتي (لكل محفظة · الكمية الكلية · بلا تكرار) — ما يبين بالشريط
@@ -24016,11 +24069,7 @@ function updCard(el,b,bench){
   // ⏱️ زمن التشغيل (من تاريخ التشغيل الثابت — v3.36.18) + المعدلات (بالدولار للجرد)
   if(R.age){
     R.age.textContent=stAge(b);R.age.title=stAgeT(b);
-    const rd=b.rate_daily;
-    if(rd!=null){
-      R.rates.textContent=`+${rd.toFixed(2)} / +${(rd*30).toFixed(1)} / +${(rd*365).toFixed(0)} $`;
-      R.rates.title='معدل الربح $ (الكلي ÷ أيام التشغيل) — الشهري والسنوي تقديريان';
-    }else{R.rates.textContent='—';R.rates.title='يحتاج نصف يوم تشغيل على الأقل'}
+    R.rates.textContent=rateTxt(b);R.rates.title=rateTip(b);      // 📈 v3.36.33: من تداول البوت نفسه (عادي + 💠) — لا من عدّاد الربح
   }
   const d=b.today||0;R.delta.className='delta '+(d>1e-9?'up':d<-1e-9?'dn':'z');
   R.delta.textContent=(d>1e-9?'▲ اليوم +':d<-1e-9?'▼ اليوم ':'اليوم ')+d.toFixed(4)+'$';
@@ -24413,6 +24462,8 @@ function buildRecCard(b,i){
     <div class="dcacyc"><div class="dcacyclbl"><span>🛡️ حد الأمان</span><span class="num" data-k="capt">—</span></div><div class="dcabar"><div class="dcafill" data-k="capfill"></div></div></div>
     <div class="rcrow" data-k="rngrow"><span class="dl" title="البوت يشتري/يبيع بالموعد بس لما السعر داخل النطاق — برّه النطاق يتخطّى ويبلّغك · الخروج بالهدف ما يتأثر">📏 النطاق</span><b class="num" data-k="rng">—</b><button data-k="rngb">✏️</button></div>
     <div class="rcrow"><span class="dl" title="العمولات اللي دفعها البوت فعلاً بالمنصة (بعملتها) — ونسبة عمولة حسابك المتعلّمة من التنفيذ">💸 العمولات المدفوعة</span><b class="num" data-k="fees">—</b></div>
+    <div class="rcrow"><span class="dl" title="منذ تاريخ تشغيل البوت">⏱️ التشغيل</span><b class="num" data-k="age">—</b></div>
+    <div class="rcrow"><span class="dl" title="ربح تداول هذا البوت (عادي + 💠 إعادة الاستثمار) ÷ أيام تشغيله — الشهري ×30 والسنوي ×365 تقديريان">📈 معدل يومي / شهري / سنوي</span><b class="num" data-k="rates">—</b></div>
     <div class="rcri" data-k="ribox" style="display:none">
       <span class="dl" title="الربح المعاد استثماره اللي لسه داخل البوت: بالحصّالة (للأمر الجاي) + حصّته بالأوامر المفتوحة">💠 معاد استثماره</span><b class="num" data-k="held">—</b>
       <button data-k="riw" title="يحرّر الربح المعاد استثماره — حتى لو صار ${sell?'دولار':'عملة'} داخل الأوامر">💠 سحب</button><button data-k="rip" title="نسبة ربح كل صفقة اللي ترجع تنضاف للأمر الجاي">⚖️ —</button></div>
@@ -24491,7 +24542,7 @@ function updRecCard(el,b){
   const cap=+r.cap||0,pc=cap>0?Math.min(100,(+r.expo||0)/cap*100):0;
   R.capt.innerHTML=cap>0?`<span dir="ltr">${recEx(r.expo,r)} / ${recEx(cap,r)}</span> · ${pc.toFixed(0)}%`:'بلا حد';
   {const out=!r.in_range&&(+r.lo||+r.hi);R.rng.innerHTML=`<span dir="ltr">${recRng(r)}</span>`+(out?' · <span style="color:var(--amber)">⚠️ السعر برّه — الموعد يتخطّى</span>':'');
-   const F=r.fees||{},ks=Object.keys(F);R.fees.innerHTML=ks.length?`<span dir="ltr">${(+r.fee_usd||0).toFixed(4)}$</span>`+((r.fee_other||[]).length?' + '+r.fee_other.map(k=>`${(+F[k]).toPrecision(3)} ${gEsc(k)}`).join(' + '):'')+` <small>· نسبتك ${(+r.fee_rate||0.1)}%</small>`:`— <small>· نسبتك ${(+r.fee_rate||0.1)}%</small>`;
+   cardRates(R,b);const F=r.fees||{},ks=Object.keys(F);R.fees.innerHTML=ks.length?`<span dir="ltr">${(+r.fee_usd||0).toFixed(4)}$</span>`+((r.fee_other||[]).length?' + '+r.fee_other.map(k=>`${(+F[k]).toPrecision(3)} ${gEsc(k)}`).join(' + '):'')+` <small>· نسبتك ${(+r.fee_rate||0.1)}%</small>`:`— <small>· نسبتك ${(+r.fee_rate||0.1)}%</small>`;
    R.fees.title=ks.map(k=>`${k}: ${F[k]}`).join(' · ')}
   R.capfill.style.width=pc+'%';R.capfill.classList.toggle('hot',pc>=90);
   const showRi=r.mode!=='avg'||(+r.held||0)>0;
@@ -24750,6 +24801,8 @@ function buildVaCard(b,i){
     <div class="rcrow"><span class="dl" title="المحقق + غير المحقق (قيمة العملة لو بيعت الآن بعد العمولة − كلفتها)">📊 النتيجة الكلية الآن</span><b class="num" data-k="total">—</b></div>
     <div class="rcrow"><span class="dl" title="العملة التي يحملها البوت · كلفتها · متوسط سعر الشراء">📦 يحمل</span><b class="num" data-k="pos">—</b></div>
     <div class="rcrow"><span class="dl" title="العمولات التي دفعها البوت فعلاً بالمنصة (بعملتها) — ونسبة عمولة حسابك المتعلَّمة من التنفيذ">💸 العمولات المدفوعة</span><b class="num" data-k="fees">—</b></div>
+    <div class="rcrow"><span class="dl" title="منذ تاريخ تشغيل البوت">⏱️ التشغيل</span><b class="num" data-k="age">—</b></div>
+    <div class="rcrow"><span class="dl" title="ربح تداول هذا البوت (عادي + 💠 إعادة الاستثمار) ÷ أيام تشغيله — الشهري ×30 والسنوي ×365 تقديريان">📈 معدل يومي / شهري / سنوي</span><b class="num" data-k="rates">—</b></div>
     <div class="vachart" data-k="chartbox"></div>
     <div class="dcaopts"><button class="dcashield" data-k="now">⏩ خطوة الآن</button><button class="dcalast" data-k="pause">—</button></div>
     <div class="dcaopts"><button class="dcashield" data-k="set">⚙️ الإعدادات</button><button class="dcabuy loss" data-k="exit">✋ بيع الكل</button></div>
@@ -24832,7 +24885,7 @@ function updVaCard(el,b){
   R.total.innerHTML=`<span dir="ltr">${vaS(tot)}$</span> <small>(محقق <span dir="ltr">${vaS(r.profit)}</span> · على الورق <span dir="ltr">${vaS((QL>0||GL)?unreal:0)}</span>)</small>`;
   R.total.className='num '+(tot>=0?'dcacoin':'dcaloss');
   R.pos.innerHTML=GL?`<span dir="ltr">${recC(QL)} ${gEsc(r.base||'')}</span>`+((+HG.cash||0)>0?` · 💵 <span dir="ltr">${vaD(HG.cash)}$</span> من بيعات الشبكة (بانتظار إعادة الشراء)`:'')+` <small>· ♾️ الشبكة تتداول بها</small>`:(+r.q||0)>0?`<span dir="ltr">${recC(r.q)} ${gEsc(r.base||'')}</span> · كلفتها <span dir="ltr">${vaD(r.c)}$</span> · المتوسط <span dir="ltr">${f4(+r.avg)}</span>`:'— لا شيء بعد';
-  {const F=r.fees||{},ks=Object.keys(F);R.fees.innerHTML=ks.length?`<span dir="ltr">${(+r.fee_usd||0).toFixed(4)}$</span>`+((r.fee_other||[]).length?' + '+r.fee_other.map(k=>`${(+F[k]).toPrecision(3)} ${gEsc(k)}`).join(' + '):'')+` <small>· نسبتك ${(+r.fee_rate||0.1)}%</small>`:`— <small>· نسبتك ${(+r.fee_rate||0.1)}%</small>`}
+  cardRates(R,b);{const F=r.fees||{},ks=Object.keys(F);R.fees.innerHTML=ks.length?`<span dir="ltr">${(+r.fee_usd||0).toFixed(4)}$</span>`+((r.fee_other||[]).length?' + '+r.fee_other.map(k=>`${(+F[k]).toPrecision(3)} ${gEsc(k)}`).join(' + '):'')+` <small>· نسبتك ${(+r.fee_rate||0.1)}%</small>`:`— <small>· نسبتك ${(+r.fee_rate||0.1)}%</small>`}
   const sig=(r.steps||[]).length+'|'+((r.steps||[]).slice(-1)[0]||{}).k;
   if(el._vsig!==sig){el._vsig=sig;R.chartbox.innerHTML=vaChart(r)}
   R.pause.textContent=r.paused?'▶️ تشغيل المسار':'⏸ إيقاف المسار';
@@ -25582,7 +25635,7 @@ function updDcaCard(el,b){
       R.rday.textContent=rf(rd);
       R.rmon.textContent=rf(rd*30);
       R.ryear.textContent=rf(rd*365);
-      R.rday.title=R.rmon.title=R.ryear.title='معدل ربح '+bc+' (محسوب من الربح الكلي ÷ أيام التشغيل)';
+      R.rday.title=R.rmon.title=R.ryear.title=rateTip(b);
     }else{
       R.rday.textContent=R.rmon.textContent=R.ryear.textContent='—';
       R.rday.title='يحتاج نصف يوم تشغيل على الأقل';
@@ -26544,6 +26597,14 @@ function shareCheck(box,sym,q){
 // 📉 v3.25.4: الخسائر — يحسب بس (ولا زر يحرّك فلوس أو يغيّر بوت)
 const LS={f:{w:'',src:'',from:'',to:''},v:null};
 /* ⏱️ v3.36.18: زمن التشغيل من تاريخ ثابت (started — تحفظه اللوحة مرة وحدة) · المدة + يوم البداية · التلميح: التاريخ والساعة */
+/* 📈 v3.36.33 (المالك 13-11): معدل الربح لكل بطاقة = تداولها هي (عادي + 💠) ÷ أيام تشغيلها — يومي · ×30 · ×365 · بالدولار أو بعملة البوت */
+function rateNum(v){v=+v||0;const a=Math.abs(v),k=a>=100?1:a>=1?2:a>=0.01?4:a>=0.0001?6:8;return (v>=0?'+':'')+v.toFixed(k)}
+function rateU(b){return b&&b.rate_unit&&b.rate_unit!=='$'?' '+b.rate_unit:'$'}
+function rateTxt(b){const rd=b&&b.rate_daily;if(rd==null)return '—';const u=rateU(b);return `${rateNum(rd)}${u} / ${rateNum(rd*30)}${u} / ${rateNum(rd*365)}${u}`}
+function rateTip(b){if(!b||b.rate_daily==null)return 'يحتاج نصف يوم تشغيل على الأقل';
+  return `معدل ربح هذا البوت من تداوله هو${b.bot_type==='dca'||b.bot_type==='dca_buy'||b.bot_type==='rec_sell'?'':' (عادي + 💠 إعادة الاستثمار)'}: ${rateNum(+b.rate_trade||0)}${rateU(b)} خلال ${(+b.rate_days||0).toFixed(1)} يوم ÷ الأيام — الشهري ×30 والسنوي ×365 تقديريان · عدّاد الربح لا يتغيّر`}
+function cardRates(R,b){if(R.age){const t=stAge(b);if(R.age.textContent!==t)R.age.textContent=t;R.age.title=stAgeT(b)}
+  if(R.rates){const t=rateTxt(b);if(R.rates.textContent!==t)R.rates.textContent=t;R.rates.title=rateTip(b)}}
 function stAge(x){const t=+(x&&x.started)||0;if(!t)return '—';const s=Math.max(0,Date.now()/1000-t),d=s/86400,
   dur=d>=30?(d/30).toFixed(1)+' شهر':d>=1?d.toFixed(1)+' يوم':s>=3600?Math.floor(s/3600)+' ساعة':Math.max(1,Math.floor(s/60))+' دقيقة',
   D=new Date(t*1000),p=n=>String(n).padStart(2,'0');
@@ -29435,7 +29496,7 @@ function skModel(el,b,kd){
     M.gfx='<div class="dcaviz skdv"></div>';M.after=v=>{const n=v.querySelector('.skdv');if(n)dcaViz(n,d,cp)};
     M.chips=[skText(el,'dtrail'),skText(el,'dlast')].filter(Boolean).map((t,i)=>`<span class="chip ${(i===0&&d.trail_on)||(i===1&&d.stop_after)?'gOn':''}">${SKE(t)}</span>`).join('');
     M.m=[[(el.querySelector('[data-k="avg"]')||{}).previousElementSibling?el.querySelector('[data-k="avg"]').previousElementSibling.textContent:'المتوسط',skText(el,'avg')],['تقدّم الدورة',skText(el,'prog')],['المسافة للهدف',skText(el,'dist')],
-      [skShown(R.lpbox)?skText(el,'lplbl'):'لو أغلقت الآن',skShown(R.lpbox)?skText(el,'lp'):'—'],['التشغيل',skText(el,'age')],['يومي / شهري',skText(el,'rday')+' / '+skText(el,'rmon')]];
+      [skShown(R.lpbox)?skText(el,'lplbl'):'لو أغلقت الآن',skShown(R.lpbox)?skText(el,'lp'):'—'],['التشغيل',skText(el,'age')],['المعدل يومي / شهري / سنوي',[skText(el,'rday'),skText(el,'rmon'),skText(el,'ryear')].join(' / ')]];
     const bn=skBtn(el,'buynow');M.main=bn?Object.assign(bn,{loss:R.buynow.classList.contains('loss')}):skBtn(el,'dpause');
     M.ic=[skBtn(el,'dchart','📈 شارت'),skBtn(el,'dtable','📋 الجدول'),skBtn(el,'dhist','📜 السجل')];
     M.menu=[ME('🪜 السلم','dladder'),ME(null,'dtrail'),ME(null,'dlast'),bn?ME(null,'dpause'):null,{k:'drawer',t:'⚙ تفاصيل البوت'},{k:'full',t:'🗂️ كل التفاصيل (الشكل القديم)'},ME('🗑 حذف نهائي','ddel',1)];
@@ -29447,7 +29508,7 @@ function skModel(el,b,kd){
     M.pl=['اليوم',skText(el,'today')];M.pc=sign(r.today);
     M.gfx=skRec(r,cp);
     M.chips=`<span class="chip">📏 ${SKE(skText(el,'rng'))}</span>`+(skShown(R.ribox)?`<span class="chip ${(+r.ri_pct||0)>0?'gOn':''}">💠 ${SKE(skText(el,'held'))}${r.mode!=='avg'?' · '+(+r.ri_pct||0)+'%':''}</span>`:'');
-    M.m=[['📦 المفتوح',skText(el,'nopen')],['⏰ الأمر القادم',skText(el,'next')],['🛡️ حد الأمان',skText(el,'capt')],['💸 العمولات',skText(el,'fees')],['السعر الآن',skText(el,'cp')],['الوضع',r.mode==='avg'?'📊 بالمعدل':'🧩 كل أمر وحده']];
+    M.m=[['📦 المفتوح',skText(el,'nopen')],['⏰ الأمر القادم',skText(el,'next')],['🛡️ حد الأمان',skText(el,'capt')],['💸 العمولات',skText(el,'fees')],['السعر الآن',skText(el,'cp')],['الوضع',r.mode==='avg'?'📊 بالمعدل':'🧩 كل أمر وحده'],['التشغيل',skText(el,'age')],['المعدل يومي / شهري / سنوي',skText(el,'rates')]];
     M.main=Object.assign(skBtn(el,'pause')||{k:'pause',t:'—'},{go:!!r.paused});M.ic=[skBtn(el,'now'),skBtn(el,'chart','📈 شارت'),skBtn(el,'hist','📜 السجل')];
     const nO=(r.lots||[]).length;
     M.menu=[ME(null,'sellall'),r.mode==='avg'?(skShown(R.avgbox)?{k:'x:avgbox',t:'📊 المعدل والهدف'}:null):{k:'x:lots',t:`🧩 الأوامر المفتوحة (${nO})`},
@@ -29466,7 +29527,7 @@ function skModel(el,b,kd){
         `💹 تحت سعر التشغيل <span class="num">${f4(+HG.p0||+r.p0||0)}</span> يعمل المسار · فوقه الشبكة (درجة ${vaN((HG.cfg||{}).g)}% · ${vaD((HG.cfg||{}).usd)}$)`}
     else M.gfx=skVa(r);
     M.chips=(kd==='hyb'?vaHgRiChip(b,HG).replace(/onclick="[^"]*"/,'data-sk="hgri"'):'')+(r.guard_on&&kd!=='hyb'?`<span class="chip gOn">🛡️ لا شراء فوق ${f4(+r.p0||0)}</span>`:'')+`<span class="chip">🛡️ الميزانية ${SKE(skText(el,'capt'))}</span>`;
-    M.m=[['🎯 الهدف القادم',skText(el,'tgt')],['💰 قيمة العملة',skText(el,'val')],['⏰ الخطوة القادمة',skText(el,'next')],['📦 يحمل',skText(el,'pos')],['السعر الآن',skText(el,'cp')],['💸 العمولات',skText(el,'fees')]];
+    M.m=[['🎯 الهدف القادم',skText(el,'tgt')],['💰 قيمة العملة',skText(el,'val')],['⏰ الخطوة القادمة',skText(el,'next')],['📦 يحمل',skText(el,'pos')],['السعر الآن',skText(el,'cp')],['💸 العمولات',skText(el,'fees')],['التشغيل',skText(el,'age')],['المعدل يومي / شهري / سنوي',skText(el,'rates')]];
     M.main=Object.assign(skBtn(el,'pause')||{k:'pause',t:'—'},{go:!!r.paused});M.ic=[skBtn(el,'now'),skBtn(el,'plan','📋 الجدول'),skBtn(el,'hist','📜 السجل')];
     M.menu=[ME('⚙️ الإعدادات','set'),kd==='hyb'?{k:'hgri',t:'💠 إعادة استثمار الشبكة'}:null,ME(null,'exit'),ME('📈 شارت','chart'),pw(),{k:'drawer',t:'⚙ تفاصيل البوت'},{k:'full',t:'🗂️ كل التفاصيل (الشكل القديم)'},ME('🗑 حذف البوت','del',1)];
     M.note=R.hint?R.hint.innerHTML:''}
