@@ -39,7 +39,7 @@ devs(){ curl -s -X POST localhost:8099/api/app/devices -H 'Content-Type: applica
 if git fetch -q --depth=1 origin $OLDC 2>/dev/null && git show FETCH_HEAD:Holy_Dashboard.pyw | python3 ci/ci_tools.py apk > old.apk 2>/dev/null && [ -s old.apk ]; then
   adb install old.apk 2>&1 | tail -1 | sed 's/^/HOLYCI install previous: /'
   adb shell dumpsys package $P | grep -m1 versionName | tr -d '\r' | sed 's/^/HOLYCI before the move: /'
-  r=$(adb install -r holy.apk 2>&1 | tail -1 | tr -d '\r')
+  r=$(adb install -r holy.apk 2>&1 | tr -d '\r' | grep -m1 -oE "Success|Failure.*|INSTALL_[A-Z_]+.*")   # (run 89: the last line was empty on Android 9)
   echo "$r" | grep -q "UPDATE_INCOMPATIBLE" && say "PASS 2.0: Android refuses 2.0 over 1.9 (a new signing key) ⇒ the move is manual, once" || say "INFO 2.0 over 1.9: $r"
   ci=$(curl -s localhost:8099/api/app/info -A "HolyApp/1.9" | python3 -c "import sys,json;print(json.load(sys.stdin)['apk']['code'])")
   cn=$(curl -s localhost:8099/api/app/info -A "HolyApp/2.0" | python3 -c "import sys,json;print(json.load(sys.stdin)['apk']['code'])")
