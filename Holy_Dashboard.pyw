@@ -28372,7 +28372,9 @@ function hwPlay(a,el,o,q){                                       // 🎬 v3.36.3
 function hwIn(panel,scrim,small,pt){const s=hwStyle();if(s==='none'||!panel||!panel.animate)return;
   try{const kf=hwKF(s,panel,small,pt||hwPt());if(!kf)return;let o=null;
     if(kf.o){o=panel.style.transformOrigin;panel.style.transformOrigin=kf.o}
+    const wc=panel.style.willChange;panel.style.willChange=s==='blur'?'transform,opacity,filter':'transform,opacity';   // 🎬 v3.36.37: طبقتها تنجهّز قبل الحركة
     const a=panel.animate(kf,{duration:HW_MS[s],easing:s==='spring'?'cubic-bezier(.34,1.56,.64,1)':'cubic-bezier(.2,.8,.2,1)',fill:'backwards'});
+    const un=()=>{try{panel.style.willChange=wc}catch(e){}};a.addEventListener('finish',un);a.addEventListener('cancel',un);
     hwPlay(a,panel,o)}catch(e){}}
 function hwLight(o,c){                                            // 🎬 v3.36.36: نسخة الإغلاق خفيفة — كل صندوق برّا الشاشة ينفرغ ويبقى بحجمه
   try{const O=o.getElementsByTagName('*'),C=c.getElementsByTagName('*');if(O.length!==C.length||O.length<60)return;
@@ -28432,6 +28434,7 @@ function hwOut(box,panelSel,small,pt){                 // النافذة تنس�
     c.style.backdropFilter='none';c.style.webkitBackdropFilter='none';                    // 🎬 v3.36.35: النسخة بلا ضبابية خلفية (ثقيلة كل إطار)
     const p=(panelSel&&c.querySelector(panelSel))||c,kf=hwKF(s,p,small,pt||hwPt()),d=Math.round(HW_MS[s]*.6);
     if(kf&&kf.o)p.style.transformOrigin=kf.o;
+    p.style.willChange=s==='blur'?'transform,opacity,filter':'transform,opacity';if(p!==c)c.style.willChange='opacity';   // 🎬 v3.36.37
     if(kf)hwPlay(p.animate(kf.slice().reverse(),{duration:d,easing:'cubic-bezier(.4,0,.7,.2)',fill:'both'}),p,null,1);
     if(p!==c)hwPlay(c.animate([{opacity:1},{opacity:0}],{duration:d,easing:'linear',fill:'both'}),c,null,1);
     setTimeout(()=>{try{c.remove()}catch(e){}},d+260)}catch(e){}}
