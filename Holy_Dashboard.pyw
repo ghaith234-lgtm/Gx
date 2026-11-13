@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.34"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.35"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -23701,6 +23701,7 @@ html[dir="rtl"] #drawer{transform:none}
   .page .pwrap{margin:0;min-height:100%;border-radius:0;border:0;padding-top:env(safe-area-inset-top,0px)}
   .page .phead{border-radius:0}
   #drawer,#notifPanel{inset:0;border-radius:0;border:0}
+  .mbg.full,.btov,.page{backdrop-filter:none;-webkit-backdrop-filter:none}   /* 🎬 v3.36.35: الشاشة كلها مغطّاة ⇒ الضبابية خلفها شغل بلا فائدة كل إطار */
 }
 .hwclone{overflow:hidden}
 
@@ -26582,7 +26583,7 @@ function fsSync(){const b=$('#bFs');if(!b)return;const on=!!document.fullscreenE
 function fsToggle(){try{if(document.fullscreenElement)document.exitFullscreen();else document.documentElement.requestFullscreen({navigationUI:'hide'}).catch(()=>toast('المتصفح ما سمح بالشاشة الكاملة',false))}catch(e){}}
 function tapesKick(){Object.values(TAPES).forEach(t=>{try{t.kick()}catch(e){}})}
 /* 🎨 v3.26.9: نافذة · صفحة · درج · مركز الإشعارات فوق اللوحة ⇒ الحركة اللي تحتها توقف (ما تنشاف — وكانت تخلي الضباب ينعاد بكل إطار) */
-function coverSync(){const m=$('#mbg'),c=!!document.querySelector('.page.on,#drawer.on,#notifPanel.on')||!!(m&&!m.hidden);
+function coverSync(){const m=$('#mbg'),c=!!document.querySelector('.page.on,#drawer.on,#notifPanel.on,#btov')||!!(m&&!m.hidden);   // 🎬 v3.36.35: + الاختبار التجريبي
   if(document.documentElement.classList.contains('covered')===c)return;
   document.documentElement.classList.toggle('covered',c);Object.values(TAPES).forEach(t=>{try{t.cover(c)}catch(e){}})}
 function scrollWatch(){let t=0;const r=document.documentElement;
@@ -28295,18 +28296,23 @@ function hwKF(s,el,small,pt){
   if(s==='up')return [{transform:'translateY('+(small?Math.round(innerHeight*.4)+'px':'100%')+')'},{transform:'none'}];
   if(s==='zoom')return [{opacity:0,transform:'scale(.92)'},{opacity:1,transform:'none'}];
   if(s==='side')return [{opacity:small?0:1,transform:'translateX('+(small?'-40vw':'-100%')+')'},{opacity:1,transform:'none'}];
-  if(s==='blur')return [{opacity:0,filter:'blur(14px)',transform:'scale(1.04)'},{opacity:1,filter:'blur(0px)',transform:'none'}];
+  if(s==='blur')return [{opacity:0,filter:'blur(6px)',transform:'scale(1.03)'},{opacity:1,filter:'blur(0px)',transform:'none'}];   // 🎬 v3.36.35: أخف (كان 14px)
   if(s==='spring')return [{opacity:0,transform:'translateY(48px) scale(.96)'},{opacity:1,transform:'none'}];
-  if(s==='btn'){const r=el.getBoundingClientRect(),p=pt||{x:innerWidth/2,y:innerHeight/2},cx=Math.round(p.x-r.left),cy=Math.round(p.y-r.top),
-    R=Math.ceil(Math.hypot(Math.max(Math.abs(cx),Math.abs(r.width-cx)),Math.max(Math.abs(cy),Math.abs(r.height-cy))))+2;
-    return [{clipPath:`circle(0px at ${cx}px ${cy}px)`},{clipPath:`circle(${R}px at ${cx}px ${cy}px)`}]}
+  if(s==='btn'){const r=el.getBoundingClientRect(),p=pt||{x:innerWidth/2,y:innerHeight/2};   // 🎬 v3.36.35: تكبير من نقطة الضغط (يحرّكه كرت الشاشة) بدل قصّ يُعاد رسمه كل إطار
+    const kf=[{opacity:0,transform:'scale(.06)'},{opacity:1,offset:.3},{opacity:1,transform:'none'}];kf.o=Math.round(p.x-r.left)+'px '+Math.round(p.y-r.top)+'px';return kf}
   return null}
 function hwPt(){return HW.pt&&Date.now()-HW.pt.t<5000?HW.pt:null}
+function hwPlay(a,el,o){                                         // 🎬 v3.36.35: تبدأ من أولها بعد ما تنرسم النافذة مرة (كانت تقفز فوق أولها)
+  a.pause();let go=0;const play=()=>{if(go)return;go=1;try{a.play()}catch(e){}};
+  try{HW.busy=Math.max(HW.busy||0,performance.now()+(+a.effect.getTiming().duration||0)+200)}catch(e){}
+  requestAnimationFrame(()=>requestAnimationFrame(play));setTimeout(play,180);
+  if(o!=null){const back=()=>{try{el.style.transformOrigin=o}catch(e){}};a.addEventListener('finish',back);a.addEventListener('cancel',back)}}
 function hwIn(panel,scrim,small,pt){const s=hwStyle();if(s==='none'||!panel||!panel.animate)return;
-  try{const kf=hwKF(s,panel,small,pt||hwPt());if(!kf)return;
-    panel.animate(kf,{duration:HW_MS[s],easing:s==='spring'?'cubic-bezier(.34,1.56,.64,1)':'cubic-bezier(.2,.8,.2,1)'});
-    if(scrim&&scrim!==panel){const bc=getComputedStyle(scrim).backgroundColor;
-      scrim.animate([{backgroundColor:'rgba(0,0,0,0)'},{backgroundColor:bc}],{duration:Math.round(HW_MS[s]*.8),easing:'linear'})}}catch(e){}}
+  try{const kf=hwKF(s,panel,small,pt||hwPt());if(!kf)return;let o=null;
+    if(kf.o){o=panel.style.transformOrigin;panel.style.transformOrigin=kf.o}
+    const a=panel.animate(kf,{duration:HW_MS[s],easing:s==='spring'?'cubic-bezier(.34,1.56,.64,1)':'cubic-bezier(.2,.8,.2,1)',fill:'backwards'});
+    hwPlay(a,panel,o)}catch(e){}}
+function hwIdle(){const w=(HW.busy||0)-performance.now();return w>0?new Promise(r=>setTimeout(r,Math.min(w,700))):null}   // 🎬 v3.36.35: حركة شغّالة ⇒ انتظر نهايتها
 function hwOut(box,panelSel,small,pt){                 // النافذة تنسدّ فوراً (الكود يشوفها مسدودة) · نسخة منها تلعب الإغلاق
   const s=hwStyle();if(s==='none'||!box||!box.animate||!box.isConnected)return;
   try{const r=box.getBoundingClientRect();if(!r.width||!r.height)return;
@@ -28319,10 +28325,12 @@ function hwOut(box,panelSel,small,pt){                 // النافذة تنس�
     document.body.appendChild(c);
     const sc=[[box,c]].concat(['.hwb','.pwrap','.dbody','.npbody'].map(q=>[box.querySelector(q),c.querySelector(q)]));
     sc.forEach(([a,b])=>{if(a&&b&&a.scrollTop)b.scrollTop=a.scrollTop});
+    c.style.backdropFilter='none';c.style.webkitBackdropFilter='none';                    // 🎬 v3.36.35: النسخة بلا ضبابية خلفية (ثقيلة كل إطار)
     const p=(panelSel&&c.querySelector(panelSel))||c,kf=hwKF(s,p,small,pt||hwPt()),d=Math.round(HW_MS[s]*.75);
-    if(kf)p.animate(kf.slice().reverse(),{duration:d,easing:'cubic-bezier(.4,0,.7,.2)',fill:'forwards'});
-    if(p!==c)c.animate([{opacity:1},{opacity:0}],{duration:d,easing:'linear',fill:'forwards'});
-    setTimeout(()=>{try{c.remove()}catch(e){}},d+80)}catch(e){}}
+    if(kf&&kf.o)p.style.transformOrigin=kf.o;
+    if(kf)hwPlay(p.animate(kf.slice().reverse(),{duration:d,easing:'cubic-bezier(.4,0,.7,.2)',fill:'both'}),p,null);
+    if(p!==c)hwPlay(c.animate([{opacity:1},{opacity:0}],{duration:d,easing:'linear',fill:'both'}),c,null);
+    setTimeout(()=>{try{c.remove()}catch(e){}},d+260)}catch(e){}}
 /* الطبقات: كل وحدة تنعرف من حالتها (مو من اللي فتحها) ⇒ أي كود يفتحها تاخذ الحركة والترتيب وزر الرجوع */
 function hwLayers(){const L=[],mb=$('#mbg');
   if(mb)L.push({k:'modal',el:mb,panel:$('#modal'),scrim:mb,on:!mb.hidden,small:mb.classList.contains('small'),close:hideModal});
@@ -28341,7 +28349,8 @@ function hwPush(x){const top=HW.st[HW.st.length-1];
 function hwPop(k){const i=HW.st.findIndex(s=>s.k===k);if(i<0)return;const it=HW.st.splice(i,1)[0];
   if(it.el&&it.el.style)it.el.style.zIndex='';
   if(it.h&&!HW.popping){HW.skip++;try{history.back()}catch(e){HW.skip--}}}
-function hwSync(){for(const x of hwLayers()){const i=HW.st.findIndex(s=>s.k===x.k);if(x.on&&i<0)hwPush(x);else if(!x.on&&i>=0)hwPop(x.k)}}
+function hwSync(){for(const x of hwLayers()){const i=HW.st.findIndex(s=>s.k===x.k);if(x.on&&i<0)hwPush(x);else if(!x.on&&i>=0)hwPop(x.k)}
+  try{coverSync()}catch(e){}}
 window.addEventListener('popstate',()=>{if(HW.skip>0){HW.skip--;return}const t=HW.st[HW.st.length-1];if(!t)return;
   t.h=0;HW.popping=1;try{t.close()}catch(e){}HW.popping=0;hwSync()});
 function hwWatch(){if(HW.mo)return;HW.mo=new MutationObserver(()=>hwSync());
@@ -29795,7 +29804,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden){tick();if
 function wsCoins(tape){const s=new Set(tape||[]);((DATA&&DATA.bots)||[]).forEach(b=>{if(b&&b.symbol)s.add(b.symbol)});return [...s].sort()}
 
 async function tick(){
-  try{const d=await api('/api/overview',0,1);DATA=d;$('#pulse').classList.remove('off');pulseBeat();
+  try{const d=await api('/api/overview',0,1);const hw=hwIdle();if(hw)await hw;DATA=d;$('#pulse').classList.remove('off');pulseBeat();   // 🎬 v3.36.35
     if(lastTotal!==null&&d.total_profit>lastTotal+1e-9){if(localStorage.getItem('dash_sound')!=='off')chime();try{STK.cheer()}catch(e){}}   // 🕺 يفرح ويّا الربح
     lastTotal=d.total_profit;updTop(d);syncCards(d.bots||[]);
     if(CUR&&$('#drawer').classList.contains('on'))fillDrawer(false);

@@ -121,7 +121,8 @@ const SMALL = [
     mot.push({ a, ...r, c0, c1 });
     await ctx.close();
   }
-  const want = { none: '', up: 'transform', zoom: 'opacity+transform', side: 'opacity+transform', btn: 'clipPath', blur: 'filter+opacity+transform', spring: 'opacity+transform' };
+  const want = { none: '', up: 'transform', zoom: 'opacity+transform', side: 'opacity+transform', btn: 'opacity+transform',   // v3.36.35: grows from the tapped point by scale (was a clip)
+    blur: 'filter+opacity+transform', spring: 'opacity+transform' };
   const badM = mot.filter(m => (m.an[0] || '') !== want[m.a] || !m.c0.hidden || (m.a === 'none' ? m.c0.clone !== 0 : m.c0.clone !== 1) || m.c1 !== 0 || (m.a === 'zoom' && m.style !== 'zoom'));
   ok(`🎬 each of the 7 opens with its own motion (default «تكبير ناعم») · closing: the window is closed at once and a copy plays it backwards, then is gone`, !badM.length, badM.length ? badM : mot.map(m => m.a + ':' + (m.an[0] || '—')));
   ({ ctx, pg } = await open(br, 1440, 900, 'spring', errs));
