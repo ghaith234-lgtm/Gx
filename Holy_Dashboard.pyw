@@ -22365,6 +22365,17 @@ if(localStorage.getItem('dash_lite')==='on')document.documentElement.classList.a
 <link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="alternate icon" href="/favicon.ico" sizes="16x16 32x32 48x48 256x256">
 <title>The Holy Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script>/* 🔤 v3.36.33: خط الكتابة المختار لهذا الجهاز — قبل الرسم (بلا ومضة الخط القديم) */
+var HFONTS=[['plex','IBM Plex Sans Arabic','IBM Plex','IBM+Plex+Sans+Arabic:wght@400;500;600;700'],['cairo','Cairo','القاهرة Cairo','Cairo:wght@400;500;600;700'],
+  ['tajawal','Tajawal','تجوال Tajawal','Tajawal:wght@400;500;700'],['almarai','Almarai','المراعي Almarai','Almarai:wght@400;700'],
+  ['kufi','Noto Kufi Arabic','كوفي Noto Kufi','Noto+Kufi+Arabic:wght@400;500;600;700'],['readex','Readex Pro','ريدكس Readex','Readex+Pro:wght@400;500;600;700'],
+  ['naskh','Noto Naskh Arabic','نسخ Noto Naskh','Noto+Naskh+Arabic:wght@400;500;600;700'],['amiri','Amiri','أميري Amiri','Amiri:wght@400;700'],
+  ['sys','system-ui','خط الجهاز','']];
+function hFontApply(k){var f=HFONTS.find(function(x){return x[0]===k})||HFONTS[0];
+  document.documentElement.style.setProperty('--ff',f[1]==='system-ui'?'system-ui':"'"+f[1]+"'");
+  if(f[3]&&f[0]!=='plex'&&!document.getElementById('hfont-'+f[0])){var l=document.createElement('link');l.id='hfont-'+f[0];l.rel='stylesheet';
+    l.href='https://fonts.googleapis.com/css2?family='+f[3]+'&display=swap';document.head.appendChild(l)}return f}
+try{hFontApply(localStorage.getItem('dash_font')||'plex')}catch(e){}</script>
 <style>
 :root{
   --bg0:#070210;--bg1:#0d0524;--tx:#ece7ff;--mut:#9b93c9;--mut2:#6f679e;
@@ -22385,7 +22396,7 @@ if(localStorage.getItem('dash_lite')==='on')document.documentElement.classList.a
 *{box-sizing:border-box;margin:0;padding:0}
 [hidden]{display:none!important}
 html,body{height:100%}
-body{font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;background:var(--bg0);color:var(--tx);overflow-x:hidden;
+body{font-family:var(--ff,'IBM Plex Sans Arabic'),system-ui,sans-serif;background:var(--bg0);color:var(--tx);overflow-x:hidden;
   background-image:radial-gradient(1200px 700px at 85% -10%,var(--bgA) 0%,transparent 60%),radial-gradient(1000px 700px at -10% 110%,var(--bgB) 0%,transparent 55%);}
 .num{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:embed}
 ::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:rgb(var(--vio-rgb)/.25);border-radius:9px}
@@ -25966,6 +25977,7 @@ function openSettings(){
   showModal(`<h2>⚙️ الإعدادات والأدوات</h2>
    <div style="margin-top:6px"><div style="font-size:11.5px;font-weight:600;color:var(--mut);margin-bottom:6px">🎨 المظهر (لهذا الجهاز)</div><div class="thgrid">${TB}</div></div>
    <div style="margin-top:8px"><div style="font-size:11px;color:var(--mut2);margin-bottom:6px">🃏 شكل البطاقات (لهذا الجهاز) — الأرقام والأزرار نفسها في كل الأشكال:</div><div class="pollrow" id="skinRow">${[['old','القديم'],['c','ج — الرسمة أولاً'],['b','ب — شريط الأرقام'],['o','OKX']].map(x=>`<button class="${uiSkin()===x[0]?'on':''}" onclick="setSkin('${x[0]}')">${x[1]}</button>`).join('')}</div></div>
+   <div style="margin-top:8px"><div style="font-size:11px;color:var(--mut2);margin-bottom:6px">🔤 خط الكتابة (لهذا الجهاز) — كل زر مكتوب بخطّه · الأرقام تبقى بخطّها الثابت:</div><div class="pollrow" id="fontRow">${HFONTS.map(x=>`<button class="${uiFont()===x[0]?'on':''}" data-font="${x[0]}" style="font-family:${x[1]==='system-ui'?'system-ui':`'${x[1]}'`},system-ui" onmouseenter="hFontPre('${x[0]}')" onclick="setFont('${x[0]}')">${x[2]}</button>`).join('')}</div></div>
    ${S('🕺 التسلية (لهذا الجهاز)', B('🕺','رجل العصا','STK.toggle();openSettings()','bStk',{on:STK.on(),a:'شغّال — يمشي ويلعب فوق الأيقونات · اسحبه',b:'مطفي'}))}
    ${S('⚡ الخفة والأداء', B('⚡','الوضع الخفيف','uiLiteToggle()','bLite',{on:uiLite(),a:'شغّال — بلا حركات ولا ضبابية',b:'مطفي — كامل الحركات'}))}
    <div style="margin-top:8px"><div style="font-size:11px;color:var(--mut2);margin-bottom:6px">⏱️ تحديث الأرقام كل (الأسعار لحظية بكل الأحوال):</div><div class="pollrow">${PB}</div></div>
@@ -29191,6 +29203,11 @@ function setFps(f){if(![30,60,120,240].includes(f))return;_ls('dash_fps',String(
   try{if(IN_APP&&window.HolyApp&&typeof HolyApp.setFps==='function')HolyApp.setFps(f)}catch(e){}
   toast('🎞️ '+f+' فريم'+(f>=120?' — أنعم (ياكل بطارية أكثر)':' — يوفّر بطارية'),true);setTimeout(()=>{const m=$('#mbg');if($('#fpsRow')&&m&&!m.hidden)openSettings()},800)}   // v3.26.9: ما يرجع يفتح الإعدادات لو انسدّت
 function fpsSkip(o,now){if(!FPSCAP)FPSCAP=uiFps();if(FPSCAP>=120)return false;if(now-(o._fl||0)<1000/FPSCAP-2)return true;o._fl=now;return false}
+function uiFont(){const k=_ls('dash_font');return HFONTS.some(x=>x[0]===k)?k:'plex'}       // 🔤 v3.36.33
+function hFontPre(k){try{const f=HFONTS.find(x=>x[0]===k);if(f&&f[3]&&!document.getElementById('hfont-'+k)){const l=document.createElement('link');l.id='hfont-'+k;l.rel='stylesheet';
+  l.href='https://fonts.googleapis.com/css2?family='+f[3]+'&display=swap';document.head.appendChild(l)}}catch(e){}}
+function setFont(k){const f=hFontApply(k);_ls('dash_font',f[0]==='plex'?null:f[0]);
+  try{if(typeof rowsFit==='function')setTimeout(rowsFit,300)}catch(e){}openSettings();toast('🔤 خط الكتابة: '+f[2],true)}
 function _ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){return null}}
 function uiTheme(){const t=_ls('dash_theme');return THEMES.some(x=>x[0]===t)?t:'holy'}
 function applyTheme(t){const h=document.documentElement;
