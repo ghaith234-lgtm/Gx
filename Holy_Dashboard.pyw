@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.33"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.34"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -23653,6 +23653,57 @@ html.lite .card:hover,html.lite button:hover{transform:none}
 .bigprice.long{font-size:17px}
 .bidi{unicode-bidi:isolate;direction:ltr;display:inline-block}
 .tape2 .iv{unicode-bidi:isolate;direction:rtl}.tape2 .iv b{unicode-bidi:isolate;direction:ltr}
+/* ═══ 🪟 v3.36.34: نمط النوافذ الموحّد — كاملة الشاشة (بالحاسوب لوحة كبيرة مثل «الاختبار التجريبي») · ✕ بنفس الزاوية · التأكيدات بحجمها ═══ */
+:root{--hw-gap:22px;--hw-max:1180px;--hw-r:22px}
+.hwx,.phead .x,.dhead .x,.npx,.btx{width:36px;height:36px;min-width:36px;padding:0;border-radius:50%;display:grid;place-items:center;font-size:15px;line-height:1;
+  border:1px solid var(--line2);background:rgb(var(--surf-rgb)/.92);color:var(--tx)}
+.hwx{position:absolute;top:12px;inset-inline-end:12px;z-index:6;margin:0}
+.mbg .modal{position:relative;display:flex;flex-direction:column;overflow:hidden;animation:none}
+.mbg .hwb{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.mbg .hwb>h2:first-child{padding-inline-end:48px}
+/* الكاملة */
+.mbg.full{padding:var(--hw-gap);place-items:stretch}
+.mbg.full .modal{width:min(var(--hw-max),100%);max-width:none;height:100%;max-height:none;margin:0 auto;padding:0;border-radius:var(--hw-r);border:1px solid var(--line2)}
+.mbg.full .hwb{padding:0 22px 26px}
+.mbg.full .hwb>h2:first-child{position:sticky;top:0;z-index:4;margin:0 -22px 16px;padding:15px 22px 13px;padding-inline-end:62px;background:var(--modal-bg);
+  border-bottom:1px solid var(--line);font-size:17px;line-height:1.45}
+/* الصغيرة (التأكيدات وشبهها): حجمها كما كان · نفس الشكل */
+.mbg.small .modal{border:1px solid var(--line2);border-radius:var(--hw-r)}
+.mbg.small .hwb>h2:first-child{margin-bottom:14px}
+/* الصفحات */
+.page,.page.on{transition:none}.page{transform:none}
+.page .pwrap{max-width:var(--hw-max);min-height:calc(100% - 2*var(--hw-gap));margin:var(--hw-gap) auto;padding:0 22px 40px;background:var(--modal-bg);
+  border:1px solid var(--line2);border-radius:var(--hw-r);box-shadow:0 30px 80px rgb(var(--sh-rgb)/.5)}
+.page .phead{position:sticky;top:0;z-index:4;margin:0 -22px 18px;padding:13px 22px 12px;padding-inline-end:16px;background:var(--modal-bg);border-bottom:1px solid var(--line);
+  border-radius:var(--hw-r) var(--hw-r) 0 0}
+.page .phead h2{font-size:17px}
+/* تفاصيل البوت */
+#drawer{inset:var(--hw-gap);width:auto;max-width:var(--hw-max);margin:0 auto;border:1px solid var(--line2);border-radius:var(--hw-r);background:var(--modal-bg);
+  transform:none;opacity:0;visibility:hidden;transition:none;box-shadow:0 0 0 100vmax rgb(var(--scrim-rgb)/.66),0 30px 80px rgb(var(--sh-rgb)/.5)}
+html[dir="rtl"] #drawer{transform:none}
+#drawer.on{opacity:1;visibility:visible}
+#drawer>*{width:100%;max-width:880px;margin-inline:auto}
+#drawer .dhead{max-width:none}
+/* الإشعارات */
+#notifPanel{left:var(--hw-gap);right:var(--hw-gap);top:var(--hw-gap);bottom:var(--hw-gap);width:auto;max-width:var(--hw-max);margin:0 auto;
+  border:1px solid var(--line2);border-radius:var(--hw-r);background:var(--modal-bg);transform:none;transition:none}
+#notifPanel.on{transform:none;transition:none}
+#notifPanel>*{width:100%;max-width:880px;margin-inline:auto}
+#notifPanel .nphead{max-width:none}
+/* الاختبار التجريبي (المرجع) */
+.btov{padding:var(--hw-gap)}
+.btbox{min-height:100%;border-radius:var(--hw-r)}
+/* الهاتف: كل نافذة تملأ الشاشة */
+@media (max-width:720px){
+  .mbg.full,.btov{padding:0}
+  .mbg.full .modal,.btbox{width:100%;height:100%;border-radius:0;border:0}
+  .mbg.full{padding-top:env(safe-area-inset-top,0px)}
+  .page .pwrap{margin:0;min-height:100%;border-radius:0;border:0;padding-top:env(safe-area-inset-top,0px)}
+  .page .phead{border-radius:0}
+  #drawer,#notifPanel{inset:0;border-radius:0;border:0}
+}
+.hwclone{overflow:hidden}
+
 
 </style>
 </head>
@@ -23960,7 +24011,7 @@ function notifIcon(msg){
   if(/بيع|🔴/.test(msg))return'🔴';
   if(/عاد|🌐/.test(msg))return'🌐';
   return'🔔'}
-function toggleNotif(){npOpen=!npOpen;$('#notifPanel').classList.toggle('on',npOpen);
+function toggleNotif(){if(npOpen){const it=HW.st.find(s=>s.k==='np');hwOut($('#notifPanel'),null,false,it&&it.pt)}npOpen=!npOpen;$('#notifPanel').classList.toggle('on',npOpen);hwSync();
   $('#npScrim').classList.toggle('on',npOpen);document.body.classList.toggle('npopen',npOpen);   // 🔔 v3.21.7: درج + خلفية معتمة
   if(npOpen){$('#bellDot').style.display='none';renderNotif();markAllSeen()}}
 /* 👉 سحب الدرج لليمين يسكّره */
@@ -24392,7 +24443,7 @@ function accumPrompt(b,side){
   const cp=+((window.JPX&&JPX[b.symbol])||b.cp||0);
   const word=buy?'الشراء':'البيع';
   const dir2=buy?'لا شراء تحت هذا السعر':'لا بيع فوق هذا السعر';
-  showModal(`<h2>⏸ إيقاف ${word} = تجميع</h2>
+  showDialog(`<h2>⏸ إيقاف ${word} = تجميع</h2>
     <p style="color:var(--mut);font-size:13px;line-height:1.9;margin-bottom:14px">اختر الحد السعري — ${dir2}. كل مستوى يقطعه السعر خلفه ينحسب بالخفاء، وعند الاستئناف تنفّذ كلها بأمر واحد وأوامرها المقابلة تتوزع بأماكنها العادية. العدّاد على الزر يبدي من صفر ويزيد كل ما السعر يقطع درجة.</p>
     <div class="fld" style="margin-bottom:12px"><label>الحد السعري</label>
       <input id="ap_limit" class="num" value="${cp>0?(cp<0.001?f4(cp):String(+cp.toPrecision(10))):''}" placeholder="0.0000"></div>
@@ -24426,7 +24477,7 @@ function resumeConfirm(b,side){
     if(buy&&AX.ab!=null&&AX.ab<n)body+=`<p ${P.replace('var(--mut)','var(--red)')}>💵 دولارك الحر $${AX.qa} يغطي ${AX.ab} من ${n} درجة — البوت يشتري اللي يغطيه والباقي ينتظر بالمخزن لحد ما يتوفر دولار</p>`;
     if(!buy)body+=`<p ${P}>🪙 البيع بقدر عملتك الحرّة — اللي ما تغطيه ما ينباع</p>`;
   }else body=`<p ${P}>ولا درجة قطعها السعر — ولا ${word} بالسوق.${kept?` ${kept} أمر محفوظ ترجع بأماكنها.`:''}</p>`;
-  showModal(`<h2>▶️ استئناف ${word} — تأكيد</h2>${body}
+  showDialog(`<h2>▶️ استئناف ${word} — تأكيد</h2>${body}
     <p style="font-size:11px;color:var(--mut2);margin-bottom:12px">💡 الأرقام تقريبية لحظة الضغط — البوت ينفّذ بسعر السوق لحظة التنفيذ (خلال ثواني)</p>
     <div class="mbtns"><button class="primary" id="rc_go">✅ نعم، استأنف ${word}</button><button onclick="hideModal()">إلغاء</button></div>`);
   $('#rc_go').onclick=()=>{hideModal();const x=botOf(b.dir);if(x){if(buy){x.floor=0;x.pause_buy=false}else{x.ceil=0;x.pause_sell=false}}
@@ -24616,7 +24667,7 @@ function recSell(b,id){
   if(id==='all'||r.mode==='avg'){pl=r.avg&&r.avg.pl!=null?+r.avg.pl:null;what=r.mode==='avg'?`الكل (${lots.length} أمر — بالمعدل)`:`الكل (${lots.length} أمر)`;id='all'}
   else{const l=lots.find(x=>x.id===id);if(!l){toast('الأمر هذا مو مفتوح — حدّث الصفحة',false);return}pl=l.pl!=null?+l.pl:null;what='الأمر #'+l.n}
   const loss=pl!=null&&pl<0,act=sell?'يرجع يشتري':'يبيع';
-  showModal(`<h2>${loss?'⚠️':'💰'} خروج يدوي — ${b.symbol}</h2>
+  showDialog(`<h2>${loss?'⚠️':'💰'} خروج يدوي — ${b.symbol}</h2>
     <p style="color:var(--mut);font-size:13px;line-height:1.9;margin-bottom:12px">${act} <b>${what}</b> هسه بسعر السوق (أمر فوري — بدون انتظار الهدف). ${sell?'الدولار اللي استلمه يرجع عملة':'العملة ترجع دولار'} والربح ينحسب صافي بعد العمولة${(+r.ri_pct||0)>0?` · ⚖️ ${r.ri_pct}% من الربح يرجع للأمر الجاي`:''}.</p>
     <div class="dcaprofit" style="margin-bottom:12px;justify-content:center;gap:10px"><span class="dl">النتيجة التقريبية:</span>
       <b class="num ${loss?'dcaloss':'dcacoin'}" style="font-size:20px" dir="ltr">${pl==null?'—':recS(pl,r)+U}</b></div>
@@ -24628,7 +24679,7 @@ function recWithdraw(b){
   const r=b.rec||{},sell=r.side==='sell',U=recU(r),pot=+r.pot||0,inl=+r.held_lots||0;
   if(!((+r.held||0)>0)){toast('💠 ماكو ربح معاد استثماره داخل البوت',false);return}
   const lotTxt=sell?'حصّته من الأوامر المفتوحة صارت <b>دولار</b> (العملة انباعت) ⇒ تتحرر دولار':'حصّته من الأوامر المفتوحة صارت <b>عملة</b> (اشترى بيها) ⇒ تتحرر عملة بكلفتها';
-  showModal(`<h2>💠 سحب الربح المعاد استثماره — ${b.symbol}</h2>
+  showDialog(`<h2>💠 سحب الربح المعاد استثماره — ${b.symbol}</h2>
     <div class="dnsum" style="grid-template-columns:1fr 1fr;margin-bottom:12px">
       <div class="dnstat"><span>بالحصّالة (للأمر الجاي)</span><b dir="ltr">${recV(pot,r)}${U}</b></div>
       <div class="dnstat"><span>داخل الأوامر المفتوحة</span><b dir="ltr">${recV(inl,r)}${U}</b></div></div>
@@ -24638,7 +24689,7 @@ function recWithdraw(b){
 }
 function recRi(b){
   const r=b.rec||{},v=+r.ri_pct||0,sell=r.side==='sell';
-  showModal(`<h2>⚖️ إعادة استثمار الربح — ${b.symbol}</h2>
+  showDialog(`<h2>⚖️ إعادة استثمار الربح — ${b.symbol}</h2>
     <p style="color:var(--mut);font-size:12.5px;line-height:1.9;margin-bottom:10px">النسبة من ربح كل صفقة اللي ترجع تنضاف <b>للأمر الجاي بس</b> (${sell?'عملات الربح تنباع ويّا البيع الجاي':'دولار الربح يشتري ويّا الشراء الجاي'}) — تبقى داخل البوت وتگدر تسحبها بأي وقت. الباقي يتحرر ${sell?'عملة':'دولار'} ويروح للمُراكِم/الربح مثل باقي البوتات.</p>
     <div class="fld"><label>النسبة % (0 = كل الربح محرر · 100 = كله يرجع)</label><input id="rc_ri" class="num" value="${v}"></div>
     <div class="dcaopts" style="grid-template-columns:repeat(4,1fr);margin-top:8px">${[0,25,50,100].map(x=>`<button class="dcashield" onclick="$('#rc_ri').value=${x}">${x}%</button>`).join('')}</div>
@@ -24650,7 +24701,7 @@ function recNow(b){
   if(!b.alive){toast('البوت متوقف — شغّله أول',false);return}
   const amt=recAmt(r);
   const cap=+r.cap||0,full=cap>0&&(+r.expo||0)+(+r.amount||0)>cap+1e-12,out=!r.in_range&&(+r.lo||+r.hi);
-  showModal(`<h2>${sell?'🏷️ بيع هسه':'🛒 اشتري هسه'} — ${b.symbol}</h2>
+  showDialog(`<h2>${sell?'🏷️ بيع هسه':'🛒 اشتري هسه'} — ${b.symbol}</h2>
     <p style="color:var(--mut);font-size:13px;line-height:1.9">${sell?'يبيع':'يشتري'} <b>${amt}</b> هسه بسعر السوق كأمر جديد بقائمته${(+r.pot||0)>0?' (ويّا الحصّالة)':''} — خارج الجدول، والموعد الجاي ما يتغيّر.</p>
     ${full?`<p style="color:var(--amber);font-size:12px;margin-top:8px">🛡️ وصل حد الأمان — البوت راح يتخطّاه (${recEx(r.expo,r)} من ${recEx(cap,r)}).</p>`:''}
     ${out?`<p style="color:var(--amber);font-size:12px;margin-top:8px">📏 السعر برّه النطاق (${recRng(r)}) — هذا أمر يدوي ينفّذ رغم النطاق (النطاق يحكم المواعيد بس).</p>`:''}
@@ -24663,7 +24714,7 @@ function recPower(b,alive){
   askConfirm('⏹ إيقاف البوت الدوري — '+b.symbol+'؟',`البوت يطفي: ما يشتري/يبيع بالمواعيد${n?` · و<b>${n} أمر مفتوح ما تنراقب أهدافها</b> (الهدف مو أمر بالمنصة — البوت هو اللي يراقب السعر)`:''} لحد ما تشغّله. أوامره كلها فورية فماكو شي معلّق بالمنصة. لو تريد توقف الشراء/البيع بالمواعيد بس وتبقى الأهداف شغّالة: «⏸ وقّف الدوري».`,()=>ctl(b.dir,'stop'))}
 function recRange(b){
   const r=b.rec||{},sell=r.side==='sell',cp=(window.JPX&&JPX[b.symbol])||r.cp||0;
-  showModal(`<h2>📏 نطاق الأوامر الدورية — ${b.symbol}</h2>
+  showDialog(`<h2>📏 نطاق الأوامر الدورية — ${b.symbol}</h2>
     <p style="color:var(--mut);font-size:12.5px;line-height:1.9;margin-bottom:10px">البوت ${sell?'يبيع':'يشتري'} بالموعد <b>بس لما السعر بين الحدين</b> — برّه النطاق يتخطّى الموعد ويبلّغك ويرجع لما السعر يرجع. الخروج بالهدف والخروج اليدوي <b>ما يتأثرون</b>. 0 = بلا حد.${cp?` السعر هسه <b dir="ltr">${f4(+cp)}</b>.`:''}</p>
     <div class="frm"><div class="fld"><label>📉 الحد الأدنى للسعر</label><input id="rc_lo" class="num" value="${+r.lo||0}"></div>
       <div class="fld"><label>📈 الحد الأعلى للسعر</label><input id="rc_hi" class="num" value="${+r.hi||0}"></div></div>
@@ -24932,7 +24983,7 @@ function vaDelete(b){                                              // 🗑 v3.35
     askConfirm('🗑 حذف بوت مسار القيمة — '+b.symbol+'؟',(q>0?`يحمل البوت كسوراً صغيرة فقط (<b dir="ltr">${recC(q)} ${gEsc(base)}</b> ≈ <b dir="ltr">${vaD(val)}$</b>) أصغر من أقل أمر — تبقى في محفظتك.<br>`:'لا عملة يحملها البوت.<br>')
       +'يتوقف البوت ويُؤرشف مجلده — أرباحه المحققة تبقى في الدفاتر والتقارير.',()=>{ctl(b.dir,'delete_purge');closeDrawer()});return}
   const un=+r.unreal||0,pr=+r.profit||0,tot=pr+un,loss=un<0,col=v=>v>=0?'var(--green)':'var(--red)';
-  showModal(`<h2 style="color:var(--cyan)">🗑 حذف بوت مسار القيمة — ${gEsc(b.symbol)}</h2>
+  showDialog(`<h2 style="color:var(--cyan)">🗑 حذف بوت مسار القيمة — ${gEsc(b.symbol)}</h2>
     <p style="font-size:13px;color:var(--mut);line-height:1.8;margin:0 0 10px">قبل الحذف: ماذا تريد أن تفعل بالعملة التي اشتراها البوت؟</p>
     <div class="vadel">
       <div>🪙 يحمل البوت: <b dir="ltr">${recC(q)} ${gEsc(base)}</b> · كلفتها <b dir="ltr">${vaD(r.c)}$</b> · قيمتها الآن <b dir="ltr">${vaD(val)}$</b></div>
@@ -24963,7 +25014,7 @@ function vaHgRi(dir){
   if(!C){toast('إعادة استثمار الشبكة تعمل مع التعاوني ♾️×💹 فقط',false);return}
   const on=!!C.ri,pc=C.rip!=null?+C.rip:100,run=!!HG.on;
   const quick=[0,25,50,75,100].map(v=>`<button onclick="$('#hr_val').value='${v}';vaHgRiPrev()" style="font-size:11.5px;padding:3px 12px;border-radius:7px">${v}%</button>`).join('');
-  showModal(`<h2 style="color:var(--cyan)">💠 إعادة استثمار الشبكة — ${b.symbol}</h2>
+  showDialog(`<h2 style="color:var(--cyan)">💠 إعادة استثمار الشبكة — ${b.symbol}</h2>
    <p style="color:var(--mut);font-size:12.5px;line-height:1.8">فوق سعر التشغيل تعمل الشبكة اللانهائية. عند كل بيعة لها يُقسَم ربحها: نسبة تعود <b>إلى أمر الشراء نفسه</b> فيكبر، والباقي <b>ربح محرَّر</b> يدخل ربح البوت — مثل إعادة استثمار بوت الإنفنتي.</p>
    <label class="ck" style="margin:6px 0"><input type="checkbox" id="hr_on" ${on?'checked':''} onchange="$('#hr_f').style.opacity=this.checked?1:.45;vaHgRiPrev()">💠 إعادة الاستثمار تعمل</label>
    <div id="hr_f" style="background:var(--bg1);border:1px solid var(--line2);border-radius:10px;padding:10px;opacity:${on?1:.45}">
@@ -25226,13 +25277,13 @@ function btFromForm(kind){                                    // من نموذج
   const k=kind==='rec'?(body.rec_type||'rec_buy'):kind==='dca'?(body.dca_type||'dca'):kind==='grid'?(body.g_type||'grid'):kind==='step'?'grid_step':kind;
   btOpen({kind:k,body})}
 function btFromBot(dir){hideModal();btOpen({dir})}            // من بوت قائم — إعداداته الحالية (بلا مفاتيح)
-function btClose(){const o=$('#btov');if(o)o.remove();clearTimeout(BT.poll);BT.poll=0;btStopPlay();document.body.classList.remove('btopen');
+function btClose(){const o=$('#btov');if(o){const it=HW.st.find(s=>s.k==='bt');hwOut(o,'.btbox',false,it&&it.pt);o.remove();hwSync()}clearTimeout(BT.poll);BT.poll=0;btStopPlay();document.body.classList.remove('btopen');
   if(BT.job&&BT.st&&(BT.st.state==='run'||BT.st.state==='prep'))api('/api/bt_stop',{id:BT.job},true).catch(()=>{});BT.job=null}   // إغلاق النافذة يوقف الاختبار الجاري (لا عمل في الخلفية بلا فائدة)
 async function btOpen(src){
   btClose();BT.src=src;BT.job=null;BT.st=null;BT.cache={};
   const o=document.createElement('div');o.id='btov';o.className='btov';
   o.innerHTML=`<div class="btbox" role="dialog" aria-modal="true"><button class="btx" onclick="btClose()" aria-label="إغلاق">✕</button><div id="bt_in"><div class="vach0">…</div></div></div>`;
-  document.body.appendChild(o);document.body.classList.add('btopen');
+  document.body.appendChild(o);document.body.classList.add('btopen');hwSync();
   o.addEventListener('click',e=>{if(e.target.id==='btov')btClose()});
   let P=null;try{P=await api('/api/bt_prep',src)}catch(e){}
   if(!$('#btov'))return;
@@ -25751,7 +25802,7 @@ function dcaLast(b){
   const txt=on?'يلغي «آخر دورة» ويكمّل يفتح دورات عادي.'
     :(open?`يكمّل الدورة الحالية لحد ما ${buy?'يبيع':'يشتري'} بالهدف (الإغلاق بلا خسارة مثل العادة)، وبعدها <b>يوقف</b> ويطفّي الحارس عليه — <b>ما يفتح دورة جديدة</b> (ما ${buy?'يشتري':'يبيع'} أول أمر). تگدر تلغيه بأي وقت قبل الإغلاق.`
           :'ماكو دورة مفتوحة هسه — البوت يوقف بدون ما يفتح دورة جديدة.');
-  showModal(`<h2>🏁 ${on?'إلغاء آخر دورة':'آخر دورة ويخرج'} — ${b.symbol}</h2>
+  showDialog(`<h2>🏁 ${on?'إلغاء آخر دورة':'آخر دورة ويخرج'} — ${b.symbol}</h2>
     <p style="color:var(--mut);font-size:13px;line-height:1.9;margin-bottom:14px">${txt}</p>
     <div class="mbtns"><button class="primary" onclick="hideModal();ctl('${b.dir}','${on?'last_off':'last_on'}')">${on?'إلغاء «آخر دورة»':'🏁 نعم، آخر دورة'}</button>
     <button onclick="hideModal()">رجوع</button></div>`);
@@ -25761,7 +25812,7 @@ function dcaShield(b){
   const txt=on
     ?`أوامر الأمان ترجع <b>حدود ثابتة على المنصة</b> (أقربها تنفتح فوراً) · والإغلاق يرجع فوري عند الهدف.`
     :`أوامر الأمان تنسحب من المنصة وتبقى <b>بالذاكرة</b>: لما السعر يعبر مستوى، البوت يلاحق ${buy?'القاع':'القمة'} و${buy?'يشتري':'يبيع'} عند ارتداد <b>${pc}%</b> — ولا مرة بسعر أسوأ من المستوى.<br>وبعد الهدف يلاحق السعر ويغلق عند الارتداد — <b>ولا مرة أسوأ من الهدف</b>.`;
-  showModal(`<h2>🛡️ ${on?'إطفاء':'تشغيل'} الدرع — ${b.symbol}</h2>
+  showDialog(`<h2>🛡️ ${on?'إطفاء':'تشغيل'} الدرع — ${b.symbol}</h2>
     <p style="color:var(--mut);font-size:13px;line-height:1.9;margin-bottom:14px">${txt}</p>
     <div class="mbtns"><button class="primary" onclick="hideModal();ctl('${b.dir}','${on?'trail_off':'trail_on'}')">${on?'إطفاء الدرع':'🛡️ شغّل الدرع'}</button>
     <button onclick="hideModal()">إلغاء</button></div>`);
@@ -25776,7 +25827,7 @@ function dcaBuyNow(b){
     ?`يبيع العملة اللي اشتراها (${d.total_net} صافي بعد العمولة) بالسعر الحالي ويغلق الدورة فوراً (المصروف ${d.total_usdt}$)، بدون انتظار الهدف. النتيجة تحت صافية بعد عمولة البيع.`
     :`يشتري بالدولار اللي استلمه من البيع (${d.total_net}$ صافي بعد العمولة) بالسعر الحالي ويغلق الدورة فوراً، بدون انتظار الهدف. النتيجة تحت صافية بعد عمولة الشراء.`;
   const warnTxt=buy?'⚠️ السعر تحت المتوسط — هذا بيع بخسارة. متأكد؟':'⚠️ السعر فوق المتوسط — هذا شراء بخسارة عملة. متأكد؟';
-  showModal(`<h2>${warn?'⚠️':'💰'} ${act} فوري — ${b.symbol}</h2>
+  showDialog(`<h2>${warn?'⚠️':'💰'} ${act} فوري — ${b.symbol}</h2>
     <p style="color:var(--mut);font-size:13px;line-height:1.9;margin-bottom:14px">${desc}</p>
     <div class="dcaprofit" style="margin-bottom:14px;justify-content:center;gap:10px">
       <span class="dl">النتيجة:</span>
@@ -25919,7 +25970,7 @@ function riSetPct(dir,cur){
   const net=Math.max(0,g-2*f-g*f);                 // نمو الدورة كنسبة من الأمر
   const quick=[0,25,50,75,100].map(v=>`<button onclick="$('#p_val').value='${v}';riPctPrev(${net})"
     style="font-size:11.5px;padding:3px 12px;border-radius:7px">${v}%</button>`).join('');
-  showModal(`<h2>⚖️ نسبة إعادة الاستثمار — ${b.symbol}</h2>
+  showDialog(`<h2>⚖️ نسبة إعادة الاستثمار — ${b.symbol}</h2>
    <p style="color:var(--mut);font-size:12.5px;line-height:1.8">
      كل بيعة يتقسّم ربحها: نسبة ترجع <b>لنفس أمر الشراء</b> فيكبر،
      والباقي يمشي <b>ربحاً عادياً</b> ويدخل الربح اليومي والمُراكِم.</p>
@@ -25978,6 +26029,7 @@ function openSettings(){
    <div style="margin-top:6px"><div style="font-size:11.5px;font-weight:600;color:var(--mut);margin-bottom:6px">🎨 المظهر (لهذا الجهاز)</div><div class="thgrid">${TB}</div></div>
    <div style="margin-top:8px"><div style="font-size:11px;color:var(--mut2);margin-bottom:6px">🃏 شكل البطاقات (لهذا الجهاز) — الأرقام والأزرار نفسها في كل الأشكال:</div><div class="pollrow" id="skinRow">${[['old','القديم'],['c','ج — الرسمة أولاً'],['b','ب — شريط الأرقام'],['o','OKX']].map(x=>`<button class="${uiSkin()===x[0]?'on':''}" onclick="setSkin('${x[0]}')">${x[1]}</button>`).join('')}</div></div>
    <div style="margin-top:8px"><div style="font-size:11px;color:var(--mut2);margin-bottom:6px">🔤 خط الكتابة (لهذا الجهاز) — كل زر مكتوب بخطّه · الأرقام تبقى بخطّها الثابت:</div><div class="pollrow" id="fontRow">${HFONTS.map(x=>`<button class="${uiFont()===x[0]?'on':''}" data-font="${x[0]}" style="font-family:${x[1]==='system-ui'?'system-ui':`'${x[1]}'`},system-ui" onmouseenter="hFontPre('${x[0]}')" onclick="setFont('${x[0]}')">${x[2]}</button>`).join('')}</div></div>
+   <div style="margin-top:8px"><div style="font-size:11px;color:var(--mut2);margin-bottom:6px">🎬 حركة فتح النوافذ (لهذا الجهاز) — الإغلاق بعكسها · «⚡ الوضع الخفيف» بلا حركة:</div><div class="pollrow" id="animRow">${HW_ANIMS.map(x=>`<button class="${uiAnim()===x[0]?'on':''}" data-anim="${x[0]}" onclick="setAnim('${x[0]}')">${x[1]}</button>`).join('')}</div></div>
    ${S('🕺 التسلية (لهذا الجهاز)', B('🕺','رجل العصا','STK.toggle();openSettings()','bStk',{on:STK.on(),a:'شغّال — يمشي ويلعب فوق الأيقونات · اسحبه',b:'مطفي'}))}
    ${S('⚡ الخفة والأداء', B('⚡','الوضع الخفيف','uiLiteToggle()','bLite',{on:uiLite(),a:'شغّال — بلا حركات ولا ضبابية',b:'مطفي — كامل الحركات'}))}
    <div style="margin-top:8px"><div style="font-size:11px;color:var(--mut2);margin-bottom:6px">⏱️ تحديث الأرقام كل (الأسعار لحظية بكل الأحوال):</div><div class="pollrow">${PB}</div></div>
@@ -26934,7 +26986,7 @@ function riInject(dir,k,px,coinSide,cur){
   const f4=v=>(+v).toFixed(4), f2=v=>(+v).toFixed(2);
   const quick=[10,25,50].map(q=>`<button onclick="$('#i_amt').value='${f4(now*q/100)}';riPrev(${now},${px},${coinSide?1:0},'${base}')" style="font-size:11px;padding:2px 10px;border-radius:6px">+${q}%</button>`).join('');
   const _sl=stRiRow(b,k);
-  showModal(`<h2>💉 حقن رأس مال — ${_sl&&_sl.lbl?'🪜 المستوى '+_sl.lbl.replace(' · ',' · الجزء '):'الدرجة '+(+px).toFixed(4)}</h2>
+  showDialog(`<h2>💉 حقن رأس مال — ${_sl&&_sl.lbl?'🪜 المستوى '+_sl.lbl.replace(' · ',' · الجزء '):'الدرجة '+(+px).toFixed(4)}</h2>
    <p style="color:var(--mut);font-size:12.5px;line-height:1.8">
      ${coinSide?`عملة من محفظتك تنضاف <b>لأمر البيع نفسه فوراً</b> (منشور أو بالذاكرة).`:`الدولار يكبّر <b>أمر الشراء فوراً</b> — ولو ما گدر، يروح للحصّالة ويكبر بدورته.`}</p>
    <div style="background:var(--bg1);border:1px solid var(--line2);border-radius:10px;padding:10px;margin-top:6px">
@@ -27002,7 +27054,7 @@ function riWithdraw(dir,k,px,inj,total,coinSide,io){
   const BX='background:var(--bg1);border:1px solid var(--line2);border-radius:10px;padding:10px';
   const IN='width:100%;padding:8px;border-radius:8px;border:1px solid var(--line2);background:var(--bg0);color:var(--tx);font-size:14px';
   const _sl=stRiRow(b,k);
-  showModal(`<h2>➖ سحب من ${_sl&&_sl.lbl?'🪜 المستوى '+_sl.lbl.replace(' · ',' · الجزء '):'الدرجة '+p.toFixed(4)} — ${cs?'جهة البيع (عملة)':'جهة الشراء (دولار)'}</h2>
+  showDialog(`<h2>➖ سحب من ${_sl&&_sl.lbl?'🪜 المستوى '+_sl.lbl.replace(' · ',' · الجزء '):'الدرجة '+p.toFixed(4)} — ${cs?'جهة البيع (عملة)':'جهة الشراء (دولار)'}</h2>
    <p style="color:var(--mut);font-size:12.5px;line-height:1.8">اسحب اللي تريده من كل جيب — الأساس المنشور ما ينلمس.</p>
     ${(bookOnly&&valD<=0)?'<div style="background:var(--bg1);border:1px solid var(--amber);border-radius:10px;padding:8px;font-size:11.5px;color:var(--amber)">⚠️ المعروض بالعملة بس الموجود فعلاً داخل الأمر.</div>':''}
    <div style="display:flex;flex-direction:column;gap:12px;margin-top:6px">
@@ -27273,7 +27325,7 @@ function dcaDetails(b){
       <button class="primary" onclick="hideModal();dcaLadder(botOf('${b.dir}'))">🪜 السلم</button>
       <button onclick="btFromBot('${b.dir}')" title="إعدادات هذا البوت على مسار تجريبي — لا يمسّ البوت">🧪 اختبار تجريبي</button><button onclick="hideModal()">إغلاق</button></div>`);
 }
-function closeDrawer(){CUR=null;$('#drawer').classList.remove('on')}
+function closeDrawer(){CUR=null;const e=$('#drawer');if(e&&e.classList.contains('on')){const it=HW.st.find(s=>s.k==='drawer');hwOut(e,null,false,it&&it.pt)}e.classList.remove('on');hwSync()}
 function dTab(t){['over','log','set','danger'].forEach(k=>{$('#tab_'+k).style.display=k===t?'':'none';$('#tb_'+k).classList.toggle('act',k===t)});
   if(t==='log')loadHist();if(t==='set')fillSettings()}
 function fillDrawer(first){const b=botOf(CUR);if(!b)return;
@@ -27327,8 +27379,8 @@ async function cloneBot(){const r=await api('/api/control',{dir:CUR,action:'clon
   if(r.ok){closeDrawer();(r.cfg&&r.cfg.bot_type==='grid_step'?openDeployStep:openDeploy)(r.cfg);toast('📋 انعبت النموذج من البوت — غيّر الرمز وانشر',true)}}
 
 /* ── الصفحات ── */
-function openPage(p){$('#page_'+p).classList.add('on')}
-function closePage(p){$('#page_'+p).classList.remove('on')}
+function openPage(p){$('#page_'+p).classList.add('on');hwSync()}
+function closePage(p){const e=$('#page_'+p);if(!e)return;if(e.classList.contains('on')){const it=HW.st.find(s=>s.k===e.id);hwOut(e,'.pwrap',false,it&&it.pt)}e.classList.remove('on');hwSync()}
 async function openReports(){openPage('reports');loadReport(REPKIND);loadProfit()}
 /* ── 📜 v3.22.6: السجلات المفصّلة — كل عملية بفلاتر (الفئة · البوت · المستوى · الفترة · النص) · مباشر كل 5 ثواني ── */
 const LG={cats:new Set(),items:[],more:false,timer:null,qt:null,busy:false,meta:{}};
@@ -27727,6 +27779,10 @@ function holyGoNow(){const t=HGO;HGO=null;if(!t)return;
   if(k==='acc'){const L=(DATA&&DATA.accum)||[];const a=L.find(x=>x.name===v||x.id===v||x.symbol===v);if(a)return holyFlash(ACARDS.get(a.id));return}
   goTop()}
 function holyBack(){                                    // ↩️ زر الرجوع بالموبايل: يسكّر اللي فوق أولاً — بعدين يطلع
+  // 🪟 v3.36.34: القائمة «⋯» · نافذة الخط الصغيرة ⇐ ثم الطبقة الأعلى بترتيب فتحها (تأكيد · نافذة · صفحة · تفاصيل · اختبار · إشعارات)
+  try{const p=document.getElementById('stpop');if(p&&p.style.display==='block'){p.style.display='none';return true}}catch(e){}
+  try{const c=[...document.querySelectorAll('.card.sk')].find(el=>el._skm);if(c){c._skm=0;c._skv._h='';skinUpd(c);return true}}catch(e){}
+  try{hwSync();const t=HW.st[HW.st.length-1];if(t){t.close();hwSync();return true}}catch(e){}
   try{if(npOpen){toggleNotif();return true}}catch(e){}
   if(!$('#mbg').hidden){hideModal();return true}
   const dr=$('#drawer');if(dr&&dr.classList.contains('on')){closeDrawer();return true}
@@ -28121,14 +28177,14 @@ function pfOpen(wid){
 function pfEnv(wid,id){
   const w=pfW(wid);if(!w)return;const e=id?(w.profit.env||[]).find(x=>x.id===id):null;
   const left=100-w.profit.env_pct+(e?e.pct:0);
-  showModal(`<h2>${e?'✏️ تعديل صندوق':'➕ صندوق جديد'}</h2><p style="font-size:12px;color:var(--mut)">النسبة من كل ربح (دولار) ينزل لهالمحفظة · المتاح ${left.toFixed(2).replace(/\.00$/,'')}% · التعديل يطبّق على الجاي، و«🔄 إعادة تقسيم» يطبّقه على الموجود.</p>
+  showDialog(`<h2>${e?'✏️ تعديل صندوق':'➕ صندوق جديد'}</h2><p style="font-size:12px;color:var(--mut)">النسبة من كل ربح (دولار) ينزل لهالمحفظة · المتاح ${left.toFixed(2).replace(/\.00$/,'')}% · التعديل يطبّق على الجاي، و«🔄 إعادة تقسيم» يطبّقه على الموجود.</p>
   <div class="frm"><div class="fld"><label>الاسم</label><input id="pf_n" value="${e?flE(e.name):''}" placeholder="مصروفي الخاص" maxlength="40"></div>
   <div class="fld"><label>النسبة %</label><input id="pf_p" class="num" value="${e?e.pct:''}" placeholder="${Math.min(50,left)}"></div></div>
   <div class="mbtns" style="margin-top:12px"><button class="primary" id="pf_go">💾 حفظ</button><button onclick="pfOpen('${flE(wid)}')">↩ رجوع</button></div>`);
   $('#pf_go').onclick=async()=>{const r=await api('/api/pfbox',{act:e?'env_edit':'env_add',wid,id:e?e.id:undefined,name:$('#pf_n').value,pct:$('#pf_p').value});
     toast(r.msg||'تم',r.ok!==false);if(r.ok){await loadFlow();pfOpen(wid)}}}
 function pfSpend(wid,id,bal,name,coin,ccy){
-  showModal(`<h2>💸 صرف من «${flE(name)}»</h2><p style="font-size:12px;color:var(--mut)">الرصيد ${coin?fmtQ(bal):fl$(bal)} · الصرف يعني طلع للمحفظة/انصرف — دفتر بس، ما يحرّك شي بالمنصة.</p>
+  showDialog(`<h2>💸 صرف من «${flE(name)}»</h2><p style="font-size:12px;color:var(--mut)">الرصيد ${coin?fmtQ(bal):fl$(bal)} · الصرف يعني طلع للمحفظة/انصرف — دفتر بس، ما يحرّك شي بالمنصة.</p>
   <div style="display:flex;gap:6px;flex-wrap:wrap"><input id="pf_a" class="num" placeholder="0" style="flex:1 1 90px;min-width:0" oninput="this.dataset.all=''">
   <button onclick="const i=$('#pf_a');i.value=${coin?`'${bal}'`:`(+${bal}).toFixed(2)`};i.dataset.all='1'">الكل</button>
   <button class="primary" id="pf_go">💸 صرف</button></div><div class="mbtns" style="margin-top:12px"><button onclick="pfOpen('${flE(wid)}')">↩ رجوع</button></div>`);
@@ -28138,7 +28194,7 @@ function pfSpend(wid,id,bal,name,coin,ccy){
 function pfAssign(wid,base,bal,fromEnv){
   // 📁 v3.23.0: عملة بالصندوق النهائي ⇒ تخصّصها لصندوق بيدك (أو ترجعها لغير المخصّصة) — ما تتقسّم بالنسب
   const w=pfW(wid);if(!w)return;const envs=w.profit.env||[];const e0=fromEnv?envs.find(e=>e.id===fromEnv):null;
-  showModal(`<h2>${e0?`↩ رجّع ${flE(base)} من «${flE(e0.name)}»`:`📁 تخصيص ${flE(base)} لصندوق`}</h2>
+  showDialog(`<h2>${e0?`↩ رجّع ${flE(base)} من «${flE(e0.name)}»`:`📁 تخصيص ${flE(base)} لصندوق`}</h2>
   <p style="font-size:12px;color:var(--mut)">المتاح ${fmtQ(bal)} ${flE(base)} · ${e0?'ترجع «غير مخصّصة» بالصندوق النهائي.':'العملات ما تتقسّم لحالها مثل الدولار — تحددها إنت.'} (دفتر بس)</p>
   ${e0?'':`<div class="frm"><div class="fld" style="grid-column:1/-1"><label>الصندوق</label><select id="pf_e">${envs.map(e=>`<option value="${flE(e.id)}">📁 ${flE(e.name)}</option>`).join('')}</select></div></div>`}
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><input id="pf_a" class="num" placeholder="0" style="flex:1 1 90px;min-width:0" oninput="this.dataset.all=''">
@@ -28161,7 +28217,7 @@ async function openWallets(){openPage('wallets');
       +(s.acc_bot?`<p style="font-size:11px;color:var(--amber);margin-top:6px">🪙 مُراكِمات على مفاتيح بوتات (مو محفوظة كمحفظة): ${gEsc(s.acc_bot)}</p>`:'')
       +(s.n_acc?'<p style="font-size:10.5px;color:var(--mut2);margin-top:6px">👛 كل مُراكِم على محفظته (تختارها بالنشر) — حسابه مستقل · ✏️ تحديث المفاتيح ينقل مُراكِماتها ويّاها · الحذف يخلّيهم بلا مفاتيح</p>':'')}catch(e){}}
 async function testWallet(n){
-  showModal('<h2>🔑 فحص مفتاح '+gEsc(n)+'</h2><p style="color:var(--mut);font-size:12px">⏳ يسأل OKX (قراءة بس — ولا أمر)…</p>');
+  showDialog('<h2>🔑 فحص مفتاح '+gEsc(n)+'</h2><p style="color:var(--mut);font-size:12px">⏳ يسأل OKX (قراءة بس — ولا أمر)…</p>');
   let r={};try{r=await api('/api/wallet_test',{name:n})}catch(e){}
   let h=`<h2>🔑 مفتاح ${gEsc(n)}${r.acc?' · 🪙 محفظة المُراكِم':''}</h2>`;
   h+=`<div style="background:var(--card2,#12161f);border:1px solid ${r.ok?'rgb(var(--green2-rgb)/.35)':'rgb(var(--red2-rgb)/.35)'};border-radius:10px;padding:11px;margin-bottom:10px;font-size:12px;line-height:1.9">`;
@@ -28178,10 +28234,10 @@ async function testWallet(n){
   h+='</div>';
   for(const w of (r.warn||[]))h+=`<div style="font-size:11.5px;color:var(--amber);margin-bottom:6px;word-break:break-word">⚠️ ${gEsc(w)}</div>`;
   h+=`<div class="mbtns"><button onclick="updWallet(${gEsc(JSON.stringify(String(n)))})">✏️ حدّث المفاتيح</button><button onclick="hideModal()">إغلاق</button></div>`;
-  showModal(h);
+  showDialog(h);
 }
 function updWallet(n){
-  showModal(`<h2>✏️ مفاتيح ${gEsc(n)}</h2>
+  showDialog(`<h2>✏️ مفاتيح ${gEsc(n)}</h2>
   <p style="color:var(--mut);font-size:12px;line-height:1.8">تتحدّث <b>بمكانها</b> — نفس الاسم والترتيب (المُراكِم يبقى عليها). ينفحص المفتاح بـOKX قبل الحفظ.<br>
   💡 بـOKX: فعّل «قراءة» + «تداول» بس (بلا «سحب») · واربطه بـIP السيرفر حتى ما ينمسح بعد 14 يوم.</p>
   <div class="frm"><div class="fld"><label>API Key</label><input id="uw_api" autocomplete="off"></div>
@@ -28194,7 +28250,7 @@ function updWallet(n){
 }
 async function refreshBal(){toast('🔄 أجلب الأرصدة من OKX…',true);const r=await api('/api/control',{action:'refresh_bal'});toast(r.msg,r.ok);openWallets();tick()}
 async function testTg(){toast('🧪 أرسل رسالة اختبار…',true);const r=await api('/api/control',{action:'tg_test'});
- if(r.ok)toast(r.msg,true);else showModal(`<h2>📨 الإشعار ما وصل</h2><pre class="rep">${(r.msg||'').replace(/</g,'&lt;')}</pre><div class="mbtns"><button class="primary" onclick="hideModal();openWallets()">↩ رجوع للإعدادات</button></div>`)}
+ if(r.ok)toast(r.msg,true);else showDialog(`<h2>📨 الإشعار ما وصل</h2><pre class="rep">${(r.msg||'').replace(/</g,'&lt;')}</pre><div class="mbtns"><button class="primary" onclick="hideModal();openWallets()">↩ رجوع للإعدادات</button></div>`)}
 async function saveTg(){const r=await api('/api/settings',{tg_token:$('#w_tok').value,tg_chat_id:$('#w_chat').value});toast(r.msg,r.ok)}
 async function addWallet(){const r=await api('/api/wallet',{op:'add',name:$('#nw_name').value,api:$('#nw_api').value,sec:$('#nw_sec').value,pass:$('#nw_pass').value});
   toast(r.msg,r.ok);if(r.ok){['nw_name','nw_api','nw_sec','nw_pass'].forEach(i=>$('#'+i).value='');openWallets()}}
@@ -28223,10 +28279,88 @@ async function exOrdOpen(refresh){
   showModal(h)}
 
 /* ── النوافذ ── */
-function showModal(html){$('#modal').innerHTML=html;$('#mbg').hidden=false}
-function hideModal(){$('#mbg').hidden=true}
+/* 🪟 v3.36.34 (المالك 13-11): نمط واحد لكل النوافذ — كاملة الشاشة (بالحاسوب لوحة كبيرة مثل «الاختبار التجريبي») · ✕ بنفس الزاوية ·
+   التأكيدات وشبهها بحجمها بالشكل الجديد (showDialog) · حركة الفتح من ⚙️ والإغلاق بعكسها · زر الرجوع يسكّر الأعلى أولاً (بالتطبيق وبالمتصفح) ·
+   نافذة جديدة بـshowModal / showDialog تاخذ كل هذا وحدها */
+const HW_ANIMS=[['none','بلا حركة'],['up','انزلاق من الأسفل'],['zoom','تكبير ناعم'],['side','انزلاق جانبي'],['btn','تتوسّع من الزر'],['blur','تلاشٍ مع ضبابية'],['spring','ارتداد خفيف']];
+const HW_MS={up:320,zoom:260,side:300,btn:420,blur:300,spring:440};
+const HW={st:[],pt:null,skip:0,popping:0};
+function uiAnim(){const v=_ls('dash_anim');return HW_ANIMS.some(x=>x[0]===v)?v:'zoom'}
+function setAnim(v){if(!HW_ANIMS.some(x=>x[0]===v))v='zoom';_ls('dash_anim',v==='zoom'?null:v);const n=(HW_ANIMS.find(x=>x[0]===v)||[])[1]||'';
+  hideModal();setTimeout(()=>{openSettings();toast('🎬 حركة النوافذ: '+n,true)},v==='none'?0:Math.round((HW_MS[v]||0)*.75)+80)}   // تنفتح من جديد ⇒ تشوف الحركة
+function hwStyle(){try{if(document.documentElement.classList.contains('lite'))return 'none';
+  if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)return 'none'}catch(e){}return uiAnim()}
+document.addEventListener('pointerdown',e=>{HW.pt={x:e.clientX,y:e.clientY,t:Date.now()}},true);
+function hwKF(s,el,small,pt){
+  if(s==='up')return [{transform:'translateY('+(small?Math.round(innerHeight*.4)+'px':'100%')+')'},{transform:'none'}];
+  if(s==='zoom')return [{opacity:0,transform:'scale(.92)'},{opacity:1,transform:'none'}];
+  if(s==='side')return [{opacity:small?0:1,transform:'translateX('+(small?'-40vw':'-100%')+')'},{opacity:1,transform:'none'}];
+  if(s==='blur')return [{opacity:0,filter:'blur(14px)',transform:'scale(1.04)'},{opacity:1,filter:'blur(0px)',transform:'none'}];
+  if(s==='spring')return [{opacity:0,transform:'translateY(48px) scale(.96)'},{opacity:1,transform:'none'}];
+  if(s==='btn'){const r=el.getBoundingClientRect(),p=pt||{x:innerWidth/2,y:innerHeight/2},cx=Math.round(p.x-r.left),cy=Math.round(p.y-r.top),
+    R=Math.ceil(Math.hypot(Math.max(Math.abs(cx),Math.abs(r.width-cx)),Math.max(Math.abs(cy),Math.abs(r.height-cy))))+2;
+    return [{clipPath:`circle(0px at ${cx}px ${cy}px)`},{clipPath:`circle(${R}px at ${cx}px ${cy}px)`}]}
+  return null}
+function hwPt(){return HW.pt&&Date.now()-HW.pt.t<5000?HW.pt:null}
+function hwIn(panel,scrim,small,pt){const s=hwStyle();if(s==='none'||!panel||!panel.animate)return;
+  try{const kf=hwKF(s,panel,small,pt||hwPt());if(!kf)return;
+    panel.animate(kf,{duration:HW_MS[s],easing:s==='spring'?'cubic-bezier(.34,1.56,.64,1)':'cubic-bezier(.2,.8,.2,1)'});
+    if(scrim&&scrim!==panel){const bc=getComputedStyle(scrim).backgroundColor;
+      scrim.animate([{backgroundColor:'rgba(0,0,0,0)'},{backgroundColor:bc}],{duration:Math.round(HW_MS[s]*.8),easing:'linear'})}}catch(e){}}
+function hwOut(box,panelSel,small,pt){                 // النافذة تنسدّ فوراً (الكود يشوفها مسدودة) · نسخة منها تلعب الإغلاق
+  const s=hwStyle();if(s==='none'||!box||!box.animate||!box.isConnected)return;
+  try{const r=box.getBoundingClientRect();if(!r.width||!r.height)return;
+    const z=getComputedStyle(box).zIndex,c=box.cloneNode(true);
+    c.removeAttribute('id');c.querySelectorAll('[id]').forEach(n=>n.removeAttribute('id'));
+    c.querySelectorAll('[data-dir],[data-acc]').forEach(n=>{n.removeAttribute('data-dir');n.removeAttribute('data-acc')});
+    c.setAttribute('aria-hidden','true');c.setAttribute('inert','');c.classList.add('hwclone');c.classList.add('on');c.hidden=false;
+    Object.assign(c.style,{position:'fixed',left:r.left+'px',top:r.top+'px',width:r.width+'px',height:r.height+'px',right:'auto',bottom:'auto',
+      margin:'0',zIndex:String(+z||150),pointerEvents:'none',transition:'none',animation:'none',transform:'none',opacity:'1',visibility:'visible'});
+    document.body.appendChild(c);
+    const sc=[[box,c]].concat(['.hwb','.pwrap','.dbody','.npbody'].map(q=>[box.querySelector(q),c.querySelector(q)]));
+    sc.forEach(([a,b])=>{if(a&&b&&a.scrollTop)b.scrollTop=a.scrollTop});
+    const p=(panelSel&&c.querySelector(panelSel))||c,kf=hwKF(s,p,small,pt||hwPt()),d=Math.round(HW_MS[s]*.75);
+    if(kf)p.animate(kf.slice().reverse(),{duration:d,easing:'cubic-bezier(.4,0,.7,.2)',fill:'forwards'});
+    if(p!==c)c.animate([{opacity:1},{opacity:0}],{duration:d,easing:'linear',fill:'forwards'});
+    setTimeout(()=>{try{c.remove()}catch(e){}},d+80)}catch(e){}}
+/* الطبقات: كل وحدة تنعرف من حالتها (مو من اللي فتحها) ⇒ أي كود يفتحها تاخذ الحركة والترتيب وزر الرجوع */
+function hwLayers(){const L=[],mb=$('#mbg');
+  if(mb)L.push({k:'modal',el:mb,panel:$('#modal'),scrim:mb,on:!mb.hidden,small:mb.classList.contains('small'),close:hideModal});
+  const bt=$('#btov');L.push({k:'bt',el:bt,panel:bt&&bt.querySelector('.btbox'),scrim:bt,on:!!bt,close:btClose});
+  document.querySelectorAll('.page[id]').forEach(p=>L.push({k:p.id,el:p,panel:p.querySelector('.pwrap')||p,on:p.classList.contains('on'),
+    close:()=>{const b=p.querySelector('.phead .x')||p.querySelector('button[onclick*="close"]');b?b.click():p.classList.remove('on')}}));
+  const dr=$('#drawer');if(dr)L.push({k:'drawer',el:dr,panel:dr,on:dr.classList.contains('on'),close:closeDrawer});
+  const np=$('#notifPanel');if(np)L.push({k:'np',el:np,panel:np,on:np.classList.contains('on'),close:()=>{if(npOpen)toggleNotif()}});
+  return L}
+function hwPush(x){const top=HW.st[HW.st.length-1];
+  if(top&&x.el&&top.el&&top.el.isConnected){x.el.style.zIndex='';const base=+getComputedStyle(x.el).zIndex||0,tz=+getComputedStyle(top.el).zIndex||0;
+    if(tz>=base)x.el.style.zIndex=String(tz+3)}                        // المفتوحة فوق غيرها تنرسم فوقها دائماً
+  const it={k:x.k,el:x.el,close:x.close,pt:hwPt(),h:0};HW.st.push(it);
+  if(!IN_APP){try{history.pushState({hw:x.k,n:HW.st.length},'');it.h=1}catch(e){}}   // 📱 رجوع المتصفح يسكّرها (التطبيق: holyBack)
+  hwIn(x.panel,x.scrim,x.small,it.pt)}
+function hwPop(k){const i=HW.st.findIndex(s=>s.k===k);if(i<0)return;const it=HW.st.splice(i,1)[0];
+  if(it.el&&it.el.style)it.el.style.zIndex='';
+  if(it.h&&!HW.popping){HW.skip++;try{history.back()}catch(e){HW.skip--}}}
+function hwSync(){for(const x of hwLayers()){const i=HW.st.findIndex(s=>s.k===x.k);if(x.on&&i<0)hwPush(x);else if(!x.on&&i>=0)hwPop(x.k)}}
+window.addEventListener('popstate',()=>{if(HW.skip>0){HW.skip--;return}const t=HW.st[HW.st.length-1];if(!t)return;
+  t.h=0;HW.popping=1;try{t.close()}catch(e){}HW.popping=0;hwSync()});
+function hwWatch(){if(HW.mo)return;HW.mo=new MutationObserver(()=>hwSync());
+  ['#mbg','#drawer','#notifPanel'].forEach(q=>{const e=$(q);if(e)HW.mo.observe(e,{attributes:true,attributeFilter:['hidden','class']})});
+  document.querySelectorAll('.page[id]').forEach(e=>HW.mo.observe(e,{attributes:true,attributeFilter:['class']}));
+  HW.mo.observe(document.body,{childList:true});hwSync()}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',hwWatch);else setTimeout(hwWatch,0);
+function hwDress(m,small){                                           // ✕ بالزاوية · أزرار «إغلاق» وحدها تنشال (✕ يسويها)
+  m.querySelectorAll('.hwb .mbtns button').forEach(b=>{if((b.getAttribute('onclick')||'').replace(/\s/g,'')==='hideModal()'&&/^(إغلاق|رجوع|✕)$/.test((b.textContent||'').trim()))b.hidden=true});
+  m.querySelectorAll('.hwb .mbtns').forEach(x=>{if(![...x.children].some(c=>!c.hidden&&c.style.display!=='none'))x.hidden=true})}
+function showModal(html,o){const m=$('#modal'),bg=$('#mbg'),small=!!(o&&o.small),was=!bg.hidden,wasSmall=bg.classList.contains('small');
+  m.innerHTML=`<button type="button" class="hwx" aria-label="إغلاق" title="إغلاق" onclick="hideModal()">✕</button><div class="hwb">${html}</div>`;
+  hwDress(m,small);bg.classList.toggle('small',small);bg.classList.toggle('full',!small);bg.hidden=false;hwSync();   // الترتيب يتسجّل فوراً (المراقب احتياط لأي طريق ثاني)
+  if(was&&wasSmall!==small)hwIn(m,null,small)}                       // تأكيد فوق نافذة (أو العكس) ⇒ الجديدة تدخل بحركتها
+function showDialog(html){showModal(html,{small:true})}             // 🪟 التأكيدات وشبهها: حجمها نفسه بالشكل الجديد
+function hideModal(){const bg=$('#mbg');if(bg&&!bg.hidden){const it=HW.st.find(s=>s.k==='modal');hwOut(bg,'.modal',bg.classList.contains('small'),it&&it.pt)}if(bg)bg.hidden=true;hwSync()}
+
 $('#mbg').addEventListener('click',e=>{if(e.target.id==='mbg')hideModal()});
-function askConfirm(title,desc,cb){showModal(`<h2>${title}</h2><p style="color:var(--mut);font-size:13.5px;line-height:1.9">${desc}</p>
+function askConfirm(title,desc,cb){showDialog(`<h2>${title}</h2><p style="color:var(--mut);font-size:13.5px;line-height:1.9">${desc}</p>
   <div class="mbtns"><button class="danger" id="cf_y">تأكيد</button><button onclick="hideModal()">إلغاء</button></div>`);
   $('#cf_y').onclick=()=>{hideModal();cb()}}
 async function runDiag(){toast('🩺 أفحص…',true);let r;try{r=await api('/api/control',{action:'diag'})}catch(e){toast('فشل الفحص',false);return}
@@ -28384,7 +28518,7 @@ function renderAccum(list){
 function accBuyNow(a){
   const pend=a.pending||0, out=(a.in_range===false), cap=a.max_buy||0;
   const sugg=(cap>0&&cap<pend)?cap:pend;
-  showModal(`<h2>🛒 شراء فوري — ${a.name||a.symbol}</h2>
+  showDialog(`<h2>🛒 شراء فوري — ${a.name||a.symbol}</h2>
   ${out?`<div style="background:rgb(var(--amber2-rgb)/.12);border:1px solid rgb(var(--amber2-rgb)/.3);border-radius:10px;padding:10px;margin-bottom:10px;font-size:11.5px;color:var(--amber)">
     ⚠️ السعر الآن <b>${a.cp}</b> خارج نطاقك (${a.low||'∞'}–${a.high||'∞'}) — الشراء هنا يتجاوزه</div>`:''}
   ${a.bought_today?`<div style="background:rgb(var(--green2-rgb)/.1);border-radius:10px;padding:8px;margin-bottom:10px;font-size:11px;color:var(--green)">
@@ -28504,7 +28638,7 @@ async function accSell(a){
   try{p=await api('/api/accum',{act:'sell_preview',id:a.id})}catch(e){}
   if(!p.ok)return toast(p.msg||'تعذّر الحساب',false);
   const up=p.profit>=0;
-  showModal(`<h2>💰 بيع المجمّع — ${a.name||a.symbol}</h2>
+  showDialog(`<h2>💰 بيع المجمّع — ${a.name||a.symbol}</h2>
   <div style="background:var(--card2,#12161f);border:1px solid var(--bd,#232a36);border-radius:12px;padding:14px;margin-bottom:12px">
     <table style="width:100%;font-size:12px;line-height:2.1">
       <tr><td style="color:var(--mut)">الكمية المجمّعة</td><td style="text-align:end"><b>${p.sellable} ${p.base}</b></td></tr>
@@ -28542,7 +28676,7 @@ function accToFinal(a){
   // 📤 v3.23.1: من المُراكِم ⇒ 💰 الصندوق النهائي — 💵 من المتراكم (دولار) · 🪙 من المخزون (عملة) — دفتر، ولا شي يتحرك بالمنصة
   a=((DATA&&DATA.accum)||[]).find(z=>z.id===a.id)||a;
   const pend=+a.pending||0,coin=+a.coin||0,b=gEsc(String(a.base||'').toUpperCase()),id=gEsc(a.id);
-  showModal(`<h2>📤 للصندوق النهائي — ${gEsc(a.name||a.symbol||'')}</h2>
+  showDialog(`<h2>📤 للصندوق النهائي — ${gEsc(a.name||a.symbol||'')}</h2>
   <p style="font-size:11.5px;color:var(--mut);line-height:1.8">اللي تحوّله يصير ربح نهائي بـ<b>💰 الصندوق النهائي</b> لمحفظة المُراكِم (تقسّمه أو تصرفه من هناك).<br>
   ولا شي يتحرك بالمنصة: الدولار يصير حر بحسابك (ما ينشترى بيه) · العملة تبقى بحسابك (ما تنباع).</p>
   <div class="af-box"><div class="af-h">💵 من المتراكم — المتاح <b style="color:var(--green)">${pend.toFixed(2)}$</b></div>
@@ -29165,7 +29299,7 @@ async function openDeploy(pre){pre=pre||{};
     $('#n_go').disabled=true;try{const r=await api('/api/deploy',body);toast(r.msg,r.ok);if(r.ok){hideModal();tick()}}finally{$('#n_go').disabled=false}}}
 
 /* ── المحرك ── */
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(npOpen){toggleNotif();return}hideModal();closeDrawer();closePage('reports');closePage('wallets')}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')holyBack()});   // 🪟 v3.36.34: Esc = زر الرجوع (الأعلى أولاً)
 /* 🎨 الثيمات + ⚡ الوضع الخفيف + ⏱️ سرعة التحديث — محفوظة بهذا الجهاز (كل جهاز على راحته) */
 const THEMES=[['holy','بنفسجي ليلي','#0d0524','#a78bfa','#22d3ee','#fb7185'],
   ['ocean','أزرق محيطي','#061431','#60a5fa','#22d3ee','#34d399'],
