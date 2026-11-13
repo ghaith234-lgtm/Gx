@@ -47,7 +47,7 @@ bad = [x[1] for x in lit if not x[1].startswith("<h2")]
 ok(f"③ every window written in place starts with its title (<h2…>): {len(lit)} of them", lit and not bad, bad)
 
 frame = {
-    "showModal puts ✕ and the body": re.search(r"function showModal\(html,o\)\{[^\n]*\n[^\n]*class=\"hwx\"[^\n]*class=\"hwb\"", js),
+    "showModal puts ✕ and the body": re.search(r"function showModal\(html,o\)\{[\s\S]{0,600}?class=\"hwx\"[^\n]*class=\"hwb\"", js),
     "showDialog = the small size": "function showDialog(html){showModal(html,{small:true})}" in js,
     "hideModal plays the closing": re.search(r"function hideModal\(\)\{[^\n]*hwOut\(", js),
     "holyBack walks the stack": re.search(r"function holyBack\(\)\{[\s\S]{0,600}HW\.st\[HW\.st\.length-1\]", js),

@@ -28362,7 +28362,9 @@ function hwDress(m,small){                                           // ✕ با
   m.querySelectorAll('.hwb .mbtns button').forEach(b=>{if((b.getAttribute('onclick')||'').replace(/\s/g,'')==='hideModal()'&&/^(إغلاق|رجوع|✕)$/.test((b.textContent||'').trim()))b.hidden=true});
   m.querySelectorAll('.hwb .mbtns').forEach(x=>{if(![...x.children].some(c=>!c.hidden&&c.style.display!=='none'))x.hidden=true})}
 function showModal(html,o){const m=$('#modal'),bg=$('#mbg'),small=!!(o&&o.small),was=!bg.hidden,wasSmall=bg.classList.contains('small');
+  const ob=was&&m.querySelector('.hwb'),oy=ob?ob.scrollTop:0,oh=ob&&ob.querySelector('h2')?ob.querySelector('h2').textContent:null;   // 🪟 v3.36.35
   m.innerHTML=`<button type="button" class="hwx" aria-label="إغلاق" title="إغلاق" onclick="hideModal()">✕</button><div class="hwb">${html}</div>`;
+  if(oy&&wasSmall===small){const nb=m.querySelector('.hwb'),nh=nb.querySelector('h2');if(nh&&nh.textContent===oh)nb.scrollTop=oy}   // نفس النافذة انرسمت من جديد ⇒ بمكانها
   hwDress(m,small);bg.classList.toggle('small',small);bg.classList.toggle('full',!small);bg.hidden=false;hwSync();   // الترتيب يتسجّل فوراً (المراقب احتياط لأي طريق ثاني)
   if(was&&wasSmall!==small)hwIn(m,null,small)}                       // تأكيد فوق نافذة (أو العكس) ⇒ الجديدة تدخل بحركتها
 function showDialog(html){showModal(html,{small:true})}             // 🪟 التأكيدات وشبهها: حجمها نفسه بالشكل الجديد
