@@ -22838,6 +22838,13 @@ body.btopen{overflow:hidden}
 .sk-seg{flex:1;display:flex;border:1px solid var(--line2);border-radius:10px;overflow:hidden;min-width:0}
 .sk-seg button{flex:1;min-width:0;height:34px;background:transparent;border:0;border-radius:0;border-inline-start:1px solid var(--line);color:var(--tx2);font:inherit;font-size:11.5px;padding:0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sk-seg button:first-child{border:0;flex:2}.sk-seg button:disabled{opacity:.45}
+/* 🃏 v3.36.33 (المالك 13-11 «تظهر كل الكتابات»): لا قصّ «…» بالأشكال الجديدة — كل نص يلتف لسطر ثانٍ · الأزرار بكامل كلامها */
+.card.sk .skin :is(.sk-top .t b,.sk-top .t small,.sk-two .cap,.sk-m3 small,.sk-m3 b,.sk-kpi small,.sk-kpi b,.sk-meta span,.ok-tag){white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+.card.sk .skin .sk-meta span{max-width:none}
+.card.sk .skin :is(.sk-ft .main,.ok-ft>button,.sk-seg button){white-space:normal;overflow:visible;text-overflow:clip;height:auto;min-height:34px;line-height:1.3;padding-block:5px;overflow-wrap:anywhere}
+.card.sk .skin .sk-ft{flex-wrap:wrap}.card.sk .skin .sk-ft .main{flex:1 1 100%}
+.card.sk .skin .sk-ft .ic{width:auto;height:auto;min-height:34px;flex:1 1 auto;padding:5px 9px;font-size:12px;line-height:1.3}
+.card.sk .skin .sk-seg{flex-wrap:wrap}.card.sk .skin .sk-seg button{flex:1 1 auto}
 .dcatag{font-size:11px;background:rgb(var(--amber-rgb)/.16);color:var(--amber);border:1px solid rgb(var(--amber-rgb)/.35);padding:2px 9px;border-radius:99px;font-weight:600}
 .dcabody{padding:14px 16px 16px}
 .dcatop{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
@@ -29209,13 +29216,31 @@ function cardLockPaint(el){const on=uiCardLock(),lk=on&&cardLocked(el),b=el._lk;
     b.title=lk?'البطاقة مقفلة — اضغط لفتحها دقيقة واحدة':'البطاقة مفتوحة — اضغط لقفلها الآن';b.setAttribute('aria-label',b.title);b.setAttribute('aria-pressed',String(!lk))}}
 /* 🃏 v3.36.8: شكل البطاقات (لهذا الجهاز): القديم · ج · ب — الشكل الجديد طبقة عرض فوق البطاقة نفسها:
    الأرقام تُقرأ مما تحسبه البطاقة (النص نفسه بالشكل القديم) · كل زر يضغط زر البطاقة الأصلي (الفعل نفسه · نوافذ التأكيد نفسها · القفل نفسه) ·
-   «⋯» فيها باقي الأزرار · «🗂️ كل التفاصيل» تفتح البطاقة القديمة كاملة لهذه البطاقة */
+   «⋯» فيها باقي الأزرار · v3.36.33: كل صف وكل زر بالقديمة ظاهر بالشكل نفسه ⇒ انشال «🗂️ كل التفاصيل (الشكل القديم)» */
 function uiSkin(){const v=_ls('dash_skin');return v==='c'||v==='b'||v==='o'?v:'old'}
 function setSkin(v){_ls('dash_skin',v==='c'||v==='b'||v==='o'?v:null);document.querySelectorAll('.card[data-dir],.card[data-acc]').forEach(el=>skinUpd(el));
   try{if(typeof rowsFit==='function')rowsFit()}catch(e){}openSettings();toast(v==='c'?'🃏 شكل ج — الرسمة أولاً':v==='b'?'🃏 شكل ب — شريط الأرقام':v==='o'?'🃏 شكل OKX':'🃏 الشكل القديم',true)}
 const SKE=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const SKN=s=>SKE(s).replace(/([+\-−]?\d[\d.,]*(?:e[+\-]?\d+)?(?:\s?\/\s?\d[\d.,]*)?(?:\s?[$%])?)/g,'<span class="num">$1</span>');   // الأرقام بخطها واتجاهها
-function skText(el,k){const R=el._r||{},n=R[k];if(!n)return '';return (n.textContent||'').replace(/\s+/g,' ').trim()}
+/* 🃏 v3.36.33 (المالك 13-11 «تظهر كلشي مثل القديم»): كل صف بالبطاقة القديمة ما ظهر بالشكل ⇐ ينضاف وحده (من البطاقة نفسها · المخفي يبقى مخفي) ·
+   وكل زر بالقديمة ما إله مكان ⇐ داخل «⋯» */
+let SK_SEEN=null;
+function skHidden(n,el){for(let p=n;p&&p!==el;p=p.parentElement)if(p.style&&p.style.display==='none')return true;return false}
+function skRest(el,seen){const out=[];
+  el.querySelectorAll('.row,.dcacell,.rcrow,.dcacyclbl,.rcri,.blbl').forEach(r=>{
+    if(r.closest('.skin')||skHidden(r,el))return;
+    const v=[...r.querySelectorAll('[data-k]')].find(n=>n.tagName!=='BUTTON'&&!/(fill|bar|row)$/.test(n.dataset.k));
+    if(!v||seen.has(v.dataset.k))return;
+    const lb=r.querySelector('.nm,.dl')||r.firstElementChild;if(!lb||lb===v||lb.contains(v))return;
+    const t=(v.textContent||'').replace(/\s+/g,' ').trim(),l=(lb.textContent||'').replace(/\s+/g,' ').trim();if(!l)return;
+    seen.add(v.dataset.k);out.push([l,t||'—',v.dataset.k])});
+  return out}
+function skBtnRest(el,M){const have=new Set([(M.main||{}).k].concat(M.ic.map(x=>x&&x.k),M.menu.map(x=>x&&x.k)));
+  el.querySelectorAll('button[data-k]').forEach(n=>{const k=n.dataset.k;if(have.has(k)||n.closest('.skin')||skHidden(n,el))return;
+    const t=(n.textContent||'').replace(/\s+/g,' ').trim()||n.title||'';if(!t||t==='—')return;
+    have.add(k);const it={k,t,dis:!!n.disabled};if(n.classList.contains('danger'))it.dz=1;
+    const dl=M.menu.findIndex(x=>x&&x.dz);M.menu.splice(dl<0?M.menu.length:dl,0,it)})}
+function skText(el,k){if(SK_SEEN)SK_SEEN.add(k);const R=el._r||{},n=R[k];if(!n)return '';return (n.textContent||'').replace(/\s+/g,' ').trim()}
 function skShown(n){return !!n&&n.style.display!=='none'}
 function skBtn(el,k,lbl){const n=(el._r||{})[k];if(!n||!skShown(n))return null;return {k,t:lbl||(n.textContent||'').replace(/\s+/g,' ').trim(),dis:!!n.disabled}}
 function skKind(el,b){if(el.dataset.acc)return 'acc';const t=b.bot_type||'grid';
@@ -29466,6 +29491,7 @@ function skAcc(a){                               // 🏦 الكلفة مقابل
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="المُراكِم">${g}</svg>`}
 /* ── نموذج البطاقة: من البطاقة نفسها */
 function skModel(el,b,kd){
+  SK_SEEN=new Set(['cp','profit','today','delta','apl','pill','apill','hb','ptrend']);   // 🃏 v3.36.33: ما يظهر بمكان ثاني بالشكل (الربح الكبير · اليوم · السعر)
   const R=el._r||{},img=el.querySelector('img.coin'),M={kd,img:img?img.outerHTML:'',sym:b.symbol||b.name||'',kind:'',sub:'',st:'نشط',stc:'',big:'',unit:'',pill:'',pc:'',
     lbl:'الربح الكلي',pl:['',''],px:0,dn:null,gfx:'',chips:'',m:[],main:null,ic:[],menu:[],note:'',after:null,hb:''};
   if(R.hb&&skShown(R.hb))M.hb=R.hb.textContent;
@@ -29486,7 +29512,7 @@ function skModel(el,b,kd){
     M.m=[['أدنى بيع',skText(el,'lsell')],['أعلى شراء',skText(el,'hbuy')],['رصيدك',skText(el,'balr')],['تحتاج',skText(el,'fund')],['التشغيل',skText(el,'age')],['المعدل يومي / شهري / سنوي',skText(el,'rates')]];
     if(R.rirow&&skShown(R.rirow))M.m.splice(4,0,['🔄 معاد استثماره',skText(el,'rinv')]);
     M.main=pw();M.ic=[skBtn(el,'chart','📈 شارت'),skBtn(el,'lddr','🪜 السلم'),skBtn(el,'hist','📜 السجل')];
-    M.menu=[ME(null,'ab'),ME(null,'as'),ME('💠 سلّم إعادة الاستثمار','rilad'),{k:'drawer',t:'⚙ تفاصيل البوت'},{k:'full',t:'🗂️ كل التفاصيل (الشكل القديم)'},ME('🗑 حذف نهائي + إلغاء أوامره','del',1)];
+    M.menu=[ME(null,'ab'),ME(null,'as'),ME('💠 سلّم إعادة الاستثمار','rilad'),{k:'drawer',t:'⚙ تفاصيل البوت'},ME('🗑 حذف نهائي + إلغاء أوامره','del',1)];
     M.note=skText(el,'last')}
   else if(kd==='dca'){
     const d=b.dca||{};M.kind=(el.querySelector('.dcatag')||{}).textContent||'DCA';M.sub=skText(el,'prog')+(d.cycles?` · ${d.cycles} دورة`:'');
@@ -29499,7 +29525,7 @@ function skModel(el,b,kd){
       [skShown(R.lpbox)?skText(el,'lplbl'):'لو أغلقت الآن',skShown(R.lpbox)?skText(el,'lp'):'—'],['التشغيل',skText(el,'age')],['المعدل يومي / شهري / سنوي',[skText(el,'rday'),skText(el,'rmon'),skText(el,'ryear')].join(' / ')]];
     const bn=skBtn(el,'buynow');M.main=bn?Object.assign(bn,{loss:R.buynow.classList.contains('loss')}):skBtn(el,'dpause');
     M.ic=[skBtn(el,'dchart','📈 شارت'),skBtn(el,'dtable','📋 الجدول'),skBtn(el,'dhist','📜 السجل')];
-    M.menu=[ME('🪜 السلم','dladder'),ME(null,'dtrail'),ME(null,'dlast'),bn?ME(null,'dpause'):null,{k:'drawer',t:'⚙ تفاصيل البوت'},{k:'full',t:'🗂️ كل التفاصيل (الشكل القديم)'},ME('🗑 حذف نهائي','ddel',1)];
+    M.menu=[ME('🪜 السلم','dladder'),ME(null,'dtrail'),ME(null,'dlast'),bn?ME(null,'dpause'):null,{k:'drawer',t:'⚙ تفاصيل البوت'},ME('🗑 حذف نهائي','ddel',1)];
     M.note=skText(el,'status')}
   else if(kd==='rec'){
     const r=b.rec||{},sell=r.side==='sell';M.kind=sell?'🔴 دوري بيعي':'🟢 دوري شرائي';M.sub=skText(el,'mode');
@@ -29513,7 +29539,7 @@ function skModel(el,b,kd){
     const nO=(r.lots||[]).length;
     M.menu=[ME(null,'sellall'),r.mode==='avg'?(skShown(R.avgbox)?{k:'x:avgbox',t:'📊 المعدل والهدف'}:null):{k:'x:lots',t:`🧩 الأوامر المفتوحة (${nO})`},
       skShown(R.ribox)?ME('💠 سحب الربح المعاد استثماره','riw'):null,skShown(R.ribox)&&skShown(R.rip)?ME(null,'rip'):null,ME('📏 تعديل النطاق','rngb'),
-      Object.assign(pw(),{}),{k:'drawer',t:'⚙ تفاصيل البوت'},{k:'full',t:'🗂️ كل التفاصيل (الشكل القديم)'},ME('🗑 حذف نهائي','del',1)];
+      Object.assign(pw(),{}),{k:'drawer',t:'⚙ تفاصيل البوت'},ME('🗑 حذف نهائي','del',1)];
     M.note=skText(el,'status')}
   else if(kd==='va'||kd==='hyb'){
     const r=b.rec||{},HG=r.hg||{};M.kind=kd==='hyb'?'♾️×💹 تعاوني':'💹 مسار القيمة';M.sub=skText(el,'mode');
@@ -29529,8 +29555,8 @@ function skModel(el,b,kd){
     M.chips=(kd==='hyb'?vaHgRiChip(b,HG).replace(/onclick="[^"]*"/,'data-sk="hgri"'):'')+(r.guard_on&&kd!=='hyb'?`<span class="chip gOn">🛡️ لا شراء فوق ${f4(+r.p0||0)}</span>`:'')+`<span class="chip">🛡️ الميزانية ${SKE(skText(el,'capt'))}</span>`;
     M.m=[['🎯 الهدف القادم',skText(el,'tgt')],['💰 قيمة العملة',skText(el,'val')],['⏰ الخطوة القادمة',skText(el,'next')],['📦 يحمل',skText(el,'pos')],['السعر الآن',skText(el,'cp')],['💸 العمولات',skText(el,'fees')],['التشغيل',skText(el,'age')],['المعدل يومي / شهري / سنوي',skText(el,'rates')]];
     M.main=Object.assign(skBtn(el,'pause')||{k:'pause',t:'—'},{go:!!r.paused});M.ic=[skBtn(el,'now'),skBtn(el,'plan','📋 الجدول'),skBtn(el,'hist','📜 السجل')];
-    M.menu=[ME('⚙️ الإعدادات','set'),kd==='hyb'?{k:'hgri',t:'💠 إعادة استثمار الشبكة'}:null,ME(null,'exit'),ME('📈 شارت','chart'),pw(),{k:'drawer',t:'⚙ تفاصيل البوت'},{k:'full',t:'🗂️ كل التفاصيل (الشكل القديم)'},ME('🗑 حذف البوت','del',1)];
-    M.note=R.hint?R.hint.innerHTML:''}
+    M.menu=[ME('⚙️ الإعدادات','set'),kd==='hyb'?{k:'hgri',t:'💠 إعادة استثمار الشبكة'}:null,ME(null,'exit'),ME('📈 شارت','chart'),pw(),{k:'drawer',t:'⚙ تفاصيل البوت'},ME('🗑 حذف البوت','del',1)];
+    M.note=(R.hint?R.hint.innerHTML:'')+(skText(el,'status')&&skText(el,'status')!=='—'?`<div>${SKN(skText(el,'status'))}</div>`:'')}
   else{                                                                     // 🏦 المُراكِم
     const a=b;M.sym=a.name||a.symbol||'';M.kind='🏦 مُراكِم';M.sub=[a.wlabel,(a.low||a.high)?`${a.low||'∞'}–${a.high||'∞'}`:'',a.pct!=null?a.pct+'%':''].filter(Boolean).join(' · ');
     M.st=a.enabled?'يجمع':'موقوف';M.stc=a.enabled?'':'wait';M.big=fmtQ(a.coin);M.unit=a.base||'';M.lbl='العملة المتجمّعة';M.px=+a.cp||0;
@@ -29540,9 +29566,10 @@ function skModel(el,b,kd){
     M.m=[['📊 متوسط الشراء',skText(el,'aavg')],['💵 كلّف',skText(el,'aspent')],['💰 قيمتها الآن',skText(el,'aval')],['⏳ قيد الشراء (اليوم)',skText(el,'apool')],['🏧 المتراكم',skText(el,'apend')],['🏦 ربح محقق',skText(el,'areal')]];
     const sl=skBtn(el,'asell');M.main=sl?Object.assign(sl,{go:(a.pl||0)>=0,loss:(a.pl||0)<0}):skBtn(el,'abuy');
     M.ic=[skBtn(el,'apause'),skBtn(el,'afin','📤 للصندوق النهائي'),skBtn(el,'alog','📜 السجل')];
-    M.menu=[sl?ME(null,'abuy'):null,ME(null,'aretry'),ME('⚙️ الإعدادات','aedit'),{k:'full',t:'🗂️ كل التفاصيل (الشكل القديم)'},ME('🛑 إنهاء المُراكِم','adel',1)];
+    M.menu=[sl?ME(null,'abuy'):null,ME(null,'aretry'),ME('⚙️ الإعدادات','aedit'),ME('🛑 إنهاء المُراكِم','adel',1)];
     M.note=[skText(el,'awm')&&'🗓️ أسبوعي / شهري '+skText(el,'awm'),skText(el,'acnt'),skText(el,'alast')&&'🕒 آخر شراء '+skText(el,'alast')].filter(Boolean).join(' · ')}
   M.ic=M.ic.filter(Boolean);M.menu=M.menu.filter(x=>x&&!x.hide);
+  try{M.m=M.m.concat(skRest(el,SK_SEEN||new Set()));skBtnRest(el,M)}catch(e){console.error('skin rest',e)}SK_SEEN=null;
   return M}
 /* ── القالبان */
 function skHead(el,M){return `<div class="sk-top">${M.img}<div class="t"><b>${SKE(M.sym)}</b><small>${SKE(M.kind)}${M.sub?' · '+SKN(M.sub):''}</small></div>
@@ -29558,7 +29585,7 @@ function skC(el,M){
   <div class="sk-gfx">${M.gfx}${M.cap?`<div class="sk-cap">${M.cap}</div>`:''}</div>
   ${M.chips?`<div class="sk-chips">${M.chips}</div>`:''}
   <div class="sk-m3">${M.m.map(x=>`<div title="${SKE(x[0]+': '+x[1])}"><small>${SKE(x[0])}</small><b>${SKN(x[1]||'—')}</b></div>`).join('')}</div>
-  <div class="sk-ft"><button type="button" class="${skMainCls(M)}" data-sk="${mn.k}" ${mn.dis?'disabled':''}>${SKE(mn.t)}</button>${M.ic.map(x=>`<button type="button" class="ic" data-sk="${x.k}" title="${SKE(x.t)}" aria-label="${SKE(x.t)}" ${x.dis?'disabled':''}>${skIcon(x)}</button>`).join('')}<button type="button" class="ic" data-sk="menu" title="المزيد" aria-label="المزيد">⋯</button>${skMenuH(el,M)}</div>
+  <div class="sk-ft"><button type="button" class="${skMainCls(M)}" data-sk="${mn.k}" ${mn.dis?'disabled':''}>${SKE(mn.t)}</button>${M.ic.map(x=>`<button type="button" class="ic" data-sk="${x.k}" title="${SKE(x.t)}" aria-label="${SKE(x.t)}" ${x.dis?'disabled':''}>${SKE(x.t)}</button>`).join('')}<button type="button" class="ic" data-sk="menu" title="المزيد" aria-label="المزيد">⋯</button>${skMenuH(el,M)}</div>
   ${M.note?`<div class="sk-note">${M.kd==='va'||M.kd==='hyb'?M.note:SKN(M.note)}</div>`:''}`}
 function skB(el,M){
   const mn=M.main||{k:'',t:'—',dis:true};
@@ -29568,7 +29595,7 @@ function skB(el,M){
   <div class="sk-gfx">${M.gfx}${M.cap?`<div class="sk-cap">${M.cap}</div>`:''}</div>
   ${M.chips?`<div class="sk-chips">${M.chips}</div>`:''}
   <div class="sk-meta">${M.m.map(x=>`<span title="${SKE(x[0]+': '+x[1])}">${SKE(x[0])} <b>${SKN(x[1]||'—')}</b></span>`).join('')}</div>
-  <div class="sk-ft"><div class="sk-seg"><button type="button" data-sk="${mn.k}" ${mn.dis?'disabled':''}>${SKE(mn.t)}</button>${M.ic.map(x=>`<button type="button" data-sk="${x.k}" title="${SKE(x.t)}" ${x.dis?'disabled':''}>${SKE(skShort(x.t))}</button>`).join('')}<button type="button" data-sk="menu" title="المزيد" style="flex:0 0 40px">⋯</button></div>${skMenuH(el,M)}</div>
+  <div class="sk-ft"><div class="sk-seg"><button type="button" data-sk="${mn.k}" ${mn.dis?'disabled':''}>${SKE(mn.t)}</button>${M.ic.map(x=>`<button type="button" data-sk="${x.k}" title="${SKE(x.t)}" ${x.dis?'disabled':''}>${SKE(x.t)}</button>`).join('')}<button type="button" data-sk="menu" title="المزيد" style="flex:0 0 40px">⋯</button></div>${skMenuH(el,M)}</div>
   ${M.note?`<div class="sk-note">${M.kd==='va'||M.kd==='hyb'?M.note:SKN(M.note)}</div>`:''}`}
 /* 🃏 v3.36.13: شكل OKX — الزوج ونوع البوت · الربح كبير · شبكة 2×3 (عنوان رمادي فوق رقم أبيض) · زر أبيض رئيسي والباقي بإطار */
 function skO(el,M){
@@ -29582,7 +29609,7 @@ function skO(el,M){
   <div class="ok-g">${M.m.map(x=>`<div title="${SKE(x[0]+': '+x[1])}"><small>${SKE(x[0])}</small><b>${SKN(x[1]||'—')}</b></div>`).join('')}</div>
   <div class="sk-gfx">${M.gfx}${M.cap?`<div class="sk-cap">${M.cap}</div>`:''}</div>
   ${M.chips?`<div class="sk-chips">${M.chips}</div>`:''}
-  <div class="ok-ft"><button type="button" class="${skMainCls(M)}" data-sk="${mn.k}" ${mn.dis?'disabled':''}>${SKE(mn.t)}</button>${M.ic.map(x=>`<button type="button" data-sk="${x.k}" title="${SKE(x.t)}" ${x.dis?'disabled':''}>${SKE(skShort(x.t))}</button>`).join('')}<button type="button" class="more" data-sk="menu" title="المزيد">⋯</button>${skMenuH(el,M)}</div>
+  <div class="ok-ft"><button type="button" class="${skMainCls(M)}" data-sk="${mn.k}" ${mn.dis?'disabled':''}>${SKE(mn.t)}</button>${M.ic.map(x=>`<button type="button" data-sk="${x.k}" title="${SKE(x.t)}" ${x.dis?'disabled':''}>${SKE(x.t)}</button>`).join('')}<button type="button" class="more" data-sk="menu" title="المزيد">⋯</button>${skMenuH(el,M)}</div>
   ${M.note?`<div class="sk-note">${M.kd==='va'||M.kd==='hyb'?M.note:SKN(M.note)}</div>`:''}`}
 function cardLockDeco(el){if(!el||el._lk)return;const h=el.querySelector('.chead,.dcahead');if(!h)return;
   const b=document.createElement('button');b.type='button';b.className='lkbtn';
