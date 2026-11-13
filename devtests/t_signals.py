@@ -127,7 +127,8 @@ m.TG_MUTED["v"] = False
 
 def run(sens, coins_bot, fresh_state=True, since=0):
     for s, (lv, sc) in coins_bot.items():
-        bb = dict(FCR[s].get("bot") or {}, lv=lv, score=sc, lbl={"watch": "👀 راقب", "zone": "🟡 منطقة شراء", "strong": "🟢 قاع قوي", "none": "لا إشارة"}[lv], since=since)
+        bb = dict(FCR[s].get("bot") or {}, lv=lv, score=sc, lbl={"watch": "👀 راقب", "zone": "🟡 منطقة شراء", "strong": "🟢 قاع قوي", "none": "لا إشارة"}[lv], since=since,
+                  vol=True)                                   # (v3.36.31: only the bottom confirmed by volume alerts — t_alerts.py checks the rest)
         FCR[s]["bot"] = bb
     m.app_cfg = lambda: {"ina_on": True, "ina_sens": sens, "ina_ch": "both"}
     if fresh_state and os.path.exists(m.INA_FILE):
@@ -147,11 +148,12 @@ for sens in ("low", "mid", "high"):
     out = []
     for lv, sc in (("watch", 30), ("zone", 50), ("strong", 70)):
         for s in D1:
-            FCR[s]["bot"] = dict(FCR[s]["bot"], lv=lv, score=sc, lbl={"watch": "👀 راقب", "zone": "🟡 منطقة شراء", "strong": "🟢 قاع قوي"}[lv], since=1, day=day)
+            FCR[s]["bot"] = dict(FCR[s]["bot"], lv=lv, score=sc, lbl={"watch": "👀 راقب", "zone": "🟡 منطقة شراء", "strong": "🟢 قاع قوي"}[lv], since=1, day=day, vol=True)
         out += [x["t"].split(" — ")[0] for x in m.ina_tick(now=time.time(), rows=INDROWS, send=True) if x["sym"] == "ETH-USDT"]
     al[sens] = out
-ok(f"… by sensitivity, one alert per level as the episode deepens: quiet {al['low']} · medium {al['mid']} · sensitive {al['high']}",
-   al["low"] == ["🟢 قاع قوي"] and al["mid"] == ["🟡 منطقة شراء", "🟢 قاع قوي"] and al["high"] == ["👀 راقب", "🟡 منطقة شراء", "🟢 قاع قوي"], al)
+ok(f"… by sensitivity, one alert per level as the episode deepens (confirmed by volume · v3.36.31): quiet {al['low']} · medium {al['mid']} · sensitive {al['high']}",
+   al["low"] == ["🟢 قاع قوي ✅ مؤكد بالحجم"] and al["mid"] == ["🟡 منطقة شراء ✅ مؤكد بالحجم", "🟢 قاع قوي ✅ مؤكد بالحجم"]
+   and al["high"] == ["🟡 منطقة شراء ✅ مؤكد بالحجم", "🟢 قاع قوي ✅ مؤكد بالحجم"], al)
 again = m.ina_tick(now=time.time(), rows=INDROWS, send=True)
 ok("… the same level in the same episode never again", not [x for x in again if x["sym"] == "ETH-USDT"], again)
 run("mid", {"ETH-USDT": ("strong", 70)}, since=1)
@@ -171,9 +173,9 @@ fresh_new = [x for x in m.ina_tick(now=time.time(), rows=INDROWS, send=True) if 
 txt = fresh_new[0] if fresh_new else {}
 ok(f"… right after a start: a NEW episode (began ≤ 1 day ago) alerts ({len(fresh_new)}) · an old one (6 days) stays silent ({len(old_ep)})",
    len(fresh_new) == 1 and not old_ep, (fresh_new, old_ep))
-ok("… the alert carries its parts, the 28-coin record (14 days · normal 46%), Bitcoin's state, the coin's own record and the limit · sent to Telegram and the app",
-   "مؤشر القاع" in txt.get("t", "") and "نزل" in txt.get("b", "") and "أعلى بعد 14 يوماً" in txt.get("r", "") and "العادي 46%" in txt.get("r", "")
-   and "البيتكوين" in txt.get("r", "") and "دفعات" in txt.get("r", "") and any(k == "tg" for k, _ in SENT) and any(k == "app" for k, _ in SENT), (txt, SENT[:1]))
+ok("… the alert carries its parts, the 28-coin record with volume (14 days · normal 46% · lately), without volume like chance, and the limit · sent to Telegram and the app",
+   "مؤشر القاع" in txt.get("t", "") and "مؤكد بالحجم" in txt.get("t", "") and "نزل" in txt.get("b", "") and "أعلى بعد 14 يوماً" in txt.get("r", "") and "العادي 46%" in txt.get("r", "")
+   and "السنوات الأخيرة" in txt.get("r", "") and "مثل الصدفة" in txt.get("r", "") and "دفعات" in txt.get("r", "") and any(k == "tg" for k, _ in SENT) and any(k == "app" for k, _ in SENT), (txt, SENT[:1]))
 v = m.ina_view()
 ok("… the panel's rule says it (bottom only · the others off with the reason) · the test sample is a bottom alert",
    "مؤشر القاع" in v["rule"] and "لم تثبت لها قيمة" in v["rule"] and "🔄" not in v["rule"], v["rule"])
