@@ -25,6 +25,10 @@ api(){ curl -s -X POST "localhost:8099$1" -H 'Content-Type: application/json' -d
 seek(){ local xy=""; for i in 1 2 3 4 5 6 7 8; do dump "$2" >/dev/null; xy=$(python3 ci/ci_tools.py findx $OUT/ui_$2.xml "$1"); [ -n "$xy" ] && break
   adb shell input swipe $((SW/2)) $((SH*7/10)) $((SW/2)) $((SH*35/100)) 500; sleep 1.5; done
   if [ -n "$xy" ]; then adb shell input tap $xy; say "tap «$1» at $xy (after $((i-1)) scrolls)"; return 0; fi; say "tap «$1» NOT FOUND on screen after scrolling"; return 1; }
+# v3.36.38: the same, for a list row whose text holds more than its title (⚙️ rows: title + value + switch) — «contains», scrolling
+seekc(){ local xy=""; for i in 1 2 3 4 5 6 7 8; do dump "$2" >/dev/null; xy=$(python3 ci/ci_tools.py find $OUT/ui_$2.xml "$1"); [ -n "$xy" ] && break
+  adb shell input swipe $((SW/2)) $((SH*7/10)) $((SW/2)) $((SH*35/100)) 500; sleep 1.5; done
+  if [ -n "$xy" ]; then adb shell input tap $xy; say "tap «$1» at $xy (after $((i-1)) scrolls)"; return 0; fi; say "tap «$1» NOT FOUND on screen after scrolling"; return 1; }
 
 API=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
 ssz=$(adb shell wm size | grep -oE "[0-9]+x[0-9]+" | tail -1); SW=${ssz%x*}; SH=${ssz#*x}
@@ -215,7 +219,7 @@ if [ "${WVM:-0}" -lt 87 ]; then say "INFO WebView ${WVM:-?} < 87 ⇒ the ⚙️/
 adb shell am start -n $P/.MainActivity --es go set >/dev/null; sleep 6; dump set15; shot set15
 if grep -q "الفريمات" $OUT/ui_set15.xml; then say "PASS ⚙️ «الفريمات» row shown"
   # v3.36.35: ⚙️ is a list — the «الفريمات» row opens its choices on a tap
-  tap "الفريمات" set15; sleep 2; dump set15o >/dev/null; shot set15o
+  seekc "الفريمات" set15r; sleep 2; dump set15o >/dev/null; shot set15o   # v3.36.38: more rows above it ⇒ scroll to it
   grep -oE 'text="[^"]*Hz[^"]*"' $OUT/ui_set15o.xml | head -1 | sed 's/^/HOLYCI fps note: /'
   seek "60" set15s; sleep 3
   if pf | grep -q "<map"; then pf | grep -q '<int name="fps" value="60"' && say "PASS 60 saved by the app (HolyApp.setFps)" || say "FAIL fps not saved: $(pf | grep -o 'name="fps"[^/]*')"; fi
