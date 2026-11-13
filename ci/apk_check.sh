@@ -57,7 +57,9 @@ if git fetch -q --depth=1 origin $OLDC 2>/dev/null && git show FETCH_HEAD:Holy_D
     adb shell am start -n $P/.MainActivity --es url http://10.0.2.2:8099 >/dev/null; sleep 6; done
   tap "اتصال" old0
   mv=""; for i in $(seq 1 10); do sleep 4; dump old1 >/dev/null; grep -q "الانتقال إلى Holy" $OUT/ui_old1.xml && { mv=1; break; }
-    grep -q "بعدين" $OUT/ui_old1.xml && tap "بعدين" old1; done
+    grep -q "بعدين" $OUT/ui_old1.xml && tap "بعدين" old1
+    # run 103: 1.9's own «بعدين» dialog came early and the app ended up behind the home screen ⇒ open it again (the panel opens by itself inside it)
+    grep -q 'package="'$P'"' $OUT/ui_old1.xml || { adb shell am start -n $P/.MainActivity >/dev/null; say "INFO 1.9 was behind the home screen — opened it again"; }; done
   shot old1
   WV0=$(adb shell dumpsys package com.google.android.webview 2>/dev/null | grep -m1 versionName | grep -oE '[0-9]+' | head -1)
   if [ -n "$mv" ]; then say "PASS 2.0: inside 1.9 the 📱 panel opened by itself with «الانتقال إلى Holy 2.0 — مرة واحدة»"
