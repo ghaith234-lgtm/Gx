@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.37"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.38"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -22361,7 +22361,8 @@ HTML_PAGE = r"""<!DOCTYPE html>
 <meta charset="utf-8"><meta name="google" content="notranslate"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#070210">
 <script>try{var _t=localStorage.getItem('dash_theme');if(_t&&_t!=='holy')document.documentElement.dataset.theme=_t;
-if(localStorage.getItem('dash_lite')==='on')document.documentElement.classList.add('lite')}catch(e){}</script>
+if(localStorage.getItem('dash_lite')==='on')document.documentElement.classList.add('lite');
+if(localStorage.getItem('dash_mbar')==='off')document.documentElement.classList.add('nombar')}catch(e){}</script>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="alternate icon" href="/favicon.ico" sizes="16x16 32x32 48x48 256x256">
 <title>The Holy Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -23740,6 +23741,7 @@ button.stg.on{color:var(--tx);border-color:transparent;box-shadow:none}
 .stg.on .ssw{background:var(--green)}
 .stg.on .ssw i{inset-inline-start:21px}
 .sfoot{color:var(--mut2);font-size:11px;margin:14px 6px 0;line-height:1.7}
+html.nombar #mbar{display:none!important}   /* 📌 v3.36.38: الشريط المصغّر مطفي بهذا الجهاز */
 /* ═══ 🌌 v3.36.37: الخلفية المتحركة — لوحة رسم واحدة خلف كل شي · «الأصلية» = الأجرام كما كانت ═══ */
 #hbg{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;display:none}
 html.abg #hbg{display:block}
@@ -24014,6 +24016,9 @@ async function ctl(dir,action,value){try{const r=await api('/api/control',{dir,a
 function g(action,value){ctl('',action,value)}
 function goTop(){window.scrollTo({top:0,behavior:'smooth'})}
 /* 📱 الشريط المصغّر: يظهر بالموبايل لما يطلع الشريط الكبير من الشاشة */
+function uiMbar(){return _ls('dash_mbar')!=='off'}                  // 📌 v3.36.38: الشريط المصغّر اختياري (لهذا الجهاز)
+function uiMbarToggle(){const on=!uiMbar();_ls('dash_mbar',on?null:'off');document.documentElement.classList.toggle('nombar',!on);openSettings();
+  toast(on?'📌 الشريط المصغّر يظهر حين تنزل للأسفل':'📌 الشريط المصغّر مخفي',true)}
 function mbarSync(){const h=$('#top');if(h)document.body.classList.toggle('pastTop',h.getBoundingClientRect().bottom<0)}
 addEventListener('scroll',mbarSync,{passive:true});
 
@@ -26099,6 +26104,7 @@ function openSettings(){
      +X('skin','🃏','شكل البطاقات',(SKS.find(x=>x[0]===sk)||SKS[0])[1],`<div class="snote">الأرقام والأزرار نفسها في كل الأشكال.</div><div class="pollrow" id="skinRow">${SB}</div>`)
      +X('font','🔤','خط الكتابة',`<span style="font-family:${ff}">${fnT[2]}</span>`,`<div class="snote">كل زر مكتوب بخطّه · الكلمات والأرقام كلها تأخذه («IBM Plex» = الأرقام بخطّها الثابت القديم).</div><div class="pollrow" id="fontRow">${FN}</div>`)
      +X('anim','🎬','حركة فتح النوافذ',anN,`<div class="snote">الإغلاق بعكسها · «⚡ الوضع الخفيف» بلا حركة.</div><div class="pollrow" id="animRow">${AB}</div>`)
+     +T('📌','الشريط المصغّر','uiMbarToggle()','bMbar',uiMbar(),'يظهر — أرقام اليوم أعلى الشاشة حين تنزل للأسفل','مخفي')
      +T('🕺','رجل العصا','STK.toggle();openSettings()','bStk',STK.on(),'يعمل — يمشي ويلعب فوق الأيقونات · اسحبه','متوقف'))}
    ${G('⚡ الأداء',
       T('⚡','الوضع الخفيف','uiLiteToggle()','bLite',uiLite(),'مفعّل — بلا حركات ولا ضبابية','متوقف — الحركات كاملة')
