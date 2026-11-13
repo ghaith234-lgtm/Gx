@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.38"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.39"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -23843,14 +23843,14 @@ button.stg.on{color:var(--tx);border-color:transparent;box-shadow:none}
 .stg.on .ssw{background:var(--green)}
 .stg.on .ssw i{inset-inline-start:21px}
 .sfoot{color:var(--mut2);font-size:11px;margin:14px 6px 0;line-height:1.7}
-html.nombar #mbar{display:none!important}
+html.nombar #mbar{display:none!important}   /* 📌 v3.36.38: الشريط المصغّر مطفي بهذا الجهاز */
 /* 📊 v3.36.39: الشريط المصغّر — الأرباح · وتحتها حالة هذا الجهاز وحاسوب البوتات واللوحة (بالهاتف تنزل لسطر ثاني لو ما وسعت — ما ينخفي شي) */
 #mbar{flex-direction:column;gap:3px}
 #mbar .mb1{display:flex;align-items:center;justify-content:center;gap:16px;max-width:100%}
 .mb2{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;column-gap:11px;row-gap:1px;max-width:100%;white-space:nowrap;font-size:11px;line-height:1.45;color:var(--mut);font-variant-numeric:tabular-nums}
 .mb2:empty{display:none}.mb2>span{flex:0 0 auto}
 .mbprev{margin:8px 0 2px;padding:7px 10px;border:1px solid var(--line);border-radius:10px;background:rgb(var(--surf2-rgb)/.6)}
-@media (max-width:760px){#mbar .mb1{gap:14px}}   /* 📌 v3.36.38: الشريط المصغّر مطفي بهذا الجهاز */
+@media (max-width:760px){#mbar .mb1{gap:14px}}
 /* ═══ 🌌 v3.36.37: الخلفية المتحركة — لوحة رسم واحدة خلف كل شي · «الأصلية» = الأجرام كما كانت ═══ */
 #hbg{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;display:none}
 html.abg #hbg{display:block}
