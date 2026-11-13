@@ -29474,10 +29474,16 @@ const THEMES=[['holy','بنفسجي ليلي','#0d0524','#a78bfa','#22d3ee','#fb
 function uiFps(){const s=appStat();if([30,60,120,240].includes(+s.fps))return +s.fps;const v=+_ls('dash_fps')||0;return [30,60,120,240].includes(v)?v:120}
 let FPSCAP=0;
 function fpsNote(){const s=appStat();
-  if(IN_APP&&s.code>=6)return `الشاشة هسه <b>${s.hz||'?'} Hz</b>${(s.rates||[]).length?' · تدعم: '+s.rates.join(' · '):''} — الأعلى أنعم وياكل بطارية أكثر`;
-  if(IN_APP)return 'حدّث التطبيق لنسخة 1.5 حتى تتغيّر سرعة الشاشة نفسها';
-  if(IN_WIN)return 'برنامج ويندوز: بالمتصفح الشاشة تحدد سرعتها (من إعدادات ويندوز) — هنا تتحكم بحركات اللوحة (60/30 يخفف)';
-  return 'بالمتصفح الشاشة تحدد سرعتها — هنا تتحكم بحركات اللوحة (60/30 يوفّر بطارية)'}
+  if(IN_APP&&s.code>=6)return `الشاشة الآن <b>${s.hz||'?'} Hz</b>${(s.rates||[]).length?' · تدعم: '+s.rates.join(' · '):''} — <b>60 الأسلس على أغلب الهواتف</b> · الأعلى أنعم إن تحمّله الهاتف ويستهلك بطارية أكثر`;
+  if(IN_APP)return 'حدّث التطبيق إلى النسخة 1.5 لتتغيّر سرعة الشاشة نفسها';
+  if(IN_WIN)return 'برنامج ويندوز: سرعة الشاشة تُضبط من إعدادات ويندوز — هنا تتحكم بحركات اللوحة (60/30 أخف)';
+  return 'في المتصفح تحدد الشاشة سرعتها — هنا تتحكم بحركات اللوحة (60/30 يوفّر البطارية)'}
+/* 🎞️ v3.36.39 (المالك 13-11: «عندما قللت الفريمات الى ال٦٠ صارت ما اتقطع»): التطبيق 1.5+ (الشاشة نفسها تتغيّر) — جهاز ما اختار قبل يبدي على 60 · مرة وحدة ·
+   الاختيار السابق يبقى · المتصفح يبقى 120 (الشاشة هناك تحدد سرعتها) */
+function fpsFirst(){try{if(!IN_APP||_ls('dash_fps')!==null||_ls('dash_fps1'))return;const s=appStat();
+  if(!(+s.code>=6)||typeof HolyApp.setFps!=='function')return;_ls('dash_fps1','1');
+  if(+s.fps===120||!s.fps){HolyApp.setFps(60);_ls('dash_fps','60');FPSCAP=60;try{tapesKick()}catch(e){}}}catch(e){}}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(fpsFirst,0));else setTimeout(fpsFirst,0);
 /* 🎮 v3.26.9: هل هالجهاز يرسم بكرت الشاشة؟ (اسم الرسّام من WebGL — ما ينرسل لأي مكان) · وسرعة الشاشة الحقيقية */
 let GPU=null;
 function gpuInfo(){if(GPU)return GPU;GPU={ok:null,name:''};
@@ -29490,14 +29496,14 @@ function gpuInfo(){if(GPU)return GPU;GPU={ok:null,name:''};
 function hzProbe(cb){const ts=[];const f=t=>{ts.push(t);if(ts.length<30)return requestAnimationFrame(f);
   const d=[];for(let i=1;i<ts.length;i++)d.push(ts[i]-ts[i-1]);d.sort((a,b)=>a-b);const m=d[d.length>>1];cb(m>0?Math.round(1000/m):0)};requestAnimationFrame(f)}
 function gpuFill(){const el=$('#gpuNote');if(!el)return;const G=gpuInfo();
-  const fix=IN_APP?'حدّث «Android System WebView» من متجر Google':IN_WIN?'بـEdge: الإعدادات ← النظام والأداء ← «استخدام تسريع الرسومات عند توفره» شغّله وسكّر البرنامج وافتحه':'فعّل «تسريع العتاد / Hardware acceleration» من إعدادات المتصفح';
-  const g=G.ok===null?'🎮 كرت الشاشة: ما كدرت أفحصه':G.ok?`🎮 الرسم على كرت الشاشة ✅${G.name?' ('+gEsc(G.name)+')':''}`:`⚠️ الرسم على المعالج مو كرت الشاشة${G.name?' ('+gEsc(G.name)+')':''} — ${fix}`;
+  const fix=IN_APP?'حدّث «Android System WebView» من متجر Google':IN_WIN?'في Edge: الإعدادات ← النظام والأداء ← «استخدام تسريع الرسومات عند توفره» فعّله ثم أغلق البرنامج وافتحه':'فعّل «تسريع العتاد / Hardware acceleration» من إعدادات المتصفح';
+  const g=G.ok===null?'🎮 كرت الشاشة: تعذّر فحصه':G.ok?`🎮 الرسم على كرت الشاشة ✅${G.name?' ('+gEsc(G.name)+')':''}`:`⚠️ الرسم على المعالج لا على كرت الشاشة${G.name?' ('+gEsc(G.name)+')':''} — ${fix}`;
   el.innerHTML=g;
   if(!(IN_APP&&(+appStat().code||0)>=6))hzProbe(hz=>{if(!hz||!el.isConnected)return;
-    el.innerHTML=g+`<br>🖥️ الشاشة هسه ~${hz} Hz`+(IN_WIN?' — ترفعها من إعدادات ويندوز ← النظام ← العرض ← العرض المتقدم ← «معدل التحديث»':'')})}
+    el.innerHTML=g+`<br>🖥️ الشاشة الآن ~${hz} Hz`+(IN_WIN?' — ارفعها من إعدادات ويندوز ← النظام ← العرض ← العرض المتقدم ← «معدل التحديث»':'')})}
 function setFps(f){if(![30,60,120,240].includes(f))return;_ls('dash_fps',String(f));FPSCAP=f;tapesKick();
   try{if(IN_APP&&window.HolyApp&&typeof HolyApp.setFps==='function')HolyApp.setFps(f)}catch(e){}
-  toast('🎞️ '+f+' فريم'+(f>=120?' — أنعم (ياكل بطارية أكثر)':' — يوفّر بطارية'),true);setTimeout(()=>{const m=$('#mbg');if($('#fpsRow')&&m&&!m.hidden)openSettings()},800)}   // v3.26.9: ما يرجع يفتح الإعدادات لو انسدّت
+  toast('🎞️ '+f+' فريم'+(f>=120?' — أنعم إن تحمّله الجهاز (يستهلك بطارية أكثر)':f===60?' — الأسلس على أغلب الهواتف':' — يوفّر البطارية'),true);setTimeout(()=>{const m=$('#mbg');if($('#fpsRow')&&m&&!m.hidden)openSettings()},800)}   // v3.26.9: ما يرجع يفتح الإعدادات لو انسدّت
 function fpsSkip(o,now){if(!FPSCAP)FPSCAP=uiFps();if(FPSCAP>=120)return false;if(now-(o._fl||0)<1000/FPSCAP-2)return true;o._fl=now;return false}
 function uiFont(){const k=_ls('dash_font');return HFONTS.some(x=>x[0]===k)?k:'plex'}       // 🔤 v3.36.33
 function hFontPre(k){try{const f=HFONTS.find(x=>x[0]===k);if(f&&f[3]&&!document.getElementById('hfont-'+k)){const l=document.createElement('link');l.id='hfont-'+k;l.rel='stylesheet';
@@ -29506,7 +29512,7 @@ function setFont(k){const f=hFontApply(k);_ls('dash_font',f[0]==='plex'?null:f[0
   try{if(typeof rowsFit==='function')setTimeout(rowsFit,300)}catch(e){}openSettings();toast('🔤 خط الكتابة: '+f[2],true)}
 function _ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){return null}}
 /* 🌌 v3.36.37 (المالك 13-11): خلفيات متحركة — «الأصلية» (كما كانت) + ست تتلوّن بألوان «🎨 الألوان» المختارة · لهذا الجهاز ·
-   لوحة رسم واحدة خلف كل شي (#hbg) · 30 إطاراً بالثانية أقصى شي · بدقة أقل من الشاشة · تتوقف خلف النوافذ والصفحات ووقت التمرير والشاشة مطفية ·
+   لوحة رسم واحدة خلف كل شي (#hbg) · 30 إطاراً بالثانية أقصى شي · بدقة أقل من الشاشة · تتوقف خلف النوافذ والصفحات والشاشة مطفية (v3.36.39: وقت التمرير تكمل) ·
    الوضع الخفيف / تقليل الحركة ⇒ إطار ثابت · خلفية جديدة = سطر بـHBG + رسّامها بـHBG_MAKE (ياخذ ألوان المظهر) */
 const HBG=[['orig','الأصلية','كما كانت — بلا حركة جديدة'],['waves','أمواج','خيوط ضوء تتموّج ببطء — أقرب شيء لخلفية PS4'],
   ['dust','غبار نجمي','ذرّات ضوء تصعد ببطء وتلمع'],['aurora','شفق','غيوم ضوء كبيرة تسبح وتمتزج'],['beams','أشعة','حزم ضوء مائلة تمرّ ببطء'],
@@ -29571,12 +29577,13 @@ const HBG_MAKE={
     c.globalCompositeOperation='source-over'}},
 };
 function hbLoop(now){HB.raf=0;if(HB.k==='orig'||!HB.draw)return;const r=document.documentElement;
-  if(!(document.hidden||r.classList.contains('covered')||r.classList.contains('scrolling'))&&now-HB.last>=32){HB.last=now;try{HB.draw(now/1000)}catch(e){}}
+  if(!(document.hidden||r.classList.contains('covered'))&&now-HB.last>=32){HB.last=now;try{HB.draw(now/1000)}catch(e){}}   // v3.36.39: تتحرك وقت التمرير كمان
   HB.raf=requestAnimationFrame(hbLoop)}
 function hbgApply(){const k=uiBg(),r=document.documentElement;HB.k=k;r.classList.toggle('abg',k!=='orig');
   if(HB.raf){cancelAnimationFrame(HB.raf);HB.raf=0}HB.spr={};if(k==='orig'){HB.draw=null;return}
   if(!HB.c){HB.c=document.getElementById('hbg');if(!HB.c)return;HB.x=HB.c.getContext('2d');
-    addEventListener('resize',()=>{clearTimeout(HB.rt);HB.rt=setTimeout(()=>{if(HB.k!=='orig')hbgApply()},250)})}
+    addEventListener('resize',()=>{clearTimeout(HB.rt);HB.rt=setTimeout(()=>{if(HB.k!=='orig'&&(Math.abs(innerWidth-HB.w)>2||Math.abs(innerHeight-HB.h)>innerHeight*.25))hbgApply()},250)})}
+  HB.w=innerWidth;HB.h=innerHeight;   // v3.36.39: شريط عنوان المتصفح يطلع وينزل وقت التمرير ⇒ ما تبدي الخلفية من جديد
   const d=Math.min(window.devicePixelRatio||1,1.5);HB.c.width=Math.max(1,Math.round(innerWidth*d));HB.c.height=Math.max(1,Math.round(innerHeight*d));
   HB.col=hbCol();HB.draw=HBG_MAKE[k](HB.x,HB.c.width,HB.c.height,HB.col);try{HB.draw(12.3)}catch(e){}
   if(!hbStill())HB.raf=requestAnimationFrame(hbLoop)}
