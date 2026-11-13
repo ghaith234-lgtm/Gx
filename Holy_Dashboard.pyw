@@ -28345,11 +28345,11 @@ async function exOrdOpen(refresh){
    التأكيدات وشبهها بحجمها بالشكل الجديد (showDialog) · حركة الفتح من ⚙️ والإغلاق بعكسها · زر الرجوع يسكّر الأعلى أولاً (بالتطبيق وبالمتصفح) ·
    نافذة جديدة بـshowModal / showDialog تاخذ كل هذا وحدها */
 const HW_ANIMS=[['none','بلا حركة'],['up','انزلاق من الأسفل'],['zoom','تكبير ناعم'],['side','انزلاق جانبي'],['btn','تتوسّع من الزر'],['blur','تلاشٍ مع ضبابية'],['spring','ارتداد خفيف']];
-const HW_MS={up:320,zoom:260,side:300,btn:420,blur:300,spring:440};
+const HW_MS={up:240,zoom:200,side:230,btn:300,blur:230,spring:340};   // 🎬 v3.36.36: أسرع (كانت 320 · 260 · 300 · 420 · 300 · 440)
 const HW={st:[],pt:null,skip:0,popping:0,pend:0,q:[]};   // ↩️ v3.36.35: pend = رجوعات هذه الخطوة · q = نوافذ تنتظر وصول رجوعنا
 function uiAnim(){const v=_ls('dash_anim');return HW_ANIMS.some(x=>x[0]===v)?v:'zoom'}
 function setAnim(v){if(!HW_ANIMS.some(x=>x[0]===v))v='zoom';_ls('dash_anim',v==='zoom'?null:v);const n=(HW_ANIMS.find(x=>x[0]===v)||[])[1]||'';
-  hideModal();setTimeout(()=>{openSettings();toast('🎬 حركة النوافذ: '+n,true)},v==='none'?0:Math.round((HW_MS[v]||0)*.75)+80)}   // تنفتح من جديد ⇒ تشوف الحركة
+  hideModal();setTimeout(()=>{openSettings();toast('🎬 حركة النوافذ: '+n,true)},v==='none'?0:Math.round((HW_MS[v]||0)*.6)+80)}   // تنفتح من جديد ⇒ تشوف الحركة
 function hwStyle(){try{if(document.documentElement.classList.contains('lite'))return 'none';
   if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)return 'none'}catch(e){}return uiAnim()}
 document.addEventListener('pointerdown',e=>{HW.pt={x:e.clientX,y:e.clientY,t:Date.now()}},true);
@@ -28363,21 +28363,29 @@ function hwKF(s,el,small,pt){
     const kf=[{opacity:0,transform:'scale(.06)'},{opacity:1,offset:.3},{opacity:1,transform:'none'}];kf.o=Math.round(p.x-r.left)+'px '+Math.round(p.y-r.top)+'px';return kf}
   return null}
 function hwPt(){return HW.pt&&Date.now()-HW.pt.t<5000?HW.pt:null}
-function hwPlay(a,el,o){                                         // 🎬 v3.36.35: تبدأ من أولها بعد ما تنرسم النافذة مرة (كانت تقفز فوق أولها)
+function hwPlay(a,el,o,q){                                       // 🎬 v3.36.35: تبدأ من أولها بعد ما تنرسم النافذة مرة (كانت تقفز فوق أولها) · q = الإغلاق: إطار واحد
   a.pause();let go=0;const play=()=>{if(go)return;go=1;try{a.play()}catch(e){}};
   try{HW.busy=Math.max(HW.busy||0,performance.now()+(+a.effect.getTiming().duration||0)+200)}catch(e){}
-  requestAnimationFrame(()=>requestAnimationFrame(play));setTimeout(play,180);
+  requestAnimationFrame(q?play:()=>requestAnimationFrame(play));setTimeout(play,q?120:180);
   if(o!=null){const back=()=>{try{el.style.transformOrigin=o}catch(e){}};a.addEventListener('finish',back);a.addEventListener('cancel',back)}}
 function hwIn(panel,scrim,small,pt){const s=hwStyle();if(s==='none'||!panel||!panel.animate)return;
   try{const kf=hwKF(s,panel,small,pt||hwPt());if(!kf)return;let o=null;
     if(kf.o){o=panel.style.transformOrigin;panel.style.transformOrigin=kf.o}
     const a=panel.animate(kf,{duration:HW_MS[s],easing:s==='spring'?'cubic-bezier(.34,1.56,.64,1)':'cubic-bezier(.2,.8,.2,1)',fill:'backwards'});
     hwPlay(a,panel,o)}catch(e){}}
+function hwLight(o,c){                                            // 🎬 v3.36.36: نسخة الإغلاق خفيفة — كل صندوق برّا الشاشة ينفرغ ويبقى بحجمه
+  try{const O=o.getElementsByTagName('*'),C=c.getElementsByTagName('*');if(O.length!==C.length||O.length<60)return;
+    const H=innerHeight,BL=/^(block|flex|grid|table|list-item|flow-root|table-row|table-row-group)$/;const cut=[];
+    for(let i=0;i<O.length;i++){const e=O[i],r=e.getBoundingClientRect();
+      if((r.bottom<-40||r.top>H+40)&&r.height>0&&e.children.length){const cs=getComputedStyle(e);
+        if(BL.test(cs.display)&&cs.position!=='fixed'){cut.push([C[i],r.height]);i+=e.getElementsByTagName('*').length}}}
+    for(const [n,h] of cut){n.replaceChildren();Object.assign(n.style,{height:h+'px',minHeight:h+'px',maxHeight:h+'px',boxSizing:'border-box',overflow:'hidden'})}
+  }catch(e){}}
 function hwIdle(){const w=(HW.busy||0)-performance.now();return w>0?new Promise(r=>setTimeout(r,Math.min(w,700))):null}   // 🎬 v3.36.35: حركة شغّالة ⇒ انتظر نهايتها
 function hwOut(box,panelSel,small,pt){                 // النافذة تنسدّ فوراً (الكود يشوفها مسدودة) · نسخة منها تلعب الإغلاق
   const s=hwStyle();if(s==='none'||!box||!box.animate||!box.isConnected)return;
   try{const r=box.getBoundingClientRect();if(!r.width||!r.height)return;
-    const z=getComputedStyle(box).zIndex,c=box.cloneNode(true);
+    const z=getComputedStyle(box).zIndex,c=box.cloneNode(true);hwLight(box,c);   // 🎬 v3.36.36: اللي برّا الشاشة ينفرغ
     c.removeAttribute('id');c.querySelectorAll('[id]').forEach(n=>n.removeAttribute('id'));
     c.querySelectorAll('[data-dir],[data-acc]').forEach(n=>{n.removeAttribute('data-dir');n.removeAttribute('data-acc')});
     c.setAttribute('aria-hidden','true');c.setAttribute('inert','');c.classList.add('hwclone');c.classList.add('on');c.hidden=false;
@@ -28387,10 +28395,10 @@ function hwOut(box,panelSel,small,pt){                 // النافذة تنس�
     const sc=[[box,c]].concat(['.hwb','.pwrap','.dbody','.npbody'].map(q=>[box.querySelector(q),c.querySelector(q)]));
     sc.forEach(([a,b])=>{if(a&&b&&a.scrollTop)b.scrollTop=a.scrollTop});
     c.style.backdropFilter='none';c.style.webkitBackdropFilter='none';                    // 🎬 v3.36.35: النسخة بلا ضبابية خلفية (ثقيلة كل إطار)
-    const p=(panelSel&&c.querySelector(panelSel))||c,kf=hwKF(s,p,small,pt||hwPt()),d=Math.round(HW_MS[s]*.75);
+    const p=(panelSel&&c.querySelector(panelSel))||c,kf=hwKF(s,p,small,pt||hwPt()),d=Math.round(HW_MS[s]*.6);
     if(kf&&kf.o)p.style.transformOrigin=kf.o;
-    if(kf)hwPlay(p.animate(kf.slice().reverse(),{duration:d,easing:'cubic-bezier(.4,0,.7,.2)',fill:'both'}),p,null);
-    if(p!==c)hwPlay(c.animate([{opacity:1},{opacity:0}],{duration:d,easing:'linear',fill:'both'}),c,null);
+    if(kf)hwPlay(p.animate(kf.slice().reverse(),{duration:d,easing:'cubic-bezier(.4,0,.7,.2)',fill:'both'}),p,null,1);
+    if(p!==c)hwPlay(c.animate([{opacity:1},{opacity:0}],{duration:d,easing:'linear',fill:'both'}),c,null,1);
     setTimeout(()=>{try{c.remove()}catch(e){}},d+260)}catch(e){}}
 /* الطبقات: كل وحدة تنعرف من حالتها (مو من اللي فتحها) ⇒ أي كود يفتحها تاخذ الحركة والترتيب وزر الرجوع */
 function hwLayers(){const L=[],mb=$('#mbg');
