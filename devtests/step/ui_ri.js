@@ -44,7 +44,8 @@ async function until(f, ms) { const t0 = Date.now(); let v; while (Date.now() - 
   const kind = (s0.slots['-1:1'] || {}).side;
   await pg.fill('#i_amt', kind === 'sell' ? '1' : '2');
   await pg.click('#i_go');
-  const s1 = await until(async () => { const s = await sim(); return (+(s.rb || {}).inj_total || 0) > 0.5 ? s : null }, 25000);
+  // the engine saves its state first, then writes the 💉 line (F9 — on purpose) ⇒ wait for both, not only the state
+  const s1 = await until(async () => { const s = await sim(); return (+(s.rb || {}).inj_total || 0) > 0.5 && s.lines.some(l => /^💉 \[حقن\] الخانة -1:1/.test(l)) ? s : null }, 25000);
   ok(`… the engine applied it (the ${kind} side): the capital in its pot · «💉» line · books = wallet`,
      s1 && s1.lines.some(l => /^💉 \[حقن\] الخانة -1:1/.test(l)) && !s1.errors.length, s1 ? { inj: s1.rb.inj_total, lines: s1.lines.slice(0, 4), err: s1.errors } : s0.lines.slice(0, 5));
   await pg.waitForFunction(() => { const r = (DATA.bots.find(x => x.bot_type === 'grid_step').ri.rows || []).find(r => r.kk === '-1:1'); return r && r.j > 0 },
