@@ -21343,6 +21343,88 @@ def _page_cache():
     return _PAGE
 
 
+# 🖥️ v3.36.39 (المالك 13-11: «كلهم ضيفهم»): حاسوب البوتات للشريط المصغّر — المعالج % · الذاكرة % · القرص المتاح · مدة التشغيل ·
+#   بلا مكتبات (ويندوز: ctypes · لينكس: /proc) · قراءة فقط · ما يلمس البوتات ولا المنصة · المعالج = الفرق بين قراءتين
+_SYS = {"cpu": None, "lk": threading.Lock()}
+
+
+def _sys_cpu_times():
+    if os.name == "nt":
+        import ctypes
+
+        class _FT(ctypes.Structure):
+            _fields_ = [("lo", ctypes.c_uint32), ("hi", ctypes.c_uint32)]
+        i, k, u = _FT(), _FT(), _FT()
+        if not ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(i), ctypes.byref(k), ctypes.byref(u)):
+            return None
+        f = lambda x: (x.hi << 32) | x.lo
+        return f(k) + f(u), f(i)                                  # وقت النواة يشمل الخمول
+    with open("/proc/stat") as fh:
+        p = [float(x) for x in fh.readline().split()[1:]]
+    return sum(p[:8]), p[3] + (p[4] if len(p) > 4 else 0.0)
+
+
+def _sys_ram_up():
+    ram = up = None
+    if os.name == "nt":
+        import ctypes
+
+        class _MS(ctypes.Structure):
+            _fields_ = [("dwLength", ctypes.c_uint32), ("dwMemoryLoad", ctypes.c_uint32), ("ullTotalPhys", ctypes.c_uint64), ("ullAvailPhys", ctypes.c_uint64),
+                        ("ullTotalPageFile", ctypes.c_uint64), ("ullAvailPageFile", ctypes.c_uint64), ("ullTotalVirtual", ctypes.c_uint64),
+                        ("ullAvailVirtual", ctypes.c_uint64), ("ullAvailExtendedVirtual", ctypes.c_uint64)]
+        m = _MS(); m.dwLength = ctypes.sizeof(_MS)
+        if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m)) and m.ullTotalPhys:
+            ram = round(100.0 * (m.ullTotalPhys - m.ullAvailPhys) / m.ullTotalPhys, 1)
+        g = ctypes.windll.kernel32.GetTickCount64; g.restype = ctypes.c_uint64
+        up = int(g() // 1000)
+        return ram, up
+    try:
+        mi = {}
+        with open("/proc/meminfo") as fh:
+            for ln in fh:
+                a = ln.split()
+                if len(a) >= 2:
+                    mi[a[0].rstrip(":")] = float(a[1])
+        if mi.get("MemTotal") and "MemAvailable" in mi:
+            ram = round(100.0 * (1 - mi["MemAvailable"] / mi["MemTotal"]), 1)
+    except Exception:
+        pass
+    try:
+        with open("/proc/uptime") as fh:
+            up = int(float(fh.read().split()[0]))
+    except Exception:
+        pass
+    return ram, up
+
+
+def sys_stats():
+    out = {"ok": True, "cpu": None, "ram": None, "disk_free": None, "disk_total": None, "up": None}
+    try:
+        du = shutil.disk_usage(ROOT)
+        out["disk_free"], out["disk_total"] = int(du.free), int(du.total)
+    except Exception:
+        pass
+    try:
+        out["ram"], out["up"] = _sys_ram_up()
+    except Exception:
+        pass
+    try:
+        with _SYS["lk"]:
+            now, a, st = time.time(), _sys_cpu_times(), _SYS["cpu"]       # st = (وقت · الكلي · الخمول · النسبة)
+            if a and (not st or now - st[0] > 30):                         # ما في قراءة قريبة ⇒ نظرة ثانية بعد ربع ثانية
+                st = (now, a[0], a[1], None)
+                time.sleep(0.25)
+                now, a = time.time(), _sys_cpu_times()
+            if a and st and now - st[0] >= 0.2 and a[0] > st[1]:
+                st = (now, a[0], a[1], round(max(0.0, min(100.0, 100.0 * (1 - (a[1] - st[2]) / (a[0] - st[1])))), 1))
+            _SYS["cpu"] = st
+            out["cpu"] = st[3] if st else None
+    except Exception:
+        pass
+    return out
+
+
 def _overview_cached(max_age=1.0):
     """⚡ لو أكثر من جهاز/تبويب يطلب الملخص بنفس الثانية ⇒ حساب واحد يخدم الكل (والأفعال تصفّره)."""
     with _OV_LOCK:
@@ -21597,6 +21679,8 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
             return
         if u.path == "/api/overview":
             return self._json(_overview_cached())
+        if u.path == "/api/sys":                          # 🖥️ v3.36.39: حاسوب البوتات للشريط المصغّر (قراءة فقط)
+            return self._json(_safe(sys_stats, default={"ok": False}) or {"ok": False})
         if u.path == "/api/history":
             return self._json(history_of(q.get("dir", [""])[0]))
         if u.path == "/api/feed":
@@ -23759,7 +23843,14 @@ button.stg.on{color:var(--tx);border-color:transparent;box-shadow:none}
 .stg.on .ssw{background:var(--green)}
 .stg.on .ssw i{inset-inline-start:21px}
 .sfoot{color:var(--mut2);font-size:11px;margin:14px 6px 0;line-height:1.7}
-html.nombar #mbar{display:none!important}   /* 📌 v3.36.38: الشريط المصغّر مطفي بهذا الجهاز */
+html.nombar #mbar{display:none!important}
+/* 📊 v3.36.39: الشريط المصغّر — الأرباح · وتحتها حالة هذا الجهاز وحاسوب البوتات واللوحة (بالهاتف تنزل لسطر ثاني لو ما وسعت — ما ينخفي شي) */
+#mbar{flex-direction:column;gap:3px}
+#mbar .mb1{display:flex;align-items:center;justify-content:center;gap:16px;max-width:100%}
+.mb2{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;column-gap:11px;row-gap:1px;max-width:100%;white-space:nowrap;font-size:11px;line-height:1.45;color:var(--mut);font-variant-numeric:tabular-nums}
+.mb2:empty{display:none}.mb2>span{flex:0 0 auto}
+.mbprev{margin:8px 0 2px;padding:7px 10px;border:1px solid var(--line);border-radius:10px;background:rgb(var(--surf2-rgb)/.6)}
+@media (max-width:760px){#mbar .mb1{gap:14px}}   /* 📌 v3.36.38: الشريط المصغّر مطفي بهذا الجهاز */
 /* ═══ 🌌 v3.36.37: الخلفية المتحركة — لوحة رسم واحدة خلف كل شي · «الأصلية» = الأجرام كما كانت ═══ */
 #hbg{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;display:none}
 html.abg #hbg{display:block}
@@ -23834,7 +23925,7 @@ html.abg header{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgb
 </header>
 <div id="tape" class="tape tape1" style="display:none" title="أسعار حية — من الإعدادات ⚙️ ← 📈 شريط الأسعار"><button id="fcBtn" class="indbtn fcbtn" style="display:none" onclick="openFc()" title="🔮 التوقعات: يوم · أسبوع · شهر · 3 أشهر — نفس مؤشرات 📊 على شموع أطول + كم مرة صدقت (بلا إشعارات)">🔮 التوقعات</button><div class="tapewrap"><div id="tapein" class="tapein"></div></div></div>
 <div id="tape2" class="tape tape2" style="display:none" title="مؤشرات العملات المختارة — من ⚙️ الإعدادات ← 📈 شريط الأسعار"><button id="indBtn" class="indbtn" onclick="openInd()" title="📊 المؤشرات: العملة راح تصعد لو تنزل؟ — كل عملة بالشريط بعشر مؤشرات ومعدلها · الخوف والطمع · 🔔 إشعارات الأسعار">📊 المؤشرات</button><div class="tapewrap"><div id="tape2in" class="tapein"></div></div></div>
-<div id="mbar" onclick="goTop()" title="ارجع للأعلى"><span id="mPulse" class="pulse off"></span><span title="ربح التداول اليوم">🔄 <b id="mTrade" class="num">0.00</b></span><span title="إجمالي الربح المحرر">💵 <b id="mTotal" class="num">0.00</b></span><span title="الربح المحرر اليوم">📅 <b id="mToday" class="num">0.00</b></span><span id="mGuard"></span></div>
+<div id="mbar" onclick="goTop()" title="ارجع للأعلى"><div class="mb1"><span id="mPulse" class="pulse off"></span><span title="ربح التداول اليوم">🔄 <b id="mTrade" class="num">0.00</b></span><span title="إجمالي الربح المحرر">💵 <b id="mTotal" class="num">0.00</b></span><span title="الربح المحرر اليوم">📅 <b id="mToday" class="num">0.00</b></span><span id="mGuard"></span></div><div class="mb2" id="mStat"></div></div>
 <div class="toolbar">
   <div class="srch">
     <span class="si">🔍</span>
@@ -24041,7 +24132,8 @@ function uiNavToggle(){if(!navOk())return openAppPanel();const on=!uiNavOn();try
 function uiMbar(){return _ls('dash_mbar')!=='off'}                  // 📌 v3.36.38: الشريط المصغّر اختياري (لهذا الجهاز)
 function uiMbarToggle(){const on=!uiMbar();_ls('dash_mbar',on?null:'off');document.documentElement.classList.toggle('nombar',!on);openSettings();
   toast(on?'📌 الشريط المصغّر يظهر حين تنزل للأسفل':'📌 الشريط المصغّر مخفي',true)}
-function mbarSync(){const h=$('#top');if(h)document.body.classList.toggle('pastTop',h.getBoundingClientRect().bottom<0)}
+function mbarSync(){const h=$('#top');if(!h)return;const p=h.getBoundingClientRect().bottom<0;
+  if(p!==document.body.classList.contains('pastTop')){document.body.classList.toggle('pastTop',p);if(p)try{mbStatPaint()}catch(e){}}}   // 📊 v3.36.39: ينزل ⇒ حالته فوراً
 addEventListener('scroll',mbarSync,{passive:true});
 
 /* ── نابض الأرقام (فيزياء framer: k=75 c=15 m=.8) ── */
@@ -24483,7 +24575,7 @@ function updTop(d){sTot.set(d.total_profit);sDay.set(d.today_profit);drawSpark(d
   _sf('#mTotal',x=>x.textContent=(+d.total_profit||0).toFixed(2));
   _sf('#mToday',x=>x.textContent=(+d.today_profit||0).toFixed(2));
   _sf('#mGuard',x=>{x.textContent=gN?`🛡️ ${gN}`:'';x.style.color=gRed?'var(--red)':'var(--amber)'});
-  _sf('#mPulse',x=>{const p=$('#pulse');if(p)x.className=p.className});
+  _sf('#mPulse',x=>{const p=$('#pulse');if(p)x.className=p.className});try{mbStatPaint()}catch(e){}
   const sw=$('#step_w');if(sw&&typeof d.wallets==='number')sw.textContent=d.wallets>0?'✅ المحفظة جاهزة':'1️⃣ 👛 أضف محفظة OKX';
   $('#tEx').innerHTML=(typeof d.ex_b==='number')?`<span>${d.ex_s}↑ · ${d.ex_b}↓</span><small>${d.ex_b+d.ex_s}</small>`:'<span>—</span>';
   if(PV&&$('#page_reports')&&$('#page_reports').classList.contains('on'))pcKpi(PV)}
@@ -26093,7 +26185,8 @@ function stTog(k){const on=!STO.has(k);if(on)STO.add(k);else STO.delete(k);
   if(r){r.classList.toggle('open',on);r.classList.add('anim');const h=r.querySelector('.shd');if(h)h.setAttribute('aria-expanded',String(on))}
   if(on&&k==='fps')try{gpuFill()}catch(e){}
   if(on&&k==='bg')try{hbPrev()}catch(e){}
-  if(on&&k==='cfx')setTimeout(()=>{try{cfxRun('enter');cfxRun('bars')}catch(e){}},280)}
+  if(on&&k==='cfx')setTimeout(()=>{try{cfxRun('enter');cfxRun('bars')}catch(e){}},280)
+  if(on&&k==='mbi')setTimeout(()=>{try{MB.sysT=0;mbStatPaint()}catch(e){}},0)}
 function openSettings(){
   const d=DATA||{}, os=d.srv_os||'';
   const X=(k,ic,t,val,body)=>`<div class="sitem sx${STO.has(k)?' open':''}" data-k="${k}"><button type="button" class="shd" aria-expanded="${STO.has(k)}" onclick="stTog('${k}')">
@@ -26132,6 +26225,7 @@ function openSettings(){
      +X('anim','🎬','حركة فتح النوافذ',anN,`${rmN}<div class="snote">الإغلاق بعكسها · «⚡ الوضع الخفيف» بلا حركة.</div><div class="pollrow" id="animRow">${AB}</div>`)
      +X('cfx','🃏','حركات البطاقات',caVal(),cfxBody())
      +T('📌','الشريط المصغّر','uiMbarToggle()','bMbar',uiMbar(),'يظهر — أرقام اليوم أعلى الشاشة حين تنزل للأسفل','مخفي')
+     +X('mbi','📊','عناصر الشريط المصغّر',`${MBI.length-MBOFF().size} من ${MBI.length}`,mbiBody())
      +T('🕺','رجل العصا','STK.toggle();openSettings()','bStk',STK.on(),'يعمل — يمشي ويلعب فوق الأيقونات · اسحبه','متوقف'))}
    ${G('⚡ الأداء',
       T('⚡','الوضع الخفيف','uiLiteToggle()','bLite',uiLite(),'مفعّل — بلا حركات ولا ضبابية','متوقف — الحركات كاملة')
@@ -30208,8 +30302,63 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden){tick();if
 /* ⚡ رموز القناة اللحظية = عملات الشريط + عملات البوتات (بدل استطلاع كل بوت من المتصفح كل 4 ثواني) */
 function wsCoins(tape){const s=new Set(tape||[]);((DATA&&DATA.bots)||[]).forEach(b=>{if(b&&b.symbol)s.add(b.symbol)});return [...s].sort()}
 
+/* 📊 v3.36.39 (المالك 13-11: «كلهم ضيفهم ، لا تضع سرعة الوصول لokx»): الشريط المصغّر — سطر ثاني بحالة هذا الجهاز وحاسوب البوتات واللوحة ·
+   كل عنصر يظهر ويختفي من ⚙️ (لهذا الجهاز · كلها ظاهرة بالبداية) · حاسوب البوتات يُسأل كل 10 ثواني بس والشريط ظاهر ·
+   متصفح ما يعطي عنصر (حاسوب بلا بطارية · بلا معلومات اتصال) ⇒ العنصر ما يظهر */
+const MBI=[['bat','📱','🔋','البطارية'],['net','📱','📶','الاتصال'],['clk','📱','🕐','الساعة'],['rtt','📱','⏱️','زمن رد الخادم'],
+  ['cpu','🖥️','🖥️','المعالج'],['ram','🖥️','🧠','الذاكرة'],['dsk','🖥️','💽','مساحة القرص'],['up','🖥️','⏳','مدة التشغيل'],
+  ['bots','📊','🟢','البوتات العاملة'],['live','📊','📡','الأسعار اللحظية'],['last','📊','🕑','آخر تحديث']];
+const MB={rtt:null,last:0,sys:null,sysT:0,sysBusy:0,bat:null,batOk:null};
+function MBOFF(){return new Set(String(_ls('dash_mb_off')||'').split(',').filter(k=>MBI.some(x=>x[0]===k)))}
+function mbOn(k){return !MBOFF().has(k)}
+function mbBytes(n){const G=1024**3;return n>=1024*G?(n/1024/G).toFixed(1)+'TB':n>=10*G?Math.round(n/G)+'GB':n>=G?(n/G).toFixed(1)+'GB':Math.round(n/1024**2)+'MB'}
+function mbDur(s){s=Math.max(0,+s||0);const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);return d?`${d}ي ${h}س`:h?`${h}س ${m}د`:`${m}د`}
+function mbAgo(s){return s<60?Math.max(0,Math.round(s))+'ث':s<3600?Math.floor(s/60)+'د':Math.floor(s/3600)+'س'}
+function mbNet(){if(navigator.onLine===false)return '📵 بلا اتصال';const c=navigator.connection;if(!c)return '';
+  const q={'3g':' · متوسط','2g':' · بطيء','slow-2g':' · بطيء جداً'}[c.effectiveType]||'',t=c.type;
+  return '📶 '+(t==='wifi'?'Wi‑Fi':t==='ethernet'?'سلكي':t==='cellular'?'بيانات الهاتف':'متصل')+q}
+function mbLive(){const n=Object.values(LIVE.last||{}).filter(x=>Date.now()-x.ts<20000).length;
+  if(LIVE.ws&&LIVE.ws.readyState===1)return n?['📡 مباشر','الأسعار تصل لحظياً']:['📡 متصل','القناة اللحظية مفتوحة — بانتظار سعر'];
+  return LIVE.ws?['📡 يتصل…','القناة اللحظية تتصل']:['📡 منقطع','الأسعار تتحدّث مع الأرقام كل بضع ثوانٍ']}
+function mbItems(){const D=DATA||{},o=[],off=MBOFF(),on=k=>!off.has(k);
+  if(on('bat')&&MB.bat)o.push(['bat',`🔋 ${Math.round(MB.bat.level*100)}%${MB.bat.charging?'⚡':''}`,MB.bat.charging?'بطارية هذا الجهاز — يشحن':'بطارية هذا الجهاز']);
+  if(on('net')){const t=mbNet();if(t)o.push(['net',t,'اتصال هذا الجهاز'])}
+  if(on('clk')){const d=new Date();o.push(['clk','🕐 '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'),'الساعة'])}
+  if(on('rtt')&&MB.rtt!=null)o.push(['rtt',`⏱️ ${Math.round(MB.rtt)}ms`,'زمن رد الخادم على اللوحة (آخر تحديث)']);
+  const S=MB.sys;if(S){
+    if(on('cpu')&&S.cpu!=null)o.push(['cpu',`🖥️ ${Math.round(S.cpu)}%`,'معالج حاسوب البوتات']);
+    if(on('ram')&&S.ram!=null)o.push(['ram',`🧠 ${Math.round(S.ram)}%`,'ذاكرة حاسوب البوتات']);
+    if(on('dsk')&&S.disk_free!=null)o.push(['dsk',`💽 ${mbBytes(S.disk_free)}`,'المساحة المتاحة بقرص البوتات']);
+    if(on('up')&&S.up!=null)o.push(['up',`⏳ ${mbDur(S.up)}`,'مدة تشغيل حاسوب البوتات منذ آخر إقلاع'])}
+  if(on('bots')){const B=D.bots||[];if(B.length)o.push(['bots',`🟢 ${B.filter(b=>b.alive).length}/${B.length}`,'البوتات العاملة من الكل'])}
+  if(on('live')){const s=mbLive();o.push(['live',s[0],s[1]])}
+  if(on('last')&&MB.last)o.push(['last','🕑 '+mbAgo((Date.now()-MB.last)/1000),'آخر تحديث للأرقام']);
+  return o}
+function mbPrevEl(){return document.querySelector('#modal .sx[data-k="mbi"].open #mbPrev')}
+function mbShown(){return document.body.classList.contains('pastTop')&&!document.documentElement.classList.contains('nombar')}
+function mbSysPoll(){if(MB.sysBusy||Date.now()-MB.sysT<10000||!['cpu','ram','dsk','up'].some(mbOn))return;MB.sysBusy=1;MB.sysT=Date.now();
+  api('/api/sys',0,1).then(d=>{if(d&&d.ok)MB.sys=d}).catch(()=>{}).finally(()=>{MB.sysBusy=0;mbStatPaint()})}
+function mbStatPaint(){const el=document.getElementById('mStat'),p=mbPrevEl();if(!el||!(mbShown()||p))return;mbSysPoll();
+  const h=mbItems().map(x=>`<span data-mb="${x[0]}" title="${x[2]}">${x[1]}</span>`).join('');
+  if(el._h!==h){el.innerHTML=h;el._h=h}if(p&&p._h!==h){p.innerHTML=h||'<span>— لا عناصر —</span>';p._h=h}}
+function mbTog(k){const off=MBOFF();if(off.has(k))off.delete(k);else off.add(k);_ls('dash_mb_off',off.size?[...off].join(','):null);
+  const b=document.querySelector('#modal button[data-mbi="'+k+'"]');if(b){b.classList.toggle('on',!off.has(k));b.setAttribute('aria-pressed',String(!off.has(k)))}
+  const v=document.querySelector('#modal .sx[data-k="mbi"] .sval');if(v)v.textContent=`${MBI.length-off.size} من ${MBI.length}`;
+  if(!off.has(k)&&['cpu','ram','dsk','up'].includes(k))MB.sysT=0;mbStatPaint()}
+function mbiBody(){const off=MBOFF();
+  const na=[MB.batOk===false?'🔋 البطارية: هذا الجهاز لا يعطيها للمتصفح':'',navigator.connection?'':'📶 الاتصال: هذا المتصفح لا يعطي نوعه'].filter(Boolean);
+  return `<div class="snote">اضغط أي عنصر لإظهاره أو إخفائه · لهذا الجهاز · يظهر تحت أرقام الربح حين تنزل للأسفل${uiMbar()?'':' · <b style="color:var(--amber)">الشريط المصغّر مخفي الآن — أظهره من السطر الذي قبل هذا</b>'}</div>
+   <div class="mb2 mbprev" id="mbPrev"></div>
+   ${[['📱','📱 هذا الجهاز'],['🖥️','🖥️ حاسوب البوتات'],['📊','📊 اللوحة']].map(g=>`<div class="cfx-g"><div class="cfx-gt">${g[1]}</div><div class="pollrow">${MBI.filter(x=>x[1]===g[0]).map(x=>
+     `<button type="button" data-mbi="${x[0]}" class="${off.has(x[0])?'':'on'}" aria-pressed="${!off.has(x[0])}" onclick="mbTog('${x[0]}')">${x[2]} ${x[3]}</button>`).join('')}</div></div>`).join('')}
+   ${na.length?`<div class="cfx-d" style="margin-top:8px">${na.join(' · ')}</div>`:''}`}
+try{if(navigator.getBattery)navigator.getBattery().then(b=>{const mob=IN_APP||/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+  const f=()=>{const none=!mob&&b.charging&&b.level>=1&&!b.chargingTime&&b.dischargingTime===Infinity;MB.batOk=!none;MB.bat=none?null:{level:b.level,charging:b.charging};mbStatPaint()};
+  f();b.addEventListener('levelchange',f);b.addEventListener('chargingchange',f)}).catch(()=>{MB.batOk=false});else MB.batOk=false}catch(e){MB.batOk=false}
+setInterval(()=>{if(!document.hidden&&(mbShown()||mbPrevEl()))try{mbStatPaint()}catch(e){}},1000);
+addEventListener('online',()=>{try{mbStatPaint()}catch(e){}});addEventListener('offline',()=>{try{mbStatPaint()}catch(e){}});
 async function tick(){
-  try{const d=await api('/api/overview',0,1);const hw=hwIdle();if(hw)await hw;DATA=d;$('#pulse').classList.remove('off');pulseBeat();   // 🎬 v3.36.35
+  try{const t0=performance.now();const d=await api('/api/overview',0,1);MB.rtt=performance.now()-t0;MB.last=Date.now();const hw=hwIdle();if(hw)await hw;DATA=d;$('#pulse').classList.remove('off');pulseBeat();   // 🎬 v3.36.35
     if(lastTotal!==null&&d.total_profit>lastTotal+1e-9){if(localStorage.getItem('dash_sound')!=='off')chime();try{STK.cheer()}catch(e){}}   // 🕺 يفرح ويّا الربح
     lastTotal=d.total_profit;updTop(d);syncCards(d.bots||[]);
     if(CUR&&$('#drawer').classList.contains('on'))fillDrawer(false);

@@ -184,7 +184,56 @@ const SNAP = `(() => { const c = document.getElementById('hbg'); if (!c || !c.wi
     ok(`🃏 ${nm}: the cards stand still · ⚙️ says «${l0.v}» · the sample still moves when tapped`, l0.cards === 0 && /متوقفة/.test(l0.v) && /التجربة هنا فقط/.test(l0.note) && l0.sample > 0, l0);
     await ctx.close();
   }
-  //@@MBAR@@
+  // ── 📊 the small bar's second line: this device · the bots' computer · the dashboard — every item on/off in ⚙️ · no OKX speed
+  const BAT = `navigator.getBattery = () => Promise.resolve({ level: .82, charging: true, chargingTime: 1200, dischargingTime: Infinity, addEventListener() {} })`;
+  ({ ctx, pg } = await open(br, errs, { ls: { dash_anim: 'none' } }));
+  const sysReq = []; pg.on('request', r => { if (/\/api\/sys\b/.test(r.url())) sysReq.push(Date.now()) });
+  await pg.evaluate(new Function(BAT + `;MB.bat = null; navigator.getBattery().then(b => { MB.bat = { level: b.level, charging: b.charging }; MB.batOk = true })`));
+  const api0 = await pg.evaluate(async () => { const r = await fetch('/api/sys', { cache: 'no-store' }); return r.json() });
+  ok(`🖥️ /api/sys: the bots' computer — CPU ${api0.cpu}% · memory ${api0.ram}% · free disk ${Math.round(api0.disk_free / 1e9)} GB · on for ${Math.round(api0.up / 60)} min`,
+    api0.ok && api0.cpu >= 0 && api0.cpu <= 100 && api0.ram > 0 && api0.ram <= 100 && api0.disk_free > 0 && api0.disk_total >= api0.disk_free && api0.up > 0, api0);
+  await pg.waitForTimeout(1500);
+  const q0 = sysReq.length;
+  const b0 = await pg.evaluate(async () => { scrollTo(0, 2600); dispatchEvent(new Event('scroll')); mbarSync(); await new Promise(r => setTimeout(r, 1300));
+    return { items: [...document.querySelectorAll('#mStat span')].map(s => [s.dataset.mb, s.textContent]), keys: MBI.map(x => x[0]).join(), shown: getComputedStyle(document.getElementById('mStat')).display } });
+  const it = Object.fromEntries(b0.items);
+  ok(`📊 scrolled down: the second line shows ${b0.items.length} items — ${b0.items.map(x => x[1]).join(' · ')}`,
+    b0.items.length === 11 && b0.keys === 'bat,net,clk,rtt,cpu,ram,dsk,up,bots,live,last' && /^🔋 82%⚡$/.test(it.bat) && /^🕐 \d\d:\d\d$/.test(it.clk) && /^⏱️ \d+ms$/.test(it.rtt)
+      && /^🖥️ \d+%$/.test(it.cpu) && /^🧠 \d+%$/.test(it.ram) && /^💽 [\d.]+(GB|TB|MB)$/.test(it.dsk) && /^⏳ /.test(it.up) && /^🟢 \d+\/9$/.test(it.bots) && /^📡 /.test(it.live) && /^🕑 \d+ث$/.test(it.last), b0);
+  ok('📊 no OKX speed item (the owner: «لا تضع سرعة الوصول لokx»)', !b0.items.some(x => /okx|ping|بينغ/i.test(x[1])) && !/okx/i.test(b0.keys), b0.keys);
+  const w0 = await pg.evaluate(() => { const r = document.getElementById('mbar').getBoundingClientRect(), L = [...document.querySelectorAll('#mStat span')].map(s => s.getBoundingClientRect());
+    return { inside: L.every(x => x.left >= -1 && x.right <= innerWidth + 1 && x.height > 0), h: Math.round(r.height), lines: new Set(L.map(x => Math.round(x.top))).size } });
+  ok(`📊 on a phone all 11 fit on screen (${w0.lines} short lines under the profits · the bar ${w0.h}px high)`, w0.inside && w0.lines <= 2 && w0.h <= 80, w0);
+  const c1 = await pg.evaluate(async () => { const a = document.querySelector('#mStat [data-mb="clk"]').textContent, l1 = document.querySelector('#mStat [data-mb="last"]').textContent;
+    await new Promise(r => setTimeout(r, 2100)); return { l1, l2: document.querySelector('#mStat [data-mb="last"]').textContent } });
+  ok(`📊 «آخر تحديث» counts by itself every second (${c1.l1} → ${c1.l2}) — the clock too`, c1.l1 !== c1.l2 || /^🕑 [0-2]ث$/.test(c1.l2), c1);
+  const q1 = sysReq.length - q0; await pg.waitForTimeout(3000); const q2 = sysReq.length - q0;
+  ok(`🖥️ the computer is asked once when the bar comes down, then at most every 10 s (${q2} in 4 s)`, q1 >= 1 && q2 <= 2, { q1, q2 });
+  // ⚙️ 🖌️ «📊 عناصر الشريط المصغّر»: a live preview · tap an item ⇒ hidden there and in the bar · kept on this device
+  await pg.evaluate(() => { scrollTo(0, 0); openSettings(); stTog('mbi') }); await pg.waitForTimeout(500);
+  const ms0 = await pg.evaluate(() => { const row = document.querySelector('#modal .sx[data-k="mbi"]'), g = [...document.querySelectorAll('#modal .sgrp')][0];
+    return { v: row.querySelector('.sval').textContent, rows: [...g.querySelectorAll('.sgl>.sitem')].map(r => r.dataset.k || r.id), prev: document.querySelectorAll('#mbPrev span').length,
+      btn: [...row.querySelectorAll('button[data-mbi]')].map(b => b.dataset.mbi + (b.classList.contains('on') ? '+' : '-')).join(' '), grp: [...row.querySelectorAll('.cfx-gt')].map(x => x.textContent) } });
+  ok(`📊 ⚙️ 🖌️ «عناصر الشريط المصغّر» after its switch («${ms0.v}») · 3 groups (${ms0.grp.join(' · ')}) · a live preview of ${ms0.prev}`,
+    ms0.rows.indexOf('mbi') === ms0.rows.indexOf('bMbar') + 1 && /11 من 11/.test(ms0.v) && ms0.prev === 11 && ms0.grp.length === 3 && ms0.btn.split(' ').every(x => x.endsWith('+')), ms0);
+  await pg.click('#modal button[data-mbi="cpu"]'); await pg.click('#modal button[data-mbi="bat"]'); await pg.waitForTimeout(250);
+  const ms1 = await pg.evaluate(() => ({ v: document.querySelector('#modal .sx[data-k="mbi"] .sval').textContent, ls: localStorage.getItem('dash_mb_off'),
+    prev: [...document.querySelectorAll('#mbPrev span')].map(s => s.dataset.mb).join(), on: document.querySelector('#modal button[data-mbi="cpu"]').getAttribute('aria-pressed') }));
+  ok(`📊 tap «المعالج» and «البطارية» ⇒ hidden from the preview («${ms1.v}») · kept on this device`, /9 من 11/.test(ms1.v) && ms1.ls === 'cpu,bat' && !/cpu|bat/.test(ms1.prev) && ms1.on === 'false', ms1);
+  const ms2 = await pg.evaluate(async () => { hideModal(); await new Promise(r => setTimeout(r, 300)); scrollTo(0, 2600); mbarSync(); await new Promise(r => setTimeout(r, 300));
+    const k = [...document.querySelectorAll('#mStat span')].map(s => s.dataset.mb).join(); openSettings(); stTog('mbi'); await new Promise(r => setTimeout(r, 200));
+    document.querySelector('#modal button[data-mbi="cpu"]').click(); document.querySelector('#modal button[data-mbi="bat"]').click(); hideModal();
+    return { k, ls: localStorage.getItem('dash_mb_off') } });
+  ok('📊 the bar follows (no CPU · no battery) · tapped again ⇒ back (nothing stored)', !/cpu|bat/.test(ms2.k) && ms2.k.split(',').length === 9 && ms2.ls === null, ms2);
+  await ctx.close();
+  // a computer without a battery · the bar switched off ⇒ the computer is never asked
+  ({ ctx, pg } = await open(br, errs, { ls: { dash_anim: 'none', dash_mbar: 'off' } }));
+  const sysReq2 = []; pg.on('request', r => { if (/\/api\/sys\b/.test(r.url())) sysReq2.push(1) });
+  const n0 = await pg.evaluate(async () => { scrollTo(0, 2600); dispatchEvent(new Event('scroll')); mbarSync(); await new Promise(r => setTimeout(r, 1500));
+    openSettings(); stTog('mbi'); await new Promise(r => setTimeout(r, 200)); const note = document.querySelector('#modal .sx[data-k="mbi"] .sbody').textContent; hideModal();
+    return { bat: MB.bat, batOk: MB.batOk, note } });
+  ok('📊 the bar off ⇒ /api/sys never asked while scrolling · a computer with no battery ⇒ no 🔋 (⚙️ says so)', sysReq2.length <= 1 && !n0.bat && /البطارية: هذا الجهاز لا يعطيها/.test(n0.note) && /مخفي الآن/.test(n0.note), { n: sysReq2.length, n0 });
+  await ctx.close();
   ok('no page errors', !errs.length, errs);
   await br.close();
   console.log(`${res.every(Boolean) ? '✅' : '❌'} ui_live: ${res.filter(Boolean).length}/${res.length}`);
