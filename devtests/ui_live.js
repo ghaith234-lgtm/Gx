@@ -178,7 +178,7 @@ const SNAP = `(() => { const c = document.getElementById('hbg'); if (!c || !c.wi
     const l0 = await pg.evaluate(async () => { const b = DATA.bots.find(x => (x.bot_type || 'grid') === 'grid'); const el = CARDS.get(b.dir);
       const t = performance.now(); el._caT = 0; b.profit = +(+b.profit + 0.4).toFixed(4); syncCards(DATA.bots); await new Promise(r => setTimeout(r, 60));
       const cards = window.__an.filter(x => x.t >= t).length; openSettings(); stTog('cfx'); await new Promise(r => setTimeout(r, 200));
-      const v = document.querySelector('#modal .sx[data-k="cfx"] .sval').textContent, note = document.querySelector('#modal .sx[data-k="cfx"] .snote').textContent;
+      const v = document.querySelector('#modal .sx[data-k="cfx"] .sval').textContent, note = [...document.querySelectorAll('#modal .sx[data-k="cfx"] .snote')].map(x => x.textContent).join(' ');
       const t2 = performance.now(); cfxRun('num'); await new Promise(r => setTimeout(r, 60)); const sample = window.__an.filter(x => x.t >= t2 && x.id === 'cfxV').length; hideModal();
       return { cards, v, note, sample } });
     ok(`🃏 ${nm}: the cards stand still · ⚙️ says «${l0.v}» · the sample still moves when tapped`, l0.cards === 0 && /متوقفة/.test(l0.v) && /التجربة هنا فقط/.test(l0.note) && l0.sample > 0, l0);
@@ -233,6 +233,34 @@ const SNAP = `(() => { const c = document.getElementById('hbg'); if (!c || !c.wi
     openSettings(); stTog('mbi'); await new Promise(r => setTimeout(r, 200)); const note = document.querySelector('#modal .sx[data-k="mbi"] .sbody').textContent; hideModal();
     return { bat: MB.bat, batOk: MB.batOk, note } });
   ok('📊 the bar off ⇒ /api/sys never asked while scrolling · a computer with no battery ⇒ no 🔋 (⚙️ says so)', sysReq2.length <= 1 && !n0.bat && /البطارية: هذا الجهاز لا يعطيها/.test(n0.note) && /مخفي الآن/.test(n0.note), { n: sysReq2.length, n0 });
+  await ctx.close();
+  // ── 🎬 v3.36.40: a computer set to «reduce motion» with a moving background chosen ⇒ it asks once · the rows carry the button
+  ({ ctx, pg } = await open(br, errs, { rm: true, ls: { dash_anim: 'none', dash_bg: 'waves' } }));
+  await pg.waitForTimeout(3600);
+  const rm0 = await pg.evaluate(() => { const m = document.getElementById('modal'); return { open: !document.getElementById('mbg').hidden, h: (m.querySelector('h2') || {}).textContent || '',
+    t: m.textContent, raf: !!HB.raf, ca: caOn('num') } });
+  ok(`🎬 the dashboard opens on such a computer ⇒ it asks once: «${rm0.h}» (the background and the cards stand still until then)`,
+    rm0.open && /الحركة متوقفة على هذا الجهاز/.test(rm0.h) && /تأثيرات الحركة/.test(rm0.t) && !rm0.raf && !rm0.ca, rm0);
+  await pg.click('#rmY'); await pg.waitForTimeout(500);
+  const rm1 = await pg.evaluate(() => ({ open: !document.getElementById('mbg').hidden, f: localStorage.getItem('dash_motion_force'), raf: !!HB.raf, ca: caOn('num'), seen: localStorage.getItem('dash_rm_seen') }));
+  ok('🎬 «▶️ شغّل الحركة» ⇒ the background moves and the card motions work on this computer (kept)', !rm1.open && rm1.f === 'on' && rm1.raf && rm1.ca && rm1.seen === '1', rm1);
+  await ctx.close();
+  ({ ctx, pg } = await open(br, errs, { rm: true, ls: { dash_anim: 'none', dash_bg: 'waves', dash_rm_seen: '1' } }));
+  await pg.waitForTimeout(3600);
+  const rm2 = await pg.evaluate(async () => { const asked = !document.getElementById('mbg').hidden; openSettings(); stTog('bg'); stTog('cfx'); await new Promise(r => setTimeout(r, 300));
+    const n = [...document.querySelectorAll('#modal .rmGo')].map(b => b.closest('.sx').dataset.k); hideModal(); await new Promise(r => setTimeout(r, 300));
+    return { asked, n } });
+  ok(`🎬 answered before ⇒ not asked again · ⚙️ «الخلفية» and «حركات البطاقات» carry «▶️ شغّل الحركة رغم إعداد الجهاز» (${rm2.n.join(' · ')})`, !rm2.asked && rm2.n.includes('bg') && rm2.n.includes('cfx'), rm2);
+  const rm3 = await pg.evaluate(async () => { localStorage.removeItem('dash_bg'); hbgApply(); openSettings(); await new Promise(r => setTimeout(r, 200)); setBg('aurora'); await new Promise(r => setTimeout(r, 800));
+    const h = (document.querySelector('#modal h2') || {}).textContent || ''; document.getElementById('rmN').click(); await new Promise(r => setTimeout(r, 400));
+    const back = !!document.querySelector('#modal .sx[data-k="bg"]'); setBg('silk'); await new Promise(r => setTimeout(r, 800));
+    const again = /الحركة متوقفة على هذا الجهاز/.test((document.querySelector('#modal h2') || {}).textContent || ''); hideModal(); return { h, back, again, f: localStorage.getItem('dash_motion_force') } });
+  ok('🎬 picking a moving background there ⇒ it asks (once this session) · «اتركها متوقفة» ⇒ back to ⚙️, nothing changed', /الحركة متوقفة على هذا الجهاز/.test(rm3.h) && rm3.back && !rm3.again && rm3.f === null, rm3);
+  await ctx.close();
+  ({ ctx, pg } = await open(br, errs, { ls: { dash_anim: 'none', dash_bg: 'waves' } }));
+  await pg.waitForTimeout(3600);
+  const rm4 = await pg.evaluate(() => ({ open: !document.getElementById('mbg').hidden, raf: !!HB.raf }));
+  ok('🎬 a computer that allows motion ⇒ never asked, the background just moves', !rm4.open && rm4.raf, rm4);
   await ctx.close();
   ok('no page errors', !errs.length, errs);
   await br.close();

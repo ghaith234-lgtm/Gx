@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.39"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.40"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -26218,7 +26218,7 @@ function openSettings(){
    ${G('🖌️ الشكل والحركة — لهذا الجهاز',
       X('theme','🎨','الألوان',`<i class="sdot" style="background:${thT[3]}"></i>${thT[1]}`,`<div class="thgrid">${TB}</div>`)
      +X('bg','🌌','الخلفية',(HBG.find(x=>x[0]===uiBg())||HBG[0])[1]+(uiBg()!=='orig'&&hbStill()?' · متوقفة':''),
-        `<div class="snote">تتلوّن بـ«🎨 الألوان» المختارة · تتوقف وحدها خلف النوافذ وفي «⚡ الوضع الخفيف» · «الأصلية» كما كانت.</div><div class="bgrid" id="bgRow">${HBG.map(x=>
+        `${rmRow()}<div class="snote">تتلوّن بـ«🎨 الألوان» المختارة · تتوقف وحدها خلف النوافذ وفي «⚡ الوضع الخفيف» · «الأصلية» كما كانت.</div><div class="bgrid" id="bgRow">${HBG.map(x=>
         `<button class="bgb ${uiBg()===x[0]?'on':''}" data-bg="${x[0]}" title="${x[2]}" onclick="setBg('${x[0]}')"><canvas data-bg="${x[0]}" width="132" height="80"></canvas><span>${x[1]}${uiBg()===x[0]?' ✓':''}</span></button>`).join('')}</div>`)
      +X('skin','🃏','شكل البطاقات',(SKS.find(x=>x[0]===sk)||SKS[0])[1],`<div class="snote">الأرقام والأزرار نفسها في كل الأشكال.</div><div class="pollrow" id="skinRow">${SB}</div>`)
      +X('font','🔤','خط الكتابة',`<span style="font-family:${ff}">${fnT[2]}</span>`,`<div class="snote">كل زر مكتوب بخطّه · الكلمات والأرقام كلها تأخذه («IBM Plex» = الأرقام بخطّها الثابت القديم).</div><div class="pollrow" id="fontRow">${FN}</div>`)
@@ -28505,6 +28505,19 @@ function hwDevRm(){try{return !!(window.matchMedia&&matchMedia('(prefers-reduced
 function hwForce(){return _ls('dash_motion_force')==='on'}            // شغّل الحركة رغم «تقليل الحركة» بالجهاز (لهذا الجهاز)
 function setMotionForce(on){_ls('dash_motion_force',on?'on':null);try{hbgApply()}catch(e){}openSettings();
   toast(on?'🎬 الحركة تعمل رغم إعداد الجهاز':'🎬 اللوحة تتبع إعداد الجهاز (تقليل الحركة)',true)}
+/* 🎬 v3.36.40 (المالك 13-11: «الخلفية المتحركة ما تشغل على الحاسوب وكلك حركة البطاقات»): الحاسوب مضبوط على «تقليل الحركة» ⇒ يسأل مرة —
+   لما يختار خلفية متحركة (مرة بالجلسة) · أو تنفتح اللوحة وعنده خلفية متحركة مختارة (مرة لهذا الجهاز) · الجواب ينحفظ لهذا الجهاز */
+function rmStop(){return hwDevRm()&&!hwForce()&&!uiLite()}
+function rmRow(){return rmStop()?`<div class="snote" style="color:var(--amber)">⚠️ الحركة متوقفة: هذا الجهاز مضبوط على «تقليل الحركة».</div><div class="pollrow" style="margin-bottom:8px"><button type="button" class="rmGo" onclick="setMotionForce(true)">▶️ شغّل الحركة رغم إعداد الجهاز</button></div>`:''}
+function rmAsk(back){if(!rmStop())return;_ls('dash_rm_seen','1');
+  showDialog(`<h2>🎬 الحركة متوقفة على هذا الجهاز</h2><p style="color:var(--mut);font-size:13.5px;line-height:1.9">هذا الجهاز مضبوط على «تقليل الحركة»
+    (ويندوز: الإعدادات ⇐ إمكانية الوصول ⇐ التأثيرات المرئية ⇐ «تأثيرات الحركة» · أندرويد: إمكانية الوصول ⇐ «إزالة الرسوم المتحركة»)،
+    لذلك أوقفت اللوحة الخلفية المتحركة وحركات البطاقات والنوافذ.</p><p style="font-size:13.5px;line-height:1.9">تشغيلها على هذا الجهاز؟ تُرجعها من ⚙️ في أي وقت.</p>
+    <div class="mbtns"><button class="primary" id="rmY">▶️ شغّل الحركة</button><button id="rmN">اتركها متوقفة</button></div>`);
+  $('#rmY').onclick=()=>{_ls('dash_motion_force','on');try{hbgApply()}catch(e){}if(back)openSettings();else hideModal();toast('🎬 الحركة تعمل على هذا الجهاز رغم إعداده',true)};
+  $('#rmN').onclick=()=>{if(back)openSettings();else hideModal()}}
+function rmBoot(n){n=n||0;try{if(!rmStop()||_ls('dash_rm_seen')||uiBg()==='orig')return;
+  const m=$('#mbg');if(document.getElementById('splash')||(m&&!m.hidden)||document.hidden){if(n<20)setTimeout(()=>rmBoot(n+1),1500);return}rmAsk(false)}catch(e){}}
 document.addEventListener('pointerdown',e=>{HW.pt={x:e.clientX,y:e.clientY,t:Date.now()}},true);
 function hwKF(s,el,small,pt){
   if(s==='up')return [{transform:'translateY('+(small?Math.round(innerHeight*.4)+'px':'100%')+')'},{transform:'none'}];
@@ -29635,7 +29648,8 @@ const HBG=[['orig','الأصلية','كما كانت — بلا حركة جدي�
 const HB={c:null,x:null,k:'orig',draw:null,raf:0,last:0,col:null,rt:0,spr:{}};
 function uiBg(){const v=_ls('dash_bg');return HBG.some(x=>x[0]===v)?v:'orig'}
 function setBg(v){if(!HBG.some(x=>x[0]===v))v='orig';_ls('dash_bg',v==='orig'?null:v);hbgApply();openSettings();
-  toast('🌌 الخلفية: '+HBG.find(x=>x[0]===v)[1],true)}
+  toast('🌌 الخلفية: '+HBG.find(x=>x[0]===v)[1],true);
+  if(v!=='orig'&&rmStop()){let s='';try{s=sessionStorage.getItem('holy_rmask')||'';sessionStorage.setItem('holy_rmask','1')}catch(e){}if(!s)setTimeout(()=>rmAsk(true),450)}}   // 🎬 v3.36.40
 function hbStill(){try{return uiLite()||(hwDevRm()&&!hwForce())}catch(e){return false}}
 function hbRgb(v){v=String(v||'').trim();if(v[0]==='#'){let h=v.slice(1);if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h.slice(0,6),16);
   return [(n>>16)&255,(n>>8)&255,n&255].join(',')}const m=v.match(/[\d.]+/g);return m&&m.length>=3?m.slice(0,3).map(x=>Math.round(+x)).join(','):'167,139,250'}
@@ -29890,7 +29904,7 @@ function caAfterSync(){const els=[...CARDS.values()].filter(e=>e.style.display!=
 function caVal(){if(caOff())return uiLite()?'متوقفة (الوضع الخفيف)':'متوقفة (إعداد الجهاز)';const n=Object.keys(HCA).filter(g=>uiCa(g)!=='none').length;return n?`${n} من 5 تعمل`:'بلا حركة'}
 function cfxBody(){const rows=[['🟢 بيع','0.5321','120'],['⚡ السعر','0.5208',''],['🔵 شراء','0.5150','120']].map(r=>`<div><span>${r[0]}</span><span class="num">${r[1]}</span><span class="num">${r[2]}</span></div>`).join('');
   const minis=[['♾️ XRP','+1.24$'],['🪜 SUI','+0.49$'],['📉 DOGE','+0.12$']].map(x=>`<div><span>${x[0]}</span><b class="num">${x[1]}</b></div>`).join('');
-  return `<div class="snote">اضغط أي خيار فيتحرك على البطاقة التجريبية فوراً · يُحفظ لهذا الجهاز.${caOff()?` <b style="color:var(--amber)">الحركة متوقفة الآن على البطاقات (${uiLite()?'الوضع الخفيف':'إعداد الجهاز — ⚙️ «حركة فتح النوافذ»'}) — التجربة هنا فقط.</b>`:''}</div>
+  return `${rmRow()}<div class="snote">اضغط أي خيار فيتحرك على البطاقة التجريبية فوراً · يُحفظ لهذا الجهاز.${caOff()?` <b style="color:var(--amber)">الحركة متوقفة الآن على البطاقات (${uiLite()?'الوضع الخفيف':'إعداد الجهاز'}) — التجربة هنا فقط.</b>`:''}</div>
   <div class="cfx-demo"><div class="cfx-card" id="cfxCard"><div class="cfx-hd"><b>♾️ XRP</b><span>نشط</span></div>
     <div class="cfx-big"><span class="v num" id="cfxV">28.1278</span><small>$</small></div>
     <div class="cfx-bars"><i style="width:88%"></i><i style="width:56%"></i><i style="width:72%"></i><i style="width:38%"></i></div>
@@ -30844,7 +30858,7 @@ const STK=(()=>{
       cracks:fx.filter(e=>e.k==='cr').length,rot:F.rot,
       grab:F.J?{x:(F.J.hip.x+F.J.nk.x)/2,y:(F.J.hip.y+F.J.nk.y)/2}:null}},
     put(x,y){if(!on)return;ball=null;F.play=false;F.rot=0;F.x=x;F.y=y;toAir('fall')}}})();
-tick();schedPoll();applyTheme(uiTheme());STK.boot();try{glintInit()}catch(e){}try{coverWatch()}catch(e){}try{document.addEventListener('fullscreenchange',fsSync);fsSync()}catch(e){}try{appBioSync()}catch(e){}
+tick();schedPoll();applyTheme(uiTheme());STK.boot();setTimeout(rmBoot,3600);try{glintInit()}catch(e){}try{coverWatch()}catch(e){}try{document.addEventListener('fullscreenchange',fsSync);fsSync()}catch(e){}try{appBioSync()}catch(e){}
 document.body.classList.add('boot');setTimeout(()=>document.body.classList.remove('boot'),1400);
 setInterval(()=>{if(CUR&&$('#tab_log').style.display!=='none')loadHist()},8000);
 </script>
