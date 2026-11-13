@@ -1,7 +1,7 @@
 # 🚀 START HERE — The Holy Dashboard (لأي محادثة جديدة)
 
 > هذا الملف يخلّي المحادثة الجديدة تكمل **بلا ما تنسى شي**. اقراه أول، وبعدين الملفات بالترتيب تحت.
-> النسخة: **v3.36.37** · بصمة اللوحة `sha256 c44c95c197790ffc011087383484dc0d595bccc7c88024e90b412798c896a249` · 2026-11-13
+> النسخة: **v3.36.38** · بصمة اللوحة `sha256 a2c86350e0487010723d5110186bd58f6d8b6a47bcf15f64253be7493de37d4e` · 2026-11-13
 
 ## ١ · شنو المشروع
 بوتات تداول آلية على OKX (جرد لانهائي · جرد نطاق · جرد بلس · إعادة استثمار · DCA بيعي · DCA شرائي · الدوري · 🛤️ مسار القيمة) + لوحة ويب **بملف بايثون واحد**
@@ -11,7 +11,7 @@
 ## ٢ · ترتيب القراءة (إلزامي)
 1. `START_HERE.md` (هذا) — الصورة كاملة.
 2. `SUMMARY.md` — الملخص: القواعد · المحركات · الحالة · البنود المفتوحة · المهمة الجاية.
-3. `HANDOFF.md` — الذاكرة الكاملة (كبير — دوّر بيه): §٠ البروتوكول · §١ القواعد · §٢ البيئة والبصمات · **§٧ر٤٣ ⇐ §٧ر١٢٤** (آخر النسخ v3.22.0 ⇐ v3.36.37) · جدول البنود (ب٣ …).
+3. `HANDOFF.md` — الذاكرة الكاملة (كبير — دوّر بيه): §٠ البروتوكول · §١ القواعد · §٢ البيئة والبصمات · **§٧ر٤٣ ⇐ §٧ر١٢٥** (آخر النسخ v3.22.0 ⇐ v3.36.38) · جدول البنود (ب٣ …).
 4. `MAP.md` — خارطة أسطر اللوحة (مولّدة لنفس البصمة فوق): أقسام كل نسخة · فهرس كل الدوال بأسطرها.
 5. تحقّق: `sha256sum Holy_Dashboard.pyw` = البصمة فوق. لو اختلفت ⇒ أرقام الأسطر بـ`MAP.md` باطلة (أعد التوليد بـ`map_remap.py`).
 
@@ -26,7 +26,7 @@
 - السيرفر: `systemctl stop|start holy-dashboard` — **لا تستعمل pkill**.
 - **🔗 قاعدة الترابط:** أي بوت/نوع/رقم جديد ينربط بكل الأماكن (القائمة بـ`HANDOFF.md` §١ قاعدة 12) — و🛡️ «🔗 الترابط والحسابات» لازم **صفر ❌** + فحص عطل مقصود (نمط `v3264_test.py`) قبل التسليم.
 
-## ٤ · الحالة الآن (v3.36.37)
+## ٤ · الحالة الآن (v3.36.38)
 - المحركات الستة **ما تغيّرت من v3.22.1** (DCA البيعي والشرائي آخر تعديل v3.22.1 · الجرد الثلاثة من v3.21.10 · إعادة الاستثمار من v3.21.0) · الدوري `recur.py` من v3.26.2 · **جديد v3.34.0: `vpath.py` 🛤️ مسار القيمة**.
 - آخر النسخ (التفاصيل بـHANDOFF):
   - v3.22.0 DCA: صافي بعد العمولة · إغلاق بلا خسارة · درع اختياري §٧ر٤٣
@@ -92,6 +92,7 @@
   - **v3.36.35 🎬 الحركات بلا تقطيع · ⚙️ الإعدادات قائمة (المجموعات: الشكل · الأداء · الإشعارات = تيليغرام + الشريط · الأصوات = الربح + القفل …) · ↕️ المكان يبقى · ↩️ رجوع المتصفح يبقى باللوحة §٧ر١٢٢** — `p43_smooth` · `p44_keep_scroll` · `p46_back_entries` · `p45_settings_list` · الفحص `devtests/ui_smooth.py` · `devtests/ui_settings.py` · **إعداد جديد = صف بالقائمة (القاعدة 14)**
   - **v3.36.36 🔤 الخط المختار على كل حرف عربي · 🎬 أسرع والإغلاق أخف · 🩺 «فحص سلاسة الحركة» على الجهاز §٧ر١٢٣** — `p47_font_all` · `p48_motion_quick` · `p49_motion_check` · الفحص `devtests/ui_fonts.py` · **ينتظر المالك: الخلفية المتحركة والنغمة (صفحة الأمثلة) · خطّا «خالد» و«أرسلان وسام» (الرخصة)**
   - **v3.36.37 🌌 ست خلفيات متحركة بألوان المظهر · 🎶 نغمة مستمرة · 🔢 الأرقام بالخط المختار · 🎬 طبقة النافذة قبل الحركة §٧ر١٢٤** — `p50_font_numbers` · `p51_window_layer` · `p52_backgrounds` · `p53_tone` · الفحص `devtests/ui_bgtone.py` · **خلفية جديدة = سطر بـHBG (القاعدة 14)** · 💳 الاشتراكات بالعملات الرقمية: تصميم بس (HANDOFF «🔴 ابدأ من هنا»)
+  - **v3.36.38 📌 الشريط المصغّر اختياري · 🎬 سبب توقف الحركة + «شغّلها رغم إعداد الجهاز» · 📲 تطبيق 2.1 (أزرار الهاتف اختيارية) §٧ر١٢٥** — `p54` · `p55` · `p56` · `android/` 2.1 · الفحص `devtests/ui_device.py` · **ينتظر المالك: عناصر الشريط + حركات البطاقات (صفحة الأمثلة)**
   - **v3.36.33 📈 معدل الربح لكل بطاقة من تداولها · 🃏 الأشكال ج · ب · OKX تعرض كل شي · 🔤 خط الكتابة §٧ر١٢٠** — `p38_card_rates.py` · `p39_skins_full.py` · `p40_fonts.py` · `p41_bt_tmp.py` · الفحص `devtests/t_rates.py` · `devtests/ui_skins.py` · المجلد بكل الأنواع `devtests/seed_cards.py`
   - **v3.36.32 📱 تطبيق 2.0: ويدجت بشكل كرت B بنفسجي وستة أرقام · مصدر التطبيق بالمستودع · مفتاح توقيع جديد §٧ر١١٩** — `p37_app20_widget.py` · الفحص `devtests/t_app20.py` + `ui_app20.js` · التطبيق `android/` (`python3 android/build.py [--key …]` · `version.json`) · المحاكيات `ci/apk_check.sh` · **المفتاح عند المالك بس — ما ينرفع للمستودع**
   - **v3.36.31 🔔 تنبيهات مقيسة: 🟢 القاع المؤكد بالحجم · 🌊 انهيار السوق كله §٧ر١١٨** — `p36_alerts_vol_mkt.py` · الفحص `devtests/t_alerts.py` · القياس `ci/sig_check4.py` · `5`
@@ -117,7 +118,7 @@
   - ✅ انحلّت الأربعة (§٧ر٦٣). العملة نفسها تبقى **بلا حجز** بالمنصة (حساب واحد) — الحماية: تنبيه الإنشاء + الرقابة على الحر + تنبيه رفض الخروج.
   - ✅ إصلاحات DCA: ١–٥ بـv3.25.3 · ٦ (خسارة DCA البيعي) انحسم بتبويب «📉 الخسائر» (حساب بس) v3.25.4.
 
-### مصدر كل رقم (v3.36.37)
+### مصدر كل رقم (v3.36.38)
 | الرقم | المصدر |
 |---|---|
 | 💵 الربح المحرر (يومي/إجمالي) | `Holy_Ledger.json` — فرق ربح الكرت × معامل العمولة · ربح الانطفاء على أيامه من سجل الصفقات · دورة DCA الشرائي بيومها |
@@ -142,7 +143,7 @@
 ## ٥ · ملفات حزمة النقل
 | الملف | شنو بيه |
 |---|---|
-| `Holy_v3.36.37.zip` | **التسليم للسيرفر**: اللوحة + `HANDOFF.md` + `MAP.md` + `SUMMARY.md` + `START_HERE.md` (بلا `.py`) |
+| `Holy_v3.36.38.zip` | **التسليم للسيرفر**: اللوحة + `HANDOFF.md` + `MAP.md` + `SUMMARY.md` + `START_HERE.md` (بلا `.py`) |
 | `Holy_DevKit_full_v3.36.14.zip` | **كل الأدوات والفحوص** (المنصة الوهمية · محاكيات الجرد والـDCA · فحوص الحسابات · فحوص المتصفح · أدوات البناء) + `README_DEVKIT.md` |
 | `Holy_DevKit_add_v3.36.15.zip` | **إضافة v3.36.15 — تنفك فوق DevKit v3.36.14** (`p3375/` المسترجع · `map_remap.py` و`p3363/map_fix_bt.py` المعاد بناؤهم) — الحاوية انبدلت 6-11 وضاعت ملفات الفحص المؤقتة · فحوص المحرك 🪜 ضاعت وترجع تنكتب (§٧ر١٠٢) |
 | `HANDOFF.md` · `MAP.md` · `SUMMARY.md` · `START_HERE.md` | نفسها مفتوحة للقراءة السريعة |
@@ -164,9 +165,9 @@
 | 🔔 إشعارات الأسعار · 📊 مكان الزر | `python3 v3266_test.py <اللوحة الجديدة> <القديمة>` (فحص المتصفح صار `ui_3267.js` ⇓) | 37 |
 | 📱 v3.36.32: تطبيق 2.0 (بالمستودع) | `python3 devtests/t_app20.py` (اللوحة + `ui_app20.js` بالمتصفح · `unset TMPDIR`) · بناء التطبيق `python3 android/build.py` (بلا مفتاح ⇐ غير موقّع · يفحص النسخة بكل أماكنها) · المحاكيات: ارفع `ci/RUN` | 30 · يبني |
 | 🪟 v3.36.34: النوافذ والحركة والرجوع (بالمستودع) | `python3 devtests/ui_windows.py` (`unset TMPDIR`) · الحارس `python3 devtests/t_windows.py` (بلا متصفح) | 19 · 4 |
-| 🎬⚙️ v3.36.35: الحركات بلا تقطيع · قائمة الإعدادات · رجوع المتصفح (بالمستودع) | `python3 devtests/ui_smooth.py` · `python3 devtests/ui_settings.py` · `python3 devtests/ui_fonts.py` · `python3 devtests/ui_bgtone.py` (`unset TMPDIR`) | 12 · 24 · 10 · 14 |
+| 🎬⚙️ v3.36.35: الحركات بلا تقطيع · قائمة الإعدادات · رجوع المتصفح (بالمستودع) | `python3 devtests/ui_smooth.py` · `python3 devtests/ui_settings.py` · `python3 devtests/ui_fonts.py` · `python3 devtests/ui_bgtone.py` · `python3 devtests/ui_device.py` (`unset TMPDIR`) | 12 · 24 · 10 · 14 · 10 |
 | 🃏 v3.36.33: المعدل · الأشكال · الخط (بالمستودع) | `python3 devtests/t_rates.py` · `python3 devtests/ui_skins.py` (`unset TMPDIR`) · مجلد بكل أنواع البطاقات للفحص اليدوي: `python3 devtests/seed_cards.py <مجلد>` ثم `python3 devtests/step/video/vid_dash.py <مجلد> <منفذ>` | 8 · 25 |
-| 🪜 v3.36.37: الشبكي المتدرج (بالمستودع) | 🔔 `devtests/t_alerts.py` · ⬆️ `devtests/step/t_up500.py` · 📈 `devtests/t_bt_real.py` · 🖼️ `devtests/t_card_periods.py` · 🔬 `devtests/t_signals.py` · 🧮 `devtests/t_gridup.py` · ⏩ `devtests/step/t_btfast.py` · ⚠️ `devtests/ui_resize.py` · 💠↕️ `devtests/step/ui_full.py` · 🎨 `devtests/step/ui_lines.py` · 🆔 `devtests/t_botcode.py` · 🪜♾️ `t_pair.py` · **الكل:** `python3 devtests/step/run_all.py [--only=off,ri,reinvest,win,deep,cut,ui,soak] [--names=…]` · 🔬 `t_deep.py [--only=own,far,gap,matrix,riops,scale]` (الدفتر المستقل لكل جزء) · 🃏 `ui_full.py` (البطاقة) · 🪟🛡️🪙 `t_win.py` (النافذة · الرقابة الحقيقية · المُراكِم) · 💠 `t_ri.py` · `t_inj.py` · `t_wd.py` · `t_rel.py` · `t_ri_dash.py` · `ui_ri.py` · طلبات 7-11: `devtests/t_misc.py` · `devtests/ui_misc.py` · بإعادة استثمار: `STEP_CFG='{"reinvest": true, "reinvest_pct": 60}'` · `python3 devtests/step/t_fixes.py` · `t_osc.py` · `t_soak.py --hours=48` (أو `--forever`) · `t_first.py` · `t_inputs.py` · `t_core.py` · `t_faults.py` · `t_ping.py` · `t_cut.py -j4` (+ `--move`) · `ui_first.py` (`unset TMPDIR`) · `bt3615_test.py Holy_Dashboard.pyw` · بمسافة أول بيعة: `STEP_CFG='{"step_first": 0.008}' python3 devtests/step/t_faults.py` | 22 · 5 · 17 · 10 · 5 · 4546 · 9 · 19 |
+| 🪜 v3.36.38: الشبكي المتدرج (بالمستودع) | 🔔 `devtests/t_alerts.py` · ⬆️ `devtests/step/t_up500.py` · 📈 `devtests/t_bt_real.py` · 🖼️ `devtests/t_card_periods.py` · 🔬 `devtests/t_signals.py` · 🧮 `devtests/t_gridup.py` · ⏩ `devtests/step/t_btfast.py` · ⚠️ `devtests/ui_resize.py` · 💠↕️ `devtests/step/ui_full.py` · 🎨 `devtests/step/ui_lines.py` · 🆔 `devtests/t_botcode.py` · 🪜♾️ `t_pair.py` · **الكل:** `python3 devtests/step/run_all.py [--only=off,ri,reinvest,win,deep,cut,ui,soak] [--names=…]` · 🔬 `t_deep.py [--only=own,far,gap,matrix,riops,scale]` (الدفتر المستقل لكل جزء) · 🃏 `ui_full.py` (البطاقة) · 🪟🛡️🪙 `t_win.py` (النافذة · الرقابة الحقيقية · المُراكِم) · 💠 `t_ri.py` · `t_inj.py` · `t_wd.py` · `t_rel.py` · `t_ri_dash.py` · `ui_ri.py` · طلبات 7-11: `devtests/t_misc.py` · `devtests/ui_misc.py` · بإعادة استثمار: `STEP_CFG='{"reinvest": true, "reinvest_pct": 60}'` · `python3 devtests/step/t_fixes.py` · `t_osc.py` · `t_soak.py --hours=48` (أو `--forever`) · `t_first.py` · `t_inputs.py` · `t_core.py` · `t_faults.py` · `t_ping.py` · `t_cut.py -j4` (+ `--move`) · `ui_first.py` (`unset TMPDIR`) · `bt3615_test.py Holy_Dashboard.pyw` · بمسافة أول بيعة: `STEP_CFG='{"step_first": 0.008}' python3 devtests/step/t_faults.py` | 22 · 5 · 17 · 10 · 5 · 4546 · 9 · 19 |
 | 🪜 v3.36.15: الشبكي المتدرج | `python3 p3375/bt3615_test.py <اللوحة>` · `p3375/lay3615.sh <اللوحة>` · المتصفح `ui_3615.js` يحتاج `seed3615.py` ⇐ `step_harness.py` (ضاع) · `t_step` · `t_cut` · `t_ping` · `v3615_test` · `m1_step` ضاعوا ويا الحاوية (6-11) وترجع تنكتب | قبل الضياع: 43/43 ✅ (31- · 34/34 ✅ (31- · 42/42 ✅ |
 | 🧩 v3.36.14: أوامر الدوري فوق الأزرار · 3 + سلايد | `python3 p3374/v3614_test.py <اللوحة الجديدة> p3374/base_v3613.pyw` · `python3 p3374/seed3614.py <جذر> && ./run_with.sh <اللوحة> <جذر> node p3374/ui_3614.js` · `p3374/lay3614.sh <اللوحة>` | 7/7 ✅ · 54/54 ✅ · 30/30 ✅ |
 | 🛠️🧩🃏🎨📱 v3.36.13: تصليحات البينغ · أوامر الدوري · OKX · الويدجت | `python3 p3373/v3613_test.py <اللوحة الجديدة> p3373/base_v3612.pyw` · `python3 p3373/v3613_dca.py p3373/eng` · `python3 p3373/seed3613.py <جذر> && ./run_with.sh <اللوحة> <جذر> node p3373/ui_3613.js` · `python3 p3372/ping_test.py p3373/eng all --prof 0.3,1,3,4.9,spiky -j4` · `p3373/cut_all.sh p3373/eng` | 13/13 ✅ · 36/36 ✅ · 54/54 ✅ · 105/105 ✅ (0.3 · 1 · 3 · 4.9 ثانية · متذبذب — كل المحركات) |
