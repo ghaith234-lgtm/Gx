@@ -16,3 +16,6 @@ android/keystore/
 
 # 📱 the signed app file (built by android/build.py --key …) — it goes INTO the dashboard (APP_APK_B64), not into git
 android/dist/
+
+# 🔤 v3.36.40: the owner's own fonts (never in this public repository)
+fonts/

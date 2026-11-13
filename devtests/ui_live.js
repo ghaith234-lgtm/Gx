@@ -262,6 +262,29 @@ const SNAP = `(() => { const c = document.getElementById('hbg'); if (!c || !c.wi
   const rm4 = await pg.evaluate(() => ({ open: !document.getElementById('mbg').hidden, raf: !!HB.raf }));
   ok('🎬 a computer that allows motion ⇒ never asked, the background just moves', !rm4.open && rm4.raf, rm4);
   await ctx.close();
+  // ── 🔤 v3.36.40: your own fonts — ⚙️ «خط الكتابة» ⇒ «➕ أضف خطاً من جهازك» (a free system font stands in for the owner's files)
+  const FONT = require('fs').readdirSync('/usr/share/fonts/truetype/crosextra').map(f => '/usr/share/fonts/truetype/crosextra/' + f).find(f => /Caladea-Regular\.ttf$/.test(f));
+  ({ ctx, pg } = await open(br, errs, { ls: { dash_anim: 'none' } }));
+  await pg.evaluate(async () => { openSettings(); stTog('font'); await new Promise(r => setTimeout(r, 200)) });
+  const uf0 = await pg.evaluate(() => ({ add: !!document.getElementById('ufAdd'), inp: (document.getElementById('ufIn') || {}).accept, n: HFONTS.length }));
+  await pg.setInputFiles('#ufIn', FONT); await pg.waitForTimeout(2500);
+  const uf1 = await pg.evaluate(async () => { const k = localStorage.getItem('dash_font'), f = HFONTS.find(x => x[0] === k) || [];
+    await document.fonts.ready; return { k, name: f[2], ff: document.documentElement.style.getPropertyValue('--ff'), list: JSON.parse(localStorage.getItem('dash_ufonts') || '[]').length,
+      loaded: [...document.fonts].some(x => /HolyU/.test(x.family) && x.status === 'loaded'), btn: !!document.querySelector(`#fontRow button[data-font="${k}"]`), del: document.querySelectorAll('#ufRow .ufDel').length } });
+  ok(`🔤 ⚙️ «➕ أضف خطاً من جهازك» ⇒ uploaded, in the list as «${uf1.name}» and picked at once (the page draws with it)`,
+    uf0.add && /\.ttf/.test(uf0.inp) && /^u[0-9a-f]{10}$/.test(uf1.k) && uf1.name === 'Caladea Regular' && /HolyU/.test(uf1.ff) && uf1.loaded && uf1.btn && uf1.del === 1 && uf1.list === 1, { uf0, uf1 });
+  await pg.reload({ waitUntil: 'domcontentloaded' });
+  const uf2 = await pg.evaluate(() => ({ ff: document.documentElement.style.getPropertyValue('--ff'), css: (document.getElementById('hufonts') || {}).textContent || '' }));
+  ok('🔤 after a reload the chosen font is there before the page draws (kept on this device)', /HolyU/.test(uf2.ff) && /@font-face/.test(uf2.css), uf2);
+  await pg.waitForFunction(() => typeof DATA !== 'undefined' && DATA && DATA.bots && DATA.bots.length >= 9, null, { timeout: 30000 }); await pg.waitForTimeout(2000);
+  const uf3 = await pg.evaluate(async () => { const r = await api('/api/fonts', { act: 'add', name: 'fake.ttf', b64: btoa('<html>not a font</html>') }); const l = await api('/api/fonts');
+    const k = localStorage.getItem('dash_font'), w = await fetch('/font/' + k); return { r, n: l.fonts.length, ct: w.headers.get('content-type'), cc: w.headers.get('cache-control'), sz: (await w.arrayBuffer()).byteLength } });
+  ok(`🔤 a file that is not a font ⇒ refused («${uf3.r.msg}») · the font file is served as ${uf3.ct} and cached`, !uf3.r.ok && uf3.n === 1 && uf3.ct === 'font/ttf' && /immutable/.test(uf3.cc || '') && uf3.sz > 50000, uf3);
+  await pg.evaluate(async () => { openSettings(); stTog('font'); await new Promise(r => setTimeout(r, 200)) });
+  await pg.click('#ufRow .ufDel'); await pg.waitForTimeout(300); await pg.click('#cf_y'); await pg.waitForTimeout(1500);
+  const uf4 = await pg.evaluate(async () => { const l = await api('/api/fonts'); return { n: l.fonts.length, k: localStorage.getItem('dash_font'), ff: document.documentElement.style.getPropertyValue('--ff'), u: HFONTS.filter(x => x[5]).length } });
+  ok('🔤 🗑 ⇒ asked, then the font is gone from the server and the list · this device back to IBM Plex', uf4.n === 0 && uf4.k === null && !/HolyU/.test(uf4.ff) && uf4.u === 0, uf4);
+  await ctx.close();
   ok('no page errors', !errs.length, errs);
   await br.close();
   console.log(`${res.every(Boolean) ? '✅' : '❌'} ui_live: ${res.filter(Boolean).length}/${res.length}`);
