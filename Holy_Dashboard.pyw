@@ -5576,7 +5576,7 @@ def _bt_finished(jd):
         if os.path.exists(os.path.join(jd, "stop.flag")) or os.path.exists(os.path.join(jd, "err_f.json")):   # 📈 جلب الأسعار فشل ⇒ لا عمّال بعده
             return True
         n = int((load_json(os.path.join(jd, "job.json")) or {}).get("paths") or 0)
-        return n > 0 and sum(1 for f in os.listdir(jd) if f.startswith("s_")) >= n
+        return n > 0 and sum(1 for f in os.listdir(jd) if f.startswith("s_") and f.endswith(".json")) >= n   # 🧪 v3.36.33: لا «.dash_tmp»
     except Exception:
         return False
 
@@ -5601,7 +5601,7 @@ def bt_status(data):
             paths.append(s)
     err = None
     for fn in sorted(os.listdir(jd)):
-        if fn.startswith("err_"):
+        if fn.startswith("err_") and fn.endswith(".json"):      # 🧪 v3.36.33: ملف «.dash_tmp» قبل اسمه النهائي ما ينقرا (كان يسبق «انتهى؟»)
             e = load_json(os.path.join(jd, fn)) or {}
             err = e.get("msg") or "خطأ"
     j = _BT_JOBS.get(job.get("id"))

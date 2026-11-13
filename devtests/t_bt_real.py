@@ -15,7 +15,7 @@
 #      the range of 🎚️ and the periodic bot's lo/hi moved to the window's price
 #   ⑤ a running bot's own settings (its folder): its base price → the window's first price, its floor by the same ratio
 #   ⑥ a coin younger than the paths asked → only the windows it has, with a note · a coin with no candles → a clear error
-#   ⑦ stop while fetching → stopped, no worker started, the box free again
+#   ⑦ stop while fetching → stopped, no worker started, the box free again · ⑦b a half-written «.dash_tmp» file counts for nothing
 #   ⑧ 3 months · 6 months: for every market (calm/normal/wild/real) · ~8,700 price points each, ending at their start price (synthetic)
 #   ⑨ a real browser: the period and market buttons · the real note · the fetch line · a real run's end card (real profit · holding ·
 #      bot vs holding · its dates) · the median line · the table column · no page error
@@ -309,6 +309,26 @@ try:
        S8.get("ok") and s8.get("state") == "prep" and not busy.get("ok") and st8.get("state") == "stopped"
        and not any(f.startswith("w") and f.endswith(".log") for f in os.listdir(jd8)) and not (m._BT_JOBS.get(S8["id"]) or {}).get("fetch")
        and sum(1 for f in os.listdir(jd8) if f.startswith("px_")) < 20, (S8, s8.get("state"), busy, st8.get("state"), os.listdir(jd8)))
+
+    # ── ⑦b (v3.36.33 · p41): a file half-written («.dash_tmp» before its final name) is not read — the status said «error» from
+    #    «err_f.json.dash_tmp» while «finished?» waited for «err_f.json» ⇒ a new test in that instant was refused (⑦ once, 19/20)
+    jr = "bt_20990101_000000_777"
+    jdr = os.path.join(m.BT_DIR, jr)
+    os.makedirs(jdr, exist_ok=True)
+    json.dump({"id": jr, "paths": 1, "sym": "XRP-USDT", "period": "week", "kind": "grid"}, open(os.path.join(jdr, "job.json"), "w"))
+    json.dump({"msg": "ما وصلت أسعار حقيقية"}, open(os.path.join(jdr, "err_f.json.dash_tmp"), "w"))
+    json.dump({"n": 0}, open(os.path.join(jdr, "s_0.json.dash_tmp"), "w"))
+    a_st, a_fin = (m._safe(m.bt_status, {"id": jr}, default={}) or {}).get("state"), m._bt_finished(jdr)
+    os.replace(os.path.join(jdr, "err_f.json.dash_tmp"), os.path.join(jdr, "err_f.json"))
+    b_st, b_fin = (m._safe(m.bt_status, {"id": jr}, default={}) or {}).get("state"), m._bt_finished(jdr)
+    os.remove(os.path.join(jdr, "err_f.json"))
+    c_fin = m._bt_finished(jdr)
+    os.replace(os.path.join(jdr, "s_0.json.dash_tmp"), os.path.join(jdr, "s_0.json"))
+    d_fin = m._bt_finished(jdr)
+    ok(f"⑦b a half-written file counts for nothing: «err_f.json.dash_tmp» ⇒ state {a_st} · finished {a_fin} — renamed ⇒ {b_st} · {b_fin} · "
+       f"«s_0.json.dash_tmp» ⇒ finished {c_fin} — renamed ⇒ {d_fin} (status and «finished?» always agree)",
+       a_st != "error" and a_fin is False and b_st == "error" and b_fin is True and c_fin is False and d_fin is True, (a_st, a_fin, b_st, b_fin, c_fin, d_fin))
+    shutil.rmtree(jdr, ignore_errors=True)
 
     # ── ⑧ 3 and 6 months for every market
     per_ok = m._BT_PER.get("q3") == (91, 900) and m._BT_PER.get("h6") == (182, 1800) and m._BT_BAR.get("q3") == ("15m", 900) and m._BT_BAR.get("h6") == ("30m", 1800)
