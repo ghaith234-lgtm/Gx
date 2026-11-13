@@ -211,7 +211,10 @@ adb shell dumpsys window windows | grep -E "com.holy.dash/com.holy.dash.MainActi
 WVM=$(adb shell dumpsys package com.google.android.webview 2>/dev/null | grep -m1 versionName | grep -oE '[0-9]+' | head -1)
 if [ "${WVM:-0}" -lt 87 ]; then say "INFO WebView ${WVM:-?} < 87 ⇒ the ⚙️/📱 windows can't open here ⇒ 🎞️/🔐 taps skipped on this phone (Android 14 runs them)"; else
 adb shell am start -n $P/.MainActivity --es go set >/dev/null; sleep 6; dump set15; shot set15
-if grep -q "الفريمات" $OUT/ui_set15.xml; then say "PASS ⚙️ «الفريمات» row shown"; grep -oE 'text="[^"]*Hz[^"]*"' $OUT/ui_set15.xml | head -1 | sed 's/^/HOLYCI fps note: /'
+if grep -q "الفريمات" $OUT/ui_set15.xml; then say "PASS ⚙️ «الفريمات» row shown"
+  # v3.36.35: ⚙️ is a list — the «الفريمات» row opens its choices on a tap
+  tap "الفريمات" set15; sleep 2; dump set15o >/dev/null; shot set15o
+  grep -oE 'text="[^"]*Hz[^"]*"' $OUT/ui_set15o.xml | head -1 | sed 's/^/HOLYCI fps note: /'
   seek "60" set15s; sleep 3
   if pf | grep -q "<map"; then pf | grep -q '<int name="fps" value="60"' && say "PASS 60 saved by the app (HolyApp.setFps)" || say "FAIL fps not saved: $(pf | grep -o 'name="fps"[^/]*')"; fi
   adb shell dumpsys window windows | grep -E "com.holy.dash/com.holy.dash.MainActivity" -A40 | grep -oE "preferredRefreshRate=[0-9.]+" | head -1 | sed 's/^/HOLYCI window after 60: /'

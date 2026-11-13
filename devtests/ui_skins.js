@@ -47,7 +47,7 @@ async function open(br, skin, errs) {
   ok('📈 the tip says where it comes from (its own trading · ÷ days · the counter unchanged)', /من تداوله هو/.test(x.tip) && /عدّاد الربح لا يتغيّر/.test(x.tip), x.tip);
   // ── 🔤 the fonts
   await pg.evaluate(() => openSettings());
-  await pg.waitForSelector('#fontRow button', { timeout: 10000 });
+  await pg.waitForSelector('#fontRow button', { state: 'attached', timeout: 10000 });   // v3.36.35: inside the closed «خط الكتابة» row
   const fr = await pg.evaluate(() => [...document.querySelectorAll('#fontRow button')].map(b => ({ t: b.textContent, f: b.style.fontFamily, on: b.classList.contains('on'), k: b.dataset.font })));
   ok(`🔤 ⚙️ «خط الكتابة»: ${fr.length} fonts, each button written in its own font · the default (IBM Plex) on`,
      fr.length === 9 && fr.every(b => b.f) && (fr.find(b => b.k === 'plex') || {}).on && fr.some(b => /Cairo/.test(b.f)) && fr.some(b => b.k === 'sys'), fr);

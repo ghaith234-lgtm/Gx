@@ -52,7 +52,7 @@ frame = {
     "hideModal plays the closing": re.search(r"function hideModal\(\)\{[^\n]*hwOut\(", js),
     "holyBack walks the stack": re.search(r"function holyBack\(\)\{[\s\S]{0,600}HW\.st\[HW\.st\.length-1\]", js),
     "the browser back is watched": "window.addEventListener('popstate'" in js,
-    "⚙️ «حركة فتح النوافذ»": 'id="animRow"' in js and "🎬 حركة فتح النوافذ" in js,
+    "⚙️ «حركة فتح النوافذ»": 'id="animRow"' in js and "حركة فتح النوافذ" in js,
     "Esc = back": "if(e.key==='Escape')holyBack()" in js,
     "askConfirm keeps the dialog size": re.search(r"function askConfirm\([^)]*\)\{showDialog\(", js),
     "every layer is watched (any code that opens it)": "HW.mo=new MutationObserver" in js,
