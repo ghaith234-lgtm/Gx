@@ -211,6 +211,8 @@ grep -q "مخفي" $OUT/ui_app13b.xml && say "PASS panel shows «مخفي»" || 
 pf(){ adb shell cat /data/data/$P/shared_prefs/holy.xml 2>/dev/null | tr -d '\r'; }
 pf | grep -q "<map" && say "app settings file readable (root)" || say "INFO app settings file not readable here (no root) ⇒ the checks read the screen only"
 pf | grep -oE '<(int|boolean) name="(fps|lock)" value="[^"]*"' | sed 's/^/HOLYCI prefs before: /'
+# v3.36.39: a phone that never chose starts at 60 (the dashboard asks the app once — the owner: «60 ⇒ no stutter»)
+if pf | grep -q "<map"; then pf | grep -q '<int name="fps" value="60"' && say "PASS never chosen ⇒ the app starts at 60 (asked once by the dashboard)" || say "FAIL never chosen ⇒ not 60: $(pf | grep -o 'name="fps"[^/]*')"; fi
 adb shell dumpsys window windows | grep -E "com.holy.dash/com.holy.dash.MainActivity" -A40 | grep -oE "preferredDisplayModeId=[0-9]+|preferredRefreshRate=[0-9.]+" | sort -u | head -3 | sed 's/^/HOLYCI window: /'
 adb shell dumpsys window windows | grep -E "com.holy.dash/com.holy.dash.MainActivity" -A40 | grep -qE "preferredDisplayModeId=[1-9]|preferredRefreshRate=[1-9]" && say "PASS 1.5: the app window asks the screen for a refresh rate" || say "FAIL 1.5: the app window asks for no refresh rate"
 # the dashboard's windows need Chrome 87+ (CSS inset) ⇒ on an older system WebView the ⚙️/📱 rows have no size ⇒ nothing to tap
