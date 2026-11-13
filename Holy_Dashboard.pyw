@@ -26103,7 +26103,7 @@ function openSettings(){
      +T('🔒','قفل البطاقات — لهذا الجهاز','uiCardLockToggle()','bCLock',uiCardLock(),'مفعّل — اضغط 🔒 في البطاقة قبل أي زر','غير مفعّل')
      +T('🤖','الحارس الآلي',"g('watchdog');setTimeout(openSettings,700)",'bWd',!!d.watchdog,'يعمل — يعيد تشغيل البوت المتوقف','متوقف — البوت المتوقف يبقى متوقفاً')
      +L('🛡️','فحص الرقابة الآن',"g('guard_scan')",'مطابقة الأرصدة والأوامر مع المنصة'))}
-   ${G('🩺 التشخيص', L('🩺','تشخيص','runDiag()')+L('📄','تقرير كامل','openExport()')+L('🔍','فحص OKX','okxCheck()')+L('🧰','المكتبات','openLibs()'))}
+   ${G('🩺 التشخيص', L('🩺','تشخيص','runDiag()')+L('🎬','فحص سلاسة الحركة','motionCheck()','يقيس الحركة على هذا الجهاز نفسه')+L('📄','تقرير كامل','openExport()')+L('🔍','فحص OKX','okxCheck()')+L('🧰','المكتبات','openLibs()'))}
    ${G('🖥️ النظام', ((lin||!os)?L('🐧','إقلاع لينكس','openBoot()'):'')
       +((win||!os)?T('🪟','إقلاع ويندوز',"g('boot');setTimeout(openSettings,700)",'bBoot',!!d.boot,'مفعّل — تعمل مع تشغيل الحاسوب','معطّل'):'')
       +L('🧬','تحديث المحركات','confirmUpgrade()'))}
@@ -28381,6 +28381,40 @@ function hwLight(o,c){                                            // 🎬 v3.36.
         if(BL.test(cs.display)&&cs.position!=='fixed'){cut.push([C[i],r.height]);i+=e.getElementsByTagName('*').length}}}
     for(const [n,h] of cut){n.replaceChildren();Object.assign(n.style,{height:h+'px',minHeight:h+'px',maxHeight:h+'px',boxSizing:'border-box',overflow:'hidden'})}
   }catch(e){}}
+/* 🎬 v3.36.36: فحص سلاسة الحركة على الجهاز نفسه — يفتح ويسد ⚙️ والتأكيد و📊 بالحركة المختارة ويعدّ الإطارات (عرض فقط · لا يرسل شيئاً) */
+async function motionCheck(){const s=hwStyle(),nm=(HW_ANIMS.find(x=>x[0]===uiAnim())||[])[1]||'';
+  if(s==='none'){toast(uiLite()?'⚡ الوضع الخفيف مفعّل — لا حركة لقياسها':'📴 الهاتف مضبوط على تقليل الحركة — لا حركة لقياسها',false);return}
+  const W=ms=>new Promise(r=>setTimeout(r,ms)),hz=await new Promise(r=>hzProbe(r)),fr=hz>0?1000/hz:16.7;
+  for(let i=0;i<8&&holyBack();i++);await W(500);toast('🎬 أقيس الحركة… لا تلمس الشاشة (10 ثوانٍ تقريباً)',true);await W(900);
+  const T=[['⚙️ الإعدادات',()=>openSettings(),()=>hideModal()],['تأكيد',()=>askConfirm('🧪 نافذة قياس','لا تضغط شيئاً — تنسدّ وحدها.',()=>{}),()=>hideModal()],
+           ['📊 التقارير',()=>openReports(),()=>closePage('reports')]],R=[];
+  for(const [w,op,cl] of T)for(const ph of ['فتح','سد']){
+    if(ph==='سد'){op();await W(1100)}
+    const t0=performance.now();if(ph==='فتح')op();else cl();const c0=performance.now()-t0;
+    const pick=()=>ph==='فتح'?((w.includes('التقارير')?document.querySelector('#page_reports .pwrap'):document.getElementById('modal'))||{getAnimations:()=>[]}).getAnimations()[0]
+      :document.getAnimations().find(x=>x.effect&&x.effect.target&&x.effect.target.closest&&x.effect.target.closest('.hwclone')&&x.effect.target.matches('.modal,.pwrap'));
+    const A=pick(),ts=[];let st=0;
+    await new Promise(res=>{(function f(){const n=performance.now(),ps=A?A.playState:'none';
+      if(ps==='running'||ps==='finished'){if(!st)st=n;ts.push(n)}
+      if(A&&ps!=='finished'&&n-t0<2500)requestAnimationFrame(f);else res()})()});
+    const g=ts.slice(1).map((t,i)=>t-ts[i]);
+    R.push({w,ph,cost:Math.round(c0),first:st?Math.round(st-t0):-1,max:Math.round(g.length?Math.max(...g):0),bad:g.filter(x=>x>fr*2.2).length,n:g.length});
+    if(ph==='فتح')cl();await W(800)}
+  const G=gpuInfo(),dm=navigator.deviceMemory,cores=navigator.hardwareConcurrency,where=IN_APP?'📱 التطبيق':IN_WIN?'💻 برنامج ويندوز':'🌐 المتصفح';
+  const v=x=>x.first<0?'—':x.bad===0&&x.first<=120?'✅ سلسة':x.bad<=2&&x.first<=250?'🟡 مقبولة':x.bad>2?'🔴 تقطّع':'🐢 بطيئة البداية';
+  const row=x=>`<tr><td>${x.w}</td><td>${x.ph}</td><td class="num">${x.first<0?'—':x.first+' ms'}</td><td class="num">${x.max} ms</td><td class="num">${x.bad}</td><td>${v(x)}</td></tr>`;
+  const worst=R.reduce((a,x)=>Math.max(a,x.bad),0)+R.filter(x=>x.first>250).length,slow=R.reduce((a,x)=>Math.max(a,x.first),0);
+  showModal(`<h2>🎬 فحص سلاسة الحركة</h2>
+    <p style="color:var(--mut);font-size:13px;line-height:1.9">الحركة: <b>${nm}</b> · ${where} · الشاشة <b class="num">${hz||'?'} Hz</b> (الإطار ${fr.toFixed(1)} ms) ·
+      المعالج <b class="num">${cores||'?'}</b> أنوية${dm?` · الذاكرة <b class="num">${dm} GB</b>`:''} · الرسوميات: ${G.name?SKE(G.name):'غير معروفة'}${G.ok===false?' ⚠️ (الرسم على المعالج)':''}</p>
+    <div style="overflow-x:auto"><table class="mtab" style="width:100%;border-collapse:collapse;font-size:13px">
+      <tr style="color:var(--mut2)"><th style="text-align:start">النافذة</th><th>المرحلة</th><th>بدأت بعد</th><th>أطول فجوة</th><th>تقطّعات</th><th></th></tr>
+      ${R.map(row).join('')}</table></div>
+    <p style="color:var(--mut2);font-size:12px;line-height:1.8;margin-top:10px">«بدأت بعد» = من الضغطة حتى أول إطار من الحركة (يشمل بناء النافذة) · «أطول فجوة» بين إطارين أثناء الحركة ·
+      «تقطّعات» = إطارات تأخرت أكثر من ضعف إطار الشاشة أثناء الحركة. ${worst?'صوّر هذه النافذة وأرسلها لنعرف أين التقطّع بالضبط.':'الحركة سلسة على هذا الجهاز.'}
+      ${slow>250?' البداية بطيئة: بناء النافذة نفسها يأخذ وقتاً على هذا الجهاز.':''}</p>
+    <div class="mbtns"><button onclick="motionCheck()">🔁 أعد القياس</button><button onclick="hideModal()">إغلاق</button></div>`);
+  try{const tb=document.querySelector('#modal .mtab');tb.querySelectorAll('td,th').forEach(c=>{c.style.padding='6px 4px';c.style.borderBottom='1px solid var(--line)'})}catch(e){}}
 function hwIdle(){const w=(HW.busy||0)-performance.now();return w>0?new Promise(r=>setTimeout(r,Math.min(w,700))):null}   // 🎬 v3.36.35: حركة شغّالة ⇒ انتظر نهايتها
 function hwOut(box,panelSel,small,pt){                 // النافذة تنسدّ فوراً (الكود يشوفها مسدودة) · نسخة منها تلعب الإغلاق
   const s=hwStyle();if(s==='none'||!box||!box.animate||!box.isConnected)return;

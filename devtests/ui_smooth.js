@@ -78,6 +78,22 @@ const STYLES = ['up', 'zoom', 'side', 'btn', 'blur', 'spring'];
   const pc = await pg.evaluate(async () => { openSettings(); await new Promise(r => setTimeout(r, 400)); const f = getComputedStyle(document.getElementById('mbg')).backdropFilter; hideModal(); return f });
   ok(`🖥️ a computer: the frosted background behind the big window stays («${pc}»)`, pc && pc !== 'none', pc);
   await ctx.close();
+  // ── v3.36.36: ⚙️ 🩺 «فحص سلاسة الحركة» measures on the device itself (display only)
+  ({ ctx, pg } = await open(br, 412, 900, null, errs, true));
+  const mc = await pg.evaluate(async () => { const row = [...document.querySelectorAll('#modal .sln')].length; openSettings(); stTog('anim');
+    const has = !!document.querySelector('#modal .sln[onclick="motionCheck()"]'); hideModal(); await new Promise(r => setTimeout(r, 400));
+    await motionCheck(); await new Promise(r => setTimeout(r, 300));
+    const m = document.getElementById('modal'), rows = [...m.querySelectorAll('.mtab tr')].slice(1).map(tr => [...tr.children].map(td => td.textContent.trim()));
+    return { has, open: !document.getElementById('mbg').hidden, title: (m.querySelector('h2') || {}).textContent, rows, head: (m.querySelector('.hwb p') || {}).textContent || '',
+      reports: document.getElementById('page_reports').classList.contains('on'), st: HW.st.map(x => x.k).join() } });
+  ok(`🎬 ⚙️ 🩺 «فحص سلاسة الحركة»: opens and closes ⚙️ · a confirmation · 📊 with the motion and shows ${mc.rows.length} rows (wait · longest gap · stutters · verdict) + the device`,
+    mc.has && mc.open && /سلاسة الحركة/.test(mc.title) && mc.rows.length === 6 && mc.rows.every(r => r.length === 6 && /ms$/.test(r[2]) && /(سلسة|مقبولة|تقطّع)/.test(r[5]))
+      && /Hz/.test(mc.head) && /أنوية/.test(mc.head) && !mc.reports && mc.st === 'modal', mc);
+  await pg.evaluate(() => hideModal());
+  const ml = await pg.evaluate(async () => { localStorage.setItem('dash_lite', 'on'); document.documentElement.classList.add('lite'); await motionCheck(); await new Promise(r => setTimeout(r, 200));
+    return { open: !document.getElementById('mbg').hidden, toast: (document.querySelector('#toast,.toast') || {}).textContent || '' } });
+  ok('🎬 with «⚡ الوضع الخفيف» it measures nothing and says why', !ml.open && /الخفيف/.test(ml.toast), ml);
+  await ctx.close();
   // ── the hitches, measured: frames over 34 ms while ⚙️ opens and closes, every motion, CPU ×4
   const jk = [];
   for (const a of STYLES) {
