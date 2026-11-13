@@ -40,9 +40,10 @@ elif cmd == "find":
     if best is not None:
         print("%d %d" % center(best.get("bounds")))
 elif cmd == "findx":             # exact text only · on screen (a row below the fold has no size until it is scrolled into view)
-    want = sys.argv[3]
+    nz = lambda x: " ".join(x.replace("\ufe0f", "").split())     # 2.0 (run 89): the WebView reports «⬇️» without its U+FE0F
+    want = nz(sys.argv[3])
     for n in nodes(sys.argv[2]):
-        t = (n.get("text") or n.get("content-desc") or "").strip()
+        t = nz(n.get("text") or n.get("content-desc") or "")
         x1, y1, x2, y2 = map(int, re.findall(r"\d+", n.get("bounds") or "[0,0][0,0]"))
         if t == want and x2 > x1 and y2 > y1:
             print("%d %d" % center(n.get("bounds")))

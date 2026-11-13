@@ -60,6 +60,8 @@ if git fetch -q --depth=1 origin $OLDC 2>/dev/null && git show FETCH_HEAD:Holy_D
       if [ -n "$got" ] && [ "$(sha256sum moved.apk | cut -d' ' -f1)" = "$NEWSHA" ]; then say "PASS 2.0: «⬇️ احفظها» saved Downloads/Holy/Holy-2.0.apk = the dashboard's 2.0 (sha256)"; INST=moved.apk
       else say "FAIL 2.0: «⬇️ احفظها» — no Holy-2.0.apk in Downloads/Holy, or not the same file ($(adb shell ls /sdcard/Download/Holy 2>&1 | tr -d '\r' | tr '\n' ' '))"; fi
       dump old3 >/dev/null; shot old3
+    elif [ "${WV0:-0}" -lt 87 ]; then say "INFO 2.0: this WebView (${WV0:-?}) lays the panel's buttons out with no size ⇒ «⬇️ احفظها» not tapped here (Android 14 runs it)"
+    else say "FAIL 2.0: «⬇️ احفظها» not found in the 1.9 panel ($(python3 ci/ci_tools.py texts $OUT/ui_old2.xml old2 | grep -o '.\{0,40\}احفظها.\{0,10\}' | head -2 | tr '\n' ' '))"
     fi
   elif [ "${WV0:-0}" -lt 87 ]; then say "INFO 2.0: this system WebView (${WV0:-?}) can't open the dashboard's windows ⇒ the 1.9 panel isn't checked here (Android 11/14 run it)"
   else say "FAIL 2.0: inside 1.9 the move panel never opened ($(python3 ci/ci_tools.py texts $OUT/ui_old1.xml old1 | cut -c1-200))"; fi
