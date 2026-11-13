@@ -34,22 +34,22 @@ const vis = 'el => !!el && el.offsetHeight > 0';
   ok(`⚙️ ${gr.length} groups in order: ${gr.map(g => g.t.split(' — ')[0]).join(' · ')}`, gr.length === 9 && GT.every((t, i) => gr[i] && gr[i].t.startsWith(t)), gr.map(g => g.t));
   const G = t => (gr.find(g => g.t.startsWith(t)) || { rows: [] }).rows;
   ok('🔔 the notifications together: Telegram + the price ticker (its alerts)', G('🔔').join('|') === 'تنبيهات تيليغرام|شريط الأسعار وإشعاراته', G('🔔'));
-  ok('🔊 the sounds together: the profit sound + the unlock sound', G('🔊').join('|') === 'صوت الربح|صوت فتح القفل', G('🔊'));
-  ok('🖌️ the look: المظهر · البطاقات · الخط · الحركة · رجل العصا', G('🖌️').join('|') === 'المظهر|شكل البطاقات|خط الكتابة|حركة فتح النوافذ|رجل العصا', G('🖌️'));
+  ok('🔊 the sounds together: the profit sound + the unlock sound (+ the continuous tone, v3.36.37)', G('🔊').join('|') === 'صوت الربح|صوت فتح القفل|النغمة المستمرة', G('🔊'));
+  ok('🖌️ the look: الألوان · الخلفية · البطاقات · الخط · الحركة · رجل العصا', G('🖌️').join('|') === 'الألوان|الخلفية|شكل البطاقات|خط الكتابة|حركة فتح النوافذ|رجل العصا', G('🖌️'));
   ok('⚡ the performance: الوضع الخفيف · تحديث الأرقام · الفريمات', G('⚡').join('|') === 'الوضع الخفيف|تحديث الأرقام|الفريمات', G('⚡'));
   // ── every row with choices: closed, shows its value
   const sx = await pg.evaluate(() => [...document.querySelectorAll('#modal .sx')].map(r => ({ k: r.dataset.k, open: r.classList.contains('open'),
     body: r.querySelector('.sbody').offsetHeight, val: r.querySelector('.sval').textContent.trim(), aria: r.querySelector('.shd').getAttribute('aria-expanded') })));
-  ok(`⚙️ ${sx.length} rows with choices (${sx.map(x => x.k).join(' · ')}) — all closed at first, their choices hidden`, sx.map(x => x.k).join() === 'theme,skin,font,anim,poll,fps' && sx.every(x => !x.open && !x.body && x.aria === 'false'), sx);
+  ok(`⚙️ ${sx.length} rows with choices (${sx.map(x => x.k).join(' · ')}) — all closed at first, their choices hidden`, sx.map(x => x.k).join() === 'theme,bg,skin,font,anim,poll,fps,tone' && sx.every(x => !x.open && !x.body && x.aria === 'false'), sx);
   const want = await pg.evaluate(() => ({ theme: (THEMES.find(t => t[0] === uiTheme()) || [])[1], font: (HFONTS.find(x => x[0] === uiFont()) || [])[2],
-    anim: (HW_ANIMS.find(x => x[0] === uiAnim()) || [])[1], fps: uiFps() + ' فريم', poll: pollMs() === 3000 ? 'عادي 3ث' : '?', skin: 'القديم' }));
+    anim: (HW_ANIMS.find(x => x[0] === uiAnim()) || [])[1], fps: uiFps() + ' فريم', poll: pollMs() === 3000 ? 'عادي 3ث' : '?', skin: 'القديم', bg: 'الأصلية', tone: 'بلا' }));
   const badV = sx.filter(x => !x.val.startsWith(want[x.k]));
   ok(`⚙️ each row shows its current value without opening it (المظهر «${want.theme}» · الفريمات «${want.fps}» …)`, !badV.length, { badV, want });
   // ── tap المظهر ⇒ the colours · tap again ⇒ hidden
   await pg.click('#modal .sx[data-k="theme"] .shd'); await pg.waitForTimeout(300);
   const t1 = await pg.evaluate(() => { const r = document.querySelector('#modal .sx[data-k="theme"]'); return { open: r.classList.contains('open'), n: r.querySelectorAll('.sbody .thb').length,
     shown: [...r.querySelectorAll('.thb')].filter(b => b.offsetHeight > 0).length, aria: r.querySelector('.shd').getAttribute('aria-expanded'), others: [...document.querySelectorAll('#modal .sx.open')].length } });
-  ok(`🎨 a tap on «المظهر» shows the ${t1.n} colours (only that row opens)`, t1.open && t1.n >= 7 && t1.shown === t1.n && t1.aria === 'true' && t1.others === 1, t1);
+  ok(`🎨 a tap on «الألوان» shows the ${t1.n} colours (only that row opens)`, t1.open && t1.n >= 7 && t1.shown === t1.n && t1.aria === 'true' && t1.others === 1, t1);
   await pg.click('#modal .sx[data-k="theme"] .shd'); await pg.waitForTimeout(250);
   const t2 = await pg.evaluate(() => document.querySelector('#modal .sx[data-k="theme"] .sbody').offsetHeight);
   ok('🎨 a second tap closes it', t2 === 0, t2);
@@ -70,7 +70,7 @@ const vis = 'el => !!el && el.offsetHeight > 0';
   await pg.evaluate(() => setTheme('ocean')); await pg.waitForTimeout(250);
   const th = await pg.evaluate(() => ({ open: document.querySelector('#modal .sx[data-k="theme"]').classList.contains('open'), val: document.querySelector('#modal .sx[data-k="theme"] .sval').textContent.trim(),
     on: (document.querySelector('#modal .thb.on') || {}).title }));
-  ok(`🎨 choosing a colour: «المظهر» stays open · the row and the ✓ follow («${th.val}»)`, th.open && th.val === 'أزرق محيطي' && th.on === 'أزرق محيطي', th);
+  ok(`🎨 choosing a colour: «الألوان» stays open · the row and the ✓ follow («${th.val}»)`, th.open && th.val === 'أزرق محيطي' && th.on === 'أزرق محيطي', th);
   await pg.evaluate(() => { setTheme('holy'); stTog('theme'); stTog('fps') }); await pg.waitForTimeout(200);
   await pg.evaluate(() => { document.querySelector('#modal .hwb').scrollTop = 400; showModal('<h2>🧪 نافذة أخرى</h2><div style="height:3000px"></div>') }); await pg.waitForTimeout(150);
   const other = await pg.evaluate(() => document.querySelector('#modal .hwb').scrollTop);

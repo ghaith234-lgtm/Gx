@@ -23747,6 +23747,7 @@ html.abg .orb{display:none}
 html.abg body{background-image:none}
 html.abg header{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgb(var(--surf2-rgb)/.94)}
 .bgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(98px,1fr));gap:8px}
+.tvol{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:12px;color:var(--mut)}.tvol input[type=range]{flex:1;max-width:280px;height:26px;padding:0;border:0;background:none;accent-color:rgb(var(--vio-rgb))}
 .bgb{display:flex;flex-direction:column;align-items:center;gap:6px;padding:7px 6px 8px;border-radius:12px;font-size:11.5px;min-width:0}
 .bgb canvas{width:100%;max-width:132px;aspect-ratio:5/3;height:auto;border-radius:8px;display:block;background:var(--bg0)}
 
@@ -24029,7 +24030,7 @@ const f2=x=>x.toFixed(2),f4=x=>{const a=Math.abs(x);return(a>0&&a<0.001)?x.toFix
 let toastT=null;
 function toast(msg,ok){const t=$('#toast');t.textContent=msg||'…';t.className=(ok===false||ok==='0')?'err show':'show';
   clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),3600)}
-function chime(){try{const c=new(window.AudioContext||window.webkitAudioContext)();const g=c.createGain();g.gain.value=.06;g.connect(c.destination);
+function chime(){try{htDuck()}catch(e){}try{const c=new(window.AudioContext||window.webkitAudioContext)();const g=c.createGain();g.gain.value=.06;g.connect(c.destination);
   [880,1320].forEach((f,i)=>{const o=c.createOscillator();o.frequency.value=f;o.type='sine';o.connect(g);o.start(c.currentTime+i*.09);o.stop(c.currentTime+.09+i*.09)})}catch(e){}}
 function toggleSound(){const off=localStorage.getItem('dash_sound')==='off';localStorage.setItem('dash_sound',off?'on':'off');
   toast(off?'🎵 صوت الربح شغال':'🔇 صوت الربح مطفي',true)}     // ⚙️ v3.21.7: الزر انتقل للإعدادات
@@ -26108,7 +26109,11 @@ function openSettings(){
      +L('📈','شريط الأسعار وإشعاراته','openTicker()','العملات في الشريط · إشعارات الأسعار'))}
    ${G('🔊 الأصوات — لهذا الجهاز',
       T('🎵','صوت الربح',"toggleSound();openSettings()",'sSound',soundOn(),'يعمل — نغمة مع كل ربح','متوقف')
-     +T('🔊','صوت فتح القفل','uiUnlockToggle()','bUnl',uiUnlockOn(),'يعمل — نغمة عند فتح القفل','متوقف'))}
+     +T('🔊','صوت فتح القفل','uiUnlockToggle()','bUnl',uiUnlockOn(),'يعمل — نغمة عند فتح القفل','متوقف')
+     +X('tone','🎶','النغمة المستمرة',(HTONE.find(x=>x[0]===uiTone())||HTONE[0])[1],
+        `<div class="snote">نغمة هادئة تتكرر بلا نهاية — مولّدة هنا، لا تتكرر بالحرف · تبدأ بعد أول لمسة · تهدأ حين تخرج من اللوحة أو تنطفئ الشاشة.</div>
+        <div class="pollrow" id="toneRow">${HTONE.map(x=>`<button class="${uiTone()===x[0]?'on':''}" data-tone="${x[0]}" onclick="setTone('${x[0]}')">${x[1]}</button>`).join('')}</div>
+        <div class="tvol"><label for="toneVol">🔉 مستوى صوتها</label><input id="toneVol" type="range" min="0" max="100" step="1" value="${toneVol()}" oninput="setToneVol(this.value)"></div>`))}
    ${G('📱 التطبيقات',
       L('📱','تطبيق أندرويد','openAppPanel()',IN_APP?'أنت داخل من التطبيق الآن':'تنزيله · إشعارات مختصرة على الهاتف','bApp')
      +L('💻','برنامج ويندوز','openWinPanel()',IN_WIN?'أنت داخل من البرنامج الآن':'نافذة خاصة على الحاسوب','bWin'))}
@@ -29188,7 +29193,7 @@ function dcaChart(rows,s,base){
   return svg;
 }
 function uiUnlockOn(){try{return localStorage.getItem('ui_unlock_sound')!=='off'}catch(e){return true}}
-function uiChime(){try{const c=new(window.AudioContext||window.webkitAudioContext)(),g=c.createGain(),t=c.currentTime+0.02;g.connect(c.destination);
+function uiChime(){try{htDuck()}catch(e){}try{const c=new(window.AudioContext||window.webkitAudioContext)(),g=c.createGain(),t=c.currentTime+0.02;g.connect(c.destination);
   g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.22,t+0.03);g.gain.exponentialRampToValueAtTime(0.0001,t+0.95);
   [[523.25,0],[659.25,0.09],[783.99,0.18],[1046.5,0.27]].forEach(n=>{const o=c.createOscillator();o.type='triangle';o.frequency.value=n[0];o.connect(g);o.start(t+n[1]);o.stop(t+n[1]+0.42)})}catch(e){}}
 function uiUnlockToggle(){const on=!uiUnlockOn();try{localStorage.setItem('ui_unlock_sound',on?'on':'off')}catch(e){}
@@ -29559,6 +29564,64 @@ function hbgApply(){const k=uiBg(),r=document.documentElement;HB.k=k;r.classList
   if(!hbStill())HB.raf=requestAnimationFrame(hbLoop)}
 function hbPrev(){const C=hbCol();document.querySelectorAll('#bgRow canvas[data-bg]').forEach(cv=>{try{const c=cv.getContext('2d');HBG_MAKE[cv.dataset.bg](c,cv.width,cv.height,C)(12.3)}catch(e){}})}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',hbgApply);else setTimeout(hbgApply,0);
+/* 🎶 v3.36.37 (المالك 13-11): نغمة مستمرة (لهذا الجهاز) — مولّدة بالمتصفح (لا ملف صوت ولا حقوق لأحد) · ما تتكرر بالحرف ·
+   تبدي بعد أول لمسة (المتصفح والتطبيق يمنعون الصوت قبلها) · تهدأ لما تطلع من اللوحة أو تنطفي الشاشة · تخفت لحظة صوت الربح وفتح القفل */
+const HTONE=[['off','بلا'],['calm','سكون'],['space','فضاء'],['drops','قطرات'],['sea','بحر']];
+const HT={ac:null,m:null,verb:null,k:'off',stop:null,armed:0};
+function uiTone(){const v=_ls('dash_tone');return HTONE.some(x=>x[0]===v)?v:'off'}
+function toneVol(){const v=parseInt(_ls('dash_tone_vol')||'40',10);return isFinite(v)?Math.max(0,Math.min(100,v)):40}
+function htVol(){return Math.pow(toneVol()/100,1.6)*.8}
+function setTone(v){if(!HTONE.some(x=>x[0]===v))v='off';_ls('dash_tone',v==='off'?null:v);htApply(true);openSettings();
+  toast(v==='off'?'🔇 النغمة المستمرة: متوقفة':'🎶 النغمة المستمرة: '+HTONE.find(x=>x[0]===v)[1],true)}
+function setToneVol(v){_ls('dash_tone_vol',String(Math.max(0,Math.min(100,+v||0))));if(HT.m)HT.m.gain.setTargetAtTime(htVol(),HT.ac.currentTime,.08)}
+function htInit(){if(HT.ac)return;HT.ac=new (window.AudioContext||window.webkitAudioContext)();const ac=HT.ac;
+  HT.m=ac.createGain();HT.m.gain.value=htVol();const cp=ac.createDynamicsCompressor();cp.threshold.value=-18;cp.ratio.value=3;HT.m.connect(cp).connect(ac.destination);
+  const n=Math.round(ac.sampleRate*4),b=ac.createBuffer(2,n,ac.sampleRate);for(let ch=0;ch<2;ch++){const d=b.getChannelData(ch);for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/n,2.4)}
+  HT.verb=ac.createConvolver();HT.verb.buffer=b;const wet=ac.createGain();wet.gain.value=.7;HT.verb.connect(wet).connect(HT.m)}
+const htHz=m=>440*Math.pow(2,(m-69)/12),htR=(a,b)=>a+Math.random()*(b-a);
+function htBus(send){const ac=HT.ac,g=ac.createGain();g.gain.value=0;g.gain.setTargetAtTime(1,ac.currentTime,.6);g.connect(HT.m);const s=ac.createGain();s.gain.value=send;g.connect(s).connect(HT.verb);return g}
+function htVoice(out,f,t0,dur,o){o=o||{};const ac=HT.ac,os=ac.createOscillator();os.type=o.type||'sine';os.frequency.value=f;os.detune.value=o.det||0;
+  const g=ac.createGain(),att=o.att||.02,rel=o.rel||1,pk=o.peak||.2;g.gain.setValueAtTime(0,t0);g.gain.linearRampToValueAtTime(pk,t0+att);
+  g.gain.setValueAtTime(pk,t0+Math.max(att,dur-rel));g.gain.exponentialRampToValueAtTime(.0001,t0+dur);let n=os;
+  if(o.cut){const f2=ac.createBiquadFilter();f2.type='lowpass';f2.frequency.value=o.cut;f2.Q.value=.4;os.connect(f2);n=f2}
+  if(o.pan&&ac.createStereoPanner){const p=ac.createStereoPanner();p.pan.value=o.pan;n.connect(p);n=p}
+  n.connect(g).connect(out);os.start(t0);os.stop(t0+dur+.05)}
+function htSched(step,every){const ac=HT.ac;let next=ac.currentTime+.1;const run=()=>{while(next<ac.currentTime+1.2)next+=step(next)};run();return setInterval(run,every||250)}
+const HTONES={
+  calm(){const out=htBus(.55),CH=[[57,64,67,71,76],[53,60,64,69,72],[55,62,67,71,74],[52,59,64,67,71]];let i=0;
+    const id=htSched(t=>{const ch=CH[i++%CH.length];for(const m of ch){htVoice(out,htHz(m),t,10.5,{type:'triangle',att:2.6,rel:3.4,peak:.05,det:-6,cut:1400});
+      htVoice(out,htHz(m),t,10.5,{type:'sawtooth',att:2.6,rel:3.4,peak:.018,det:7,cut:900})}htVoice(out,htHz(ch[0]-12),t,10.5,{att:2,rel:3,peak:.09});return 8},400);
+    return()=>{clearInterval(id);return out}},
+  space(){const ac=HT.ac,out=htBus(.85),D=[];
+    for(const [m,p] of [[33,.1],[40,.06],[45,.04]]){const o=ac.createOscillator();o.frequency.value=htHz(m);const g=ac.createGain();g.gain.value=0;g.gain.setTargetAtTime(p,ac.currentTime,2);
+      const l=ac.createOscillator();l.frequency.value=.07+Math.random()*.05;const lg=ac.createGain();lg.gain.value=p*.35;l.connect(lg).connect(g.gain);o.connect(g).connect(out);o.start();l.start();D.push(o,l)}
+    const P=[69,72,74,76,79,81,84,86,88];
+    const id=htSched(t=>{const m=P[Math.floor(Math.random()*P.length)],pn=htR(-.7,.7);htVoice(out,htHz(m),t,5,{att:.01,rel:4.6,peak:.06,pan:pn});
+      htVoice(out,htHz(m)*2.01,t,3,{att:.01,rel:2.8,peak:.015,pan:pn});return htR(1.6,4.2)});
+    return()=>{clearInterval(id);D.forEach(o=>{try{o.stop(ac.currentTime+2.5)}catch(e){}});return out}},
+  drops(){const out=htBus(.6),P=[57,60,62,64,67,69,72,74,76,79];
+    const pad=htSched(t=>{for(const m of [45,52,57,64])htVoice(out,htHz(m),t,13,{type:'triangle',att:4,rel:4.5,peak:.025,cut:700});return 12},500);
+    const id=htSched(t=>{htVoice(out,htHz(P[Math.floor(Math.random()*P.length)]),t,1.6,{type:'triangle',att:.005,rel:1.5,peak:.09,pan:htR(-.6,.6)});return htR(.45,1.3)});
+    return()=>{clearInterval(id);clearInterval(pad);return out}},
+  sea(){const ac=HT.ac,out=htBus(.35),n=ac.sampleRate*4,b=ac.createBuffer(1,n,ac.sampleRate),d=b.getChannelData(0);let l=0;
+    for(let i=0;i<n;i++){l=(l+.02*(Math.random()*2-1))/1.02;d[i]=l*3.5}
+    const src=ac.createBufferSource();src.buffer=b;src.loop=true;const f=ac.createBiquadFilter();f.type='lowpass';f.frequency.value=700;
+    const g=ac.createGain();g.gain.value=.12;const lf=ac.createOscillator();lf.frequency.value=.11;const lg=ac.createGain();lg.gain.value=.1;lf.connect(lg).connect(g.gain);
+    const lf2=ac.createGain();lf2.gain.value=350;lf.connect(lf2).connect(f.frequency);src.connect(f).connect(g).connect(out);src.start();lf.start();
+    const pad=htSched(t=>{for(const m of [50,57,62,66])htVoice(out,htHz(m),t,15,{att:5,rel:5,peak:.03});return 14},500);
+    return()=>{clearInterval(pad);try{src.stop(ac.currentTime+2.5);lf.stop(ac.currentTime+2.5)}catch(e){}return out}},
+};
+function htStop(){if(!HT.stop){HT.k='off';return}const out=HT.stop();HT.stop=null;HT.k='off';
+  try{const t=HT.ac.currentTime;out.gain.cancelScheduledValues(t);out.gain.setTargetAtTime(0,t,.5);setTimeout(()=>{try{out.disconnect()}catch(e){}},4000)}catch(e){}}
+function htArm(){if(HT.armed)return;HT.armed=1;const go=()=>{removeEventListener('pointerdown',go,true);removeEventListener('keydown',go,true);HT.armed=0;htApply(true)};
+  addEventListener('pointerdown',go,true);addEventListener('keydown',go,true)}
+function htApply(user){const k=uiTone();if(k==='off'){htStop();return}
+  try{if(!HT.ac){if(!user){htArm();return}htInit()}
+    if(HT.k!==k){htStop();HT.k=k;HT.stop=HTONES[k]()}
+    if(HT.ac.state==='suspended'&&!document.hidden)HT.ac.resume()}catch(e){}}
+function htDuck(){try{if(!HT.m||HT.k==='off')return;const t=HT.ac.currentTime,g=HT.m.gain;g.cancelScheduledValues(t);g.setTargetAtTime(htVol()*.2,t,.04);g.setTargetAtTime(htVol(),t+1.4,.5)}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(!HT.ac)return;try{if(document.hidden)HT.ac.suspend();else if(HT.k!=='off')HT.ac.resume()}catch(e){}});
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>htApply(false));else setTimeout(()=>htApply(false),0);
 function uiTheme(){const t=_ls('dash_theme');return THEMES.some(x=>x[0]===t)?t:'holy'}
 function applyTheme(t){const h=document.documentElement;
   if(t&&t!=='holy')h.dataset.theme=t;else delete h.dataset.theme;
