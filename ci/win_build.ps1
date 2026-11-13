@@ -2,6 +2,7 @@
 #   (NuGet Microsoft.Web.WebView2) · then put it into the dashboard checked out here (windows/embed.py) · and print it (base64 lines
 #   HOLYEXE) so it can be taken from the log and put into the repository's dashboard.
 $ErrorActionPreference = "Stop"
+$env:PYTHONUTF8 = "1"; $env:PYTHONIOENCODING = "utf-8"     # the patch prints ✅ — the runner's console is cp1252
 $V = "1.0.2903.40"
 Invoke-WebRequest "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/$V/microsoft.web.webview2.$V.nupkg" -OutFile wv2.zip -UseBasicParsing
 Expand-Archive wv2.zip -DestinationPath wv2 -Force
