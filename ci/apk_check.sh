@@ -35,6 +35,8 @@ adb logcat -c
 #    file lands in Downloads/Holy · 1.9 removed · THAT saved file installed · the old phone unlinked (step 4 of the panel) ──
 OLDC=5f434fa97e2701c379569074bd1e67fdc276f228
 NEWSHA=$(sha256sum holy.apk | cut -d' ' -f1); INST=holy.apk
+# v3.36.38: the app's version from android/version.json (2.1 · 12 …) — the move from 1.x is the same for every version after 2.0
+NV=$(python3 -c "import json;print(json.load(open('android/version.json'))['name'])"); NC=$(python3 -c "import json;print(json.load(open('android/version.json'))['code'])")
 devs(){ curl -s -X POST localhost:8099/api/app/devices -H 'Content-Type: application/json' -d '{"act":"list"}' | python3 -c "import sys,json;print(' '.join(d['id'] for d in json.load(sys.stdin)['devs']))"; }
 if git fetch -q --depth=1 origin $OLDC 2>/dev/null && git show FETCH_HEAD:Holy_Dashboard.pyw | python3 ci/ci_tools.py apk > old.apk 2>/dev/null && [ -s old.apk ]; then
   adb install old.apk 2>&1 | tail -1 | sed 's/^/HOLYCI install previous: /'
@@ -42,8 +44,8 @@ if git fetch -q --depth=1 origin $OLDC 2>/dev/null && git show FETCH_HEAD:Holy_D
   r=$(adb install -r holy.apk 2>&1 | tr -d '\r' | grep -m1 -oE "Success|Failure.*|INSTALL_[A-Z_]+.*")   # (run 89: the last line was empty on Android 9)
   echo "$r" | grep -q "UPDATE_INCOMPATIBLE" && say "PASS 2.0: Android refuses 2.0 over 1.9 (a new signing key) ⇒ the move is manual, once" || say "INFO 2.0 over 1.9: $r"
   ci=$(curl -s localhost:8099/api/app/info -A "HolyApp/1.9" | python3 -c "import sys,json;print(json.load(sys.stdin)['apk']['code'])")
-  cn=$(curl -s localhost:8099/api/app/info -A "HolyApp/2.0" | python3 -c "import sys,json;print(json.load(sys.stdin)['apk']['code'])")
-  [ "$ci" = 0 ] && [ "$cn" = 11 ] && say "PASS 2.0: /api/app/info offers 1.9 no update (code $ci) · 2.0 sees code $cn" || say "FAIL 2.0: /api/app/info — 1.9 gets $ci · 2.0 gets $cn"
+  cn=$(curl -s localhost:8099/api/app/info -A "HolyApp/$NV" | python3 -c "import sys,json;print(json.load(sys.stdin)['apk']['code'])")
+  [ "$ci" = 0 ] && [ "$cn" = "$NC" ] && say "PASS 2.0: /api/app/info offers 1.9 no update (code $ci) · $NV sees code $cn" || say "FAIL 2.0: /api/app/info — 1.9 gets $ci · 2.0 gets $cn"
   [ "$API" -ge 33 ] && adb shell pm grant $P android.permission.POST_NOTIFICATIONS
   [ "$API" -le 28 ] && adb shell pm grant $P android.permission.WRITE_EXTERNAL_STORAGE      # saving into Downloads on Android 9 (the app asks; granted here ahead)
   adb shell am start -n $P/.MainActivity --es url http://10.0.2.2:8099 >/dev/null
@@ -56,9 +58,9 @@ if git fetch -q --depth=1 origin $OLDC 2>/dev/null && git show FETCH_HEAD:Holy_D
   WV0=$(adb shell dumpsys package com.google.android.webview 2>/dev/null | grep -m1 versionName | grep -oE '[0-9]+' | head -1)
   if [ -n "$mv" ]; then say "PASS 2.0: inside 1.9 the 📱 panel opened by itself with «الانتقال إلى Holy 2.0 — مرة واحدة»"
     if seek "⬇️ احفظها" old2; then
-      got=""; for i in $(seq 1 20); do sleep 1; adb pull /sdcard/Download/Holy/Holy-2.0.apk moved.apk >/dev/null 2>&1 && [ -s moved.apk ] && { got=1; break; }; done
-      if [ -n "$got" ] && [ "$(sha256sum moved.apk | cut -d' ' -f1)" = "$NEWSHA" ]; then say "PASS 2.0: «⬇️ احفظها» saved Downloads/Holy/Holy-2.0.apk = the dashboard's 2.0 (sha256)"; INST=moved.apk
-      else say "FAIL 2.0: «⬇️ احفظها» — no Holy-2.0.apk in Downloads/Holy, or not the same file ($(adb shell ls /sdcard/Download/Holy 2>&1 | tr -d '\r' | tr '\n' ' '))"; fi
+      got=""; for i in $(seq 1 20); do sleep 1; adb pull /sdcard/Download/Holy/Holy-$NV.apk moved.apk >/dev/null 2>&1 && [ -s moved.apk ] && { got=1; break; }; done
+      if [ -n "$got" ] && [ "$(sha256sum moved.apk | cut -d' ' -f1)" = "$NEWSHA" ]; then say "PASS 2.0: «⬇️ احفظها» saved Downloads/Holy/Holy-$NV.apk = the dashboard's $NV (sha256)"; INST=moved.apk
+      else say "FAIL 2.0: «⬇️ احفظها» — no Holy-$NV.apk in Downloads/Holy, or not the same file ($(adb shell ls /sdcard/Download/Holy 2>&1 | tr -d '\r' | tr '\n' ' '))"; fi
       dump old3 >/dev/null; shot old3
     elif [ "${WV0:-0}" -lt 87 ]; then say "INFO 2.0: this WebView (${WV0:-?}) lays the panel's buttons out with no size ⇒ «⬇️ احفظها» not tapped here (Android 14 runs it)"
     else say "FAIL 2.0: «⬇️ احفظها» not found in the 1.9 panel ($(python3 ci/ci_tools.py texts $OUT/ui_old2.xml old2 | grep -o '.\{0,40\}احفظها.\{0,10\}' | head -2 | tr '\n' ' '))"
@@ -222,6 +224,17 @@ if grep -q "الفريمات" $OUT/ui_set15.xml; then say "PASS ⚙️ «الف�
   seek "120" set15c; sleep 3
   if pf | grep -q "<map"; then pf | grep -q '<int name="fps" value="120"' && say "PASS back to 120 (saved)" || say "FAIL 120 not saved: $(pf | grep -o 'name="fps"[^/]*')"; fi
 else say "FAIL «الفريمات» row not on the ⚙️ screen ($(grep -c '<node' $OUT/ui_set15.xml 2>/dev/null) nodes)"; fi
+# ── 2.1 📲 the phone's buttons (back · home): ⚙️ 📱 «أزرار الهاتف» ⇒ shown (the app keeps them, the page sits above them) · again ⇒ hidden ──
+nb(){ adb shell dumpsys window 2>/dev/null | tr -d '\r' | grep -ciE "navigationBars.*visible=true|type=ITYPE_NAVIGATION_BAR.*mVisible=true|NavigationBar.*isVisible=true|navigationBars mVisible=true"; }
+adb shell am start -n $P/.MainActivity --es go set >/dev/null; sleep 5; nb0=$(nb)
+xy=""; for i in 1 2 3 4 5 6 7 8 9 10; do dump nav0 >/dev/null; xy=$(python3 ci/ci_tools.py find $OUT/ui_nav0.xml "أزرار الهاتف"); [ -n "$xy" ] && break
+  adb shell input swipe $((SW/2)) $((SH*7/10)) $((SW/2)) $((SH*35/100)) 500; sleep 1.2; done
+if [ -n "$xy" ]; then say "PASS 2.1: ⚙️ 📱 shows «أزرار الهاتف»"; adb shell input tap $xy; sleep 3; shot nav1; nb1=$(nb)
+  if pf | grep -q "<map"; then pf | grep -q '<boolean name="nav_bar" value="true"' && say "PASS 2.1: «أزرار الهاتف» on ⇒ kept by the app (nav_bar = true)" || say "FAIL 2.1: nav_bar not saved: $(pf | grep -o 'name=\"nav_bar\"[^/]*')"; fi
+  say "INFO 2.1: the system's navigation-bar lines that say «visible» — before $nb0 · after showing $nb1"
+  dump nav1 >/dev/null; xy=$(python3 ci/ci_tools.py find $OUT/ui_nav1.xml "أزرار الهاتف"); [ -n "$xy" ] && adb shell input tap $xy; sleep 3; shot nav2
+  if pf | grep -q "<map"; then pf | grep -q '<boolean name="nav_bar" value="false"' && say "PASS 2.1: again ⇒ hidden (nav_bar = false)" || say "FAIL 2.1: nav_bar not false after the second tap"; fi
+else say "FAIL 2.1: no «أزرار الهاتف» row in ⚙️ ($(python3 ci/ci_tools.py texts $OUT/ui_nav0.xml nav0 | grep -o '.\{0,40\}التطبيقات.\{0,60\}' | head -1))"; fi
 # ── 1.9 📱 the home-screen widget (2): ⚙️ 📱 «📌 أضفه» ⇒ Android's own «add» sheet ⇒ placed · it fetches with the phone's key and draws · a tap opens Holy ──
 WX=""; WY=""
 adb shell am start -n $P/.MainActivity --es go app >/dev/null; sleep 7; dump wd0

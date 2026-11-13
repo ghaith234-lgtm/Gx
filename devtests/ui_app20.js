@@ -5,7 +5,8 @@
 //     (sha256) and copies the dashboard's address; a reload within two days does not open it again
 //   · inside 2.0: no panel by itself · no move text · «آخر نسخة» · in a browser: «remove Holy 1.x first» · no page error
 const { chromium } = require('playwright');
-const URL = process.argv[2], SHA = process.argv[3], Q = process.argv.includes('-q');
+const URL = process.argv[2], SHA = process.argv[3], NV = process.argv[4] || '2.0', NC = +(process.argv[5] || 11), Q = process.argv.includes('-q');
+const NVR = NV.replace(/\./g, '\\.');   // v3.36.38: the embedded version (2.1 …) — passed by t_app20.py
 const res = [];
 function ok(name, cond, det) {
   res.push(!!cond);
@@ -42,14 +43,14 @@ const modalText = pg => pg.evaluate(() => { const m = document.getElementById('m
   let pg = await page(c1, errs);
   await pg.waitForFunction(() => /الانتقال إلى Holy/.test((document.getElementById('modal') || {}).innerText || ''), null, { timeout: 15000 }).catch(() => null);
   let t = await modalText(pg);
-  ok('1.9 app: the 📱 panel opens by itself with «⬆️ الانتقال إلى Holy 2.0 — مرة واحدة»', /📱 تطبيق أندرويد/.test(t) && /الانتقال إلى Holy 2\.0 — مرة واحدة/.test(t), t.slice(0, 400));
-  ok('… the version row: «1.9 · في اللوحة: 2.0 — نسخة جديدة بتوقيع جديد: تُثبَّت يدوياً مرة واحدة» and «⬇️ احفظها» (no «حدّث» that would fail)',
-     /1\.9 · في اللوحة: 2\.0 — نسخة جديدة بتوقيع جديد: تُثبَّت يدوياً مرة واحدة/.test(t) && /⬇️ احفظها/.test(t)
+  ok(`1.9 app: the 📱 panel opens by itself with «⬆️ الانتقال إلى Holy ${NV} — مرة واحدة»`, /📱 تطبيق أندرويد/.test(t) && new RegExp(`الانتقال إلى Holy ${NVR} — مرة واحدة`).test(t), t.slice(0, 400));
+  ok(`… the version row: «1.9 · في اللوحة: ${NV} — نسخة جديدة بتوقيع جديد: تُثبَّت يدوياً مرة واحدة» and «⬇️ احفظها» (no «حدّث» that would fail)`,
+     new RegExp(`1\\.9 · في اللوحة: ${NVR} — نسخة جديدة بتوقيع جديد: تُثبَّت يدوياً مرة واحدة`).test(t) && /⬇️ احفظها/.test(t)
      && !(await pg.evaluate(() => [...document.querySelectorAll('#ap_body button')].some(b => /^(حدّث|افحص)$/.test(b.textContent.trim())))), t);
   const steps = await pg.evaluate(() => [...document.querySelectorAll('#ap_body ol.ap-steps li')].map(li => li.innerText));
   ok('… the four steps: save · remove the current app (the dashboard and bots stay) · install from Files ← Downloads ← Holy · log in with the address, add the widget, unlink the old phone',
-     steps.length === 4 && /احفظها/.test(steps[0]) && /Holy-2\.0\.apk/.test(steps[0]) && /إلغاء التثبيت/.test(steps[1]) && /لا تتأثر/.test(steps[1])
-     && /الملفات/.test(steps[2]) && /التنزيلات ← Holy/.test(steps[2]) && /Holy-2\.0\.apk/.test(steps[2])
+     steps.length === 4 && /احفظها/.test(steps[0]) && steps[0].includes(`Holy-${NV}.apk`) && /إلغاء التثبيت/.test(steps[1]) && /لا تتأثر/.test(steps[1])
+     && /الملفات/.test(steps[2]) && /التنزيلات ← Holy/.test(steps[2]) && steps[2].includes(`Holy-${NV}.apk`)
      && steps[3].includes(new globalThis.URL(URL).origin) && /الويدجت/.test(steps[3]) && /افصل الجهاز القديم/.test(steps[3]), steps);
   ok('… why it is manual (a new signing key · once only, then updates are automatic again) and the browser fallback',
      /موقّعة بمفتاح جديد/.test(t) && /مرة واحدة فقط/.test(t) && /يعود التحديث التلقائي/.test(t) && /متصفح الموبايل/.test(t), t.slice(-500));
@@ -63,35 +64,47 @@ const modalText = pg => pg.evaluate(() => { const m = document.getElementById('m
     const h = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bin))].map(x => x.toString(16).padStart(2, '0')).join('');
     return { n: s.n, t: s.t, len: bin.length, h, copied: window.__copied };
   });
-  ok('«⬇️ احفظها» saves «Holy-2.0.apk» through the app (Android package type) = the very APK the dashboard carries (sha256) · copies the address',
-     sv && sv.n === 'Holy-2.0.apk' && sv.t === 'application/vnd.android.package-archive' && sv.h === SHA && sv.copied.includes(new globalThis.URL(URL).origin), sv && { ...sv, h: sv.h.slice(0, 16) });
+  ok(`«⬇️ احفظها» saves «Holy-${NV}.apk» through the app (Android package type) = the very APK the dashboard carries (sha256) · copies the address`,
+     sv && sv.n === `Holy-${NV}.apk` && sv.t === 'application/vnd.android.package-archive' && sv.h === SHA && sv.copied.includes(new globalThis.URL(URL).origin), sv && { ...sv, h: sv.h.slice(0, 16) });
   await pg.reload({ waitUntil: 'domcontentloaded' });
   await pg.waitForFunction(() => typeof DATA !== 'undefined' && DATA && DATA.bots, null, { timeout: 30000 });
   await pg.waitForTimeout(4000);
   t = await modalText(pg);
   ok('… reloaded within two days: the panel does not open by itself again', !/الانتقال إلى Holy/.test(t), t.slice(0, 200));
   await c1.close();
-  // ── a phone on 2.0
+  // ── a phone on the embedded version (the newest)
   const c2 = await br.newContext({ viewport: { width: 412, height: 900 } });
-  await c2.addInitScript(bridge(11, '2.0'));
+  await c2.addInitScript(bridge(NC, NV));
   pg = await page(c2, errs);
   await pg.waitForTimeout(4500);
   t = await modalText(pg);
-  ok('2.0 app: the panel does not open by itself', !/تطبيق أندرويد/.test(t), t.slice(0, 200));
+  ok(`${NV} app: the panel does not open by itself`, !/تطبيق أندرويد/.test(t), t.slice(0, 200));
   await pg.evaluate(() => openAppPanel());
   await pg.waitForFunction(() => /نسخة التطبيق/.test((document.getElementById('ap_body') || {}).innerText || ''), null, { timeout: 15000 }).catch(() => null);
   t = await modalText(pg);
-  ok('… opened by hand: «2.0 · باللوحة: 2.0 — آخر نسخة» · no move steps · no «⬇️ احفظها»',
-     /2\.0 · باللوحة: 2\.0 — آخر نسخة/.test(t) && !/الانتقال إلى Holy/.test(t) && !/احفظها/.test(t) && !/بتوقيع جديد/.test(t), t.slice(0, 600));
+  ok(`… opened by hand: «${NV} · باللوحة: ${NV} — آخر نسخة» · no move steps · no «⬇️ احفظها»`,
+     new RegExp(`${NVR} · باللوحة: ${NVR} — آخر نسخة`).test(t) && !/الانتقال إلى Holy/.test(t) && !/احفظها/.test(t) && !/بتوقيع جديد/.test(t), t.slice(0, 600));
   await c2.close();
+  if (NC > 11) {   // ── a phone on 2.0 (the same key): an ordinary update, no move
+    const c4 = await br.newContext({ viewport: { width: 412, height: 900 } });
+    await c4.addInitScript(bridge(11, '2.0'));
+    pg = await page(c4, errs);
+    await pg.waitForTimeout(3000);
+    await pg.evaluate(() => openAppPanel());
+    await pg.waitForFunction(() => /نسخة التطبيق/.test((document.getElementById('ap_body') || {}).innerText || ''), null, { timeout: 15000 }).catch(() => null);
+    t = await modalText(pg);
+    ok(`2.0 app: «2.0 · باللوحة: ${NV} — في تحديث» (it updates itself — the same key) · no move steps · no «بتوقيع جديد»`,
+       new RegExp(`2\\.0 · باللوحة: ${NVR} — في تحديث`).test(t) && !/الانتقال إلى Holy/.test(t) && !/بتوقيع جديد/.test(t), t.slice(0, 600));
+    await c4.close();
+  }
   // ── a browser
   const c3 = await br.newContext({ viewport: { width: 1280, height: 900 } });
   pg = await page(c3, errs);
   await pg.evaluate(() => openAppPanel());
   await pg.waitForFunction(() => /نزّل التطبيق/.test((document.getElementById('ap_body') || {}).innerText || ''), null, { timeout: 15000 }).catch(() => null);
   t = await modalText(pg);
-  ok('browser: «⬇️ نزّل التطبيق — Holy 2.0» with «🔐 عندك Holy 1.x على الموبايل؟ احذفه أولاً … مرة واحدة فقط»',
-     /نزّل التطبيق — Holy 2\.0/.test(t) && /عندك Holy 1\.x على الموبايل؟ احذفه أولاً/.test(t) && /مرة واحدة فقط/.test(t), t.slice(0, 600));
+  ok(`browser: «⬇️ نزّل التطبيق — Holy ${NV}» with «🔐 عندك Holy 1.x على الموبايل؟ احذفه أولاً … مرة واحدة فقط»`,
+     new RegExp(`نزّل التطبيق — Holy ${NVR}`).test(t) && /عندك Holy 1\.x على الموبايل؟ احذفه أولاً/.test(t) && /مرة واحدة فقط/.test(t), t.slice(0, 600));
   await c3.close();
   ok('no page error', errs.length === 0, errs);
   await br.close();

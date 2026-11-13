@@ -104,8 +104,9 @@ try:
     z = zipfile.ZipFile(io.BytesIO(raw))
     man = B.axml_read(z.read("AndroidManifest.xml"), "manifest")
     info = B.axml_read(z.read("res/xml/holy_widget_info.xml"), "appwidget-provider")
-    ok("② the embedded app: versionCode 11 · versionName «2.0» = APP_APK_CODE / APP_APK_NAME",
-       man[B.A_VERSION_CODE][1] == 11 == m.APP_APK_CODE and man[B.A_VERSION_NAME][2] == "2.0" == m.APP_APK_NAME and m.APP_APK_REKEY == 11, man)
+    NC, NV = m.APP_APK_CODE, m.APP_APK_NAME           # v3.36.38: the embedded version (2.1 · 12 …) — every version from 2.0 on (rekey 11)
+    ok(f"② the embedded app: versionCode {NC} · versionName «{NV}» = APP_APK_CODE / APP_APK_NAME (≥ 2.0 · the new key since 11)",
+       man[B.A_VERSION_CODE][1] == NC >= 11 and man[B.A_VERSION_NAME][2] == NV and m.APP_APK_REKEY == 11, man)
     ok("② the widget starts 4×3: minHeight 180 dp · targetCellHeight 3 (was 110 dp · 2)",
        info[B.A_MIN_HEIGHT][1] >> 8 == 180 and info[B.A_TARGET_CELL_H][1] == 3, info)
     dex = z.read("classes.dex")
@@ -133,13 +134,13 @@ try:
 
     seen = {}
     for name, ua in (("1.9 app", "HolyApp/1.9"), ("1.8 app", "HolyApp/1.8"), ("1.9 WebView", "Mozilla/5.0 (Linux; Android 14) Chrome/120 Mobile Safari/537.36 HolyApp/1.9"),
-                     ("2.0 app", "HolyApp/2.0"), ("2.0 WebView", "Mozilla/5.0 (Linux; Android 14) Chrome/120 HolyApp/2.0"), ("browser", "Mozilla/5.0 (X11; Linux) Firefox/130")):
+                     ("2.0 app", "HolyApp/2.0"), ("2.0 WebView", "Mozilla/5.0 (Linux; Android 14) Chrome/120 HolyApp/2.0"), ("browser", "Mozilla/5.0 (X11; Linux) Firefox/130")):   # 2.0 = the same key ⇒ it updates itself
         c, b = get("/api/app/info", ua)
         seen[name] = json.loads(b).get("apk") if c == 200 else c
     ok("③ /api/app/info: a 1.x app (its own call or its WebView) is offered code 0 — never a file it cannot install over itself",
        all(seen[k]["code"] == 0 for k in ("1.9 app", "1.8 app", "1.9 WebView")), seen)
-    ok("③ … 2.0 and a browser see code 11 «2.0» · everyone gets «rekey» 11",
-       all(seen[k]["code"] == 11 and seen[k]["name"] == "2.0" for k in ("2.0 app", "2.0 WebView", "browser"))
+    ok(f"③ … 2.0 and a browser see code {NC} «{NV}» (2.0 updates itself — the same key) · everyone gets «rekey» 11",
+       all(seen[k]["code"] == NC and seen[k]["name"] == NV for k in ("2.0 app", "2.0 WebView", "browser"))
        and all(v["rekey"] == 11 for v in seen.values()), seen)
     c, apk = get("/app/holy.apk")
     ok("③ /app/holy.apk = the embedded app, the size and sha256 /api/app/info states",
@@ -156,7 +157,7 @@ try:
     ok("③ … and nobody without the phone's key (401)", c0 == 401, c0)
 
     # ── ④ the page
-    r = subprocess.run(["node", os.path.join(H, "ui_app20.js"), U + "/", hashlib.sha256(raw).hexdigest()] + (["-q"] if Q else []),
+    r = subprocess.run(["node", os.path.join(H, "ui_app20.js"), U + "/", hashlib.sha256(raw).hexdigest(), str(NV), str(NC)] + (["-q"] if Q else []),
                        capture_output=True, text=True, timeout=300, cwd="/tmp", env=env)
     out = r.stdout.strip() or r.stderr.strip()[-1500:]
     import re
