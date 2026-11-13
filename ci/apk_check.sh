@@ -63,6 +63,7 @@ if git fetch -q --depth=1 origin $OLDC 2>/dev/null && git show FETCH_HEAD:Holy_D
     elif [ "${WV0:-0}" -lt 87 ]; then say "INFO 2.0: this WebView (${WV0:-?}) lays the panel's buttons out with no size ⇒ «⬇️ احفظها» not tapped here (Android 14 runs it)"
     else say "FAIL 2.0: «⬇️ احفظها» not found in the 1.9 panel ($(python3 ci/ci_tools.py texts $OUT/ui_old2.xml old2 | grep -o '.\{0,40\}احفظها.\{0,10\}' | head -2 | tr '\n' ' '))"
     fi
+  elif ! timeout 15 adb get-state >/dev/null 2>&1; then say "FAIL 2.0: the emulator stopped answering during the 1.9 phase (adb: no device — run 90, Android 11, lost it right after «اتصال»)"
   elif [ "${WV0:-0}" -lt 87 ]; then say "INFO 2.0: this system WebView (${WV0:-?}) can't open the dashboard's windows ⇒ the 1.9 panel isn't checked here (Android 11/14 run it)"
   else say "FAIL 2.0: inside 1.9 the move panel never opened ($(python3 ci/ci_tools.py texts $OUT/ui_old1.xml old1 | cut -c1-200))"; fi
   old=$(devs); adb uninstall $P 2>&1 | tail -1 | sed 's/^/HOLYCI 1.9 removed: /'
