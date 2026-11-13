@@ -542,7 +542,7 @@
 
     const-string v2, "code"
 
-    const/16 v3, 0xb
+    const/16 v3, 0xc
 
     invoke-virtual {v1, v2, v3}, Lorg/json/JSONObject;->put(Ljava/lang/String;I)Lorg/json/JSONObject;
     :try_end_4c
@@ -805,6 +805,49 @@
     goto :goto_c
 .end method
 
+.method public navBar()Z
+    .registers 2
+    .annotation runtime Landroid/webkit/JavascriptInterface;
+    .end annotation
+
+    .prologue
+    .line 1220
+    iget-object v0, p0, Lcom/holy/dash/MainActivity$Bridge;->this$0:Lcom/holy/dash/MainActivity;
+
+    invoke-static {v0}, Lcom/holy/dash/Prefs;->navBar(Landroid/content/Context;)Z
+
+    move-result v0
+
+    return v0
+.end method
+
+.method public setNavBar(Z)V
+    .registers 3
+    .annotation runtime Landroid/webkit/JavascriptInterface;
+    .end annotation
+
+    .prologue
+    .line 1224
+    invoke-virtual {p0}, Lcom/holy/dash/MainActivity$Bridge;->ok()Z
+
+    move-result v0
+
+    if-eqz v0, :cond_e
+
+    iget-object v0, p0, Lcom/holy/dash/MainActivity$Bridge;->this$0:Lcom/holy/dash/MainActivity;
+
+    invoke-static {v0, p1}, Lcom/holy/dash/Prefs;->setNavBar(Landroid/content/Context;Z)V
+
+    new-instance v0, Lcom/holy/dash/MainActivity$Bridge$16;
+
+    invoke-direct {v0, p0}, Lcom/holy/dash/MainActivity$Bridge$16;-><init>(Lcom/holy/dash/MainActivity$Bridge;)V
+
+    invoke-virtual {p0, v0}, Lcom/holy/dash/MainActivity$Bridge;->onUi(Ljava/lang/Runnable;)V
+
+    :cond_e
+    return-void
+.end method
+
 .method public setHideLock(Z)V
     .registers 3
     .annotation runtime Landroid/webkit/JavascriptInterface;
@@ -982,7 +1025,7 @@
     :try_start_7
     const-string v2, "code"
 
-    const/16 v4, 0xb
+    const/16 v4, 0xc
 
     invoke-virtual {v3, v2, v4}, Lorg/json/JSONObject;->put(Ljava/lang/String;I)Lorg/json/JSONObject;
 
@@ -990,7 +1033,7 @@
 
     const-string v4, "name"
 
-    const-string v5, "2.0"
+    const-string v5, "2.1"
 
     invoke-virtual {v2, v4, v5}, Lorg/json/JSONObject;->put(Ljava/lang/String;Ljava/lang/Object;)Lorg/json/JSONObject;
 

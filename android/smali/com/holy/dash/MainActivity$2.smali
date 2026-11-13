@@ -37,7 +37,7 @@
 
 # virtual methods
 .method public onApplyWindowInsets(Landroid/view/View;Landroid/view/WindowInsets;)Landroid/view/WindowInsets;
-    .registers 8
+    .registers 9
 
     .prologue
     .line 209
@@ -45,6 +45,21 @@
 
     move-result v0
 
+    iget-object v5, p0, Lcom/holy/dash/MainActivity$2;->this$0:Lcom/holy/dash/MainActivity;
+
+    invoke-static {v5}, Lcom/holy/dash/Prefs;->navBar(Landroid/content/Context;)Z
+
+    move-result v5
+
+    if-eqz v5, :cond_nonav
+
+    invoke-static {}, Landroid/view/WindowInsets$Type;->navigationBars()I
+
+    move-result v5
+
+    or-int/2addr v0, v5
+
+    :cond_nonav
     invoke-virtual {p2, v0}, Landroid/view/WindowInsets;->getInsets(I)Landroid/graphics/Insets;
 
     move-result-object v0

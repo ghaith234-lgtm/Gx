@@ -1385,7 +1385,7 @@
 
     move-result-object v1
 
-    const-string v2, "2.0"
+    const-string v2, "2.1"
 
     invoke-virtual {v1, v2}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
 
@@ -1833,6 +1833,18 @@
     .registers 4
 
     .prologue
+    .line 188
+    invoke-static {p0}, Lcom/holy/dash/Prefs;->navBar(Landroid/content/Context;)Z
+
+    move-result v1
+
+    if-eqz v1, :cond_hideall
+
+    invoke-virtual {p0}, Lcom/holy/dash/MainActivity;->navShown()V
+
+    return-void
+
+    :cond_hideall
     .line 189
     invoke-virtual {p0}, Lcom/holy/dash/MainActivity;->getWindow()Landroid/view/Window;
 
@@ -1892,6 +1904,62 @@
     invoke-virtual {v0, v1}, Landroid/view/View;->setSystemUiVisibility(I)V
 
     goto :goto_24
+.end method
+
+.method navShown()V
+    .registers 4
+
+    .prologue
+    .line 203
+    invoke-virtual {p0}, Lcom/holy/dash/MainActivity;->getWindow()Landroid/view/Window;
+
+    move-result-object v0
+
+    sget v1, Landroid/os/Build$VERSION;->SDK_INT:I
+
+    const/16 v2, 0x1e
+
+    if-lt v1, v2, :cond_old
+
+    const/4 v1, 0x0
+
+    invoke-virtual {v0, v1}, Landroid/view/Window;->setDecorFitsSystemWindows(Z)V
+
+    invoke-virtual {v0}, Landroid/view/Window;->getInsetsController()Landroid/view/WindowInsetsController;
+
+    move-result-object v0
+
+    if-eqz v0, :cond_done
+
+    invoke-static {}, Landroid/view/WindowInsets$Type;->statusBars()I
+
+    move-result v1
+
+    invoke-interface {v0, v1}, Landroid/view/WindowInsetsController;->hide(I)V
+
+    invoke-static {}, Landroid/view/WindowInsets$Type;->navigationBars()I
+
+    move-result v1
+
+    invoke-interface {v0, v1}, Landroid/view/WindowInsetsController;->show(I)V
+
+    const/4 v1, 0x2
+
+    invoke-interface {v0, v1}, Landroid/view/WindowInsetsController;->setSystemBarsBehavior(I)V
+
+    :cond_done
+    return-void
+
+    :cond_old
+    invoke-virtual {v0}, Landroid/view/Window;->getDecorView()Landroid/view/View;
+
+    move-result-object v0
+
+    const/16 v1, 0x1104
+
+    invoke-virtual {v0, v1}, Landroid/view/View;->setSystemUiVisibility(I)V
+
+    goto :cond_done
 .end method
 
 .method insets()V

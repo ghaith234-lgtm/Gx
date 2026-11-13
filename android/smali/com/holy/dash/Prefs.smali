@@ -823,3 +823,47 @@
 
     return v0
 .end method
+
+.method static navBar(Landroid/content/Context;)Z
+    .registers 4
+
+    .prologue
+    .line 58
+    invoke-static {p0}, Lcom/holy/dash/Prefs;->p(Landroid/content/Context;)Landroid/content/SharedPreferences;
+
+    move-result-object v0
+
+    const-string v1, "nav_bar"
+
+    const/4 v2, 0x0
+
+    invoke-interface {v0, v1, v2}, Landroid/content/SharedPreferences;->getBoolean(Ljava/lang/String;Z)Z
+
+    move-result v0
+
+    return v0
+.end method
+
+.method static setNavBar(Landroid/content/Context;Z)V
+    .registers 4
+
+    .prologue
+    .line 60
+    invoke-static {p0}, Lcom/holy/dash/Prefs;->p(Landroid/content/Context;)Landroid/content/SharedPreferences;
+
+    move-result-object v0
+
+    invoke-interface {v0}, Landroid/content/SharedPreferences;->edit()Landroid/content/SharedPreferences$Editor;
+
+    move-result-object v0
+
+    const-string v1, "nav_bar"
+
+    invoke-interface {v0, v1, p1}, Landroid/content/SharedPreferences$Editor;->putBoolean(Ljava/lang/String;Z)Landroid/content/SharedPreferences$Editor;
+
+    move-result-object v0
+
+    invoke-interface {v0}, Landroid/content/SharedPreferences$Editor;->apply()V
+
+    return-void
+.end method

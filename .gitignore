@@ -13,3 +13,6 @@ android/build/
 *.pfx
 PASSWORD*
 android/keystore/
+
+# 📱 the signed app file (built by android/build.py --key …) — it goes INTO the dashboard (APP_APK_B64), not into git
+android/dist/
