@@ -1,0 +1,15 @@
+# Python caches
+__pycache__/
+*.pyc
+
+# 📱 the app's build: downloaded tools and build output stay local
+android/.tools/
+android/build/
+
+# 🔐 the app's signing key never goes into this repository (it is PUBLIC)
+*.p12
+*.jks
+*.keystore
+*.pfx
+PASSWORD*
+android/keystore/
