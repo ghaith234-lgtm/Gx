@@ -1,0 +1,24 @@
+# 🔬 Holy signals check, fifth pass (the owner 13-11: «اختبر الجديد وحدث»): 🌊 the whole market crashing at once · 🔥 a 4-hour jump
+#    with huge volume · ₿ Bitcoin's crash ⇒ the other coins · 💸 very negative funding · 💥 the single-coin crash alone vs with the market
+#    — public OKX 4-hour candles for 28 coins (~2 years), the last 40% of time apart. Results: lines HOLYSIG5.
+# Public market data only — no keys, no orders, no notifications. Runs only when the check, ci/RUN_SIG or this file changes.
+name: Holy signals check 5
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/sig_check5.py', 'ci/RUN_SIG5', '.github/workflows/holy-sig5-check.yml']
+permissions:
+  contents: read
+jobs:
+  real-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Signals on real OKX prices (public data · no keys · no orders · no notifications)
+        run: |
+          pip install -q requests
+          python3 ci/sig_check5.py Holy_Dashboard.pyw
