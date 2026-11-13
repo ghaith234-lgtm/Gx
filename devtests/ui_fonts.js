@@ -29,10 +29,10 @@ async function scan(pg, cdp, root) {
   const { nodeIds } = await cdp.send('DOM.querySelectorAll', { nodeId: doc.root.nodeId, selector: '[data-fchk]' });
   const bad = [];
   for (const id of nodeIds) {
-    const { fonts } = await cdp.send('CSS.getPlatformFontsForNode', { nodeId: id });
-    const info = await cdp.send('DOM.describeNode', { nodeId: id, depth: 1 });
+    let fonts, info;
+    try { ({ fonts } = await cdp.send('CSS.getPlatformFontsForNode', { nodeId: id })); info = await cdp.send('DOM.describeNode', { nodeId: id, depth: 1 }) } catch (e) { continue }   // redrawn meanwhile
     const own = (info.node.children || []).filter(c => c.nodeType === 3).map(c => c.nodeValue).join('');
-    const ar = (own.match(AR) || []).length; if (!ar || !fonts.length) continue;   // no fonts = not drawn yet (a card off screen)
+    const ar = (own.match(AR) || []).length - (own.match(/ل[اأإآ]/g) || []).length; if (ar <= 0 || !fonts.length) continue;   // «لا» = two letters, one glyph   // no fonts = not drawn yet (a card off screen)
     const fs = fonts.find(f => /FreeSerif/i.test(f.familyName)), got = fs ? fs.glyphCount : 0;
     if (got < ar) bad.push({ text: own.trim().slice(0, 40), cls: (info.node.attributes || []).join(' ').slice(0, 80), fonts: fonts.map(f => f.familyName + ':' + f.glyphCount).join(' · ') });
   }
@@ -63,6 +63,20 @@ async function open(br, skin, errs) {
   for (const [skin, nm] of [[null, 'القديم'], ['c', 'ج'], ['b', 'ب'], ['o', 'OKX']]) {
     const { ctx, pg, cdp } = await open(br, skin, errs);
     const ff = await pg.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--ff').trim());
+    if (!skin) {   // v3.36.37: the numbers follow the chosen font too («مو كل الكتابة اتغيرت»)
+      const dn = await pg.evaluate(() => { document.querySelectorAll('[data-fchk]').forEach(e => e.removeAttribute('data-fchk')); let i = 0;
+        for (const el of document.querySelectorAll('.num')) { const r = el.getBoundingClientRect(); if (!r.width || r.top > innerHeight * 2 || !/\d/.test(el.textContent)) continue; el.setAttribute('data-fchk', String(i++)); if (i >= 60) break }
+        return { i, fm: getComputedStyle(document.documentElement).getPropertyValue('--fm').trim() } });
+      const doc = await cdp.send('DOM.getDocument', { depth: 0 }); const { nodeIds } = await cdp.send('DOM.querySelectorAll', { nodeId: doc.root.nodeId, selector: '[data-fchk]' });
+      const badN = [];
+      for (const id of nodeIds) { let fonts, info; try { ({ fonts } = await cdp.send('CSS.getPlatformFontsForNode', { nodeId: id })); info = await cdp.send('DOM.describeNode', { nodeId: id, depth: 1 }) } catch (e) { continue }
+        if (!fonts.length) continue; const own = (info.node.children || []).filter(c => c.nodeType === 3).map(c => c.nodeValue).join('');
+        const dg = (own.match(/\d/g) || []).length; if (!dg) continue; const fs = fonts.find(f => /FreeSerif/i.test(f.familyName));
+        if (!fs || fs.glyphCount < dg) badN.push({ text: own.trim().slice(0, 30), fonts: fonts.map(f => f.familyName + ':' + f.glyphCount).join(' · ') }) }
+      ok(`🔢 the numbers in the chosen font too (${dn.i} numbers · --fm ${dn.fm})`, dn.i > 20 && /Amiri/.test(dn.fm) && !badN.length, badN.slice(0, 8));
+      const pl = await pg.evaluate(() => { hFontApply('plex'); const v = getComputedStyle(document.documentElement).getPropertyValue('--fm').trim(); hFontApply('amiri'); return v });
+      ok('🔢 the default font «IBM Plex» keeps the old fixed numbers', pl === '', pl);
+    }
     const r = await scan(pg, cdp);
     ok(`🔤 ${nm}: every Arabic letter on the dashboard and in the cards drawn with the chosen font (${r.n} texts · ${ff})`, r.n > 40 && !r.bad.length && /Amiri/.test(ff), r.bad.slice(0, 8));
     if (!skin) {

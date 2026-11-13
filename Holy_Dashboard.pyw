@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.36"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.37"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -22373,6 +22373,7 @@ var HFONTS=[['plex','IBM Plex Sans Arabic','IBM Plex','IBM+Plex+Sans+Arabic:wght
   ['sys','system-ui','خط الجهاز','']];
 function hFontApply(k){var f=HFONTS.find(function(x){return x[0]===k})||HFONTS[0];
   document.documentElement.style.setProperty('--ff',f[1]==='system-ui'?'system-ui':"'"+f[1]+"'");
+  if(f[0]==='plex')document.documentElement.style.removeProperty('--fm');else document.documentElement.style.setProperty('--fm',f[1]==='system-ui'?'system-ui':"'"+f[1]+"'");   // 🔤 v3.36.37: الأرقام هم
   if(f[3]&&f[0]!=='plex'&&!document.getElementById('hfont-'+f[0])){var l=document.createElement('link');l.id='hfont-'+f[0];l.rel='stylesheet';
     l.href='https://fonts.googleapis.com/css2?family='+f[3]+'&display=swap';document.head.appendChild(l)}return f}
 try{hFontApply(localStorage.getItem('dash_font')||'plex')}catch(e){}</script>
@@ -22398,7 +22399,7 @@ try{hFontApply(localStorage.getItem('dash_font')||'plex')}catch(e){}</script>
 html,body{height:100%}
 body{font-family:var(--ff,'IBM Plex Sans Arabic'),system-ui,sans-serif;background:var(--bg0);color:var(--tx);overflow-x:hidden;
   background-image:radial-gradient(1200px 700px at 85% -10%,var(--bgA) 0%,transparent 60%),radial-gradient(1000px 700px at -10% 110%,var(--bgB) 0%,transparent 55%);}
-.num{font-family:'IBM Plex Mono',var(--ff,'IBM Plex Sans Arabic'),monospace;font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:embed}
+.num{font-family:var(--fm,'IBM Plex Mono'),var(--ff,'IBM Plex Sans Arabic'),monospace;font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:embed}
 ::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:rgb(var(--vio-rgb)/.25);border-radius:9px}
 ::-webkit-scrollbar-track{background:transparent}
 
@@ -22772,7 +22773,7 @@ body.btopen{overflow:hidden}
 .card.sk.k-rec{--k-rgb:var(--cyan-rgb)}.card.sk.k-va{--k-rgb:var(--green-rgb)}.card.sk.k-hyb{--k-rgb:var(--vio-rgb)}.card.sk.k-acc{--k-rgb:var(--amber-rgb)}
 .skin{position:relative;min-width:0}
 .skin svg{direction:ltr;display:block;width:100%;height:auto;overflow:visible}
-.skin svg text{font-family:'IBM Plex Mono',ui-monospace,var(--ff,'IBM Plex Sans Arabic'),monospace}.skin svg text.ar{font-family:inherit}
+.skin svg text{font-family:var(--fm,'IBM Plex Mono'),ui-monospace,var(--ff,'IBM Plex Sans Arabic'),monospace}.skin svg text.ar{font-family:inherit}
 .skv{min-width:0}
 .sk-top{display:flex;align-items:center;gap:9px;min-width:0}
 .sk-top img.coin{width:30px;height:30px;border-radius:50%;flex:0 0 auto;margin:0}
@@ -23156,7 +23157,7 @@ html.scrolling .orb{animation-play-state:paused}   /* 🎨 v3.26.9: وقت ال�
 .pc-bars{position:relative}
 .pc-svg{display:block;width:100%;height:auto;direction:ltr;overflow:visible}
 .pc-svg .pc-gl{stroke:rgb(var(--vio-rgb)/.12);stroke-width:1}.pc-svg .pc-bl{stroke:rgb(var(--vio-rgb)/.32);stroke-width:1}
-.pc-svg text{font-family:'IBM Plex Mono',var(--ff,'IBM Plex Sans Arabic'),monospace;font-size:11px;fill:var(--mut)}
+.pc-svg text{font-family:var(--fm,'IBM Plex Mono'),var(--ff,'IBM Plex Sans Arabic'),monospace;font-size:11px;fill:var(--mut)}
 .pc-svg .pc-mx{fill:var(--tx);font-size:12px;font-weight:600}
 .pc-svg .pc-col{transform-box:fill-box;transform-origin:50% 100%;animation:pcUp .7s var(--ease) both;animation-delay:calc(var(--i)*16ms)}
 .pc-svg .pc-col.on .pc-seg{filter:brightness(1.3)}
@@ -23165,25 +23166,25 @@ html.scrolling .orb{animation-play-state:paused}   /* 🎨 v3.26.9: وقت ال�
 @keyframes pcUp{from{transform:scaleY(0)}to{transform:scaleY(1)}}
 .pc-tip{position:absolute;top:0;left:0;pointer-events:none;background:var(--tip-bg);border:1px solid var(--line2);border-radius:10px;
   padding:8px 10px;font-size:11.5px;color:var(--tx);min-width:160px;z-index:6;opacity:0;transition:opacity .12s;box-shadow:0 8px 24px rgb(var(--sh-rgb)/.35)}
-.pc-tip .pc-th{color:var(--mut);font-size:11px;margin-bottom:2px}.pc-tip .pc-tt{font-size:16px;font-weight:600;margin-bottom:4px;font-family:'IBM Plex Mono',var(--ff,'IBM Plex Sans Arabic'),monospace}
+.pc-tip .pc-th{color:var(--mut);font-size:11px;margin-bottom:2px}.pc-tip .pc-tt{font-size:16px;font-weight:600;margin-bottom:4px;font-family:var(--fm,'IBM Plex Mono'),var(--ff,'IBM Plex Sans Arabic'),monospace}
 .pc-tip .pc-tr{display:flex;align-items:center;gap:6px;line-height:1.7}.pc-tip .pc-tr i{width:10px;height:3px;border-radius:2px;flex:none}
-.pc-tip .pc-tr span{flex:1;color:var(--mut)}.pc-tip .pc-tr .v{flex:none;color:var(--tx);font-family:'IBM Plex Mono',var(--ff,'IBM Plex Sans Arabic'),monospace}
+.pc-tip .pc-tr span{flex:1;color:var(--mut)}.pc-tip .pc-tr .v{flex:none;color:var(--tx);font-family:var(--fm,'IBM Plex Mono'),var(--ff,'IBM Plex Sans Arabic'),monospace}
 .pc-tip .pc-tn{color:var(--amber);font-size:10.5px;margin-top:3px}
 .pc-dn{display:block;width:100%;max-width:210px;margin:4px auto 0}
 .pc-dn .pc-sg{transition:opacity .15s;cursor:pointer;outline:none;animation:pcIn .6s var(--ease) both}.pc-dn .pc-sg.dim{opacity:.28}
-.pc-dn .pc-c1{fill:var(--tx);font:600 17px 'IBM Plex Mono',monospace}.pc-dn .pc-c2{fill:var(--mut);font-size:10.5px}
+.pc-dn .pc-c1{fill:var(--tx);font:600 17px var(--fm,'IBM Plex Mono'),monospace}.pc-dn .pc-c2{fill:var(--mut);font-size:10.5px}
 .pc-dn text{pointer-events:none}                        /* نص المنتصف ما يغطّي الشرائح */
 @keyframes pcIn{from{opacity:0}to{opacity:1}}
 .pc-dleg{list-style:none;margin:10px 0 0;padding:0}
 .pc-dleg li{display:flex;align-items:center;gap:8px;font-size:12px;padding:5px 0;border-bottom:1px solid rgb(var(--vio-rgb)/.08);cursor:default}
 .pc-dleg .pc-sw{width:10px;height:10px;border-radius:2px;flex:none}
 .pc-dleg .pc-nm{flex:1;color:var(--tx);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pc-dleg .v{color:var(--tx);font-family:'IBM Plex Mono',var(--ff,'IBM Plex Sans Arabic'),monospace}.pc-dleg .p{color:var(--mut);min-width:44px;text-align:end;font-family:'IBM Plex Mono',var(--ff,'IBM Plex Sans Arabic'),monospace}
+.pc-dleg .v{color:var(--tx);font-family:var(--fm,'IBM Plex Mono'),var(--ff,'IBM Plex Sans Arabic'),monospace}.pc-dleg .p{color:var(--mut);min-width:44px;text-align:end;font-family:var(--fm,'IBM Plex Mono'),var(--ff,'IBM Plex Sans Arabic'),monospace}
 .pc-foot{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .pc-tbl{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:10px}
 .pc-tbl th{color:var(--mut);font-weight:600;text-align:start;padding:6px;border-bottom:1px solid var(--line)}
 .pc-tbl td{padding:5px 6px;border-bottom:1px solid rgb(var(--vio-rgb)/.08)}
-.pc-tbl td.n{font-family:'IBM Plex Mono',var(--ff,'IBM Plex Sans Arabic'),monospace;font-variant-numeric:tabular-nums;direction:ltr;text-align:end}
+.pc-tbl td.n{font-family:var(--fm,'IBM Plex Mono'),var(--ff,'IBM Plex Sans Arabic'),monospace;font-variant-numeric:tabular-nums;direction:ltr;text-align:end}
 .pc-note{font-size:10.5px;color:var(--mut2);margin-top:10px}
 .pc-empty{color:var(--mut);font-size:12.5px;text-align:center;padding:40px 0}
 @media (max-width:760px){.pc-grid{grid-template-columns:minmax(0,1fr)}.pc-kpi{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -23200,7 +23201,7 @@ select option{background:var(--bg1)}
 .ck input{accent-color:var(--vio);width:16px;height:16px}
 .wline{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px dashed var(--line);font-size:13.5px}
 .wline:last-child{border-bottom:none}
-pre.rep{white-space:pre-wrap;font-family:'IBM Plex Mono',var(--ff,'IBM Plex Sans Arabic'),monospace;font-size:12.5px;line-height:1.8;color:var(--tx2);
+pre.rep{white-space:pre-wrap;font-family:var(--fm,'IBM Plex Mono'),var(--ff,'IBM Plex Sans Arabic'),monospace;font-size:12.5px;line-height:1.8;color:var(--tx2);
   background:rgb(var(--sh-rgb)/.25);border:1px solid var(--line);border-radius:14px;padding:16px;max-height:420px;overflow:auto;direction:rtl}
 
 /* ═══ دُرج التفاصيل ═══ */
@@ -23460,7 +23461,7 @@ i.fb{font-style:normal;font-weight:600;margin:0 7px;font-size:11px;direction:ltr
 .ind-help a.gd-l{cursor:pointer;color:var(--tx);white-space:nowrap}.ind-help .gd-go{margin-top:8px;font-size:12px;padding:5px 14px;border-radius:999px}
 .indbtn small{font-weight:600;margin-inline-start:4px}.indbtn small b{font-weight:700}
 .ind-fng{display:flex;align-items:center;gap:12px;border:1px solid var(--line2);border-radius:13px;padding:10px 12px;background:var(--bg1);margin-top:4px}
-.ind-fng svg{flex:none}.ind-fng .fgn{font:700 9px 'IBM Plex Mono',monospace}
+.ind-fng svg{flex:none}.ind-fng .fgn{font:700 9px var(--fm,'IBM Plex Mono'),monospace}
 .ind-fng-t{flex:1;min-width:0;display:grid;gap:3px;font-size:12px}
 .ind-fng-t span{font-size:15px;font-weight:800}
 .ind-fng-bar{position:relative;height:6px;border-radius:99px;direction:ltr;margin:3px 0;
@@ -23477,7 +23478,7 @@ i.fb{font-style:normal;font-weight:600;margin:0 7px;font-size:11px;direction:ltr
 .fng{flex:none;padding:2px 12px;border-inline-end:1px solid var(--line2);font-size:11.5px;white-space:nowrap}
 .fng small{font-size:10.5px}
 .fgw{display:inline-flex;align-items:center;gap:7px}.fgr{flex:none;margin:-3px 0}
-.fga{transition:stroke-dashoffset 1.6s var(--ease),stroke .6s}.fgn{font:600 10.5px 'IBM Plex Mono',monospace}
+.fga{transition:stroke-dashoffset 1.6s var(--ease),stroke .6s}.fgn{font:600 10.5px var(--fm,'IBM Plex Mono'),monospace}
 .fgw.ext .fga{animation:fgp 2.4s ease-in-out infinite}@keyframes fgp{0%,100%{opacity:1}50%{opacity:.5}}
 @media (prefers-reduced-motion:reduce){.fga{transition:none}.fgw.ext .fga{animation:none}}
 .ik{display:inline-flex;align-items:center;gap:8px;margin:0 14px;vertical-align:middle;font-size:11.5px;
@@ -26082,7 +26083,7 @@ function openSettings(){
    ${G('🖌️ الشكل والحركة — لهذا الجهاز',
       X('theme','🎨','المظهر',`<i class="sdot" style="background:${thT[3]}"></i>${thT[1]}`,`<div class="thgrid">${TB}</div>`)
      +X('skin','🃏','شكل البطاقات',(SKS.find(x=>x[0]===sk)||SKS[0])[1],`<div class="snote">الأرقام والأزرار نفسها في كل الأشكال.</div><div class="pollrow" id="skinRow">${SB}</div>`)
-     +X('font','🔤','خط الكتابة',`<span style="font-family:${ff}">${fnT[2]}</span>`,`<div class="snote">كل زر مكتوب بخطّه · الأرقام تبقى بخطّها الثابت.</div><div class="pollrow" id="fontRow">${FN}</div>`)
+     +X('font','🔤','خط الكتابة',`<span style="font-family:${ff}">${fnT[2]}</span>`,`<div class="snote">كل زر مكتوب بخطّه · الكلمات والأرقام كلها تأخذه («IBM Plex» = الأرقام بخطّها الثابت القديم).</div><div class="pollrow" id="fontRow">${FN}</div>`)
      +X('anim','🎬','حركة فتح النوافذ',anN,`<div class="snote">الإغلاق بعكسها · «⚡ الوضع الخفيف» بلا حركة.</div><div class="pollrow" id="animRow">${AB}</div>`)
      +T('🕺','رجل العصا','STK.toggle();openSettings()','bStk',STK.on(),'يعمل — يمشي ويلعب فوق الأيقونات · اسحبه','متوقف'))}
    ${G('⚡ الأداء',
@@ -27714,7 +27715,7 @@ function brandWordCanvas(c,xr,y0,cap,ink){     // ✍️ v3.26.0: «THE HOLY DAS
   c.save();c.strokeStyle=ink;c.lineWidth=7.2;c.lineJoin='round';c.lineCap='butt';draw(c,x0,y0);c.restore();return w}
 function cardDraw(M){
   const _ff=(getComputedStyle(document.documentElement).getPropertyValue('--ff')||'').trim();   // 🔤 v3.36.36: الخط المختار
-  const W=1080,PAD=64,IW=W-2*PAD,FA=(_ff&&_ff!=="'IBM Plex Sans Arabic'"?_ff+',':'')+'"IBM Plex Sans Arabic","Segoe UI",Tahoma,sans-serif',FM='"IBM Plex Mono",'+(_ff?_ff+',':'')+'"Segoe UI",monospace';
+  const W=1080,PAD=64,IW=W-2*PAD,FA=(_ff&&_ff!=="'IBM Plex Sans Arabic'"?_ff+',':'')+'"IBM Plex Sans Arabic","Segoe UI",Tahoma,sans-serif',FM=((getComputedStyle(document.documentElement).getPropertyValue('--fm')||'').trim()||'"IBM Plex Mono"')+','+(_ff?_ff+',':'')+'"Segoe UI",monospace';
   const off=document.createElement('canvas');off.width=W;off.height=2600;const x=off.getContext('2d');x.direction='rtl';x.textBaseline='alphabetic';
   const RR=(c,X,Y,w,h,r)=>{c.beginPath();c.moveTo(X+r,Y);c.arcTo(X+w,Y,X+w,Y+h,r);c.arcTo(X+w,Y+h,X,Y+h,r);c.arcTo(X,Y+h,X,Y,r);c.arcTo(X,Y,X+w,Y,r);c.closePath()};
   const glass=(Y,h,r=30)=>{RR(x,PAD,Y,IW,h,r);x.fillStyle='rgba(255,255,255,0.055)';x.fill();x.strokeStyle='rgba(255,255,255,0.11)';x.lineWidth=2;x.stroke()};

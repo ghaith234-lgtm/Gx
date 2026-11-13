@@ -56,8 +56,8 @@ async function open(br, skin, errs) {
   let F = await pg.evaluate(() => ({ ff: getComputedStyle(document.documentElement).getPropertyValue('--ff').trim(), body: getComputedStyle(document.body).fontFamily,
     num: getComputedStyle(document.querySelector('.num')).fontFamily, link: (document.getElementById('hfont-cairo') || {}).href || '', ls: localStorage.getItem('dash_font'),
     links: [...document.querySelectorAll('link[id^="hfont-"]')].map(l => l.id) }));
-  ok('🔤 «Cairo»: the page font is Cairo · its file asked for (only it) · kept on this device · the numbers keep IBM Plex Mono',
-     /Cairo/.test(F.ff) && /^"?Cairo/.test(F.body) && /family=Cairo/.test(F.link) && F.ls === 'cairo' && /IBM Plex Mono/.test(F.num) && F.links.join() === 'hfont-cairo', F);
+  ok('🔤 «Cairo»: the page font is Cairo · its file asked for (only it) · kept on this device · the numbers in Cairo too (v3.36.37)',
+     /Cairo/.test(F.ff) && /^"?Cairo/.test(F.body) && /family=Cairo/.test(F.link) && F.ls === 'cairo' && /^"?'?Cairo/.test(F.num) && F.links.join() === 'hfont-cairo', F);
   await pg.reload({ waitUntil: 'domcontentloaded' });
   F = await pg.evaluate(() => ({ ff: getComputedStyle(document.documentElement).getPropertyValue('--ff').trim(), link: !!document.getElementById('hfont-cairo') }));
   ok('🔤 after a reload: Cairo applied as the page loads (before the first paint — no flash of the old font)', /Cairo/.test(F.ff) && F.link, F);
