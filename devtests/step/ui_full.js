@@ -42,8 +42,8 @@ function ok(name, cond, det) { res.push(!!cond); if (!Q || !cond) console.log((c
   let m = await pg.evaluate(() => document.getElementById('modal').innerText);
   const t = T[X];
   ok("«🪜 السلم» for 🪜 opens the full ladder by level: each level = its fixed buy + its own 3 sells (+0.45 · +0.60 · +0.75%) · the counts = the engine's slots",
-     m.includes('🪜 السلّم الكامل') && m.includes('3 بيعات خاصة بيه: +0.45% · +0.60% · +0.75%')
-     && m.includes(`على المنصة ${t.pb} شراء · ${t.ps} بيع`) && m.includes(`بالذاكرة ${t.mb} شراء · ${t.ms} بيع`), { m: m.slice(0, 600), t });
+     m.includes('🪜 السلّم الكامل') && m.includes('3 بيعات خاصة به: +0.45% · +0.60% · +0.75%')
+     && m.includes(`على المنصة ${t.pb} شراء · ${t.ps} بيع`) && m.includes(`في الذاكرة ${t.mb} شراء · ${t.ms} بيع`), { m: m.slice(0, 600), t });
   await pg.evaluate(d => stFullDraw(d, 'all'), X); await pg.waitForTimeout(200);
   m = await pg.evaluate(() => document.getElementById('modal').innerText);
   const nLv = (m.match(/🛒 المستوى -?\d+ — شراء/g) || []).length, nParts = (m.match(/الجزء \d+\/3/g) || []).length;
@@ -65,8 +65,8 @@ function ok(name, cond, det) { res.push(!!cond); if (!Q || !cond) console.log((c
   await pg.evaluate(() => document.querySelector('#modal button[onclick*="riBelow"]').click()); await pg.waitForTimeout(300);
   const vis = await pg.evaluate(() => { const M = document.getElementById('modal'), r = document.getElementById('riBelow').getBoundingClientRect(), mr = M.getBoundingClientRect();
     return r.top >= mr.top - 2 && r.top < mr.top + 80 });
-  ok("«💠 سلّم الإعادة»: one scrolling page (no 56% box) · «🪙 فوق السعر · 💵 تحت السعر · 💠 بيها إعادة» · «⬇️ تحت السعر» brings the buys under the price to the top",
-     !ri.box && ri.below && /🪙 فوق السعر 3 · 💵 تحت السعر \d+ · 💠 بيها إعادة 4/.test(ri.txt) && vis, { box: ri.box, vis, head: ri.txt.slice(0, 400) });
+  ok("«💠 سلّم الإعادة»: one scrolling page (no 56% box) · «🪙 فوق السعر · 💵 تحت السعر · 💠 فيها إعادة» · «⬇️ تحت السعر» brings the buys under the price to the top",
+     !ri.box && ri.below && /🪙 فوق السعر 3 · 💵 تحت السعر \d+ · 💠 فيها إعادة 4/.test(ri.txt) && vis, { box: ri.box, vis, head: ri.txt.slice(0, 400) });
   ok("… small amounts in full: level −1's reinvest «+0.0493 · +0.0737 · +0.0996» (was «0.05 · 0.07 · 0.10»)",
      /\+0\.049\d/.test(ri.txt) && /\+0\.073\d/.test(ri.txt) && /\+0\.099\d/.test(ri.txt), ri.txt.slice(0, 1500));
   const o1 = await riOrder();
@@ -75,7 +75,7 @@ function ok(name, cond, det) { res.push(!!cond); if (!Q || !cond) console.log((c
   await pg.evaluate(() => document.querySelector('#modal button[onclick*="RIF"]').click()); await pg.waitForTimeout(300);
   const only = await pg.evaluate(() => document.getElementById('modal').innerText);
   const rowsOnly = (only.match(/🪜 -?\d+ · \d\/3/g) || []);
-  ok(`… «💠 اللي بيها إعادة بس»: only the parts that reinvested (${T[X].grown.join(' · ')})`,
+  ok(`… «💠 التي فيها إعادة فقط»: only the parts that reinvested (${T[X].grown.join(' · ')})`,
      rowsOnly.length === T[X].grown.length, rowsOnly);
   await pg.evaluate(() => document.querySelector('#modal button[onclick*="RIF"]').click());
   await pg.evaluate(() => hideModal());
@@ -93,7 +93,7 @@ function ok(name, cond, det) { res.push(!!cond); if (!Q || !cond) console.log((c
   m = await pg.evaluate(() => document.getElementById('modal').innerText);
   const bLv = (m.match(/🛒 المستوى -?\d+ — شراء/g) || []).length, bParts = (m.match(/الجزء \d+\/20/g) || []).length;
   ok(`… «🪜 السلم» loads the full ladder: ${ta.levels} levels · ${ta.slots} parts (+0.30% · +1.30% · +2.30% … +19.30%) · not «from the card»`,
-     bLv === ta.levels && bParts === ta.slots && m.includes('+0.30% · +1.30% · +2.30% … +19.30%') && !m.includes('ما وصل السلّم الكامل'), { bLv, bParts });
+     bLv === ta.levels && bParts === ta.slots && m.includes('+0.30% · +1.30% · +2.30% … +19.30%') && !m.includes('لم يصل السلّم الكامل'), { bLv, bParts });
   await pg.evaluate(() => hideModal());
   await pg.evaluate(d => openReinvestLadder(d), A); await pg.waitForTimeout(1500);
   const rb = await pg.evaluate(() => document.getElementById('modal').innerText);
