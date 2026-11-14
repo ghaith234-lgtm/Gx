@@ -1,5 +1,6 @@
 # 🪜 puts a changed graded-grid engine back into the dashboard — the ONLY way the engine is changed in the dashboard.
-#   python3 devtests/step/embed_engine.py [engine.py] [Holy_Dashboard.pyw] [--dry]
+#   python3 devtests/step/embed_engine.py [engine.py] [Holy_Dashboard.pyw] [--dry] [--var=_GRIDP_B64]
+#   (v3.36.44: --var picks another embedded engine — _GRIDP_B64 ➕ plus · _GRIDR_B64 🎚️ range …; the default stays the 🪜 graded grid)
 #   Replaces ONE thing: the text of `_GRIDS_B64 = ( … )`. Before it writes anything it checks, and refuses on any failure:
 #     ① the engine file compiles
 #     ② the new literal decodes back to exactly the engine file
@@ -11,6 +12,7 @@ import ast, base64, hashlib, os, re, sys, zlib
 H = os.path.dirname(os.path.abspath(__file__))
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
 DRY = "--dry" in sys.argv
+VAR = next((a[6:] for a in sys.argv[1:] if a.startswith("--var=")), "_GRIDS_B64")
 ENG = args[0] if len(args) > 0 else os.path.join(H, "eng", "main_step.py")
 DASH = args[1] if len(args) > 1 else os.path.join(H, "..", "..", "Holy_Dashboard.pyw")
 WIDTH = 120
@@ -21,8 +23,8 @@ def fail(msg):
 
 
 def lit_span(lines):                      # (index of the `_GRIDS_B64 = (` line, index of the closing `)` line)
-    a = [i for i, l in enumerate(lines) if l.startswith("_GRIDS_B64 = (")]
-    if len(a) != 1: fail(f"`_GRIDS_B64 = (` found {len(a)} times")
+    a = [i for i, l in enumerate(lines) if l.startswith(VAR + " = (")]
+    if len(a) != 1: fail(f"`{VAR} = (` found {len(a)} times")
     b = next((i for i in range(a[0] + 1, len(lines)) if lines[i] == ")"), None)
     if b is None: fail("closing `)` of the literal not found")
     return a[0], b
@@ -35,7 +37,7 @@ def decode(lines, a, b):
 def tops(src):                            # every top-level node except the engine literal, as comparable text
     out = []
     for n in ast.parse(src).body:
-        if isinstance(n, ast.Assign) and any(getattr(t, "id", "") == "_GRIDS_B64" for t in n.targets):
+        if isinstance(n, ast.Assign) and any(getattr(t, "id", "") == VAR for t in n.targets):
             continue
         out.append(ast.dump(n))
     return out
@@ -43,7 +45,7 @@ def tops(src):                            # every top-level node except the engi
 
 eng = open(ENG, encoding="utf-8").read()
 try:
-    compile(eng, "main_step.py", "exec")                                        # ①
+    compile(eng, os.path.basename(ENG), "exec")                                        # ①
 except SyntaxError as e:
     fail(f"the engine does not compile: {e}")
 raw = open(DASH, encoding="utf-8", newline="").read()
@@ -54,7 +56,7 @@ old = decode(lines, a, b)
 if old == eng:
     print("= unchanged: the engine file equals the one embedded —", len(eng), "chars"); sys.exit(0)
 packed = base64.b64encode(zlib.compress(eng.encode("utf-8"), 9)).decode("ascii")
-new_lit = ['_GRIDS_B64 = ('] + ['"' + packed[i:i + WIDTH] + '"' for i in range(0, len(packed), WIDTH)] + [")"]
+new_lit = [VAR + ' = ('] + ['"' + packed[i:i + WIDTH] + '"' for i in range(0, len(packed), WIDTH)] + [")"]
 new_lines = lines[:a] + new_lit + lines[b + 1:]
 if decode(new_lines, a, a + len(new_lit) - 1) != eng: fail("the new literal does not decode to the engine file")      # ②
 new_raw = "\n".join(new_lines)
