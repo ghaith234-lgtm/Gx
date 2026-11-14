@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.42"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.43"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -21290,7 +21290,7 @@ font-size:16px;text-align:center;letter-spacing:2px}
 button{width:100%;margin-top:12px;padding:13px;border:0;border-radius:11px;cursor:pointer;font-weight:700;font-size:15px;
 background:linear-gradient(94deg,#22d3ee,#8b5cf6);color:#08111c}
 .err{color:#ef4444;font-size:12px;margin-top:10px;min-height:16px}
-</style><script>try{var _t=localStorage.getItem('dash_theme');var P={ocean:['#061431','#0a1a38','#1c2c4d','#e6f0ff','#8ea3c7','#60a5fa'],emerald:['#051a14','#06241c','#154436','#e7fff6','#8fbfae','#2dd4bf'],gold:['#16110a','#231a0c','#3d3120','#fdf6e3','#c2b28f','#f4c95d'],graphite:['#101114','#1b1e23','#2c3037','#e8eaed','#9aa0a8','#a5b4fc'],light:['#f3f1fa','#ffffff','#e3def0','#1d1733','#5d5878','#6d28d9'],okx:['#000000','#121212','#262626','#ffffff','#8c8c8c','#25a750']}[_t];
+</style><script>try{var _t=localStorage.getItem('dash_theme');var P={ocean:['#061431','#0a1a38','#1c2c4d','#e6f0ff','#8ea3c7','#60a5fa'],emerald:['#051a14','#06241c','#154436','#e7fff6','#8fbfae','#2dd4bf'],gold:['#16110a','#231a0c','#3d3120','#fdf6e3','#c2b28f','#f4c95d'],graphite:['#101114','#1b1e23','#2c3037','#e8eaed','#9aa0a8','#a5b4fc'],light:['#f3f1fa','#ffffff','#e3def0','#1d1733','#5d5878','#6d28d9'],okx:['#000000','#121212','#262626','#ffffff','#8c8c8c','#25a750'],arctic:['#0d141c','#121c27','#253546','#f1f7fc','#9fb1c2','#bae6fd'],sky:['#eef5fb','#ffffff','#d9e6f2','#0f1d2e','#4d5f73','#0369a1']}[_t];
 if(P){var c=document.createElement('style');c.textContent='body{background:'+P[0]+';color:'+P[3]+'}.box{background:'+P[1]+';border-color:'+P[2]+'}p{color:'+P[4]+'}input{background:'+P[0]+';border-color:'+P[2]+';color:'+P[3]+'}button{background:linear-gradient(94deg,#22d3ee,'+P[5]+')}';document.head.appendChild(c)}}catch(e){}</script></head><body>
 <div id="splash" aria-hidden="true"><div class="sp-in">__BRAND_TILE__<div class="sp-word">__BRAND_SPLASHWORD__</div></div></div>
 <script>(function(){var s=document.getElementById("splash");if(!s)return;var k="holy_splash";try{if(sessionStorage.getItem(k)){s.remove();return}sessionStorage.setItem(k,"1")}catch(e){}setTimeout(function(){try{s.remove()}catch(e){}},3100)})()</script>
@@ -22640,17 +22640,18 @@ html.covered .orb{animation-play-state:paused}   /* 🎨 v3.26.9: نافذة/ص�
 @media (prefers-reduced-motion:reduce){#splash,#splash *{animation-duration:.01s!important;animation-delay:0s!important}#splash{animation:spOut .35s ease .7s forwards!important}}
 
 #splash{--spA:var(--bgA);--spB:var(--bgB);--spBg:var(--bg0);--spInk:var(--tx)}
-html[data-theme="light"] #splash .bword .bsh{opacity:.2}
+html[data-theme="light"] #splash .bword .bsh,html[data-theme="sky"] #splash .bword .bsh{opacity:.2}
 html.lite #splash .sp-in,html.lite #splash .btile{animation:none}
 /* 🎨 v3.26.0: الهوية بالشريط العلوي — الشعار + الكتابة الرفيعة بخيالها الطويل */
 .brand .hlogo{display:inline-flex;align-items:center;gap:9px;direction:ltr}
 .bmark{width:27px;height:27px;overflow:visible;stroke-width:6.6;flex:none}
 .bword{height:19px;width:auto;overflow:visible;stroke-width:7.2;display:block}
 .bink{stroke:var(--tx)}.bsh{stroke:rgb(var(--sh-rgb));opacity:.55}
-html[data-theme="light"] .bsh{opacity:.17}
+html[data-theme="light"] .bsh,html[data-theme="sky"] .bsh{opacity:.17}
 /* ✨ v3.26.7: لمعة الشعار — شريط ضوء يعبر الكتابة كل 7 ثواني والخط الصاعد بالشعار يضوي · اللون = مزاج السوق من «📊 المؤشرات» */
 :root{--glint:#ffd56a}
 html[data-theme="light"]{--glint:#c58a00}
+html[data-theme="sky"]{--glint:#0284c7}
 html[data-mood="up"]{--glint:var(--green)}
 html[data-mood="down"]{--glint:var(--red)}
 .bword .bglow{stroke:var(--glint);stroke-width:9.5}
@@ -23798,6 +23799,19 @@ html[data-theme="graphite"]{--bg0:#0b0c0f;--bg1:#141619;--tx:#e8eaed;--mut:#9aa0
   --surf-rgb:20 22 26;--surf2-rgb:14 16 19;--surf3-rgb:12 13 16;--surf4-rgb:28 31 36;--scrim-rgb:5 6 8;
   --big-a:#f1f3f5;--tx2:#d7dbe0;--bgA:#1a1d22;--bgB:#111317;--orb1:transparent;--orb2:transparent;--orb3:transparent;
   --modal-bg:linear-gradient(165deg,#1b1e23,#111316);--tip-bg:#1b1e23;--coin-bg:#22252b;--chart-bg:#111316;--card2:#181a1e;--bd:#2c3037;--on-acc:#0b0c0f}
+html[data-theme="arctic"]{--bg0:#070b10;--bg1:#0d141c;--tx:#f1f7fc;--mut:#9fb1c2;--mut2:#6a7c8d;
+  --vio-rgb:186 230 253;--vio2-rgb:125 190 230;--vio3-rgb:160 214 245;--cyan-rgb:226 232 240;--cyan2-rgb:160 175 195;--cyan3-rgb:130 145 165;
+  --surf-rgb:16 24 33;--surf2-rgb:12 18 26;--surf3-rgb:9 13 19;--surf4-rgb:23 34 46;--scrim-rgb:4 7 10;
+  --big-a:#f5fbff;--tx2:#dce7f0;--bgA:#12304a;--bgB:#1f2a36;--orb1:#38bdf8;--orb2:#94a3b8;--orb3:#e0f2fe;
+  --modal-bg:linear-gradient(165deg,#15212e,#080d13);--tip-bg:#121c27;--coin-bg:#16222f;--chart-bg:#080d13;--card2:#101923;--bd:#253546;--on-acc:#08131c}
+html[data-theme="sky"]{color-scheme:light;--bg0:#eef5fb;--bg1:#ffffff;--tx:#0f1d2e;--mut:#4d5f73;--mut2:#5f7186;
+  --vio-rgb:3 105 161;--vio2-rgb:7 89 133;--vio3-rgb:2 132 199;--cyan-rgb:124 58 237;--cyan2-rgb:109 40 217;--cyan3-rgb:124 58 237;
+  --green-rgb:4 120 87;--green2-rgb:22 163 74;--red-rgb:190 18 60;--red2-rgb:220 38 38;--amber-rgb:180 83 9;--amber2-rgb:217 119 6;--amber3-rgb:180 83 9;
+  --blue-rgb:37 99 235;--ov-rgb:15 29 46;--sh-rgb:70 95 125;--surf-rgb:255 255 255;--surf2-rgb:255 255 255;--surf3-rgb:248 251 254;--surf4-rgb:255 255 255;--scrim-rgb:228 238 247;
+  --hi:#0f1d2e;--on-acc:#ffffff;--on-green:#ffffff;--red-soft:#9f1239;--green-soft:#065f46;--big-a:#12304a;--tx2:#233b52;
+  --bgA:#d6ecfb;--bgB:#e9ddff;--orb1:#7dd3fc;--orb2:#c4b5fd;--orb3:#a5f3fc;
+  --glass:linear-gradient(160deg,rgb(255 255 255/.95),rgb(255 255 255/.82));--line:rgb(3 105 161/.15);--line2:rgb(124 58 237/.28);
+  --modal-bg:linear-gradient(165deg,#ffffff,#f3f8fc);--tip-bg:#ffffff;--coin-bg:#e3eef8;--chart-bg:#ffffff;--card2:#f5f9fd;--bd:#d9e6f2}
 html[data-theme="okx"]{--bg0:#000000;--bg1:#121212;--tx:#ffffff;--mut:#8c8c8c;--mut2:#6b6b6b;
   --vio-rgb:235 235 235;--vio2-rgb:120 120 120;--vio3-rgb:200 200 200;--cyan-rgb:170 170 170;--cyan2-rgb:110 110 110;--cyan3-rgb:90 90 90;
   --green-rgb:37 167 80;--green2-rgb:30 140 66;--red-rgb:239 69 74;--red2-rgb:200 50 56;
@@ -23814,16 +23828,19 @@ html[data-theme="light"]{color-scheme:light;--bg0:#f3f1fa;--bg1:#ffffff;--tx:#1d
   --bgA:#e6ddff;--bgB:#d9f3fb;--orb1:#c4b5fd;--orb2:#a5f3fc;--orb3:#fbcfe8;
   --glass:linear-gradient(160deg,rgb(255 255 255/.95),rgb(255 255 255/.82));--line:rgb(109 40 217/.15);--line2:rgb(14 116 144/.32);
   --modal-bg:linear-gradient(165deg,#ffffff,#f7f5fd);--tip-bg:#ffffff;--coin-bg:#ece8f7;--chart-bg:#ffffff;--card2:#f7f5fd;--bd:#e3def0}
-html[data-theme="light"] .card{box-shadow:0 1px 0 rgb(255 255 255/.8) inset,0 10px 28px rgb(60 40 120/.10)}
-html[data-theme="light"] .card:hover{box-shadow:0 14px 34px rgb(60 40 120/.16)}
-html[data-theme="light"] .modal{box-shadow:0 24px 60px rgb(60 40 120/.22)}
-html[data-theme="light"] button.primary,html[data-theme="light"] .dcabuy.loss{color:#fff}
-html[data-theme="light"] nav.actions .grp button[style*="gradient"]{color:#fff!important}
+html[data-theme="light"] .card,html[data-theme="sky"] .card{box-shadow:0 1px 0 rgb(255 255 255/.8) inset,0 10px 28px rgb(60 40 120/.10)}
+html[data-theme="light"] .card:hover,html[data-theme="sky"] .card:hover{box-shadow:0 14px 34px rgb(60 40 120/.16)}
+html[data-theme="light"] .modal,html[data-theme="sky"] .modal{box-shadow:0 24px 60px rgb(60 40 120/.22)}
+html[data-theme="light"] button.primary,html[data-theme="light"] .dcabuy.loss,html[data-theme="sky"] button.primary,html[data-theme="sky"] .dcabuy.loss{color:#fff}
+html[data-theme="light"] nav.actions .grp button[style*="gradient"],html[data-theme="sky"] nav.actions .grp button[style*="gradient"]{color:#fff!important}
 html[data-theme="light"] .tot b{background:linear-gradient(92deg,#0e7490,#6d28d9);-webkit-background-clip:text;background-clip:text}
+html[data-theme="sky"] .tot b{background:linear-gradient(92deg,#7c3aed,#0369a1);-webkit-background-clip:text;background-clip:text}
 html[data-theme="light"] .st .sv>span,html[data-theme="light"] .st .sv.rotv{background:linear-gradient(92deg,#0e7490,#6d28d9);-webkit-background-clip:text;background-clip:text}
-html[data-theme="light"] .card.dead{filter:saturate(.55) brightness(.97)}
-html[data-theme="light"] .orb{opacity:.42}
+html[data-theme="sky"] .st .sv>span,html[data-theme="sky"] .st .sv.rotv{background:linear-gradient(92deg,#7c3aed,#0369a1);-webkit-background-clip:text;background-clip:text}
+html[data-theme="light"] .card.dead,html[data-theme="sky"] .card.dead{filter:saturate(.55) brightness(.97)}
+html[data-theme="light"] .orb,html[data-theme="sky"] .orb{opacity:.42}
 html[data-theme="light"] ::-webkit-scrollbar-thumb{background:rgb(109 40 217/.22)}
+html[data-theme="sky"] ::-webkit-scrollbar-thumb{background:rgb(3 105 161/.22)}
 html[data-theme="graphite"] .orb{display:none}
 
 /* ═══ ⚡ الوضع الخفيف — بلا حركات دائمة ولا ضبابية ولا أجرام (للموبايل والأجهزة الضعيفة) ═══ */
@@ -27775,7 +27792,7 @@ function lgCsv(){const it=LG.items;if(!it.length){toast('لا توجد سجلا�
 
 /* ── 📊 ربح التداول يوم بيوم + حصة كل بوت — SVG مرسوم هنا (بلا مكتبات من الإنترنت) ── */
 let PC=pcPal();
-function pcPal(){return document.documentElement.dataset.theme==='light'
+function pcPal(){return lightThemes().includes(document.documentElement.dataset.theme)
   ?{d:'#0891b2',r:'#7c3aed',bots:['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4'],other:'#b4b2a9'}
   :{d:'#0aa5c4',r:'#8b5cf6',bots:['#3987e5','#d95926','#199e70','#c98500','#d55181'],other:'#6f679e'}}
 let PV=null,PCDAYS=30,PCPER='month';
@@ -29738,12 +29755,15 @@ async function openDeploy(pre){pre=pre||{};
 /* ── المحرك ── */
 document.addEventListener('keydown',e=>{if(e.key==='Escape')holyBack()});   // 🪟 v3.36.34: Esc = زر الرجوع (الأعلى أولاً)
 /* 🎨 الثيمات + ⚡ الوضع الخفيف + ⏱️ سرعة التحديث — محفوظة بهذا الجهاز (كل جهاز على راحته) */
+function lightThemes(){return ['light','sky']}   // 🎨 v3.36.43: the light sets (the light-only rules · the chart palette · TradingView · the 🪜 lines) — a function: pcPal() runs before this line
 const THEMES=[['holy','بنفسجي ليلي','#0d0524','#a78bfa','#22d3ee','#fb7185'],
   ['ocean','أزرق محيطي','#061431','#60a5fa','#22d3ee','#34d399'],
   ['emerald','زمردي','#051a14','#2dd4bf','#67e8f9','#fbbf24'],
   ['gold','ذهبي','#16110a','#f4c95d','#e7c9a9','#34d399'],
   ['graphite','رمادي هادئ','#141619','#a5b4fc','#93c5fd','#e8eaed'],
+  ['arctic','جليدي','#0d141c','#bae6fd','#e2e8f0','#7dd3fc'],
   ['light','نهاري فاتح','#f3f1fa','#6d28d9','#0e7490','#be123c'],
+  ['sky','سماوي نهاري','#eef5fb','#0369a1','#7c3aed','#0f1d2e'],
   ['okx','OKX أسود','#000000','#ffffff','#a3a3a3','#25a750']];
 /* 🎞️ v3.26.8: الفريمات — 240 · 120 · 60 · 30 (الافتراضي 120) · بالتطبيق 1.5 الشاشة نفسها تتغيّر · 60/30 كمان تخفف حركات اللوحة (بطارية) */
 function uiFps(){const s=appStat();if([30,60,120,240].includes(+s.fps))return +s.fps;const v=+_ls('dash_fps')||0;return [30,60,120,240].includes(v)?v:120}
@@ -29946,8 +29966,8 @@ function applyTheme(t){const h=document.documentElement;
   try{if(typeof HB!=='undefined'&&HB.k!=='orig')hbgApply()}catch(e){}}   // 🌌 v3.36.37: الخلفية تاخذ الألوان الجديدة
 function setTheme(t){_ls('dash_theme',t==='holy'?null:t);applyTheme(t);openSettings();appBg();
   toast('🎨 '+((THEMES.find(x=>x[0]===t)||THEMES[0])[1])+(document.querySelector('.cchart iframe')?' — افتح الشارت من جديد حتى يتلوّن':''),true)}
-function tvTheme(){return uiTheme()==='light'?'light':'dark'}
-function tvBg(){return uiTheme()==='light'?'%23ffffff':'%230b0420'}
+function tvTheme(){return lightThemes().includes(uiTheme())?'light':'dark'}
+function tvBg(){return lightThemes().includes(uiTheme())?'%23ffffff':'%230b0420'}
 function uiLite(){return _ls('dash_lite')==='on'}
 /* 🔒 v3.36.7: قفل البطاقات (اختياري · لهذا الجهاز) — كل بطاقة بوت أو مُراكِم لا تستجيب لأي لمسة أو نقرة حتى يُضغط 🔒 فيها؛
    بعدها تبقى مفتوحة دقيقة (كل استعمال داخلها يجدّد الدقيقة) ثم تُقفل وحدها · 🔓 يقفلها فوراً · لا يرسل شيئاً للمنصة */
@@ -30133,7 +30153,7 @@ function skAR(x,y,t,side,fs,fill,extra){return `<text class="ar" x="${x}" y="${y
 /* 🪜🎨 v3.36.22: 12 لون متباعدة (المستويات المتجاورة أبعد شي) · بلا أحمر (الأحمر خسارة) ولا قريب من سماوي خط السعر · مجموعة أغمق للثيم الفاتح */
 const ST_PAL=['#d97706','#0891b2','#d8b4fe','#5eead4','#fdba74','#818cf8','#22c55e','#facc15','#93c5fd','#059669','#a3e635','#d946ef'],
   ST_PAL_L=['#65a30d','#115e59','#86198f','#6366f1','#d97706','#166534','#0284c7','#6d28d9','#059669','#854d0e','#a855f7','#1e40af'];
-function stCol(j){const P=document.documentElement.dataset.theme==='light'?ST_PAL_L:ST_PAL,n=P.length;return P[((+j%n)+n)%n]}
+function stCol(j){const P=lightThemes().includes(document.documentElement.dataset.theme)?ST_PAL_L:ST_PAL,n=P.length;return P[((+j%n)+n)%n]}
 function stCount(b){const c={pb:0,ps:0,mb:0,ms:0};(b.sl||[]).forEach(x=>{c[(x[5]==='M'?'m':'p')+(x[2]==='b'?'b':'s')]++});
   (b.sl_far||[]).forEach(f=>{c.mb+=+f[2]||0;c.ms+=+f[3]||0});return c}
 const RIFULL={},STFULL={},RIF={};                  // 🪜 v3.36.20: السلّم الكامل وصفوف 💠 الكاملة (عند الطلب) · فلتر 💠
