@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.49"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.50"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -992,6 +992,7 @@ def bot_snapshot(b):
 
 DCA_FEE_MAKER = 0.0008      # 🧾 v3.22.1: أوامر الأمان الليمت (صانع)
 DCA_FEE_TAKER = 0.001       # الأساس والإغلاق والأوامر الفورية (آخذ)
+DCA_MAX_SAFETY = 100        # 🩺 v3.36.50: حد عدد أوامر الأمان (كان بلا حد ⇒ رقم خاطئ كبير يملأ الذاكرة ويوقف اللوحة)
 
 
 def _dca_tp(cfg):
@@ -5350,7 +5351,7 @@ def _bt_wallet_def(kind, cfg, body, p0, spec):
         if kind == "rec_sell":
             return 0.0, round(f("cap", 60) / p0, 8)
         if kind in ("dca", "dca_buy"):
-            bq, aq, sm, n = f("base_order_qty", 0), f("avg_order_qty", 0), f("size_multiplier", 1), int(f("max_safety_orders", 0))
+            bq, aq, sm, n = f("base_order_qty", 0), f("avg_order_qty", 0), f("size_multiplier", 1), min(DCA_MAX_SAFETY, int(min(1e6, f("max_safety_orders", 0))))   # 🩺 v3.36.50
             tot = bq + sum(aq * sm ** i for i in range(max(0, n)))           # أقصى ما تحتاجه الخطة كاملة (بالعملة)
             tot *= 1.02
             return (round(tot * p0, 2), 0.0) if kind == "dca_buy" else (0.0, round(tot, 8))
@@ -18650,6 +18651,8 @@ def compute_dca_table(cfg, base_price):
     fee_min = 0.20
     fee_warn = tp_raw < fee_min
     tp_pct = max(tp_raw, fee_min) / 100.0
+    if n_safety > DCA_MAX_SAFETY:                      # 🩺 v3.36.50
+        return {"rows": [], "msg": f"عدد أوامر الأمان أكبر من الحد ({DCA_MAX_SAFETY}) — اكتب عدداً أصغر"}
     if base_price <= 0 or base_qty <= 0 or n_safety < 0:
         return []
     f_lv = DCA_FEE_TAKER if trail else DCA_FEE_MAKER
@@ -18673,6 +18676,8 @@ def compute_dca_table(cfg, base_price):
         cnet += q * (1 - fee) if is_buy else price * q * (1 - fee)
         avg = cv / cq
         tgt = _target(avg)
+        if not (tgt > 0 and price > 0):                # 🩺 v3.36.50: هدف يجعل سعر الخروج صفراً (أو مستوى تحت الصفر) كان يقسم على صفر
+            return {"rows": [], "msg": "الأرقام تجعل سعر الخروج أو أحد المستويات صفراً — صغّر هدف الربح أو المسافة"}
         if is_buy:
             prof = cnet * tgt * (1 - DCA_FEE_TAKER) - cv
             gap = (tgt / price - 1) * 100
@@ -18735,6 +18740,8 @@ def grid_up_calc(data):
     if base <= 0:
         return {"ok": False, "msg": "سعر العملة غير معروف — اكتب الرمز صحيحاً أو حدّد سعر الأساس"}
     step = 1.0 + g
+    if not step > 1.0:                                 # 🩺 v3.36.50: نسبة أصغر من أن تُحسب كانت تقسم على صفر
+        return {"ok": False, "msg": "نسبة الشبكة صغيرة جداً"}
     if top > 0:
         if top < base * step * (1 - 1e-9):
             return {"ok": False, "msg": f"آخر سعر بيع يجب أن يكون عند أول مستوى ({base * step:.8g}) أو فوقه"}
@@ -18877,6 +18884,8 @@ def deploy_dca(data):
         return {"ok": False, "msg": "يجب أن يكون حجم الأمر الأساسي والمتوسط أكبر من صفر"}
     if fields["max_safety_orders"] <= 0:
         return {"ok": False, "msg": "يجب أن يكون عدد أوامر الأمان ١ على الأقل"}
+    if fields["max_safety_orders"] > DCA_MAX_SAFETY:   # 🩺 v3.36.50
+        return {"ok": False, "msg": f"عدد أوامر الأمان أكبر من الحد ({DCA_MAX_SAFETY}) — اكتب عدداً أصغر"}
     if fields["take_profit_pct"] <= 0:
         return {"ok": False, "msg": "يجب أن يكون هدف الربح أكبر من صفر"}
     keys = wallet_keys(data.get("wallet", "")) or {
@@ -21019,7 +21028,7 @@ def app_pair(name, iid, code, ip):
         iid = str(iid or "")[:64]
         _APPD["devs"] = [d for d in _APPD["devs"] if not (iid and d.get("iid") == iid)]
         _APPD["devs"].append({"id": did, "iid": iid, "name": str(name or "Android")[:60], "h": _hl.sha256(tok.encode()).hexdigest(),
-                              "created": int(time.time()), "seen": int(time.time()), "code": int(code or 0), "ip": str(ip)[:45]})
+                              "created": int(time.time()), "seen": int(time.time()), "code": _safe(lambda: int(float(code or 0)), default=0) or 0, "ip": str(ip)[:45]})
         _APPD["devs"] = _APPD["devs"][-APP_DEV_MAX:]
         _appd_save(True)
     with _APPF_COND:
@@ -22651,6 +22660,8 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
             data = json.loads(self.rfile.read(n) or b"{}")
         except Exception:
             return self._json({"ok": False, "msg": "طلب غير صالح"}, 400)
+        if not isinstance(data, dict):                     # 🩺 v3.36.50: [] · "نص" · null كانت تقطع الاتصال بلا رد
+            return self._json({"ok": False, "msg": "طلب غير صالح"}, 400)
         path = urlparse(self.path).path
         if path == "/api/fonts":                          # 🔤 v3.36.40: ما ينكتب بالسجلات (الملف ميغابايتات نص)
             a = str(data.get("act") or "")
@@ -22711,12 +22722,7 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                 return self._json({"ok": True, "msg": f"▶️ شغّلت {n} بوت — وكلهن صارن تحت جناح الحارس"})
             if act == "upgrade_engines":
                 return self._json(upgrade_engines())
-            if act == "shutdown_beacon":
-                # يُستدعى من المتصفح عند إغلاق التبويب (sendBeacon) — يوقف كل البوتات
-                stop_all_bots("أُغلق التبويب")
-                kill_all_bot_procs()
-                threading.Timer(0.5, lambda: os._exit(0)).start()
-                return self._json({"ok": True, "msg": "🛑 توقف الكل"})
+            # 🩺 v3.36.50: «shutdown_beacon» انشال — بقايا قديمة (ولا شي بالصفحة يرسله) كانت توقف كل البوتات وتطفي اللوحة بأي طلب
             if act == "die":
                 stop_all_bots("أمر إيقاف خارجي")
                 kill_all_bot_procs()
@@ -22749,7 +22755,7 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                                    "msg": "📨 أُرسل التقرير إلى تيليغرام" if _ok
                                           else "⚠️ لم يُرسَل — " + str(TG_DIAG.get("last") or "")})
             if act == "guard_ack":
-                v = data.get("value") or {}
+                v = (data.get("value") if isinstance(data.get("value"), dict) else {})
                 _by = "👤 اللوحة (" + str((self.client_address or ["?"])[0]) + ")"
                 return self._json(guard_ack(v.get("key") or v.get("sym") or "", v.get("mode") or "accept",
                                             note=v.get("note") or "", by=_by))
@@ -22774,7 +22780,7 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                 log_event(f"🧹 [تصحيح النمو اليتيم] {_nm}: {len(_o)} أمر · {sum(x['usd'] for x in _o):.4f}$ — بموافقة المالك")
                 return self._json({"ok": True, "msg": f"🧹 أُرسل التصحيح ({len(_o)} أمر) — البوت ينفّذه خلال ثوانٍ"})
             if act == "ticker_set":
-                v = data.get("value") or {}
+                v = (data.get("value") if isinstance(data.get("value"), dict) else {})
                 _c = app_cfg()
                 _c["ticker_on"] = bool(v.get("on", True))
                 _c["ticker_coins"] = [str(x).upper().strip() for x in (v.get("value_coins") or v.get("coins") or [])][:20]
@@ -22787,17 +22793,17 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                 return self._json({"ok": True, "msg": f"📈 حُفظ الشريط — {len(_c['ticker_coins'])} عملة"
                                                       + ("" if _c["ticker_on"] else " (متوقف)")})
             if act == "pxa_set":                          # 🔔 v3.26.6: إشعارات الأسعار — تشغيل/إطفاء · الحساسية · وين توصل
-                return self._json(pxa_set(data.get("value") or {}))
+                return self._json(pxa_set((data.get("value") if isinstance(data.get("value"), dict) else {})))
             if act == "pxa_test":
                 return self._json(pxa_test())
             if act == "pxa_get":                          # 🔔 v3.26.7: لوحة الإشعارات صارت بـ⚙️ «📈 شريط الأسعار» (قراءة بس) · v3.31.0: ويّا 📊 المؤشرات
                 return self._json({"ok": True, "pxa": pxa_view(), "ina": ina_view()})
             if act == "ina_set":                          # 📊 v3.31.0: تنبيهات المؤشرات — تشغيل/إطفاء · الحساسية · وين توصل
-                return self._json(ina_set(data.get("value") or {}))
+                return self._json(ina_set((data.get("value") if isinstance(data.get("value"), dict) else {})))
             if act == "ina_test":
                 return self._json(ina_test())
             if act == "guard_cfg":
-                v = data.get("value") or {}
+                v = (data.get("value") if isinstance(data.get("value"), dict) else {})
                 _by = "👤 اللوحة (" + str((self.client_address or ["?"])[0]) + ")"
                 return self._json(guard_cfg(auto_fix=v.get("auto_fix"), paused=v.get("paused"), by=_by, cash_pause=v.get("cash_pause")))
             if act == "ri_report":
@@ -22807,7 +22813,7 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                                        "msg": "لا يوجد بوت لديه إعادة استثمار مفعّلة بلقطة مسجّلة"})
                 _tg_report(txt)
                 return self._json({"ok": True, "msg": "💠 أُرسل تقرير إعادة الاستثمار"})
-            return self._json(control(data.get("dir", ""), act, data.get("value")))
+            return self._json(control(str(data.get("dir") or ""), act, data.get("value")))   # 🩺 v3.36.50: «dir» ليس نصاً كان يقطع الاتصال
         if path in ("/api/deploy", "/api/deploy_dca", "/api/deploy_rec", "/api/deploy_va", "/api/deploy_step") and data.get("demo"):
             _dk = {"/api/deploy": str(data.get("g_type") or "grid"), "/api/deploy_dca": str(data.get("dca_type") or "dca"),
                    "/api/deploy_rec": str(data.get("rec_type") or "rec_buy"), "/api/deploy_va": "rec_va", "/api/deploy_step": "grid_step"}[path]
@@ -30383,7 +30389,7 @@ async function dcaPreview(){
   const body=dcaFormBody();
   let res;try{res=await api('/api/dca_preview',body)}catch(e){return}
   const box=$('#dn_preview');
-  if(!res||!res.rows||!res.rows.length){box.innerHTML='<p style="color:var(--mut);font-size:12px">أكمل الأرقام لرؤية الجدول</p>';return}
+  if(!res||!res.rows||!res.rows.length){box.innerHTML='<p style="color:var(--mut);font-size:12px">'+((res&&res.msg)||'أكمل الأرقام لرؤية الجدول')+'</p>';return}
   const s=res.summary,base=(body.symbol.split('-')[0]||'عملة'),buy=!!s.is_buy,unit=buy?'USDT':base;
   const arr=buy?'▼':'▲',back=buy?'▲':'▼',sg=v=>(v>=0?'+':'')+v;
   // 📋 v3.22.1 (ح٥): الخلاصة — كم تصرف · لوين يغطي · كم لازم يرجع · كم تربح صافي
