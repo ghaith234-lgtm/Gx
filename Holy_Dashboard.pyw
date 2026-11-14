@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.45"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.46"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -23426,6 +23426,13 @@ body.boot .card{animation:rise .6s var(--ease) both;animation-delay:calc(var(--i
 .sym{font-weight:700;font-size:15.5px;display:flex;align-items:center;gap:7px}
 .chip{font-size:10px;padding:2px 8px;border-radius:99px;border:1px solid var(--line);color:var(--mut)}
 .chip.demo{color:var(--cyan);border-color:var(--line2)}
+.demosep{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:14px 2px 0;padding:10px 4px 0;border-top:2px dashed rgb(var(--cyan-rgb)/.45);color:var(--cyan)}
+.demosep span{font-weight:800;font-size:15px}.demosep small{color:var(--mut);font-size:12px;line-height:1.6}
+.card.isdemo{border-style:dashed;border-color:rgb(var(--cyan-rgb)/.55)}
+.demob{display:inline-block;margin-inline-start:8px;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:700;vertical-align:middle;
+  color:var(--cyan);background:rgb(var(--cyan-rgb)/.10);border:1px dashed rgb(var(--cyan-rgb)/.55)}
+.demofld .ck{line-height:1.6}.demobox{grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px 12px;margin-top:8px}
+.demobox small{grid-column:1/-1;color:var(--mut2);font-size:11.5px}
 .chip.acc{color:var(--amber);border-color:rgb(var(--amber-rgb)/.4);background:rgb(var(--amber-rgb)/.07);box-shadow:0 0 10px rgb(var(--amber-rgb)/.15)}
 @keyframes apulse{0%,100%{box-shadow:0 0 0 0 rgb(var(--amber2-rgb)/.55)}50%{box-shadow:0 0 0 7px rgb(var(--amber2-rgb)/0)}}
 .hbadge{margin-inline-start:6px;font-size:13px;line-height:1}
@@ -25053,7 +25060,7 @@ function buildCard(b,i){
   const el=document.createElement('div');el.className='card';el.style.setProperty('--i',i);el.dataset.dir=b.dir;
   const BASE=b.symbol.split('-')[0];
   el.innerHTML=`
-  <div class="chead"><span class="sym"><img class="coin" src="https://assets.coincap.io/assets/icons/${BASE.toLowerCase()}@2x.png" data-alt="https://static.okx.com/cdn/oksupport/asset/currency/icon/${BASE.toLowerCase()}.png" onerror="cfb(this,'${BASE}')"> ${b.symbol}</span>${b.demo?'<span class="chip demo">تجريبي</span>':''}
+  <div class="chead"><span class="sym"><img class="coin" src="https://assets.coincap.io/assets/icons/${BASE.toLowerCase()}@2x.png" data-alt="https://static.okx.com/cdn/oksupport/asset/currency/icon/${BASE.toLowerCase()}.png" onerror="cfb(this,'${BASE}')"> ${b.symbol}</span>
     <span class="gtb ctag" title="نوع الشبكة">${gtLabel(b)}</span><span class="pill off" data-k="pill">—</span><span class="hbadge" data-k="hb" style="display:none;cursor:pointer"></span></div>
   <div class="cmain">
     <div><div class="big"><span class="num" data-k="profit">0.0000</span><span class="u"> $</span></div>
@@ -25252,6 +25259,20 @@ function sortBots(bots){
    النطاق = المحفظة: بوتات نفس مفاتيح OKX. زبون بحساب واحد يشوف
    نفس الرقم على كل بطاقاته؛ ومن عنده حسابان يشوف رقم كل حساب على بطاقاته. */
 let FUND=new Map(),FKEY=new Map();
+/* 🧪 v3.36.46: الديمو — المحرك الحقيقي على منصة وهمية بسعر OKX الحي (بلا مفاتيح · لا أوامر حقيقية · خارج كل المجاميع) */
+function demoFld(p,on){return `<div class="fld demofld" style="grid-column:1/-1"><label class="ck"><input type="checkbox" id="${p}_demo" ${on?'checked':''} onchange="demoTgl('${p}')">🧪 ديمو — المحرك الحقيقي نفسه على منصة وهمية بسعر OKX الحي (بلا مفاتيح · لا أوامر حقيقية · لا يدخل في أي مجموع)</label>
+  <div class="demobox" id="${p}_dbox" style="display:${on?'grid':'none'}"><div class="fld"><label>💵 رصيد الديمو بالدولار</label><input id="${p}_dusd" class="num" inputmode="decimal" placeholder="تلقائي"></div>
+  <div class="fld"><label>🪙 رصيد الديمو بالعملة</label><input id="${p}_dcoin" class="num" inputmode="decimal" placeholder="تلقائي"></div>
+  <small>فارغ = محفظة مقترحة تكفي خطة هذا البوت (مثل الاختبار التجريبي) · لا حاجة إلى محفظة OKX</small></div></div>`}
+function demoTgl(p){const c=$('#'+p+'_demo'),b=$('#'+p+'_dbox');if(c&&b)b.style.display=c.checked?'grid':'none'}
+function demoVal(p){const c=$('#'+p+'_demo');if(!c||!c.checked)return {demo:false};
+  return {demo:true,demo_usd:(($('#'+p+'_dusd')||{}).value||'').trim(),demo_coin:(($('#'+p+'_dcoin')||{}).value||'').trim()}}
+function demoMark(el,b){const on=!!b.demo;if(el.classList.contains('isdemo')!==on)el.classList.toggle('isdemo',on);
+  let m=el.querySelector('.demob');
+  if(on&&!m){m=document.createElement('span');m.className='demob';m.textContent='🧪 ديمو';
+    m.title='بوت ديمو: المحرك الحقيقي نفسه على منصة وهمية بسعر OKX الحي ومحفظة وهمية — لا أوامر حقيقية ولا يدخل في أي مجموع';
+    const h=el.querySelector('.chead .sym')||el.querySelector('.chead')||el;h.appendChild(m)}
+  else if(!on&&m)m.remove()}
 function walletKey(b){return b.wid!=null?'w'+b.wid:'b'+(+((b.cover||{}).have_usdt)||0).toFixed(2)}
 function vbuyCost(b){if(b.vbuy_usd!=null)return +b.vbuy_usd||0;let v=0;for(const x of (b.ladder&&b.ladder.vbuys)||[])if(x.p>0&&x.q>0)v+=x.p*x.q;return v}
 function calcFund(all){
@@ -25281,27 +25302,33 @@ function icFor(t){for(const [r,i] of [[/متوسط/,'📊'],[/السعر/,'💲'
 function syncCards(allBots){
   calcFund(allBots);
   RI_ON=(allBots||[]).filter(x=>x.ri&&(x.ri.on||x.ri.cfg_on)).length;
-  let profits=allBots.map(x=>x.profit);
+  let profits=allBots.filter(x=>!x.demo).map(x=>x.profit);   // 🧪 v3.36.46: الديمو خارج المقارنة
   const bench={max:Math.max(0,...profits),avg:profits.length?profits.reduce((a,c)=>a+c,0)/profits.length:0};
   // بحث بالاسم
   let bots=allBots.filter(b=>!FILTER.q||b.symbol.toUpperCase().includes(FILTER.q));
   // ترتيب
   bots=sortBots(bots);
+  bots=bots.filter(b=>!b.demo).concat(bots.filter(b=>b.demo));   // 🧪 v3.36.46: الحقيقية أولاً ثم الديمو تحت خط فاصل
   const shown=new Set(bots.map(b=>b.dir));
   // أنشئ/حدّث الظاهرة، وأخفِ المفلترة
   bots.forEach(b=>{
     let el=CARDS.get(b.dir);
     if(!el){el=buildCard(b,0);CARDS.set(b.dir,el);cardLockDeco(el);el._caNew=1}
     el.style.display='';
-    updCard(el,b,bench);skinUpd(el,b);caNumChk(el,b)});
+    updCard(el,b,bench);skinUpd(el,b);caNumChk(el,b);demoMark(el,b)});
   // رتّب الـ DOM حسب الترتيب الجديد — فقط إذا الترتيب تغيّر فعلاً
   // (نقل عنصر فيه iframe يعيد تحميل الشارت! فلا ننقل إلا عند الحاجة)
   const grid=$('#grid');
-  const wantOrder=bots.map(b=>b.dir).join('|');
+  const wantOrder=bots.map(b=>(b.demo?'d:':'')+b.dir).join('|');
+  let dsep=document.getElementById('demoSep');
+  const nDemo=bots.filter(b=>b.demo).length;
+  if(nDemo&&!dsep){dsep=document.createElement('div');dsep.id='demoSep';dsep.className='demosep';
+    dsep.innerHTML='<span>🧪 بوتات ديمو</span><small>المحرك الحقيقي نفسه على منصة وهمية بسعر OKX الحي ومحفظة وهمية — لا أوامر حقيقية · لا تدخل في أي مجموع</small>'}
   if(grid._lastOrder!==wantOrder){
     grid._lastOrder=wantOrder;
-    bots.forEach(b=>{const el=CARDS.get(b.dir);if(el)grid.appendChild(el)});
+    bots.forEach((b,i)=>{if(b.demo&&dsep&&(i===0||!bots[i-1].demo))grid.appendChild(dsep);const el=CARDS.get(b.dir);if(el)grid.appendChild(el)});
   }
+  if(!nDemo&&dsep)dsep.remove();
   // أخفِ المفلترة، واحذف المحذوفة فعلياً
   const allDirs=new Set(allBots.map(b=>b.dir));
   for(const [dir,el] of CARDS){
@@ -25314,8 +25341,9 @@ function syncCards(allBots){
   // العدّاد
   const fc=$('#fcount');
   const AN=ACC_N||{all:0,shown:0},ac=AN.all?(FILTER.q?`${AN.shown} من ${AN.all} مُراكِم`:`${AN.all} مُراكِم`):'';   // 🃏 v3.26.1: المُراكِمات تنحسب
+  const _nd=allBots.filter(b=>b.demo).length,_nr=allBots.length-_nd;          // 🧪 v3.36.46: الديمو يُعدّ وحده
   if(FILTER.q)fc.textContent=[`${bots.length} من ${allBots.length} بوت`,ac].filter(Boolean).join(' · ');
-  else fc.textContent=[allBots.length?`${allBots.length} بوت`:'',ac].filter(Boolean).join(' · ');
+  else fc.textContent=[_nr?`${_nr} بوت`:'',_nd?`${_nd} ديمو`:'',ac].filter(Boolean).join(' · ');
   // الفراغ
   $('#empty').hidden=allBots.length>0;
   if(allBots.length>0&&bots.length===0&&!AN.shown){$('#empty').hidden=false;$('#empty').innerHTML='🔍 لا توجد عملة باسم "'+FILTER.q+'"'}
@@ -26123,7 +26151,7 @@ async function openDeployVa(){
     <div class="fld vd_hg" style="display:none"><label title="قيمة كل أمر للشبكة (مثل «دولار لكل أمر» ببوت الإنفنتي)">💵 دولار لكل أمر (الشبكة)</label><input id="vd_hgu" class="num" value="10" oninput="vaPreview()"></div>
     <div class="fld vd_hg" style="display:none"><label title="نسبة ربح كل بيعة تعود إلى الدرجة نفسها — الباقي ربح محرر (مثل بوت الإنفنتي)">💠 إعادة استثمار الشبكة (%)</label><div style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="vd_hgr" onchange="vaPreview()" style="width:auto"><input id="vd_hgrp" class="num" value="100" oninput="vaPreview()" style="flex:1"></div></div>
     <label class="ck vd_hg" style="display:none;align-self:end" title="مثل بوت الإنفنتي: إذا نفدت عملة المسار تكمل الشبكة البيع من عملات محفظتك الحرة — ما تأخذه ينضم لحصّتها بسعر السوق لحظتها · يتغيّر من ⚙️ والبوت يعمل"><input type="checkbox" id="vd_hgw" onchange="vaPreview()">👛 الشبكة تبيع من عملات المحفظة أيضاً</label>
-    <div class="fld"><label>المحفظة</label><select id="vd_wallet" onchange="vaPreview()">${ws.map(w=>`<option>${gEsc(w.name)}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>
+    <div class="fld"><label>المحفظة</label><select id="vd_wallet" onchange="vaPreview()">${ws.map(w=>`<option>${gEsc(w.name)}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>${demoFld('vd',false)}
   </div>
   <div id="vd_share"></div>
   <div class="cklist" style="margin-top:12px"><label class="ck"><input type="checkbox" id="vd_floor" checked onchange="vaPreview()">🔒 البيع فوق الكلفة فقط (لا يبيع الفائض بخسارة)</label>
@@ -26136,11 +26164,11 @@ async function openDeployVa(){
   <div id="vd_plan"><div class="vach0">…</div></div>
   <div class="mbtns" style="margin-top:14px"><button class="primary" id="vd_go" style="background:linear-gradient(94deg,var(--green),#16a34a)">🚀 انشر وشغّل</button><button id="vd_bt" onclick="btFromForm('rec_va')" title="يعمل محرك البوت نفسه على مسار تجريبي يعود في نهايته إلى سعر البداية — بلا مفاتيح ولا أوامر حقيقية">🧪 جرّب على مسار تجريبي</button><button onclick="hideModal()">إلغاء</button></div>`);
   $('#vd_go').onclick=async()=>{
-    const body=vaFormBody();
+    const body=Object.assign(vaFormBody(),demoVal('vd'));   // 🧪 v3.36.46
     if(!body.symbol||!body.symbol.includes('-')){toast('اكتب الرمز كاملاً مثل XRP-USDT',false);return}
     $('#vd_go').disabled=true;
     try{
-      if(body.first_src==='wallet'){                          // 👛 v3.36.11: كم يأخذ من المحفظة وكم يشتري — قبل التشغيل وبموافقتك
+      if(body.first_src==='wallet'&&!body.demo){           // 🧪 الديمو بلا محفظة حقيقية                          // 👛 v3.36.11: كم يأخذ من المحفظة وكم يشتري — قبل التشغيل وبموافقتك
         const sig=JSON.stringify(body);
         if(!_vaW0||_vaW0.sig!==sig){
           const w=await api('/api/va_w0',body);
@@ -26534,7 +26562,7 @@ async function openDeployRec(){
     <div class="fld" id="rd_ri_f"><label>⚖️ إعادة استثمار الربح % (للأمر القادم)</label><input id="rd_ri" class="num" value="0" oninput="recPreview()"></div>
     <div class="fld"><label>📉 الحد الأدنى للسعر (0 = بلا حد)</label><input id="rd_lo" class="num" value="0" oninput="recPreview()"></div>
     <div class="fld"><label>📈 الحد الأعلى للسعر (0 = بلا حد)</label><input id="rd_hi" class="num" value="0" oninput="recPreview()"></div>
-    <div class="fld"><label>المحفظة</label><select id="rd_wallet" onchange="recPreview()">${ws.map(w=>`<option>${gEsc(w.name)}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>
+    <div class="fld"><label>المحفظة</label><select id="rd_wallet" onchange="recPreview()">${ws.map(w=>`<option>${gEsc(w.name)}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>${demoFld('rd',false)}
   </div>
   <div id="rd_share"></div>
   <div class="cklist" style="margin-top:12px"><label class="ck"><input type="checkbox" id="rd_now" checked onchange="recPreview()">⚡ أول أمر الآن</label>
@@ -26542,7 +26570,7 @@ async function openDeployRec(){
   <div id="rd_preview" style="margin-top:14px"></div>
   <div class="mbtns" style="margin-top:14px"><button class="primary" id="rd_go" style="background:linear-gradient(94deg,var(--green),#16a34a)">🚀 انشر وشغّل</button><button id="rd_bt" onclick="btFromForm('rec')" title="يعمل محرك البوت نفسه على مسار تجريبي يعود في نهايته إلى سعر البداية — بلا مفاتيح ولا أوامر حقيقية">🧪 جرّب على مسار تجريبي</button><button onclick="hideModal()">إلغاء</button></div>`);
   $('#rd_go').onclick=async()=>{
-    const body=recFormBody();
+    const body=Object.assign(recFormBody(),demoVal('rd'));   // 🧪 v3.36.46
     if(!body.symbol||!body.symbol.includes('-')){toast('اكتب الرمز كاملاً مثل XRP-USDT',false);return}
     $('#rd_go').disabled=true;
     try{const r=await api('/api/deploy_rec',body);toast(r.msg,r.ok);if(r.ok){hideModal();tick()}}
@@ -28290,7 +28318,7 @@ function gridDetails(b){
   // أزرار الحالة
   const guardOn=b.guard, autoOn=b.auto, pauseBuy=b.floor>0||b.pause_buy, pauseSell=b.ceil>0||b.pause_sell;
   let accChips=accChipsOf(b);
-  showModal(`<h2 style="color:var(--vio)">⚙ تفاصيل بوت الشبكة — ${b.symbol}${b.demo?' <span class="chip demo">تجريبي</span>':''}</h2>
+  showModal(`<h2 style="color:var(--vio)">⚙ تفاصيل بوت الشبكة — ${b.symbol}${b.demo?' <span class="chip demo">🧪 ديمو</span>':''}</h2>
     <div class="dnsum" style="margin-bottom:14px">
       <div class="dnstat"><span>الحالة</span><b style="font-size:13px">${b.alive?'🟢 نشط':'○ متوقف'}</b></div>
       <div class="dnstat"><span>الربح</span><b style="color:var(--green)">${f4(b.profit)}$</b></div>
@@ -29572,7 +29600,7 @@ function renderAccum(list){
         <button data-k="aedit" style="flex:1;font-size:11px;padding:9px 6px" title="الإعدادات">⚙️</button>
         <button data-k="adel" style="flex:1;font-size:11px;color:var(--red)" title="🛑 إنهاء المُراكِم — عملته ودولاره للصندوق النهائي">🛑</button></div>`;
       el._r={}; el.querySelectorAll('[data-k]').forEach(n=>el._r[n.dataset.k]=n);
-      ACARDS.set(a.id,el); grid.appendChild(el); cardLockDeco(el);
+      ACARDS.set(a.id,el); grid.insertBefore(el,document.getElementById('demoSep')); cardLockDeco(el);   // 🧪 فوق خط الديمو
     }
     const R=el._r, B=a.base||'';
     R.anm.textContent=a.name||a.symbol;
@@ -29660,8 +29688,9 @@ function renderAccum(list){
   const vis=new Set(ord.map(a=>a.id));
   for(const [id,el] of ACARDS)el.style.display=vis.has(id)?'':'none';
   const want=ord.map(a=>a.id).concat(list.filter(a=>!vis.has(a.id)).map(a=>a.id));
-  const tail=[...grid.children].slice(-want.length).map(e=>e.dataset.acc||'');
-  if(want.length&&tail.join('|')!==want.join('|'))want.forEach(id=>{const el=ACARDS.get(id);if(el)grid.appendChild(el)});
+  const _ds=document.getElementById('demoSep'),_kids=[...grid.children],_cut=_ds?_kids.indexOf(_ds):_kids.length;   // 🧪 فوق خط الديمو
+  const tail=_kids.slice(0,_cut).slice(-want.length).map(e=>e.dataset.acc||'');
+  if(want.length&&tail.join('|')!==want.join('|'))want.forEach(id=>{const el=ACARDS.get(id);if(el)grid.insertBefore(el,_ds)});
   ACC_N={all:list.length,shown:ord.length}}
 
 function accBuyNow(a){
@@ -30048,7 +30077,7 @@ async function openDeployDca(){
     <div class="fld"><label id="dn_tp_lbl">هدف الربح % (تحت المتوسط)</label><input id="dn_tp" class="num" value="0.5"></div>
     <div class="fld"><label>أوامر على المنصة (الباقي افتراضي)</label><input id="dn_ex" class="num" value="3"></div>
     <div class="fld"><label>⏳ مدة الانتظار بين الدورات (ثانية)</label><input id="dn_wait" class="num" value="30"><small style="color:var(--mut2);font-size:10px">بعد إغلاق كل دورة، ينتظر هذه المدة قبل بدء دورة جديدة (يمنع التداول المحموم)</small></div>
-    <div class="fld"><label>المحفظة</label><select id="dn_wallet" onchange="shareCheck('dn_share',$('#dn_sym').value,{wallet:this.value})">${ws.map(w=>`<option>${w.name}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>
+    <div class="fld"><label>المحفظة</label><select id="dn_wallet" onchange="shareCheck('dn_share',$('#dn_sym').value,{wallet:this.value})">${ws.map(w=>`<option>${w.name}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>${demoFld('dn',false)}
   </div>
   <div class="cklist" style="margin-top:12px"><label class="ck"><input type="checkbox" id="dn_auto" checked>🤖 يشمله الحارس</label>
     <label class="ck"><input type="checkbox" id="dn_trail" onchange="$('#dn_trail_box').style.display=this.checked?'':'none';dcaPreview()">🛡️ درع الحركة القوية</label></div>
@@ -30061,7 +30090,7 @@ async function openDeployDca(){
   <div id="dn_preview" style="margin-top:16px"></div>
   <div class="mbtns" style="margin-top:14px"><button class="primary" id="dn_go" style="background:linear-gradient(94deg,var(--green),#16a34a)">🚀 انشر وشغّل</button><button id="dn_bt" onclick="btFromForm('dca')" title="يعمل محرك البوت نفسه على مسار تجريبي يعود في نهايته إلى سعر البداية — بلا مفاتيح ولا أوامر حقيقية">🧪 جرّب على مسار تجريبي</button><button onclick="hideModal()">إلغاء</button></div>`);
   $('#dn_go').onclick=async()=>{
-    const body=dcaFormBody();
+    const body=Object.assign(dcaFormBody(),demoVal('dn'));   // 🧪 v3.36.46
     if(!body.symbol||!body.symbol.includes('-')){toast('اكتب الرمز كاملاً مثل XRP-USDT',false);return}
     $('#dn_go').disabled=true;
     try{const r=await api('/api/deploy_dca',body);toast(r.msg,r.ok);if(r.ok){hideModal();tick()}}
@@ -30348,7 +30377,7 @@ async function openDeployStep(pre){pre=pre||{};
     <div class="fld"><label title="لا شراء تحت هذا السعر">🧱 سعر الأرضية</label><input id="st_floor" class="num" value="${v('min_price','')}" oninput="stPreview()"></div>
     <div class="fld"><label title="عدد المستويات فوق سعر البداية التي تبيع من عملاتك الحرة كأنها اشتُريت بسعر مستواها (0 = لا شيء · حتى 500)">⬆️ مستويات فوق السعر من عملاتك <small>(0–500)</small></label><input id="st_up" class="num" value="${v('up_groups',1)}" oninput="stPreview()"></div>
     <div class="fld"><label title="فارغ = سعر السوق لحظة النشر">🎯 سعر البداية (اختياري)</label><input id="st_p0" class="num" value="${+v('forced_base',0)||''}" oninput="stPreview()"></div>
-    <div class="fld"><label>المحفظة</label><select id="st_wallet">${ws.map(w=>`<option>${gEsc(w.name)}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>
+    <div class="fld"><label>المحفظة</label><select id="st_wallet">${ws.map(w=>`<option>${gEsc(w.name)}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>${demoFld('st',false)}
   </div>
   <div class="cklist" style="margin-top:10px"><label class="ck"><input type="checkbox" id="st_auto" checked>🤖 يشمله الحارس</label>
     <label class="ck" title="من أول بيعة: نسبة من ربح كل بيعة تعود إلى خانتها فيكبر شراؤها (تُغيَّر لاحقاً من البطاقة) — والاختبار على مسار تجريبي يعمل بها كذلك"><input type="checkbox" id="st_ri" ${pre.reinvest?'checked':''} onchange="stRiSync()">💠 إعادة الاستثمار من البداية</label></div>
@@ -30356,7 +30385,7 @@ async function openDeployStep(pre){pre=pre||{};
   <div class="dnsec" style="margin-top:12px">📋 الجدول قبل النشر — كل مستوى وبيعاته وربح كل بيعة صافياً بعد العمولتين</div>
   <div id="st_plan"><div class="vach0">…</div></div>
   <div class="mbtns" style="margin-top:14px"><button class="primary" id="st_go" style="background:linear-gradient(94deg,var(--green),#16a34a)">🚀 انشر وشغّل</button><button id="st_bt" onclick="btFromForm('step')" title="يعمل المحرك نفسه على مسار سعري تجريبي بالإعدادات نفسها — بلا مفاتيح ولا أوامر حقيقية">🧪 جرّبه على مسار تجريبي</button><button onclick="hideModal()">إلغاء</button></div>`);
-  $('#st_go').onclick=async()=>{const body=stBody();
+  $('#st_go').onclick=async()=>{const body=Object.assign(stBody(),demoVal('st'));   // 🧪 v3.36.46
     if(!body.symbol||!body.symbol.includes('-')){toast('اكتب الرمز كاملاً مثل XRP-USDT',false);return}
     $('#st_go').disabled=true;
     try{const r=await api('/api/deploy_step',body);toast(r.msg,r.ok);if(r.ok){hideModal();tick()}}
@@ -30417,12 +30446,11 @@ async function openDeploy(pre){pre=pre||{};
     <div class="fld" id="f_lower"><label>🎚️ حد النطاق الأدنى (0=بلا أرضية)</label><input id="n_lower" class="num" value="${pre.lower_price??0}"><small style="color:var(--mut2);font-size:10px">لا شراء تحت هذا السعر — يُحجز حتى يعود داخل النطاق</small></div>
     <div class="fld" id="f_upper"><label>🎚️ حد النطاق الأعلى (0=بلا سقف)</label><input id="n_upper" class="num" value="${pre.upper_price??0}"><small style="color:var(--mut2);font-size:10px">لا بيع فوق هذا السعر — يحصر التداول داخل النطاق</small></div>
     <div class="fld" id="f_boff"><label>⚡ بُعد الشراء تحت بيعه %</label><input id="n_boff" class="num" value="${pre.buy_offset??0}" oninput="offHint()"><small id="n_boff_h" style="color:var(--mut2);font-size:10px">كل بيع يفتح شراءه على هذا البُعد تحته — يصبح ربح الدورة بهذه النسبة بدلاً من مسافة السلم</small></div>
-    <div class="fld"><label>المحفظة</label><select id="n_wallet" onchange="shareCheck('n_share',$('#n_sym').value,{wallet:this.value})">${ws.map(w=>`<option>${w.name}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>
+    <div class="fld"><label>المحفظة</label><select id="n_wallet" onchange="shareCheck('n_share',$('#n_sym').value,{wallet:this.value})">${ws.map(w=>`<option>${w.name}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>${demoFld('n',pre.demo)}
   </div>
   <div class="cklist" style="margin-top:14px">
     <label class="ck"><input type="checkbox" id="n_guard" ${pre.guard?'checked':''}>⚔️ درع السكين</label>
     <label class="ck"><input type="checkbox" id="n_auto" checked>🤖 يشمله الحارس</label>
-    <label class="ck"><input type="checkbox" id="n_demo" ${pre.demo?'checked':''}>🧪 تجريبي DEMO</label>
     <label class="ck" title="من أول دورة: نسبة من ربح كل بيعة تعود إلى أمرها فيكبر (تُغيَّر لاحقاً من البطاقة) — والاختبار على مسار تجريبي يعمل بها كذلك"><input type="checkbox" id="n_ri" ${pre.reinvest?'checked':''} onchange="nRiSync()">💠 إعادة الاستثمار من البداية</label>
   </div>
   <div class="frm" id="f_ri" style="display:none;margin-top:8px"><div class="fld"><label>💠 نسبة ما يعود إلى الأمر من ربح كل دورة (%)</label><input id="n_rip" class="num" value="${pre.reinvest_pct??100}"><small style="color:var(--mut2);font-size:10px">100% = الربح كله يكبّر الأمر · 50% = نصفه يكبّر الأمر ونصفه ربح محرَّر · لا يعمل مع DEMO</small></div></div>
@@ -30444,7 +30472,7 @@ async function openDeploy(pre){pre=pre||{};
   setTimeout(()=>shareCheck('n_share',($('#n_sym')||{}).value,{wallet:($('#n_wallet')||{}).value}),0);
   setTimeout(()=>['n_sym','n_grid','n_usd','n_base','n_upper'].forEach(id=>{const e=$('#'+id);if(e)e.addEventListener('input',()=>{const d=$('#n_upc');if(d&&d.open)nUpCalc()})}),0);   // 🧮
   $('#n_go').onclick=async()=>{
-    const body=gridFormBody();
+    const body=Object.assign(gridFormBody(),demoVal('n'));   // 🧪 v3.36.46
     $('#n_go').disabled=true;try{const r=await api('/api/deploy',body);toast(r.msg,r.ok);if(r.ok){hideModal();tick()}}finally{$('#n_go').disabled=false}}}
 
 /* ── المحرك ── */
