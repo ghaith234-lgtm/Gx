@@ -5949,8 +5949,8 @@ v3.21.2: **6/36 سليم** — العدّاد 4 والسعر رجع لـ0.995 ·
 | `t_win` (🪜 الرقابة — مو بالانحدار العادي) | 18 ✅ — كان 17/18 من v3.36.42: يدوّر «ما يشتغل صح» والنص صار فصيح «لا يعمل بشكل صحيح» (التنبيه نفسه صح) ⇐ انصلح الفحص |
 | `t_plus_cash --grid` · `t_plus_paths --grid` · `t_plus_paths --ri` (+`--grid --ri` · `--range --ri`) | 9 ✅ · 8 ✅ · 8 ✅ (×3) |
 | `t_cash_watch` | 22 ✅ (+ p73) |
-| الانحدار الكامل | __REG__ |
-| المحاكيات (تشغيل 108) | __EMU__ |
+| الانحدار الكامل | ✅ كلها (44) — `t_style` 5 · `t_fonts` 10 · `t_windows` 4 · `t_misc` 13 · `t_botcode` 4 · `t_rates` 8 · `t_alerts` 11 · `t_signals` 18 · `t_card_periods` 5 · `t_gridup` 9 · `t_app20` 31 · `t_bt_real` 21 · `t_plus_cash` 9 · `t_plus_paths` 8 · `t_cash_watch` 22 · **`t_step_pause` 14** · `t_plus_cash --range` 9 · `t_plus_paths --range` 8 · **`t_plus_cash --grid` 9 · `t_plus_paths --grid` 8 · `t_plus_paths --ri` 8 · `--grid --ri` 8 · `--range --ri` 8 · `t_step_pause --ri` 14** · `ui_themes` 8 · `ui_win20` 11 · `ui_live` 48 · `ui_device` 10 · `ui_bgtone` 14 · `ui_fonts` 10 · `ui_settings` 24 · `ui_smooth` 12 · `ui_windows` 19 · `ui_skins` 25 · `ui_misc` 7 · `ui_resize` 4 · `t_first` 27 · `bt3615_test` 25 · `t_ri_dash` 16 · `ui_first` 11 · `ui_card` 17 · `ui_ri` 10 · `ui_full` 15 · `ui_lines` 9 — **وجنبها (🪜 · مو بالعادي):** `t_win` 18 · `t_pair` 5 · `t_fixes` 14 · `t_inputs` 5 |
+| المحاكيات (تشغيل 108) | ✅ أندرويد 9: 8 · أندرويد 11: 34 · أندرويد 14: 70 — **ولا فشل** |
 
 ## ٧ر١٣١ · v3.36.44 — ➕ فحص بوت البلس كلياً (4 مشاكل انصلحت · ويّا 🎚️ المدى) · 💵 نفاد الدولار: رسالة وحدة للمحفظة · ⏸ إيقاف الشراء تلقائياً · 🟠 شارة الكرت
 
