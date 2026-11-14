@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.43"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.44"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -943,6 +943,7 @@ def bot_snapshot(b):
             "n_vbuys": len(st.get("virtual_buys") or {}), "n_vsells": len(st.get("virtual_sells") or {}),
             "n_abuys": len(st.get("accum_buys") or {}), "n_asells": len(st.get("accum_sells") or {}),
             "accx": _safe(_accx_snap, b, st, default=None),   # 📦 v3.21.2: عدّاد الإيقاف = اللي قطعها السعر بس (يبدي من صفر)
+            "cashw": _safe(_cw_card, b["dir"], default=None),  # 💵 v3.36.44: 🟠 ينتظر دولار
             "abuys_usd": round(sum(float(v.get("target_price", 0)) * float(v.get("locked_qty", 0)) for v in (st.get("accum_buys") or {}).values()), 2),
             "asells_usd": round(sum(float(v.get("target_price", 0)) * float(v.get("locked_qty", 0)) for v in (st.get("accum_sells") or {}).values()), 2),
             "bal": BAL.get(b["dir"]), "launch_err": LAUNCH_ERR.get(b["dir"]), "eng_old": _eng_old(b), "last_event": last_event,
@@ -3143,7 +3144,14 @@ def _rec_notify(b, st):
         if not new and d.get(key) == last:
             return
         sent = more = 0
+        _nbk = key + "|nobal"                 # 💵 v3.36.44: «الرصيد لا يكفي» — أول مرة ثم صمت حتى يمر شراء (وتذكير مرة باليوم)
         for e in new:
+            if e.get("k") == "open":
+                d.pop(_nbk, None)
+            if e.get("k") == "skip" and e.get("why") == "balance":
+                if now - float(d.get(_nbk) or 0) < 86400:
+                    continue
+                d[_nbk] = now
             txt = _safe(_rec_msg, b, st, e, default="")
             if not txt:
                 continue                      # 🔕 v3.36.12: حدث صامت (تبديل الشبكة ⇄ المسار …) — لا رسالة ولا «أحداث أخرى»
@@ -6709,6 +6717,8 @@ def feed_all(limit=60):
             if isinstance(e, dict) and e.get("msg"):
                 if any(x in str(e.get("msg")) for x in _FEED_SKIP):
                     continue                            # 🔕 v3.21.10 (ب٣٠): سطر عبور/حجز الإيقاف — إشعاره «📦 عبر N درجة» يطلع مرة وحدة من اللوحة
+                if _CW_LOWQ and b["symbol"].split("-")[-1] in _CW_LOWQ and any(x in str(e.get("msg")) for x in _CW_FEED):
+                    continue                            # 💵 v3.36.44: رسالة نفاد الدولار مفتوحة ⇒ أسطر «ما يكفي» المكررة تبقى بسجل البوت
                 out.append({"sym": b["symbol"], "base": base, "time": e.get("time", ""), "msg": e.get("msg", ""),
                             "dir": os.path.relpath(b["dir"], ROOT)})
     # 🪙 أحداث المُراكِمات (شراء · بيع · ترحيل · سحب)
@@ -8149,6 +8159,8 @@ def _gd_gather(W, prev, now):
                 "lo": float(cfg.get("lower_price") or 0), "hi": float(cfg.get("upper_price") or 0),
                 "base": base, "quote": quote, "tracked": n_tr, "ids": _gd_bot_ids(b),
                 "rungs": _gd_rungs(st, is_dca, bt == "dca_buy")}
+            snap["bots"][name].update(dir=b["dir"], usd=((float(cfg.get("amount") or 0) if bt == "rec_buy" else 0.0) if is_dca
+                                                         else float(usd or 0)))   # 💵 v3.36.44: أمر الشراء القادم (رسالة المحفظة · الإيقاف التلقائي)
             if bt == "rec_va":                                   # ♾️×💹 v3.36.10: فترة شبكة التعاوني (فحص الإلغاء) + درجاتها (حيّة وذاكرة)
                 _hg = st.get("hg") if isinstance(st.get("hg"), dict) else {}
                 snap["bots"][name].update(hg_on=bool(_hg.get("on")), hg_ep=int(_hg.get("ep") or 0), hg_drain=bool(_hg.get("drain")))
@@ -8553,14 +8565,7 @@ def _gd_apply(g, snap, now):
                 if e["ccy"] == q:
                     rec.setdefault("moves", []).insert(0, {k: e[k] for k in ("q", "ts", "txt")})
             rec["moves"] = (rec.get("moves") or [])[:20]
-            key = f"low:{wid}:{q}"
-            if rec["min_next"] > 0 and av < rec["min_next"]:
-                _gd_event(g, key, "🟡", f"💵 رصيد {q} الحر أقل من أمر شراء واحد",
-                          f"المتاح {av:.2f} {q} · أصغر أمر شراء {rec['min_next']:.2f} {q} — "
-                          f"لا يستطيع السلّم الامتداد للأسفل، وسترفض المنصة أي أمر شراء جديد.",
-                          wid=wid, sym=q, kind="low_quote")
-            else:
-                _gd_resolve(g, key)
+            _cw_low(g, wid, q, rec, snap, now)          # 💵 v3.36.44: رسالة واحدة حين ينفد وأخرى حين يعود (كانت تنفتح مع كل دولار يتحرك)
     # ── D · مطابقة الأوامر أمراً بأمر ──
     O = W["orders"]
     tracked = snap.get("tracked") or {}
@@ -8774,8 +8779,8 @@ def _gd_outbox(g, now):
     for e in g.get("events") or []:
         if e.get("tg") is not False:
             continue
-        if now - float(e.get("ts") or now) > 86400 or float(e.get("snooze_until") or 0) > now:
-            e["tg"] = True                   # قديم أو مؤجّل ⇒ ما نرسل متأخراً
+        if now - float(e.get("rem_ts") or e.get("ts") or now) > 86400 or float(e.get("snooze_until") or 0) > now:
+            e["tg"] = True                   # قديم أو مؤجّل ⇒ ما نرسل متأخراً (⏰ v3.36.44: التذكير يُحسب من وقته)
             continue
         txt = (f"🛡️ *الرقابة* — {_gd_md(e.get('title'))}\n"
                + (f"👛 {_gd_md(((g.get('wallets') or {}).get(e.get('wid')) or {}).get('label'))}\n" if e.get("wid") else "")
@@ -9382,6 +9387,264 @@ def guard_qa_lines(V=None):
     return L
 
 
+# ═══════════════ 💵 v3.36.44: نفاد الدولار — رسالة واحدة للمحفظة · ⏸ إيقاف الشراء تلقائياً · شارة الكرت ═══════════════
+#   المالك (14-11): «ثلاثتهم طبقهم · ايقاف الشراء اعلى بشوي حتى لو مسوي ايقاف شراء قبل وبوت اخر اخذ الدولار او نصرف يتحرك».
+#   اللوحة تكتب حقول التحكم فقط (مثل زر ⏸ بالكرت بالضبط) — المحرك وحده يضع الأوامر ويلغيها.
+CASHW_FILE = os.path.join(ROOT, "Holy_CashWatch.json")
+CW_BACK_S = 1800              # الدولار يغطي أمر الشراء نصف ساعة متواصلة ⇒ «عاد» (قبلها كل دولار يتحرك كان يفتح التنبيه من جديد)
+CW_SEEN = 2                   # فحصان متتاليان (10 دقائق) بلا دولار قبل أول إيقاف تلقائي
+_CW_TYPES = ("grid", "grid_plus", "grid_range", "grid_step")
+_CW_LOCK = threading.RLock()
+_CW_LOWQ = set()              # عملات التسعير اللي رسالة نفادها مفتوحة (مركز 🔔 يخفي أسطر الدولار المكررة)
+_CW_CACHE = {"sig": None, "d": None}
+_CW_FEED = ("ما يكفي ولا درجة", "[رفض أمر شراء] الدولار الحر", "Insufficient", "[تهدئة تجميع شراء]")
+
+
+def _cw_load():
+    d = load_json(CASHW_FILE)
+    d = d if isinstance(d, dict) else {}
+    for k in ("bots", "seen", "ok"):
+        if not isinstance(d.get(k), dict):
+            d[k] = {}
+    return d
+
+
+def _cw_cached():
+    """قراءة للعرض (الكرت) — من الذاكرة ما دام الملف ما تغيّر"""
+    try:
+        _s = os.stat(CASHW_FILE)
+        sig = (_s.st_mtime_ns, _s.st_size)
+    except Exception:
+        return {"bots": {}, "seen": {}, "ok": {}}
+    if _CW_CACHE["sig"] != sig:
+        _CW_CACHE.update(sig=sig, d=_cw_load())
+    return _CW_CACHE["d"]
+
+
+def _cw_key(d):
+    return os.path.relpath(os.path.abspath(str(d)), ROOT)
+
+
+def _cw_lbl(i):
+    return (str(i.get("sym") or "").split("-")[0] + " " + str((_BOT_KINDS.get(i.get("type") or "grid") or {}).get("ico") or "")).strip()
+
+
+def _cw_recs(wid, q, d=None):
+    d = d if d is not None else _cw_cached()
+    return [r for r in (d.get("bots") or {}).values() if r.get("wid") == wid and r.get("q") == q and not r.get("hands_off")]
+
+
+def _cw_held(wid, q, d=None):
+    """الدولار اللي حرّرته أوامر البوتات الموقوفة تلقائياً — ملك مخزنها، مو «دولار رجع»"""
+    return sum(float(r.get("freed") or 0) for r in _cw_recs(wid, q, d))
+
+
+def _cw_low(g, wid, q, rec, snap, now):
+    """① رسالة واحدة للمحفظة: «💵 نفد الدولار الحر» (من ينتظر وكم يحتاج) · تذكير مرة باليوم على الأكثر · «✅ عاد» بعد نصف ساعة متواصلة"""
+    key = f"low:{wid}:{q}"
+    av = float(rec.get("avail") or 0)
+    held = _cw_held(wid, q)
+    eff = av - held
+    rec["held"], rec["eff"] = round(held, 6), round(eff, 6)
+    mn = float(rec.get("min_next") or 0)
+    who = sorted(((float(i.get("usd") or 0), i) for i in (snap.get("bots") or {}).values()
+                  if i.get("quote") == q and float(i.get("usd") or 0) > 0 and not i.get("destruct")), key=lambda t: t[0])
+    op = next((e for e in g.get("events") or [] if e.get("key") == key and e.get("status") == "open"), None)
+    if mn > 0 and eff < mn:
+        rec.pop("ok_since", None)
+        rec.setdefault("low_since", now)
+        wait = [(u, i) for u, i in who if eff < u]
+        names = " · ".join(f"{_cw_lbl(i)} ({u:g}$)" for u, i in wait[:8]) + (f" · و{len(wait) - 8} غيرها" if len(wait) > 8 else "")
+        paused = [_cw_lbl(r) for r in _cw_recs(wid, q)]
+        det = (f"المتاح {av:.2f} {q}" + (f" (منه {held:.2f} للمستويات المحفوظة في البوتات الموقوفة)" if held > 0.005 else "")
+               + f" · أصغر أمر شراء {mn:.2f} {q}\n"
+               + (f"⏳ تنتظر الدولار: {names}\n" if names else "")
+               + (f"⏸ أُوقف شراؤها تلقائياً فوق السعر بقليل: {' · '.join(paused)} — كل مستوى ينزل إليه السعر يُحفظ ويُشترى بأمر واحد حين يعود الدولار\n"
+                  if paused else "")
+               + "البوتات تكمل البيع، ويعود الشراء وحده حين يتوفر الدولار — رسالة الآن وأخرى حين يعود (وتذكير مرة في اليوم على الأكثر).")
+        e = _gd_event(g, key, "🟡", f"💵 نفد الدولار الحر — {q}", det, wid=wid, sym=q, kind="low_quote")
+        if e.get("tg") is True and now - float(e.get("rem_ts") or e.get("ts") or now) >= 86400:
+            e["rem_ts"], e["tg"], e["rem"] = now, False, int(e.get("rem") or 0) + 1      # ⏰ تذكير مرة باليوم
+        if e.get("rem"):
+            e["title"] = f"⏰ تذكير: 💵 الدولار الحر ما زال لا يكفي — {q}"
+        return
+    rec.pop("low_since", None)
+    if not op:
+        rec.pop("ok_since", None)
+        return
+    rec.setdefault("ok_since", now)
+    if now - float(rec["ok_since"]) < CW_BACK_S:
+        return                                          # يغطي الآن — ننتظر نصف ساعة قبل «عاد» (ما نفتح ونسكّر مع كل دولار)
+    _gd_resolve(g, key, note=f"عاد الدولار: المتاح {av:.2f} {q}")
+    rec.pop("ok_since", None)
+    _gd_event(g, f"back:{wid}:{q}:{int(now)}", "🟢", f"✅ عاد الدولار الحر — {q}",
+              f"المتاح {av:.2f} {q} يغطي أمر الشراء ({mn:.2f} {q}) منذ {CW_BACK_S // 60} دقيقة — تعود البوتات إلى الشراء"
+              + (" ويُستأنف الشراء الموقوف تلقائياً (المستويات المحفوظة تُشترى بأمر واحد بقدر الدولار)" if _cw_recs(wid, q) else ""),
+              wid=wid, sym=q, kind="quote_back", status="info")
+
+
+def _cw_bot(d):
+    return (bot_dirs() or {}).get(os.path.abspath(str(d))) or (bot_dirs() or {}).get(str(d))
+
+
+def _cw_live_buys(st):
+    s = 0.0
+    for i in (st.get("limit_buys") or {}).values():
+        try:
+            s += float(i.get("target_price") or 0) * float(i.get("locked_qty") or 0)
+        except Exception:
+            pass
+    return s
+
+
+def _cw_pause(k, i, r, d, wid, q, eff, now):
+    """⏸ أرضية فوق السعر بنصف درجة (أول مرة) · تلحق السعر لو صعد · لمسة المالك ⇒ نتركه"""
+    b = _cw_bot(i["dir"])
+    if not b:
+        return False
+    sp = paths_of(b)[0]
+    st = read_retry(sp)
+    if not isinstance(st, dict):
+        return False
+    cur = float(st.get("buy_floor") or 0)
+    cp = float(i.get("cp") or st.get("current_price") or 0)
+    if cp <= 0:
+        return False
+    g_ = float(i.get("g") or 0.008) or 0.008
+    tgt = float(f"{cp * (1 + g_ / 2):.10g}")
+    need = float(i.get("usd") or 0)
+    if r is None:
+        new = max(cur, tgt)
+        freed = 0.0
+        if new > cur * (1 + 1e-9):
+            freed = _cw_live_buys(st)                    # أوامر الشراء الحية تنسحب للمخزن ⇒ دولارها يتحرر (ملك المخزن)
+            if not save_state_keys(sp, {"buy_floor": new, "pause_buy": False}):
+                return False
+        d["bots"][k] = {"wid": wid, "q": q, "sym": i.get("sym"), "type": i.get("type"), "orig": cur, "set": new,
+                        "ts": now, "need": need, "freed": round(freed, 6), "moves": 0}
+        _dash_event(i.get("sym") or "", f"⏸💵 أُوقف الشراء تلقائياً — الدولار الحر ({max(0.0, eff):.2f}$) لا يكفي أمر الشراء ({need:g}$) · "
+                                        f"الأرضية {_px_s(new)} فوق السعر بقليل: كل مستوى ينزل إليه السعر يُحفظ ويُشترى بأمر واحد حين يعود الدولار"
+                                        + (f" · أرضيتك {_px_s(cur)} تعود بعدها" if cur > 0 else ""))
+        return True
+    if abs(cur - float(r.get("set") or 0)) > max(1e-12, float(r.get("set") or 0) * 1e-7):
+        r["hands_off"], r["off_ts"] = True, now          # 👤 المالك غيّر الأرضية (استأنف أو كتب غيرها) ⇒ ما نعانده
+        journal("notify", f"👤 {i.get('sym')}: غُيّرت أرضية الشراء يدوياً — الإيقاف التلقائي يترك هذا البوت حتى يعود الدولار", "info", sym=i.get("sym") or "")
+        return True
+    if tgt > cur * (1 + g_ / 4):                        # السعر صعد ⇒ الأرضية تلحقه (ولا شراء يُرفض فوقها)
+        add = _cw_live_buys(st)
+        if not save_state_keys(sp, {"buy_floor": tgt, "pause_buy": False}):
+            return False
+        r["set"], r["freed"], r["moves"] = tgt, round(float(r.get("freed") or 0) + add, 6), int(r.get("moves") or 0) + 1
+        return True
+    return False
+
+
+def _cw_restore(k, r, d, why):
+    """▶️ عاد الدولار (أو أُطفئ الإيقاف التلقائي) ⇒ أرضية المالك كما كانت (أو بلا أرضية) — والمحرك يشتري المحفوظ بأمر واحد"""
+    b = _cw_bot(os.path.join(ROOT, k))
+    if b and not r.get("hands_off"):
+        sp = paths_of(b)[0]
+        st = read_retry(sp)
+        if not isinstance(st, dict):
+            return False
+        cur = float(st.get("buy_floor") or 0)
+        if abs(cur - float(r.get("set") or 0)) <= max(1e-12, float(r.get("set") or 0) * 1e-7):
+            o = float(r.get("orig") or 0)
+            if abs(cur - o) > 1e-15 and not save_state_keys(sp, {"buy_floor": o, "pause_buy": False}):
+                return False
+            _dash_event(r.get("sym") or "", (f"▶️💵 {why} — استؤنف الشراء تلقائياً"
+                                             + (f" · عادت أرضيتك {_px_s(o)}" if o > 0 else
+                                                " · المستويات المحفوظة تُشترى بأمر واحد بقدر الدولار الحر")))
+    d["bots"].pop(k, None)
+    return True
+
+
+def _cash_watch(g, now, snaps):
+    """② ⏸ إيقاف الشراء تلقائياً لبوتات الشبكة اللي دولار محفظتها ما يغطي أمرها القادم (فحصان متتاليان) · ▶️ رجوعه بعد نصف ساعة من عودة الدولار"""
+    on = g.get("cash_pause", True) is not False
+    with _CW_LOCK:
+        d = _cw_load()
+        ch = False
+        seen_now = set()
+        for s in snaps or []:
+            if not s.get("ok_bal"):
+                continue
+            wid = s.get("wid")
+            Wq = (((g.get("wallets") or {}).get(wid) or {}).get("quotes") or {})
+            for q, rec in Wq.items():
+                if now - float(rec.get("ts") or 0) > 120:
+                    continue                            # ما انقرأ بهالجولة
+                eff = float(rec.get("eff", rec.get("avail") or 0) or 0)
+                bots = sorted([(float(i.get("usd") or 0), _cw_key(i["dir"]), i) for i in (s.get("bots") or {}).values()
+                               if i.get("type") in _CW_TYPES and i.get("dir") and i.get("quote") == q and float(i.get("usd") or 0) > 0
+                               and not i.get("destruct")], key=lambda t: t[0])
+                wq = f"{wid}|{q}"
+                recs = sorted([(k, r) for k, r in d["bots"].items() if r.get("wid") == wid and r.get("q") == q],
+                              key=lambda t: float(t[1].get("need") or 0))
+                if recs:
+                    if (not on) or eff >= min(float(r.get("need") or 0) for _, r in recs):
+                        d["ok"].setdefault(wq, now)
+                    else:
+                        d["ok"].pop(wq, None)
+                    if (not on) or now - float(d["ok"].get(wq) or now) >= CW_BACK_S:
+                        left = eff
+                        for j, (k, r) in enumerate(recs):
+                            if on and j and left < float(r.get("need") or 0):
+                                break                   # عاد قليل ⇒ الأصغر أولاً (البقية بالجولة الجاية)
+                            if _cw_restore(k, r, d, "عاد الدولار" if on else "أُطفئ الإيقاف التلقائي"):
+                                left -= float(r.get("need") or 0)
+                                ch = True
+                        if not any(r.get("wid") == wid and r.get("q") == q for r in d["bots"].values()):
+                            d["ok"].pop(wq, None)
+                else:
+                    d["ok"].pop(wq, None)
+                for u, k, i in bots:
+                    if eff < u and i.get("alive"):
+                        sv = d["seen"].get(k) if isinstance(d["seen"].get(k), dict) else {}
+                        d["seen"][k] = {"n": int(sv.get("n") or 0) + 1, "need": u, "ts": now}
+                        seen_now.add(k)
+                        ch = True
+                    else:
+                        continue
+                    if not on:
+                        continue
+                    r = d["bots"].get(k)
+                    if r is not None and r.get("hands_off"):
+                        continue
+                    if r is None and d["seen"][k]["n"] < CW_SEEN:
+                        continue                        # تأكيد بفحصين قبل أول إيقاف
+                    if _cw_pause(k, i, r, d, wid, q, eff, now):
+                        ch = True
+        for k in list(d["seen"]):
+            if k not in seen_now:
+                d["seen"].pop(k, None)
+                ch = True
+        for k in list(d["bots"]):
+            if not os.path.isdir(os.path.join(ROOT, k)):
+                d["bots"].pop(k, None)                  # البوت انحذف
+                ch = True
+        if ch:
+            save_json_atomic(CASHW_FILE, d)
+    _CW_LOWQ.clear()
+    _CW_LOWQ.update(str(e.get("sym") or "") for e in g.get("events") or [] if e.get("kind") == "low_quote" and e.get("status") == "open")
+
+
+def _cw_card(bdir):
+    """③ شارة الكرت: {need, auto} — ينتظر دولار (والإيقاف تلقائي أو لا)"""
+    try:
+        d = _cw_cached()
+        k = _cw_key(bdir)
+        r = (d.get("bots") or {}).get(k)
+        if r and not r.get("hands_off"):
+            return {"need": round(float(r.get("need") or 0), 4), "auto": True}
+        sv = (d.get("seen") or {}).get(k)
+        if isinstance(sv, dict) and time.time() - float(sv.get("ts") or 0) < 3 * GUARD_EVERY:
+            return {"need": round(float(sv.get("need") or 0), 4), "auto": False}
+    except Exception:
+        pass
+    return None
+
+
 def guard_scan(force=False):
     """🛡️ فحص كامل لكل المحافظ. الشبكة خارج قفل الملف، والدمج تحت القفل.
     يرجع ملخصاً صادقاً: كم محفظة انفحصت فعلاً وكم فشلت — ولا «مطابق» بلا فحص."""
@@ -9408,6 +9671,7 @@ def guard_scan(force=False):
                         log_event(f"⚠️ [الرقابة] دمج {s.get('wid')}: {type(e).__name__}: {e}")
                     except Exception:
                         pass
+            _safe(_cash_watch, g, now, snaps, default=None)   # 💵 v3.36.44: ⏸ إيقاف الشراء تلقائياً حين ينفد الدولار (حقول التحكم فقط)
             _safe(_gd_acc_scan, g, now, default=None)      # 🪙 المُراكِم: جولته · توزيعه · أوامره المعلّقة
             _safe(_gd_ri_scan, g, now, default=None)       # 🔄 التفكيك والتسليم بعد إطفاء إعادة الاستثمار
             _safe(_gd_trade_scan, g, now, snaps, default=None)   # 📡 مراقبة التداول: الدفتر ⇄ المنصة · المطالبات · التحذيرات · التدقيق
@@ -9807,6 +10071,7 @@ def guard_view():
     return {"ok": True, "now": now, "scan_ts": g.get("scan_ts"), "scan_n": g.get("scan_n"),
             "scan_wallets": g.get("scan_wallets"), "scan_fail": g.get("scan_fail"),
             "auto_fix": bool(g.get("auto_fix")), "paused": bool(g.get("paused")), "busy": busy,
+            "cash_pause": g.get("cash_pause", True) is not False,                       # 💵 v3.36.44
             "every": GUARD_EVERY, "alerts": _gd_alerts(g, now), "wallets": wallets, "bots": bots,
             "events": ev, "legacy": g.get("legacy") or {}, "selfcheck": guard_selfcheck(g),
             "acc": g.get("acc") or {}, "ri": g.get("ri") or {},
@@ -9897,11 +10162,15 @@ def guard_ack(key, mode="accept", note="", by=""):
     return {"ok": False, "msg": "لا يوجد تنبيه بهذا المفتاح"}
 
 
-def guard_cfg(auto_fix=None, paused=None, by=""):
-    """⚙️ مفاتيح الرقابة: التصحيح التلقائي · الإيقاف المؤقت."""
+def guard_cfg(auto_fix=None, paused=None, by="", cash_pause=None):
+    """⚙️ مفاتيح الرقابة: التصحيح التلقائي · الإيقاف المؤقت · 💵 إيقاف الشراء تلقائياً حين ينفد الدولار (v3.36.44)."""
     with _GUARD_IO:
         g = _gd_load()
         msg = []
+        if cash_pause is not None:
+            g["cash_pause"] = bool(cash_pause)
+            msg.append("⏸💵 إيقاف الشراء تلقائياً حين ينفد الدولار " + ("مفعّل" if g["cash_pause"] else
+                                                                       "معطّل — البوتات الموقوفة تلقائياً تُستأنف بالفحص القادم"))
         if auto_fix is not None:
             g["auto_fix"] = bool(auto_fix)
             msg.append("🤖 التصحيح التلقائي " + ("مفعّل — الفروق المفسَّرة بأدلة المنصة تُصحَّح تلقائياً"
@@ -22104,7 +22373,7 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
             if act == "guard_cfg":
                 v = data.get("value") or {}
                 _by = "👤 اللوحة (" + str((self.client_address or ["?"])[0]) + ")"
-                return self._json(guard_cfg(auto_fix=v.get("auto_fix"), paused=v.get("paused"), by=_by))
+                return self._json(guard_cfg(auto_fix=v.get("auto_fix"), paused=v.get("paused"), by=_by, cash_pause=v.get("cash_pause")))
             if act == "ri_report":
                 txt = _safe(reinvest_report, data.get("value") or "daily", default=None)
                 if not txt:
@@ -24738,6 +25007,8 @@ function accBtnSync(dir){const el=CARDS.get(dir),b=botOf(dir);if(!el||!el._r||!e
 /* 📦 v3.21.2: شارة المخزن — وقت الإيقاف: المقطوع بس (يتنفّذ بأمر واحد لو تستأنف) · بلا إيقاف (حجوزات النطاق): مثل قبل */
 function accChipsOf(b){
   const AX=b.accx||{};let c='';
+  const CW=b.cashw;if(CW&&+CW.need>0)c+=`<span class="chip cashw" style="color:var(--amber);border-color:rgb(var(--amber2-rgb)/.45);background:rgb(var(--amber2-rgb)/.08)"
+    title="${CW.auto?'⏸ أُوقف الشراء تلقائياً فوق السعر بقليل لأن الدولار الحر في المحفظة لا يكفي أمر الشراء — كل مستوى ينزل إليه السعر يُحفظ ويُشترى بأمر واحد حين يعود الدولار (وتعود أرضيتك إن كانت لك أرضية) · زر الاستئناف يلغي الإيقاف التلقائي لهذا البوت':'الدولار الحر في المحفظة لا يكفي أمر الشراء القادم — يكمل البوت البيع وينتظر الدولار'}">🟠 ينتظر دولار — يحتاج $${(+CW.need).toFixed(2)}${CW.auto?' · ⏸':''}</span>`;
   if(b.floor>0){if((AX.nb||0)>0){c+=`<span class="chip acc" title="${AX.nb} تُشترى بأمر واحد إن استأنفت الآن · ${Math.max(0,(AX.kb||0)-AX.nb)} محفوظة تعود إلى أماكنها">📦 شراء ${AX.nb} ≈ $${AX.ub}</span>`;
     if(AX.ab!=null&&AX.ab<AX.nb)c+=`<span class="chip" style="color:var(--red);border-color:rgb(var(--red2-rgb)/.45);background:rgb(var(--red2-rgb)/.08)"
       title="💵 ب٢٤: دولارك الحر $${AX.qa} يغطي ${AX.ab} من ${AX.nb} درجة إن استأنفت الآن (الكل ≈ $${AX.qn}) — يشتري البوت ما يغطيه بأمر واحد وينتظر الباقي في المخزن حتى يتوفر دولار · الدولار الحر مشترك بين بوتات الحساب نفسه">💵 يغطي ${AX.ab}/${AX.nb}</span>`}}
@@ -27147,6 +27418,12 @@ function guardRender(){
       <span style="color:var(--mut2);font-size:11px">يصحّح الفرق تلقائياً <b>فقط</b> حين يوجد دليل من المنصة يفسّره بالكامل
       (تحويل · تداول من التطبيق · حذف مُراكِم). غير ذلك ينتظر قرارك دائماً.</span></div>
     <button onclick="guardCfg({auto_fix:${V.auto_fix?'false':'true'}})" class="${V.auto_fix?'on':''}" style="font-size:12px;padding:6px 12px">${V.auto_fix?'⏹️ أطفِه':'▶️ شغّله'}</button></div>`;
+  h+=`<div id="gv_cash" style="${box};display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between">
+    <div style="font-size:12px;line-height:1.8">⏸💵 <b>إيقاف الشراء تلقائياً حين ينفد الدولار:</b> <b style="color:${V.cash_pause?'var(--green)':'var(--mut2)'}">${V.cash_pause?'مفعّل':'متوقف'}</b><br>
+      <span style="color:var(--mut2);font-size:11px">حين لا يكفي الدولار الحر أمر الشراء القادم لبوت شبكة (فحصان متتاليان) يُوقف شراءه فوق السعر بقليل — كل مستوى ينزل إليه السعر
+      يُحفظ، والأرضية تتبع السعر إن صعد · وحين يعود الدولار نصف ساعة يُستأنف الشراء (يُشترى المحفوظ بأمر واحد) وتعود أرضيتك إن كانت لك أرضية.
+      رسالة واحدة للمحفظة حين ينفد وأخرى حين يعود.</span></div>
+    <button onclick="guardCfg({cash_pause:${V.cash_pause?'false':'true'}})" class="${V.cash_pause?'on':''}" style="font-size:12px;padding:6px 12px">${V.cash_pause?'⏹️ أطفِه':'▶️ شغّله'}</button></div>`;
   const A=V.alerts||[];
   h+=H(`🚨 تنبيهات مفتوحة (${A.length})`);
   if(!A.length)h+=`<div style="${box};text-align:center;color:${(allFail||!scanned)?'var(--amber)':'var(--green)'}">${!scanned?'⏳ لم يُفحص بعد — أول فحص بعد دقيقة من إقلاع اللوحة':allFail?'⚠️ تعذّر الوصول إلى المنصة في آخر فحص — لا يمكن تأكيد المطابقة':'✅ لا يوجد تنبيه مفتوح — كل المفحوص مطابق'}</div>`;
