@@ -8,6 +8,7 @@
 #      (its line once, then every ~6 hours) instead of a line and a refused order every minute
 #   ② the dollars back ⇒ the stored levels are bought in one order (as many as the dollars cover) and the line says how many
 #   ④ (found on the way · p66) a new bot reads the coin's price step BEFORE its first ladder — it laid 4 decimals on a 0.01 coin ⇒ refused
+#   ⑤ (p67) clean numbers in the log lines (the confirmed aggregate printed «من (1.4200000000000002)»)
 #   ③ the books stay whole: the coins and the dollars the engine thinks it has match the sandbox wallet's · profit only from sells
 #   python3 devtests/t_plus_cash.py [Holy_Dashboard.pyw] [-q] [--range]   (--range: the 🎚️ range bot, the same scenario)
 import importlib.machinery, importlib.util, json, math, os, re, shutil, sys, tempfile, urllib.request
@@ -133,6 +134,8 @@ ok("② dollars back ⇒ the stored levels go out in one order and the line says
 pxrej = [(round((t - m._BT_T0) / DT), sc) for t, sc in r["ex"].rejects if sc == "51000"]
 ok("④ the first ladder goes out on the coin's price step (the step is read before it · no «Parameter px error» — it refused the first 8 orders)",
    not pxrej and not any("Parameter px error" in e["msg"] for e in L), pxrej[:8])
+tail = [e["msg"] for e in L if re.search(r"\d\.\d*0000000\d|\d\.\d*9999999\d", e["msg"])]
+ok("⑤ the log prints clean numbers (no float tail like 1.4200000000000002)", not tail, tail[:3])
 st = EV["state"] or {}
 ok("③ the engine's state is whole at the end (it saved · no aggregated order left half-known)", st and not st.get("cu_pending"), list(st)[:12])
 _nm = "t_plus_cash" + (" --range" if KIND == "grid_range" else "")
