@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.48"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.49"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -393,6 +393,8 @@ def journal_ingest_bots():
                 new.append((ts, msg))
             if new:
                 for ts, msg in reversed(new):
+                    if _cut_line(msg):                   # 🔌 v3.36.49: أسطر الانقطاع لا تنسخ للسجلات (تبقى بملف البوت)
+                        continue
                     try:
                         tt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").timestamp()
                     except Exception:
@@ -449,6 +451,8 @@ def journal_query(cats=None, lv=None, bot=None, q=None, d_from=None, d_to=None, 
             if before is not None and e.get("t", 0) >= before:
                 continue
             if after is not None and e.get("t", 0) < after:
+                continue
+            if e.get("bot") and _cut_line(e):              # 🔌 v3.36.49: سطر انقطاع نُسخ قبل هذه النسخة — لا يُعرض
                 continue
             if lv == "warn" and e.get("lv") not in ("warn", "err"):
                 continue
@@ -873,7 +877,7 @@ def bot_snapshot(b):
     hist = load_json(hp) or []
     today = time.strftime("%Y-%m-%d"); today_profit = 0.0; last_event = ""
     for e in hist[:400]:
-        if not isinstance(e, dict):
+        if not isinstance(e, dict) or _cut_line(e):      # 🔌 v3.36.49: سطر الانقطاع لا يصير «آخر حدث» بالبطاقة
             continue
         last_event = e.get("msg", "")[:140]
         break
@@ -6692,12 +6696,26 @@ def overview():
             "running": sum(1 for b in bots if b["alive"]), "muted": TG_MUTED["v"],
             "watchdog": WATCHDOG["on"], "boot": boot_enabled(), "srv_os": os.name, "engine_v": ENGINE_VERSION, "wallets": len(app_cfg().get("wallets") or []), "bal_err": " · ".join(list(BAL_ERR.values())[:2]), "ex_b": _ex_n[0], "ex_s": _ex_n[1], "spark": global_daily(14), "bots": bots}
 
+# 🔌 v3.36.49 (المالك 14-11: «زيل من السجل بس ما اتغير في المحرك»): أسطر المحركات عن انقطاع الاتصال وما بعده («🔌 انقطع الإنترنت» ·
+#    «🌐 عاد الإنترنت» · «[انقطاع]» · «قبل الانقطاع») تبقى بملف البوت كما هي — المحرك ما يتغيّر والحسابات تقراها كما كانت — بس ما تُعرض
+#    للزبون: 📜 سجل البوت · 🔔 مركز الإشعارات · سطر البطاقة الأخير · السجلات المفصّلة
+_CUT_RE = re.compile(r"انقطع|انقطاع|الإنترنت|إنترنت|الكهرباء|كهرباء|انطفاء")
+
+
+def _cut_line(e):
+    """True ⇒ سطر عن انقطاع الاتصال/الكهرباء — لا يُعرض (يبقى بالملف)."""
+    try:
+        return bool(_CUT_RE.search(str(e.get("msg") or e.get("m") or "") if isinstance(e, dict) else str(e or "")))
+    except Exception:
+        return False
+
+
 def history_of(d, limit=200):
     bots = bot_dirs(); full = os.path.join(ROOT, d)
     if full not in bots:
         return []
     _, hp, _ = paths_of(bots[full])
-    return (load_json(hp) or [])[:limit]
+    return [e for e in (load_json(hp) or []) if not _cut_line(e)][:limit]   # 🔌 v3.36.49: أسطر الانقطاع لا تُعرض (تبقى بالملف)
 
 # 🔕 v3.21.10 (ب٣٠): أسطر المحرك وقت الإيقاف اللي تكرر إشعار اللوحة بمركز 🔔 (درجة انحسبت بالخفاء · مستوى انحجز بالمخزن).
 #    تبقى بسجل البوت كما هي — بس ما تطلع إشعار ثاني (كل عبور كان يطلع مرتين ويّا نغمتين، والضغط على الإيقاف 4 أسطر).
@@ -6715,7 +6733,7 @@ def feed_all(limit=60):
         _, hp, _ = paths_of(b)
         for e in (load_json(hp) or [])[:25]:
             if isinstance(e, dict) and e.get("msg"):
-                if any(x in str(e.get("msg")) for x in _FEED_SKIP):
+                if any(x in str(e.get("msg")) for x in _FEED_SKIP) or _cut_line(e):   # 🔌 v3.36.49: ولا أسطر الانقطاع
                     continue                            # 🔕 v3.21.10 (ب٣٠): سطر عبور/حجز الإيقاف — إشعاره «📦 عبر N درجة» يطلع مرة وحدة من اللوحة
                 if _CW_LOWQ and b["symbol"].split("-")[-1] in _CW_LOWQ and any(x in str(e.get("msg")) for x in _CW_FEED):
                     continue                            # 💵 v3.36.44: رسالة نفاد الدولار مفتوحة ⇒ أسطر «ما يكفي» المكررة تبقى بسجل البوت
