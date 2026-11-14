@@ -27273,7 +27273,7 @@ function guardRender(){
   h+=`<div style="${box};max-height:270px;overflow:auto">${E.length?E.map(e=>`<div style="padding:5px 0;border-bottom:1px solid var(--line);font-size:11.5px;line-height:1.7">
       ${gEsc(e.sev)} <b>${gEsc(e.title)}</b> <span style="color:var(--mut2);font-size:10.5px">· ${gAgo(e.ts)} · ${stw[e.status]||gEsc(e.status)}${e.snoozed?' · مؤجّل':''}</span>
       <div style="color:var(--mut2)">${gEsc(e.detail)}${e.acked_by?' — '+gEsc(e.acked_by):''}${e.note?' · 📝 '+gEsc(e.note):''}</div></div>`).join('')
-      :'<span style="color:var(--mut2)">ولا حدث بعد</span>'}</div>`;
+      :'<span style="color:var(--mut2)">لا يوجد حدث بعد</span>'}</div>`;
   const HS=[];for(const w of V.wallets||[])for(const c of w.coins||[])if((c.hist||[]).length)HS.push([w,c]);
   const kl={accept:'✅ اعتماد',auto:'🤖 تلقائي',reset:'♻️ تصفير',migrate:'🔧 ترحيل',book:'🤖 مطابقة التنفيذات'};
   h+=H('📜 سجل التسويات — من ومتى ولماذا');
