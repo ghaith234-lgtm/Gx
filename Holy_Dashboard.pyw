@@ -4373,6 +4373,11 @@ def _bt_on(d, step):
         return False
 
 
+def _bt_num(v):
+    """🔢 v3.36.44: رقم الصندوق المغلق كنص مثل ما ترده OKX — بلا ذيل الأعداد العشرية (repr(0.1 * 3) = 0.30000000000000004)"""
+    return repr(round(float(v), 12))
+
+
 class _BtEx:
     def __init__(self, sym, price, quote, base, tick, lot, minsz, maker, taker, slip):
         self.sym = sym
@@ -4544,9 +4549,10 @@ class _BtEx:
         st = o["state"]
         if st == "live" and o["acc"] > 0:
             st = "partially_filled"
-        return {"instId": self.sym, "ordId": o["id"], "clOrdId": o["cl"], "side": o["side"], "ordType": o["type"], "sz": repr(o["sz"]),
-                "px": repr(o["px"]) if o["type"] != "market" else "", "accFillSz": repr(o["acc"]), "fillSz": repr(o["acc"]),
-                "avgPx": repr(o["avg"]) if o["acc"] else "", "state": st, "fee": repr(o["fee"]), "feeCcy": o["feeCcy"],
+        _n = _bt_num                                     # 🔢 v3.36.44: نص نظيف مثل OKX (كان repr لمجموع: 62.970000000000006)
+        return {"instId": self.sym, "ordId": o["id"], "clOrdId": o["cl"], "side": o["side"], "ordType": o["type"], "sz": _n(o["sz"]),
+                "px": _n(o["px"]) if o["type"] != "market" else "", "accFillSz": _n(o["acc"]), "fillSz": _n(o["acc"]),
+                "avgPx": _n(o["avg"]) if o["acc"] else "", "state": st, "fee": repr(o["fee"]), "feeCcy": o["feeCcy"],
                 "cTime": str(int(o["cTime"] * 1000)), "uTime": str(int(o.get("uTime", o["cTime"]) * 1000)), "tgtCcy": ""}
 
     def query(self, oid=None, cl=None):
@@ -4571,7 +4577,7 @@ class _BtEx:
 
     def ticker(self):
         with self.lk:
-            return {"code": "0", "msg": "", "data": [{"instId": self.sym, "last": repr(self.p), "bidPx": repr(self.bid()), "askPx": repr(self.ask()),
+            return {"code": "0", "msg": "", "data": [{"instId": self.sym, "last": _bt_num(self.p), "bidPx": _bt_num(self.bid()), "askPx": _bt_num(self.ask()),
                                                        "ts": str(int(self.now() * 1000))}]}
 
     def instrument(self):
