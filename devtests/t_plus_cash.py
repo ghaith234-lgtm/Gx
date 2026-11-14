@@ -10,13 +10,13 @@
 #   ④ (found on the way · p66) a new bot reads the coin's price step BEFORE its first ladder — it laid 4 decimals on a 0.01 coin ⇒ refused
 #   ⑤ (p67) clean numbers in the log lines (the confirmed aggregate printed «من (1.4200000000000002)»)
 #   ③ the books stay whole: the coins and the dollars the engine thinks it has match the sandbox wallet's · profit only from sells
-#   python3 devtests/t_plus_cash.py [Holy_Dashboard.pyw] [-q] [--range]   (--range: the 🎚️ range bot, the same scenario)
+#   python3 devtests/t_plus_cash.py [Holy_Dashboard.pyw] [-q] [--range | --grid]   (🎚️ the range bot · ♾️ the infinite grid — the same scenario)
 import importlib.machinery, importlib.util, json, math, os, re, shutil, sys, tempfile, urllib.request
 
 H = os.path.dirname(os.path.abspath(__file__))
 Q = "-q" in sys.argv
 DASH = os.path.abspath(next((a for a in sys.argv[1:] if not a.startswith("-")), os.path.join(H, "..", "Holy_Dashboard.pyw")))
-KIND = "grid_range" if "--range" in sys.argv else "grid_plus"     # 🎚️ the range bot is the same grid code (p65 patched both)
+KIND = "grid_range" if "--range" in sys.argv else ("grid" if "--grid" in sys.argv else "grid_plus")   # ♾️ --grid (v3.36.45: p72)     # 🎚️ the range bot is the same grid code (p65 patched both)
 res = []
 
 
@@ -138,7 +138,7 @@ tail = [e["msg"] for e in L if re.search(r"\d\.\d*0000000\d|\d\.\d*9999999\d", e
 ok("⑤ the log prints clean numbers (no float tail like 1.4200000000000002)", not tail, tail[:3])
 st = EV["state"] or {}
 ok("③ the engine's state is whole at the end (it saved · no aggregated order left half-known)", st and not st.get("cu_pending"), list(st)[:12])
-_nm = "t_plus_cash" + (" --range" if KIND == "grid_range" else "")
+_nm = "t_plus_cash" + {"grid_range": " --range", "grid": " --grid"}.get(KIND, "")
 print(f"✅ {_nm}: {sum(res)}/{len(res)}" if all(res) else f"❌ {_nm}: {sum(res)}/{len(res)}")
 shutil.rmtree(R, ignore_errors=True)
 sys.exit(0 if all(res) else 1)

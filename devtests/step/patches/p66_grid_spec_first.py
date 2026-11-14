@@ -4,7 +4,7 @@
 #   4 decimals (79.5229) ⇒ OKX refused them all («Parameter px error» — an alert line on every new bot) and the ladder was re-laid
 #   only later by the gap check. The 🪜 step and the DCA engines already read it first thing; now these two do too (a public read,
 #   no key · if OKX does not answer, the old fallback stands and the loop reads it later, as before).
-#   The sacred ♾️ engine (main.py) has the same order — not touched here (rule: only with the owner's yes).
+#   The sacred ♾️ engine (main.py) has the same spots — applied there too in v3.36.45 with the owner's yes (p72_main_cash.py).
 #   python3 devtests/step/patches/p66_grid_spec_first.py devtests/step/eng/grid_plus.py devtests/step/eng/grid_range.py
 import sys
 

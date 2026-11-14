@@ -8,7 +8,7 @@
 #      every 6 hours)
 #   ③ a limit buy refused for dollars (51008 · 51119 · 51131) was sent again every cycle (a line every minute) ⇒ the new buys rest
 #      1 ⇒ 2 ⇒ 4 ⇒ 8 ⇒ 10 minutes, a line at the 1st refusal, then every 36th (~6 hours, like ②) · a sell that fills ends the rest at once
-#   The sacred ♾️ engine (main.py) has the same three spots — not touched here (rule: only with the owner's yes).
+#   The sacred ♾️ engine (main.py) has the same spots — applied there too in v3.36.45 with the owner's yes (p72_main_cash.py).
 #   python3 devtests/step/patches/p65_grid_cash.py devtests/step/eng/grid_plus.py devtests/step/eng/grid_range.py
 import sys
 

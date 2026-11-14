@@ -6,13 +6,14 @@
 #   · no line repeated more than 30 times (the trade lines aside) · no two live orders on one price
 #   · ➕ the sells the book promises never exceed the coins in the wallet (🎚️ range prints its whole ladder from the start by design)
 #   · the log prints clean numbers (no float tail like 0.12000000000000001 — p67 · p69 · the sandbox's own numbers p68)
-#   python3 devtests/t_plus_paths.py [Holy_Dashboard.pyw] [-q] [--range] [--only=path]
+#   python3 devtests/t_plus_paths.py [Holy_Dashboard.pyw] [-q] [--range | --grid] [--ri] [--only=path]   (--ri: 💠 reinvest on)
 import importlib.machinery, importlib.util, json, math, os, re, shutil, sys, tempfile, urllib.request, collections
 
 DASH = os.path.abspath(next((a for a in sys.argv[1:] if not a.startswith("-")), os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Holy_Dashboard.pyw")))
 Q = "-q" in sys.argv
-KIND = "grid_range" if "--range" in sys.argv else "grid_plus"
+KIND = "grid_range" if "--range" in sys.argv else ("grid" if "--grid" in sys.argv else "grid_plus")   # ♾️ --grid (v3.36.45: p72)
 ONLY = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--only=")), None)
+RI = "--ri" in sys.argv                                      # 💠 v3.36.45: the same 8 paths with reinvest on
 
 
 def _no_net(*a, **k):
@@ -86,6 +87,8 @@ def run(name, px, hooks=None, q=400.0, b=6.0, cfg=None):
     CFG = {"grid_percentage": 0.006, "usd_value": 10.0, "min_price": P0 * 0.5, "forced_base_price": P0, "knife_guard": False,
            "bot_type": KIND, "lower_price": P0 * 0.6 if KIND == "grid_range" else 0.0, "upper_price": P0 * 1.6 if KIND == "grid_range" else 0.0,
            "buy_offset": 0.012}
+    if RI:
+        CFG.update(reinvest=True, reinvest_pct=100.0)         # 💠 reinvest on (the bot's profit stays in the bot) — the same paths
     CFG.update(cfg or {})
     r = m._bt_run(KIND, CFG, SYM, px, DT, q, b, SPEC, samples=400)
     ex = r["ex"]
@@ -116,7 +119,7 @@ def run(name, px, hooks=None, q=400.0, b=6.0, cfg=None):
         have = bal.get("SOL", 0)
         if need > have * 1.02 + 0.02:
             worst = max(worst, need - have)
-    if worst and KIND == "grid_plus":
+    if worst and KIND in ("grid_plus", "grid"):
         bad.append(f"sells promise {worst:.4f} SOL more than the wallet holds")
     tail = [e["msg"][:160] for e in L if re.search(r"\d\.\d*0000000\d|\d\.\d*9999999\d", e["msg"])]
     if tail:
@@ -160,6 +163,6 @@ for k, (px, hk) in H.items():
             run(k, px, hk)
 if ONLY != "none":
     shutil.rmtree(R, ignore_errors=True)
-    _nm = "t_plus_paths" + (" --range" if KIND == "grid_range" else "")
+    _nm = "t_plus_paths" + {"grid_range": " --range", "grid": " --grid"}.get(KIND, "") + (" --ri" if RI else "")
     print(f"✅ {_nm}: {sum(RES)}/{len(RES)}" if RES and all(RES) else f"❌ {_nm}: {sum(RES)}/{len(RES)}")
     sys.exit(0 if RES and all(RES) else 1)
