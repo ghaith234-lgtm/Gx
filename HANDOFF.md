@@ -5944,8 +5944,8 @@ v3.21.2: **6/36 سليم** — العدّاد 4 والسعر رجع لـ0.995 ·
 |---|---|
 | `ui_tut` (انعاد) | 9 ✅ — ولا 📖 بالبطاقات ولا بالشريط · زر واحد بكل نموذج تحت عنوانه وولا شي داخل أزرار النوع · النافذة: تبويبات الشبكي 3 · DCA 2 · الدوري 2 · 🪜 و💹 بلا تبويبات · تنفتح على النوع المختار والنموذج مخفي بمكانه · كل تبويب شرح بوته بأقسامه الخمسة · المثال يتحرك بكل تبويب وواحد بس (ولا إطار قديم) · «↩️» يرجّع النموذج باللي انكتب والنوع · ⏸ · الغلق يوقفه · ولا خطأ صفحة |
 | الانحدار الكامل (على p78) | ✅ كلها (52) — `t_style` 5 · `t_fonts` 10 · `t_windows` 4 · `t_misc` 13 · `t_botcode` 4 · `t_rates` 8 · `t_alerts` 11 · `t_signals` 18 · `t_card_periods` 5 · `t_gridup` 9 · `t_app20` 31 · `t_bt_real` 21 · `t_plus_cash` 9 (+`--range` 9 · `--grid` 9) · `t_plus_paths` 8 (+`--range` · `--grid` · `--ri` · `--grid --ri` · `--range --ri` 8 كلها) · `t_cash_watch` 22 · `t_step_pause` 14 (+`--ri` 14) · `t_demo` 11 (+`grid --ri` 12 · `grid_step` 11 · `dca_buy` 10 · `rec_buy` 10 · `rec_va` 10) · `ui_demo` 7 · `ui_tut` 8 · `ui_themes` 8 · `ui_win20` 11 · `ui_live` 48 · `ui_device` 10 · `ui_bgtone` 14 · `ui_fonts` 10 · `ui_settings` 24 · `ui_smooth` 12 · `ui_windows` 19 · `ui_skins` 25 · `ui_misc` 7 · `ui_resize` 4 · `t_first` 27 · `bt3615_test` 25 · `t_ri_dash` 16 · `ui_first` 11 · `ui_card` 17 · `ui_ri` 10 · `ui_full` 15 · `ui_lines` 9 |
-| فحوص الصفحة كلها بعد p79 | REG47B |
-| المحاكيات | EMU |
+| فحوص الصفحة كلها بعد p79 | ✅ كلها (22) — `t_style` 5 · `t_windows` 4 · `t_misc` 13 · `ui_demo` 7 · `ui_tut` 9 · `ui_themes` 8 · `ui_win20` 11 · `ui_live` 48 · `ui_device` 10 · `ui_bgtone` 14 · `ui_fonts` 10 · `ui_settings` 24 · `ui_smooth` 12 · `ui_windows` 19 · `ui_skins` 25 · `ui_misc` 7 · `ui_resize` 4 · `ui_first` 11 · `ui_card` 17 · `ui_ri` 10 · `ui_full` 15 · `ui_lines` 9 (p79 يغيّر الصفحة بس — المحركات والخادم كما هي) |
+| المحاكيات | تشغيل 110 (على p78) ✅ أندرويد 9 · 11 · 14 · تشغيل 111 (النهائي) EMU111 |
 
 ## ٧ر١٣٣ · v3.36.46 — 🧪 الديمو بالمحرك الحقيقي نفسه (منصة وهمية بسعر OKX الحي · كروته تحت الحقيقية بخط فاصل · خارج كل المجاميع) · 📖 زر تعليم بكل بطاقة
 
