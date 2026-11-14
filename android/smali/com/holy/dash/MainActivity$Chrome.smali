@@ -50,7 +50,7 @@
 
     move-result-object v0
 
-    const-string v1, "\u062a\u0645\u0627\u0645"
+    const-string v1, "\u062d\u0633\u0646\u0627\u064b"
 
     new-instance v2, Lcom/holy/dash/MainActivity$Chrome$2;
 
@@ -172,7 +172,7 @@
 
     move-result-object v1
 
-    const-string v2, "\u062a\u0645\u0627\u0645"
+    const-string v2, "\u062d\u0633\u0646\u0627\u064b"
 
     new-instance v3, Lcom/holy/dash/MainActivity$Chrome$8;
 

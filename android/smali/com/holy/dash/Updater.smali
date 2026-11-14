@@ -113,7 +113,7 @@
     if-nez v0, :cond_40
 
     .line 92
-    const-string v0, "\u0627\u0633\u0645\u062d \u0644\u0640 Holy \u064a\u062b\u0628\u0651\u062a \u062a\u062d\u062f\u064a\u062b\u0627\u062a\u0647\u060c \u0648\u0627\u0631\u062c\u0639 \u0627\u0636\u063a\u0637 \u062a\u062d\u062f\u064a\u062b"
+    const-string v0, "\u0627\u0633\u0645\u062d \u0644\u0640 Holy \u0628\u062a\u062b\u0628\u064a\u062a \u062a\u062d\u062f\u064a\u062b\u0627\u062a\u0647\u060c \u062b\u0645 \u0639\u062f \u0648\u0627\u0636\u063a\u0637 \u062a\u062d\u062f\u064a\u062b"
 
     invoke-static {p0, v0, v2}, Landroid/widget/Toast;->makeText(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;
 
@@ -168,7 +168,7 @@
     sput-boolean v2, Lcom/holy/dash/Updater;->busy:Z
 
     .line 101
-    const-string v0, "\u23f3 \u064a\u0646\u0632\u0644 \u0627\u0644\u062a\u062d\u062f\u064a\u062b\u2026"
+    const-string v0, "\u23f3 \u062c\u0627\u0631\u064d \u062a\u0646\u0632\u064a\u0644 \u0627\u0644\u062a\u062d\u062f\u064a\u062b\u2026"
 
     const/4 v1, 0x0
 
@@ -540,19 +540,19 @@
 
     move-result-object v0
 
-    const-string v2, ")\n\u0639\u0646\u062f\u0643: "
+    const-string v2, ")\n\u0644\u062f\u064a\u0643: "
 
     invoke-virtual {v0, v2}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
 
     move-result-object v0
 
-    const-string v2, "2.1"
+    const-string v2, "2.2"
 
     invoke-virtual {v0, v2}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
 
     move-result-object v0
 
-    const-string v2, "\n\n\u064a\u062a\u062d\u062f\u062b \u0627\u0644\u062d\u064a\u0646\u061f"
+    const-string v2, "\n\n\u0627\u0644\u062a\u062d\u062f\u064a\u062b \u0627\u0644\u0622\u0646\u061f"
 
     invoke-virtual {v0, v2}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
 
@@ -577,7 +577,7 @@
 
     move-result-object v0
 
-    const-string v1, "\u0628\u0639\u062f\u064a\u0646"
+    const-string v1, "\u0644\u0627\u062d\u0642\u0627\u064b"
 
     const/4 v2, 0x0
 

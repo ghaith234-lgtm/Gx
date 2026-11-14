@@ -75,7 +75,7 @@
     :cond_d
     iget v0, p0, Lcom/holy/dash/Updater$1$1;->val$code:I
 
-    const/16 v1, 0xc
+    const/16 v1, 0xd
 
     if-le v0, v1, :cond_2d
 
@@ -117,7 +117,7 @@
 
     iget-object v0, v0, Lcom/holy/dash/Updater$1;->val$a:Landroid/app/Activity;
 
-    const-string v1, "\u2705 \u0639\u0646\u062f\u0643 \u0622\u062e\u0631 \u0646\u0633\u062e\u0629 (2.1)"
+    const-string v1, "\u2705 \u0644\u062f\u064a\u0643 \u0622\u062e\u0631 \u0646\u0633\u062e\u0629 (2.2)"
 
     const/4 v2, 0x0
 

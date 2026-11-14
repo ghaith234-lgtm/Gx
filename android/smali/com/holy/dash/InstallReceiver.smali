@@ -68,7 +68,7 @@
     :catch_1f
     move-exception v0
 
-    const-string v0, "\u0627\u0641\u062a\u062d Holy \u0648\u0627\u0636\u063a\u0637 \u062a\u062d\u062f\u064a\u062b \u0645\u0631\u0629 \u062b\u0627\u0646\u064a\u0629"
+    const-string v0, "\u0627\u0641\u062a\u062d Holy \u0648\u0627\u0636\u063a\u0637 \u062a\u062d\u062f\u064a\u062b \u0645\u0631\u0629 \u0623\u062e\u0631\u0649"
 
     invoke-static {p1, v0, v4}, Landroid/widget/Toast;->makeText(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;
 

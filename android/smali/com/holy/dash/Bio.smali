@@ -93,7 +93,7 @@
 
     .line 45
     :cond_3c
-    const-string v1, "\u0631\u0645\u0632 \u0627\u0644\u0645\u0648\u0628\u0627\u064a\u0644"
+    const-string v1, "\u0631\u0645\u0632 \u0627\u0644\u0647\u0627\u062a\u0641"
 
     invoke-virtual {p0}, Landroid/app/Activity;->getMainExecutor()Ljava/util/concurrent/Executor;
 

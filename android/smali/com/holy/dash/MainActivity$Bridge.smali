@@ -542,7 +542,7 @@
 
     const-string v2, "code"
 
-    const/16 v3, 0xc
+    const/16 v3, 0xd
 
     invoke-virtual {v1, v2, v3}, Lorg/json/JSONObject;->put(Ljava/lang/String;I)Lorg/json/JSONObject;
     :try_end_4c
@@ -1025,7 +1025,7 @@
     :try_start_7
     const-string v2, "code"
 
-    const/16 v4, 0xc
+    const/16 v4, 0xd
 
     invoke-virtual {v3, v2, v4}, Lorg/json/JSONObject;->put(Ljava/lang/String;I)Lorg/json/JSONObject;
 
@@ -1033,7 +1033,7 @@
 
     const-string v4, "name"
 
-    const-string v5, "2.1"
+    const-string v5, "2.2"
 
     invoke-virtual {v2, v4, v5}, Lorg/json/JSONObject;->put(Ljava/lang/String;Ljava/lang/Object;)Lorg/json/JSONObject;
 

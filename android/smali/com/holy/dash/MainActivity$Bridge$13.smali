@@ -87,7 +87,7 @@
 
     iget-object v0, v0, Lcom/holy/dash/MainActivity$Bridge;->this$0:Lcom/holy/dash/MainActivity;
 
-    const-string v1, "\ud83d\udccb \u0627\u0646\u062a\u0633\u062e"
+    const-string v1, "\ud83d\udccb \u0646\u064f\u0633\u062e"
 
     const/4 v2, 0x0
 

@@ -4,9 +4,9 @@
 
 
 # static fields
-.field static final VERSION_CODE:I = 0xc
+.field static final VERSION_CODE:I = 0xd
 
-.field static final VERSION_NAME:Ljava/lang/String; = "2.1"
+.field static final VERSION_NAME:Ljava/lang/String; = "2.2"
 
 
 # direct methods
