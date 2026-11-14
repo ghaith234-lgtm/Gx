@@ -10,7 +10,7 @@
 #       ③ the card says «🟠 ينتظر دولار — يحتاج X$» (⏸ automatic) and nothing once the dollars are back
 #   B · the rules one by one: the balance flapping 3$ ⇄ 12$ opens no second message · the owner's own floor is kept and comes back ·
 #       the owner presses ▶️ while paused ⇒ the system lets that bot alone · a daily reminder (and it is really sent) · the switch
-#       off ⇒ the paused bots resume · the recurring bot's «الرصيد لا يكفي»: once, then quiet until a buy goes through · the 🔔
+#       off (or the guard paused — p71: at once) ⇒ the paused bots resume · the recurring bot's «الرصيد لا يكفي»: once, then quiet until a buy goes through · the 🔔
 #       centre hides the engines' dollar lines while the wallet message is open · the card chip (the page's own function, in node)
 #   python3 devtests/t_cash_watch.py [Holy_Dashboard.pyw] [-q]
 import importlib.machinery, importlib.util, json, math, os, re, shutil, subprocess, sys, tempfile, urllib.request
@@ -267,6 +267,18 @@ f_off = stf(d5)["buy_floor"]
 round_(g, snapof([d5]), 3, T + 1800)
 ok("… 🛡️ the switch off ⇒ the paused bot resumes at the next round and is not paused again", f_on > 74 and f_off == 0 and stf(d5)["buy_floor"] == 0
    and not m._cw_load()["bots"], (f_on, f_off))
+# ⏸️ the guard paused ⇒ no next round ⇒ the paused bots resume at once (p71)
+g = fresh()
+d7 = mkbot("gp", floor=76.0, cp=74.0)
+d8 = mkbot("gq")
+m.bot_dirs = lambda: {d7: {"dir": d7, "symbol": SYM, "cfg": dict(CFG, symbol=SYM)}, d8: {"dir": d8, "symbol": SYM, "cfg": dict(CFG, symbol=SYM)}}
+round_(g, snapof([d7, d8], 79.0), 3, T)
+round_(g, snapof([d7, d8], 79.0), 3, T + 600)
+f7a, f8a = stf(d7)["buy_floor"], stf(d8)["buy_floor"]
+r71 = m.guard_cfg(paused=True, by="test")
+ok(f"… 🛡️ the guard paused (no next round) ⇒ every bot it paused resumes at once — the owner's floor back ({f7a} ⇒ {stf(d7)['buy_floor']}) · none ({f8a} ⇒ {stf(d8)['buy_floor']})",
+   f7a > 79 and f8a > 79 and stf(d7)["buy_floor"] == 76.0 and stf(d8)["buy_floor"] == 0 and not m._cw_load()["bots"] and "استؤنف شراء 2" in r71.get("msg", ""), r71)
+m.guard_cfg(paused=False, by="test")
 # the recurring bot's «not enough dollars»
 TG.clear()
 m.REC_TG_FILE = os.path.join(R, "rec_tg.json")

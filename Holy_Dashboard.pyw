@@ -9629,6 +9629,19 @@ def _cash_watch(g, now, snaps):
     _CW_LOWQ.update(str(e.get("sym") or "") for e in g.get("events") or [] if e.get("kind") == "low_quote" and e.get("status") == "open")
 
 
+def _cw_release_all(why):
+    """▶️ كل بوت أوقفه النظام للدولار يُستأنف الآن (أرضية المالك ترجع) — حين تُوقف الرقابة أو يُطفأ المفتاح (لا جولة قادمة تستأنفه)"""
+    n = 0
+    with _CW_LOCK:
+        d = _cw_load()
+        for k, r in list(d["bots"].items()):
+            if _cw_restore(k, r, d, why):
+                n += 1
+        d["ok"], d["seen"] = {}, {}
+        save_json_atomic(CASHW_FILE, d)
+    return n
+
+
 def _cw_card(bdir):
     """③ شارة الكرت: {need, auto} — ينتظر دولار (والإيقاف تلقائي أو لا)"""
     try:
@@ -10181,6 +10194,10 @@ def guard_cfg(auto_fix=None, paused=None, by="", cash_pause=None):
             g["paused"] = bool(paused)
             msg.append("⏸️ الرقابة موقوفة" if g["paused"] else "▶️ الرقابة تعمل")
         _gd_save(g)
+        if (cash_pause is not None and not g.get("cash_pause", True)) or (paused is not None and g.get("paused")):
+            _n = _safe(_cw_release_all, "أُوقفت الرقابة" if g.get("paused") else "أُطفئ الإيقاف التلقائي", default=0) or 0
+            if _n:                                       # 💵 v3.36.44: لا جولة قادمة تستأنفها ⇒ الآن
+                msg.append(f"▶️ استؤنف شراء {_n} بوت أوقفه النظام لنفاد الدولار")
     try:
         log_event("🛡️ [الرقابة] " + " · ".join(msg) + f" — {by}")
     except Exception:
