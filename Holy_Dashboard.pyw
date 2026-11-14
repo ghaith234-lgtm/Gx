@@ -20983,11 +20983,49 @@ def _accx_ok(b, side, p):
     return True
 
 
+def _accx_src(b, st, side, cp=None):
+    """📦 مخزن الإيقاف {مفتاح: {target_price, locked_qty}} — ♾️ ➕ 🎚️ من accum_* · 🪜 v3.36.45 من خاناته: كل خانة بذاكرة البوت خلف
+    الأرضية (شراء) / السقف (بيع) اللي قطعها السعر (تنشرى/تنباع بسعر السوق عند الاستئناف) + بقدر نافذة البوت جنب السعر (اللي سحبها الإيقاف)"""
+    ak = "accum_buys" if side == "buy" else "accum_sells"
+    if str((b.get("cfg") or {}).get("bot_type") or "") != "grid_step":
+        return st.get(ak) or {}
+    lim = float(st.get("buy_floor" if side == "buy" else "sell_ceiling") or 0)
+    if lim <= 0:
+        return {}
+    if cp is None:
+        cp = float(PX.get(b.get("symbol")) or st.get("current_price") or 0)
+    W = max(1, int(float((b.get("cfg") or {}).get("step_window") or 8)))
+    rows = []
+    for k, s in (st.get("slots") or {}).items():
+        if not isinstance(s, dict) or s.get("side") != side:
+            continue
+        o = s.get("o") or {}
+        if o.get("id") and o.get("st") == "live":
+            continue                                    # حي بالمنصة (مثلاً منفّذ جزئياً) — مو بالمخزن
+        try:
+            if side == "buy":
+                p, q = float(s.get("bp") or 0), float(s.get("q") or 0) + float(s.get("g") or 0) - float(s.get("acc") or 0)
+                if not (0 < p < lim):
+                    continue
+            else:
+                p, q = float(s.get("sp") or 0), float(s.get("sq") or 0) - float(s.get("acc") or 0)
+                if not p > lim:
+                    continue
+        except Exception:
+            continue
+        if q > 1e-12:
+            rows.append((k, p, round(q, 10)))
+    rows.sort(key=lambda t: -t[1] if side == "buy" else t[1])
+    cut = [t for t in rows if (t[1] >= cp if side == "buy" else t[1] <= cp)] if cp and cp > 0 else []
+    rest = [t for t in rows if t not in cut][:W]
+    return {k: {"target_price": p, "locked_qty": q} for k, p, q in cut + rest}
+
+
 def _accx_levels(b, st, side, cp):
     """الدرجات اللي **قطعها السعر** وهي بمخزن الإيقاف = اللي تتنفّذ بأمر واحد لو تستأنف هسه
     (شراء: سعرها ≥ السعر الحالي · بيع: ≤ السعر الحالي). [(سعر، كمية)]"""
     out = []
-    for v in (st.get("accum_buys" if side == "buy" else "accum_sells") or {}).values():
+    for v in _accx_src(b, st, side, cp).values():           # 🪜 v3.36.45: من خاناته
         try:
             p, q = float((v or {}).get("target_price") or 0), float((v or {}).get("locked_qty") or 0)
         except Exception:
@@ -21020,7 +21058,7 @@ def _accx_snap(b, st):
     + المبلغ بأسعار الدرجات · kb/ks = كل المحفوظ بالمخزن (الأوامر اللي انسحبت لحظة الإيقاف ترجع بأماكنها بالاستئناف)."""
     cp = float(PX.get(b["symbol"]) or st.get("current_price") or 0)
     out = {"nb": 0, "ub": 0.0, "ns": 0, "us": 0.0,
-           "kb": len(st.get("accum_buys") or {}), "ks": len(st.get("accum_sells") or {})}
+           "kb": len(_accx_src(b, st, "buy", cp)), "ks": len(_accx_src(b, st, "sell", cp))}
     if cp > 0 and float(st.get("buy_floor") or 0) > 0:
         lv = _accx_levels(b, st, "buy", cp)
         out["nb"], out["ub"] = len(lv), round(sum(p * q for p, q in lv), 2)
@@ -21120,7 +21158,7 @@ def _accx_tick(b, st, cp):
             rec = {"lim": lim, "k": []}                # إيقاف جديد (أو الحد تغيّر)
             ent[side] = rec
             _ACCX["dirty"] = True
-        have = {f"{float((v or {}).get('target_price') or 0):.10g}" for v in (st.get(ak) or {}).values()}
+        have = {f"{float((v or {}).get('target_price') or 0):.10g}" for v in _accx_src(b, st, side, cp).values()}
         seen = [x for x in (rec.get("k") or []) if x in have]   # درجة طلعت من المخزن ⇒ تنتسى
         if len(seen) != len(rec.get("k") or []):
             rec["k"] = seen
@@ -21284,7 +21322,7 @@ def notifier_loop():
                     prev["tp"] = tp_now
                 elif tp_now < prev["tp"] - 1e-9:
                     prev["tp"] = tp_now
-                ab, asl = len(st.get("accum_buys") or {}), len(st.get("accum_sells") or {})
+                ab, asl = len(_safe(_accx_src, b, st, "buy", default={}) or {}), len(_safe(_accx_src, b, st, "sell", default={}) or {})   # 🪜 v3.36.45
                 # 📦 v3.21.1: إشعار العبور — مرة وحدة لكل درجة يقطعها السعر وإنت موقف (كم أمر · المعدل · المبلغ).
                 #    كان «المخزون زاد» يطلع لحظة الإيقاف نفسها على أوامر ما قطعها السعر، ويتكرر مع كل إعادة تشغيل للوحة
                 _cpx = _safe(float, PX.get(sym) or st.get("current_price") or 0, default=0.0) or 0.0
