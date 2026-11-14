@@ -99,7 +99,7 @@ pw = API.get("per=pweek") or {}
 ok(f"… the previous week starts on a Monday and ends on a Sunday ({pw.get('from')} → {pw.get('to')}) · the previous month ends on its last day ({(API.get('per=prev') or {}).get('to')})",
    pw.get("from") and datetime.strptime(pw["from"], "%Y-%m-%d").weekday() == 0 and datetime.strptime(pw["to"], "%Y-%m-%d").weekday() == 6
    and (API.get("per=prev") or {}).get("to") == pm_end.strftime("%Y-%m-%d"), (pw.get("from"), pw.get("to")))
-want_b = ["اليوم", "البارحة", "آخر 7 أيام", "الأسبوع السابق", "الشهر الحالي", "الشهر السابق", "آخر 30 يوم", "آخر 90 يوم", "آخر سنة"]
+want_b = ["اليوم", "البارحة", "آخر 7 أيام", "الأسبوع السابق", "الشهر الحالي", "الشهر السابق", "آخر 30 يوماً", "آخر 90 يوماً", "آخر سنة"]
 ok(f"② the card's periods in order: {U.get('btns')}", U.get("btns") == want_b, U)
 P = U.get("per") or {}
 ok("… each new period draws with its name and its dates (yesterday one date · the others «from ← to») and its button lit: "

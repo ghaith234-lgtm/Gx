@@ -30,8 +30,8 @@ async function until(f, ms) { const t0 = Date.now(); let v; while (Date.now() - 
     const btn = c.querySelector('[data-k="rilad"]');
     return { chips, rilad: btn ? getComputedStyle(btn).display : 'none', txt: c.innerText };
   }, dir);
-  ok('the card: the 🔄 chip «شغالة» · no ⚔️ · «💠 سلّم الإعادة» shown · the reinvested dollars on the card',
-     card && card.chips.some(t => /🔄 إعادة استثمار شغالة/.test(t)) && !card.chips.some(t => /⚔️/.test(t)) && card.rilad !== 'none', card && { chips: card.chips, rilad: card.rilad });
+  ok('the card: the 🔄 chip «مفعّلة» · no ⚔️ · «💠 سلّم الإعادة» shown · the reinvested dollars on the card',
+     card && card.chips.some(t => /🔄 إعادة استثمار مفعّلة/.test(t)) && !card.chips.some(t => /⚔️/.test(t)) && card.rilad !== 'none', card && { chips: card.chips, rilad: card.rilad });
   await pg.evaluate(d => openReinvestLadder(d), dir);
   await pg.waitForTimeout(300);
   const lad = await pg.evaluate(() => { const m = document.querySelector('.modal, #modal, .mdl') || document.body; return m.innerText });

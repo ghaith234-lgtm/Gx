@@ -33,7 +33,7 @@ const FULL = [   // [name, opener] — every kind of big window
 ];
 const SMALL = [
   ['🗑 متأكد؟', "askConfirm('🗑 حذف البوت؟','سيُلغى كل أوامره.',()=>{})"], ['🛡️ الدرع', "dcaShield(DATA.bots.find(b=>b.bot_type==='dca'))"],
-  ['🏁 آخر دورة', "dcaLast(DATA.bots.find(b=>b.bot_type==='dca'))"], ['🛒 اشتري هسه', "recNow(DATA.bots.find(b=>b.bot_type==='rec_buy'))"],
+  ['🏁 آخر دورة', "dcaLast(DATA.bots.find(b=>b.bot_type==='dca'))"], ['🛒 شراء الآن', "recNow(DATA.bots.find(b=>b.bot_type==='rec_buy'))"],
   ['📏 النطاق', "recRange(DATA.bots.find(b=>b.bot_type==='rec_buy'))"],
 ];
 (async () => {
