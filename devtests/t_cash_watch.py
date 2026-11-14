@@ -215,9 +215,11 @@ ok("B · the balance flapping 3$ ⇄ 12$ every 10 minutes: one message, no «bac
 g = fresh()
 d2 = mkbot("own", floor=76.0, cp=74.0)
 m.bot_dirs = lambda: {d2: {"dir": d2, "symbol": SYM, "cfg": dict(CFG, symbol=SYM)}}
+_de0 = len(m.DASH_EVENTS)
 round_(g, snapof([d2], 74.0), 3, T)
 round_(g, snapof([d2], 74.0), 3, T + 600)
 f_a = stf(d2)["buy_floor"]
+_quiet = not any("⏸💵" in e["msg"] for e in m.DASH_EVENTS[:len(m.DASH_EVENTS) - _de0])
 round_(g, snapof([d2], 79.0), 3, T + 1200)
 f_b = stf(d2)["buy_floor"]
 for j in range(5):
@@ -225,6 +227,8 @@ for j in range(5):
 f_c = stf(d2)["buy_floor"]
 ok(f"… the owner's floor (76, the price under it): kept while it is above the price ({f_a}) · moved up with the price ({f_b}) · back to 76 when the dollars are ({f_c})",
    f_a == 76.0 and 79.0 < f_b <= 79.0 * 1.0035 and f_c == 76.0, (f_a, f_b, f_c))
+ok("… and while the owner's floor already covers the price nothing changed ⇒ no «⏸💵 أُوقف الشراء تلقائياً» line (p73)", _quiet,
+   [e["msg"][:80] for e in m.DASH_EVENTS[:4]])
 # the owner presses ▶️ while paused
 g = fresh()
 d3 = mkbot("touch")

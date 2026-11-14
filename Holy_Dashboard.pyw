@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.44"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.45"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -9522,6 +9522,8 @@ def _cw_pause(k, i, r, d, wid, q, eff, now):
                 return False
         d["bots"][k] = {"wid": wid, "q": q, "sym": i.get("sym"), "type": i.get("type"), "orig": cur, "set": new,
                         "ts": now, "need": need, "freed": round(freed, 6), "moves": 0}
+        if new <= cur * (1 + 1e-9):
+            return True                                  # 🔕 v3.36.45: أرضيتك فوق السعر أصلاً ⇒ ما تغيّر شي ⇒ ولا سطر «أُوقف» (نتذكرها بس)
         _dash_event(i.get("sym") or "", f"⏸💵 أُوقف الشراء تلقائياً — الدولار الحر ({max(0.0, eff):.2f}$) لا يكفي أمر الشراء ({need:g}$) · "
                                         f"الأرضية {_px_s(new)} فوق السعر بقليل: كل مستوى ينزل إليه السعر يُحفظ ويُشترى بأمر واحد حين يعود الدولار"
                                         + (f" · أرضيتك {_px_s(cur)} تعود بعدها" if cur > 0 else ""))
