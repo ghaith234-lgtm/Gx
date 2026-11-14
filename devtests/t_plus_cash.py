@@ -7,6 +7,7 @@
 #      10 minutes) · the one «💵 … ما يكفي ولا درجة» line says why (a reminder every 6 hours) · a refused buy rests 1 ⇒ 10 minutes
 #      (its line once, then every ~6 hours) instead of a line and a refused order every minute
 #   ② the dollars back ⇒ the stored levels are bought in one order (as many as the dollars cover) and the line says how many
+#   ④ (found on the way · p66) a new bot reads the coin's price step BEFORE its first ladder — it laid 4 decimals on a 0.01 coin ⇒ refused
 #   ③ the books stay whole: the coins and the dollars the engine thinks it has match the sandbox wallet's · profit only from sells
 #   python3 devtests/t_plus_cash.py [Holy_Dashboard.pyw] [-q] [--range]   (--range: the 🎚️ range bot, the same scenario)
 import importlib.machinery, importlib.util, json, math, os, re, shutil, sys, tempfile, urllib.request
@@ -129,6 +130,9 @@ ok(f"① … and the exchange is not pressed: {nrej} refused buy(s) in {I_BACK -
    1 <= nrej <= (I_BACK - I_RESUME) // 10 + 6, nrej)
 got = [e["msg"] for e in after if "[استئناف الشراء]" in e["msg"]]
 ok("② dollars back ⇒ the stored levels go out in one order and the line says how many", got and re.search(r"تنفيذ \d+", got[0]), got[:2] or [e["msg"] for e in after][:6])
+pxrej = [(round((t - m._BT_T0) / DT), sc) for t, sc in r["ex"].rejects if sc == "51000"]
+ok("④ the first ladder goes out on the coin's price step (the step is read before it · no «Parameter px error» — it refused the first 8 orders)",
+   not pxrej and not any("Parameter px error" in e["msg"] for e in L), pxrej[:8])
 st = EV["state"] or {}
 ok("③ the engine's state is whole at the end (it saved · no aggregated order left half-known)", st and not st.get("cu_pending"), list(st)[:12])
 _nm = "t_plus_cash" + (" --range" if KIND == "grid_range" else "")
