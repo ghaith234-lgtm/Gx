@@ -5950,7 +5950,7 @@ v3.21.2: **6/36 سليم** — العدّاد 4 والسعر رجع لـ0.995 ·
 | `ui_demo` (جديد) | 7 ✅ — الترتيب والخط · «🧪 ديمو» وحدها · المُراكِم فوق الخط · العدّاد · ولا مجموع · النماذج الخمسة |
 | `ui_tut` (جديد) | 7 ✅ — الزر بكل بطاقة · الأقسام الخمسة للأنواع التسعة · المثال يتحرك · ⏸ · الغلق يوقفه |
 | الانحدار الكامل | ✅ كلها (52) — `t_style` 5 · `t_fonts` 10 · `t_windows` 4 · `t_misc` 13 · `t_botcode` 4 · `t_rates` 8 · `t_alerts` 11 · `t_signals` 18 · `t_card_periods` 5 · `t_gridup` 9 · `t_app20` 31 · `t_bt_real` 21 · `t_plus_cash` 9 (+`--range` 9 · `--grid` 9) · `t_plus_paths` 8 (+`--range` · `--grid` · `--ri` · `--grid --ri` · `--range --ri` 8) · `t_cash_watch` 22 · `t_step_pause` 14 (+`--ri` 14) · **`t_demo` 11 · `--kind=grid --ri` 12 · `--kind=grid_step` 11 · `--kind=dca_buy` 10 · `--kind=rec_buy` 10 · `--kind=rec_va` 10 · `ui_demo` 7 · `ui_tut` 7** · `ui_themes` 8 · `ui_win20` 11 · `ui_live` 48 · `ui_device` 10 · `ui_bgtone` 14 · `ui_fonts` 10 · `ui_settings` 24 · `ui_smooth` 12 · `ui_windows` 19 · `ui_skins` 25 · `ui_misc` 7 · `ui_resize` 4 · `t_first` 27 · `bt3615_test` 25 · `t_ri_dash` 16 · `ui_first` 11 · `ui_card` 17 · `ui_ri` 10 · `ui_full` 15 · `ui_lines` 9 |
-| المحاكيات (تشغيل 109) | __EMU__ |
+| المحاكيات (تشغيل 109) | ✅ أندرويد 9: 8 · أندرويد 11: 34 · أندرويد 14: 70 — **ولا فشل** |
 
 ## ٧ر١٣٢ · v3.36.45 — ♾️ نفس تصليحات البلس للشبكة اللانهائية (بموافقة المالك) · 🪜 إيقاف الشراء/البيع بالمتدرج بنفس نمط الشبكي (العدّاد بالكرت) · 🔕 سطر «أُوقف» الكاذب
 
