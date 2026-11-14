@@ -370,9 +370,9 @@ if want("stall"):
     b.run(walk([P0, round(bp1 * 0.999, 4), round(bp1 * 0.999, 4)], 30) + [("do", hang)]
           + walk([round(bp1 * 1.0080, 4)] * 3, 30) + walk([round(P0 * 1.02, 4)] * 400, 10))
     stall = [r for r in gd.why if "تحرك" in r]
-    ok("… a hung 🪜 (alive, its loop doing nothing) while the price crossed its 3 sells: still caught ⇒ «☠️ … ما يشتغل صح» "
-       "(its orders filled at OKX and not handled · the price moved past its sells and nothing filled)",
-       len([e for e in gd.ev if e[1] == "bot"]) == 1 and stall and any("ما عالجها" in r for r in gd.why), (gd.ev[:3], gd.why))
+    ok("… a hung 🪜 (alive, its loop doing nothing) while the price crossed its 3 sells: still caught ⇒ «☠️ … لا يعمل بشكل صحيح» "
+       "(its orders filled at OKX and not handled · the price moved past its sells and nothing filled)",   # v3.36.42: the texts are MSA
+       len([e for e in gd.ev if e[1] == "bot"]) == 1 and stall and any(("لم يعالجها" in r or "ما عالجها" in r) for r in gd.why), (gd.ev[:3], gd.why))
 
 
 # ─────────────── ③ the accumulator ───────────────
