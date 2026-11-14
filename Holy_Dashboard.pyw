@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.46"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.47"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -23426,6 +23426,11 @@ body.boot .card{animation:rise .6s var(--ease) both;animation-delay:calc(var(--i
 .sym{font-weight:700;font-size:15.5px;display:flex;align-items:center;gap:7px}
 .chip{font-size:10px;padding:2px 8px;border-radius:99px;border:1px solid var(--line);color:var(--mut)}
 .chip.demo{color:var(--cyan);border-color:var(--line2)}
+.tutq{display:inline-block;margin-inline-start:4px;padding:1px 6px;border-radius:8px;border:1px solid var(--line2);background:rgb(var(--vio-rgb)/.12);font-size:12px;cursor:help}
+.tutq:hover{background:rgb(var(--vio-rgb)/.25)}
+.tutrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0 10px}.tutrow span{color:var(--mut);font-size:12.5px}
+.tutrow button{font-size:12px;padding:5px 11px}
+.tutbk{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 6px}.tutbk small{color:var(--mut2);font-size:11.5px}
 .ctut{font-size:15px}
 .tutsec{margin:14px 0 4px}.tutsec h3{margin:0 0 8px;font-size:16px;color:var(--vio)}.tutsec p{margin:0 0 8px;line-height:1.9;color:var(--tx2)}
 .tutsteps{margin:0;padding-inline-start:22px;line-height:1.9}.tutsteps li{margin:0 0 6px;color:var(--tx2)}.tutsteps b{color:var(--tx)}
@@ -25411,14 +25416,12 @@ const TUT_FAQ=[
   ['هل الربح مضمون؟','لا. البوتات تربح من التذبذب، لكن إن هبط السعر كثيراً وطويلاً تبقى عملات بسعر أقل من كلفتها حتى يعود.'],
   ['هل يعمل بوتان على عملة واحدة؟','نعم وبالمحفظة نفسها، والرقابة 🛡️ تتأكد أن لكل بوت عملاته ودولاره (المتدرج: بوت واحد لكل عملة).']
 ];
-function tutMark(el,b){if(el._tut)return;const s=el.querySelector('.cset');if(!s)return;
-  const t=document.createElement('button');t.className='ctut';t.textContent='📖';t.title='📖 كيف يعمل هذا البوت — شرح ومثال متحرك وأسئلة';
-  t.onclick=e=>{e.stopPropagation();openTut(b.dir)};s.parentNode.insertBefore(t,s);el._tut=1}
-function openTut(dir){
-  const b=(typeof botOf==='function'&&botOf(dir))||{};const k=TUT[b.bot_type]?b.bot_type:'grid',T=TUT[k];
+function openTutKind(kind,back){
+  const b={};const k=TUT[kind]?kind:'grid',T=TUT[k];
   const ico=(b.ico)||({grid:'♾️',grid_plus:'➕',grid_range:'🎚️',grid_step:'🪜',dca_buy:'📈',dca:'📉',rec_buy:'🔁',rec_sell:'🔂',rec_va:'💹'}[k]||'🤖');
   const sec=(i,h)=>`<div class="tutsec"><h3>${i}</h3>${h}</div>`;
-  let h=`<h2>📖 كيف يعمل بوت ${ico} ${T.t}${b.symbol?` — <span class="num">${b.symbol}</span>`:''}</h2>`;
+  let h=`<h2>📖 كيف يعمل بوت ${ico} ${T.t}</h2>`;
+  if(back&&TUT_STASH)h+='<div class="tutbk"><button class="primary" onclick="tutBack()">↩️ رجوع إلى النموذج</button><small>ما كتبته في النموذج باقٍ كما هو</small></div>';
   h+=sec('💡 الفكرة',T.idea.map(p=>`<p>${p}</p>`).join(''));
   h+=sec('🧩 خطوة بخطوة',`<ol class="tutsteps">${T.steps.map(s=>`<li><b>${s[0]}</b> — ${s[1]}</li>`).join('')}</ol>`);
   h+=sec('🎬 مثال متحرك',`<div class="tutanim"><svg id="tutSvg" viewBox="0 0 600 260" preserveAspectRatio="none"></svg>
@@ -25496,6 +25499,10 @@ function tutDraw(S){const svg=document.getElementById('tutSvg');if(!svg)return;c
   if(S.k==='va'){const val=S.q*(S.pts[n-1]||100),m=200;h+=`<rect x="8" y="${H-10-S.tgt/m*80}" width="14" height="${S.tgt/m*80}" style="fill:rgb(var(--vio-rgb)/.6)"/><rect x="26" y="${H-10-val/m*80}" width="14" height="${val/m*80}" style="fill:rgb(var(--cyan-rgb)/.6)"/>`}
   svg.innerHTML=h;const e=document.getElementById('tutEv'),pl=document.getElementById('tutPl');
   if(e)e.textContent=S.ev;if(pl)pl.textContent=(S.unit===' عملة'?'الربح: '+S.pl.toFixed(4)+' عملة':'الربح: '+S.pl.toFixed(2)+'$')}
+/* 📖 v3.36.47: الشرح داخل نماذج النشر — زر لكل نوع (المالك: «عند الدخول الى زر الشبكي فيه ثلاث بوتات كل بوت فيه زر اضغط عليه يخرج لي شرح») */
+let TUT_STASH=null;
+function tutQ(ev,k){if(ev){ev.preventDefault();ev.stopPropagation()}const m=$('#modal');TUT_STASH=(m&&m.querySelector('.hwb'))||null;openTutKind(k,true)}
+function tutBack(){const m=$('#modal');if(!m||!TUT_STASH)return;TUT_RUN=null;const cur=m.querySelector('.hwb');if(cur)m.replaceChild(TUT_STASH,cur);else m.appendChild(TUT_STASH);TUT_STASH=null;try{hwSync()}catch(e){}}
 function walletKey(b){return b.wid!=null?'w'+b.wid:'b'+(+((b.cover||{}).have_usdt)||0).toFixed(2)}
 function vbuyCost(b){if(b.vbuy_usd!=null)return +b.vbuy_usd||0;let v=0;for(const x of (b.ladder&&b.ladder.vbuys)||[])if(x.p>0&&x.q>0)v+=x.p*x.q;return v}
 function calcFund(all){
@@ -25538,7 +25545,7 @@ function syncCards(allBots){
     let el=CARDS.get(b.dir);
     if(!el){el=buildCard(b,0);CARDS.set(b.dir,el);cardLockDeco(el);el._caNew=1}
     el.style.display='';
-    updCard(el,b,bench);skinUpd(el,b);caNumChk(el,b);demoMark(el,b);tutMark(el,b)});   // 📖 v3.36.46
+    updCard(el,b,bench);skinUpd(el,b);caNumChk(el,b);demoMark(el,b)});
   // رتّب الـ DOM حسب الترتيب الجديد — فقط إذا الترتيب تغيّر فعلاً
   // (نقل عنصر فيه iframe يعيد تحميل الشارت! فلا ننقل إلا عند الحاجة)
   const grid=$('#grid');
@@ -26343,6 +26350,7 @@ async function openDeployVa(){
   _vaAt={ctx:'pre',i:0,A:null,sig:'',busy:0};
   let ws=[];try{const s=await api('/api/settings');ws=s.wallets||[]}catch(e){}
   showModal(`<h2 style="color:var(--cyan)">💹 نشر بوت «مسار القيمة»</h2>
+  <div class="tutrow"><span>📖 شرح:</span><button type="button" onclick="tutQ(event,'rec_va')">💹 مسار القيمة</button></div>
   <p style="font-size:12.5px;color:var(--mut);line-height:1.9;margin:0 0 8px">تحدّد <b>قيمة العملة المطلوبة</b> في محفظة البوت، وعند كل خطوة يشتري الفرق إذا نقصت ويبيع الزائد إذا زادت — دون أن تحدّد أسعاراً.</p>
   <input type="hidden" id="vd_mode" value="fixed">
   <div class="gtsel vdmode" style="display:flex;gap:6px;margin:8px 0">
@@ -26770,6 +26778,7 @@ async function openDeployRec(){
     <option value="rec_buy">🟢 شرائي — يشتري بمبلغ دولار كل فترة ويبيع بالربح (الربح دولار)</option>
     <option value="rec_sell">🔴 بيعي — يبيع عملات كل فترة ويرجع يشتري أكثر (الربح عملة)</option>
   </select></div>
+  <div class="tutrow"><span>📖 شرح:</span><button type="button" onclick="tutQ(event,'rec_buy')">🟢 الشرائي</button><button type="button" onclick="tutQ(event,'rec_sell')">🔴 البيعي</button></div>
   <input type="hidden" id="rd_mode" value="lots">
   <div class="gtsel rdmode" style="display:flex;gap:6px;margin:8px 0">
     <button type="button" data-rm="lots" onclick="recMode('lots')" style="flex:1">🧩 كل أمر على حدا</button>
@@ -30287,6 +30296,7 @@ async function openDeployDca(){
     <option value="dca">📉 بيعي — يبيع عند الصعود، يجمّع العملة (الربح بالعملة)</option>
     <option value="dca_buy">📈 شرائي — يشتري عند النزول، يجمّع الدولار (الربح بالدولار)</option>
   </select></div>
+  <div class="tutrow"><span>📖 شرح:</span><button type="button" onclick="tutQ(event,'dca')">📉 البيعي</button><button type="button" onclick="tutQ(event,'dca_buy')">📈 الشرائي</button></div>
   <p id="dn_desc" style="color:var(--mut);font-size:12px;margin:8px 0 14px">يبيع عند الصعود، المتوسط يرتفع، يشتري عند النزول — الربح بالعملة. اضبط الأرقام وشوف الجدول قبل التشغيل.</p>
   <div class="frm">
     <div class="fld"><label>الرمز (مثل XRP-USDT)</label><input id="dn_sym" style="text-transform:uppercase" placeholder="XRP-USDT" oninput="shareCheck('dn_share',this.value,{wallet:($('#dn_wallet')||{}).value})"></div>
@@ -30589,6 +30599,7 @@ async function openDeployStep(pre){pre=pre||{};
   let ws=[];try{const s=await api('/api/settings');ws=s.wallets||[]}catch(e){}
   const v=(k,d)=>pre[k]!=null&&pre[k]!==''?pre[k]:d;
   showModal(`<h2 style="color:var(--cyan)">🪜 نشر «الشبكي المتدرج»</h2>
+  <div class="tutrow"><span>📖 شرح:</span><button type="button" onclick="tutQ(event,'grid_step')">🪜 الشبكي المتدرج</button></div>
   <p class="sthelp">مثل الشبكة اللانهائية، لكن <b>كل شراء ثابت في مكانه</b> وكميته تُقسَّم على <b>عدة بيعات فوقه</b> بالتدريج. كل بيعة تُنفَّذ تعيد شراء <b>الكمية نفسها</b> بسعر شرائها الثابت ⇐ الربح بالدولار والعملة تبقى كما هي. فوق سعر البداية تبيع من عملاتك كأنها اشتُريت بسعر مستواها، وتحته شراءات ثابتة حتى الأرضية.</p>
   <div class="frm">
     <div class="fld"><label>الرمز (مثل XRP-USDT)</label><input id="st_sym" style="text-transform:uppercase" placeholder="XRP-USDT" value="${gEsc(String(v('symbol','')))}" oninput="stPreview()"></div>
@@ -30654,9 +30665,9 @@ async function openDeploy(pre){pre=pre||{};
   const _gt0=['grid','grid_range','grid_plus'].includes(pre.bot_type)?pre.bot_type:((+pre.lower_price>0||+pre.upper_price>0)?'grid_range':(+pre.buy_offset>0?'grid_plus':'grid'));
   showModal(`<h2>➕ نشر بوت جرد</h2>
   <div class="gtsel" style="display:flex;gap:6px;margin:4px 0 8px">
-    <button type="button" data-gt="grid" onclick="gType('grid')" style="flex:1">♾️ لانهائية</button>
-    <button type="button" data-gt="grid_range" onclick="gType('grid_range')" style="flex:1">🎚️ مدى</button>
-    <button type="button" data-gt="grid_plus" onclick="gType('grid_plus')" style="flex:1">➕ بلس</button>
+    <button type="button" data-gt="grid" onclick="gType('grid')" style="flex:1">♾️ لانهائية <span class="tutq" title="شرح الشبكة اللانهائية — مثال متحرك وأسئلة" onclick="tutQ(event,'grid')">📖</span></button>
+    <button type="button" data-gt="grid_range" onclick="gType('grid_range')" style="flex:1">🎚️ مدى <span class="tutq" title="شرح المدى — مثال متحرك وأسئلة" onclick="tutQ(event,'grid_range')">📖</span></button>
+    <button type="button" data-gt="grid_plus" onclick="gType('grid_plus')" style="flex:1">➕ بلس <span class="tutq" title="شرح البلس — مثال متحرك وأسئلة" onclick="tutQ(event,'grid_plus')">📖</span></button>
   </div>
   <input type="hidden" id="n_gtype" value="${_gt0}">
   <p id="n_gtype_h" style="color:var(--mut);font-size:12px;margin-bottom:12px"></p>
