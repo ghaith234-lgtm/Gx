@@ -93,8 +93,8 @@ adb shell dumpsys appwidget > $OUT/aw0.txt
 grep -q "cmp:ComponentInfo{$WCMP}" $OUT/aw0.txt && say "PASS 1.9: Android lists the Holy widget ($(grep -A3 "cmp:ComponentInfo{$WCMP}" $OUT/aw0.txt | grep -m2 -oE "min=\([^)]*\)|updatePeriodMillis=[0-9]+" | tr '\n' ' '))" || say "FAIL 1.9: Android doesn't list the Holy widget"
 tap "اتصال" setup
 sleep 18; dump dash1
-if grep -q "متصفح النظام قديم" $OUT/ui_dash1.xml; then say "PASS old system WebView ⇒ the app asks to update it"; tap "بعدين" dash1; sleep 2; dump dash1; fi
-if grep -q "بعدين" $OUT/ui_dash1.xml; then say "PASS battery dialog shown after linking"; tap "بعدين" dash1; sleep 2; fi
+if grep -q "متصفح النظام قديم" $OUT/ui_dash1.xml; then say "PASS old system WebView ⇒ the app asks to update it"; tap "لاحقاً" dash1; sleep 2; dump dash1; fi
+if grep -q "لاحقاً" $OUT/ui_dash1.xml; then say "PASS battery dialog shown after linking"; tap "لاحقاً" dash1; sleep 2; fi   # 2.2: «بعدين» ⇒ «لاحقاً» (MSA)
 sleep 3; dump dash; shot dash
 api /api/app/devices '{"act":"list"}' | sed 's/^/HOLYCI devices: /'
 adb shell dumpsys activity services $P | grep -E "ServiceRecord|isForeground|foregroundServiceType|types=" | head -6 | sed 's/^/HOLYCI svc: /'
@@ -282,7 +282,7 @@ fi
 # ── 1.5 🔐 fingerprint lock: a test PIN on the phone ⇒ turn on (asks the PIN) ⇒ 33 s in the background ⇒ locked ⇒ PIN ⇒ open ⇒ turn off ⇒ PIN removed ──
 #    (the emulator has no finger ⇒ the system sheet offers the phone's PIN — the same path a phone without a fingerprint takes)
 pin(){ sleep 4; adb shell input text 1111; sleep 1; adb shell input keyevent 66; sleep 5; }
-locked(){ grep -qE "Holy مقفول|افتح لوحتك" $OUT/ui_$1.xml; }
+locked(){ grep -qE "Holy (مقفول|مقفل)|افتح لوحتك" $OUT/ui_$1.xml; }
 dashv(){ grep -qE "The Holy Dashboard|v3\.[0-9]+" $OUT/ui_$1.xml; }
 adb shell locksettings set-pin 1111 >/dev/null 2>&1 && say "test PIN set" || say "INFO couldn't set a test PIN"
 adb shell am start -n $P/.MainActivity --es go app >/dev/null; sleep 7; dump lk1
@@ -291,7 +291,7 @@ if grep -q "قفل بالبصمة" $OUT/ui_lk1.xml; then
   grep -qE "تأكيد تشغيل القفل|Enter your PIN|Use PIN|Enter PIN" $OUT/ui_lk1p.xml && say "PASS turning it on asks the phone's PIN/fingerprint first" || say "FAIL turning it on didn't ask ($(python3 ci/ci_tools.py texts $OUT/ui_lk1p.xml lk1p | cut -c1-160))"
   pin; dump lk1q
   if pf | grep -q "<map"; then pf | grep -q '<boolean name="lock" value="true"' && say "PASS lock turned ON after the PIN" || say "FAIL lock not on: $(pf | grep -o 'name="lock"[^/]*')"
-  else grep -q "شغّال — يطلب البصمة" $OUT/ui_lk1q.xml && say "PASS lock turned ON after the PIN (panel says شغّال)" || say "FAIL lock not on (panel)"; fi
+  else grep -qE "(شغّال|مفعّل) — يطلب البصمة" $OUT/ui_lk1q.xml && say "PASS lock turned ON after the PIN (panel says شغّال)" || say "FAIL lock not on (panel)"; fi
   adb shell input keyevent KEYCODE_HOME; sleep 4
   adb shell am start -n $P/.MainActivity >/dev/null; sleep 5; dump lk2
   if locked lk2; then say "FAIL back within 30 s ⇒ asked again (should open straight away)"; elif dashv lk2; then say "PASS back within 30 s ⇒ open without a new fingerprint"; else say "FAIL back within 30 s ⇒ screen unreadable"; fi
@@ -299,7 +299,7 @@ if grep -q "قفل بالبصمة" $OUT/ui_lk1.xml; then
   adb shell am start -n $P/.MainActivity >/dev/null; sleep 5; dump lk3; shot lk3
   locked lk3 && say "PASS back after 34 s ⇒ locked (dashboard covered · asks)" || say "FAIL back after 34 s ⇒ not locked ($(python3 ci/ci_tools.py texts $OUT/ui_lk3.xml lk3 | cut -c1-160))"
   pin; dump lk4; shot lk4
-  if grep -q "Holy مقفول" $OUT/ui_lk4.xml; then say "FAIL still locked after the PIN"; elif dashv lk4; then say "PASS PIN ⇒ dashboard open again"; else say "FAIL after the PIN: screen unreadable"; fi
+  if grep -qE "Holy (مقفول|مقفل)" $OUT/ui_lk4.xml; then say "FAIL still locked after the PIN"; elif dashv lk4; then say "PASS PIN ⇒ dashboard open again"; else say "FAIL after the PIN: screen unreadable"; fi
   # 1.9: the widget is a door, not a key — after 34 s away a tap on it lands on the lock first
   if [ -n "$WX" ]; then
     adb shell input keyevent KEYCODE_HOME; sleep 34; adb shell input tap $WX $WY; sleep 5; dump lkw; shot lkw
@@ -337,11 +337,11 @@ if grep -q "قفل بالبصمة" $OUT/ui_lk1.xml; then
     if grep -q "لوحة التحكم محمية" $OUT/ui_bio4.xml; then say "FAIL 1.7: the password page showed after the PIN (the fingerprint should open it)"
     elif dashv bio4; then say "PASS 1.7: session gone + PIN/fingerprint only ⇒ dashboard open — no password typed"
     else say "FAIL 1.7: after the PIN: $(python3 ci/ci_tools.py texts $OUT/ui_bio4.xml bio4 | cut -c1-160)"; fi
-    grep -q "فتح اللوحة بالبصمة انرفض" /tmp/holy/dash.log && say "INFO a refused fingerprint unlock in the log (the stale key — expected once)"
+    grep -qE "فتح اللوحة بالبصمة انرفض|رُفض فتح اللوحة بالبصمة" /tmp/holy/dash.log && say "INFO a refused fingerprint unlock in the log (the stale key — expected once)"
   else say "FAIL 1.7: no password page after the password was set ($(python3 ci/ci_tools.py texts $OUT/ui_bio1.xml bio1 | cut -c1-160))"; fi
   adb shell am start -n $P/.MainActivity --es go app >/dev/null; sleep 6; seek "إطفاء" lk5; pin
   if pf | grep -q "<map"; then pf | grep -q '<boolean name="lock" value="false"' && say "PASS lock turned OFF after the PIN" || say "FAIL lock still on: $(pf | grep -o 'name="lock"[^/]*')"
-  else dump lk6; grep -q "مطفي — أي واحد" $OUT/ui_lk6.xml && say "PASS lock turned OFF after the PIN (panel says مطفي)" || say "FAIL lock still on (panel)"; fi
+  else dump lk6; grep -qE "مطفي — أي واحد|متوقف — أي شخص" $OUT/ui_lk6.xml && say "PASS lock turned OFF after the PIN (panel says مطفي)" || say "FAIL lock still on (panel)"; fi
   sleep 4; login
   [ "$(bio_of)" = "False" ] && say "PASS 1.7: lock off ⇒ the fingerprint no longer opens the dashboard (📱 list)" || say "FAIL 1.7: still linked after the lock went off ($(bio_of))"
   pf | grep -q "<map" && { [ "$(pkey)" = "0" ] && say "PASS 1.7: …and the app dropped its key" || say "FAIL 1.7: the app kept its key"; }
@@ -400,7 +400,7 @@ if [ -z "$id" ]; then say "SKIP unlink test — this phone never linked (its sys
   say "unlinking device $id"
   api /api/app/devices "{\"act\":\"del\",\"id\":\"$id\"}" | head -c 100; echo
   sleep 10
-  adb shell dumpsys notification --noredact | grep -q "انفصل هذا الموبايل" && say "PASS unlinked phone shows «انفصل» at once" || say "FAIL no unlink notice"
+  adb shell dumpsys notification --noredact | grep -qE "انفصل هذا الموبايل|فُصل هذا الهاتف" && say "PASS unlinked phone shows «انفصل» at once" || say "FAIL no unlink notice"
   adb shell am force-stop $P; adb shell am start -n $P/.MainActivity >/dev/null; sleep 15
   n=$(curl -s -X POST localhost:8099/api/app/devices -H 'Content-Type: application/json' -d '{"act":"list"}' | python3 -c "import sys,json;print(len(json.load(sys.stdin)['devs']))")
   [ "$n" = "0" ] && say "PASS no silent re-link after unlink" || say "FAIL re-linked by itself ($n)"
