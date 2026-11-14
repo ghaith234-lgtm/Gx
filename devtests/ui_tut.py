@@ -1,5 +1,5 @@
 # 📖 v3.36.46–47 — the tutorial: the owner (14-11) «اريد كل بوت فيه زر تعليم يوضح كيف شغل البوت بالتفصيل …» ⇒ (v3.36.47) inside each deploy form,
-#   one 📖 per bot kind. Every card kind in a closed folder (devtests/seed_cards.py: fake keys · no network · nothing launched) · the steps in ui_tut.js
+#   one 📖 per form beside ✕ (v3.36.48). Every card kind in a closed folder (devtests/seed_cards.py: fake keys · no network · nothing launched) · the steps in ui_tut.js
 #   python3 devtests/ui_tut.py [Holy_Dashboard.pyw] [-q]        (run with `unset TMPDIR`)
 import os, shutil, socket, subprocess, sys, tempfile
 
