@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.51"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.52"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -7682,6 +7682,7 @@ def ledger_tick():
                 ent["_migrated"] = datetime.now().strftime("%Y-%m-%d %H:%M")
             else:
                 ent = {"last_seen_total": 0.0, "daily": {}, "monthly": {}, "trades_daily": {}, "hourly": {}}
+                ent["_first"] = True                        # 📒 v3.36.52: أول مرة يشوفه الدفتر
         ent.setdefault("symbol", b["symbol"])
         _w = _gd_wid(b["cfg"].get("api_key")) if str(b["cfg"].get("api_key") or "").strip() else ""
         if _w and ent.get("w") != _w:                # 👛 v3.22.9: محفظة البوت محفوظة بسطره
@@ -7692,7 +7693,9 @@ def ledger_tick():
         if diff > 1e-9:
             diff = diff * _safe(net_factor, b, default=1.0)   # 📉 صافي بعد العمولة
             # 📒 v3.22.6: ربح تراكم بفترة ما انشافت وعبرت منتصف الليل (اللوحة/الحاسبة طافية) ⇒ على أيامه الحقيقية من سجل الصفقات
-            parts = _safe(_hist_window, b, gap_t, now_t, default=None) if gap_cross else None
+            # 📒 v3.36.52: أول مرة يشوف الدفتر بوتاً له ربح سابق ⇒ على أيام سطور بيعه (كان كله على «اليوم»)
+            parts = (_safe(_hist_window, b, 0.0, now_t, default=None) if ent.get("_first") else
+                     _safe(_hist_window, b, gap_t, now_t, default=None) if gap_cross else None)
             _book_split(ent.setdefault("daily", {}), diff, parts, today)
             journal("profit", f"💵 ربح محرر {diff:+.4f}$ (صافي بعد العمولة)" + (f" — موزّع على أيامه: {', '.join(sorted(parts))}" if parts else ""),
                     "ok", bot=key, sym=b["symbol"], net=round(diff, 6), card_total=tot, days=(parts or {today: 1}))
@@ -7702,6 +7705,9 @@ def ledger_tick():
             ent["last_seen_total"] = tot
             changed = True
             journal("profit", f"↩️ نزل ربح البطاقة ({last:.4f} ⇐ {tot:.4f}) — أُعيد بناؤه؟ نزل خط الأساس بلا خصم من الدفتر", "warn", bot=key, sym=b["symbol"])
+    for _e in led.values():                                 # 📒 v3.36.52: علامة «أول مرة» لنبضة واحدة فقط
+        if isinstance(_e, dict) and _e.pop("_first", None):
+            changed = True
     if changed:
         try: save_json_atomic(LEDGER, led)
         except Exception: pass
