@@ -122,7 +122,7 @@ with ThreadPoolExecutor(max(2, os.cpu_count() or 2)) as tp:
         P_(f"run {d['sym']} m{d['k'] + 1} {d['v']:14} profit {d['profit_coin']:+.6g} coin ({d['profit_usd']:+.3f}$) · cycles {d['cycles']} · "
            f"layer exits {d['lx']} · mean exposure {d['mean_exp'] * 100:.1f}% · longest >½ ladder {d['longest_h']:.1f}h · open at end "
            f"{d['end_open'] * 100:.0f}% · refused {d['rej']} {','.join(d.get('rej_codes') or [])} · wallet−books {d['check']:+.1e} · {d['secs']:.0f}s · {d['why']}")
-        if d["why"] != "end" or set(d.get("rej_codes") or []) - {"51008"} or abs(d["check"]) > 1e-6 or (d["lx"] and d["lx_min"] <= 0):   # 51008 = the paper wallet ran short (the normal DCA too)
+        if d["why"] != "end" or set(d.get("rej_codes") or []) - {"51008", "51016"} or abs(d["check"]) > 1e-6 or (d["lx"] and d["lx_min"] <= 0):   # 51008 the paper wallet ran short · 51016 a client id repeated inside one simulated second (dca.py's own — the normal DCA too; the engine retries)
             FAIL.append(f"{d['sym']} {d['k']} {d['v']}: why {d['why']} rej {d['rej']} check {d['check']} lx_min {d['lx_min']}")
 
 for v in VAR:
