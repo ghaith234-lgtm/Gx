@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.53"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.54"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -24109,6 +24109,9 @@ html.scrolling .orb{animation-play-state:paused}   /* 🎨 v3.26.9: وقت ال�
 .hgo-flash{animation:hgoF 1.1s ease 3;position:relative;z-index:2}
 @keyframes hgoF{0%,100%{box-shadow:0 0 0 0 rgb(var(--cyan-rgb)/0)}40%{box-shadow:0 0 0 3px rgb(var(--cyan-rgb)/.85),0 0 28px rgb(var(--vio3-rgb)/.55)}}
 .ap-hero{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,rgb(var(--cyan-rgb)/.12),rgb(var(--vio3-rgb)/.14));border:1px solid rgb(var(--vio3-rgb)/.25);margin-bottom:10px}
+.winold{position:relative;z-index:60;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:8px 12px 0;padding:10px 14px;border-radius:14px;
+  background:linear-gradient(135deg,rgb(var(--cyan-rgb)/.14),rgb(var(--vio3-rgb)/.16));border:1px solid rgb(var(--cyan-rgb)/.45);color:var(--tx);font-size:13px;line-height:1.7}
+.winold span{flex:1 1 320px}.winold button{font-size:12.5px;padding:6px 14px}
 .ap-hero b{font-size:13px;color:var(--tx)}.ap-hero span{font-size:12px;color:var(--mut);line-height:1.7}
 .ap-dl{width:100%;padding:12px;font-size:14px;margin:4px 0 10px}
 .ap-steps{margin:0 0 8px;padding-inline-start:20px;line-height:2;font-size:12.5px;color:var(--mut)}
@@ -29272,6 +29275,22 @@ function winInit(){if(!WINF)return;const R=document.documentElement;R.classList.
   chrome.webview.addEventListener('message',e=>{const d=e.data||{};if(d.t!=='win')return;R.classList.toggle('winmax',!!(d.max||d.fs));
     document.querySelectorAll('#wMax,#mwMax').forEach(b=>{b.textContent=d.max||d.fs?'❐':'☐';b.title=d.max||d.fs?'إرجاع النافذة':'تكبير'})});
   winCmd('state');setTimeout(winHello,1500);addEventListener('resize',()=>{clearTimeout(ht);ht=setTimeout(winHello,600)})}
+/* 💻 v3.36.54: برنامج ويندوز قديم (1.x — بشريط عنوان) ⇒ شريط واضح أعلى اللوحة بتنزيل 2.0 بضغطة · 2.0 بلا WebView2 ⇒ تنصيبه */
+async function winOldBar(){
+  if(!IN_WIN||WINF||document.getElementById('winOld'))return;
+  try{if(+localStorage.getItem('holy_winold_later')>Date.now())return}catch(e){}
+  let W={};try{W=(await api('/api/app/info')).win||{}}catch(e){return}
+  const hv=(()=>{try{return sessionStorage.getItem('holy_win')||''}catch(e){return ''}})();
+  const cur=parseFloat(hv)||1,nv=parseFloat(W.name)||0;if(!nv)return;
+  const old=cur<nv,b=document.createElement('div');b.id='winOld';b.className='winold';
+  b.innerHTML=old?`<span>💻 <b>برنامج ويندوز ${gEsc(W.name)} جاهز</b> — بلا شريط عنوان: أزرار <b dir="ltr">— ☐ ✕</b> بجانب 🔔 داخل اللوحة، وتحريك النافذة من شريطها العلوي. نسختك الحالية ${gEsc(hv||'1')}.</span>
+    <button class="primary" onclick="winOldGet()">⬇️ نزّله وافتحه مرة</button><button onclick="winOldLater()">لاحقاً</button>`
+    :`<span>💻 يعمل البرنامج الآن داخل نافذة Edge (بشريط عنوان) لأن <b>Microsoft Edge WebView2</b> غير منصّب على هذا الحاسوب — نصّبه من موقع Microsoft ثم افتح البرنامج من جديد لتظهر النافذة بلا شريط عنوان.</span>
+    <button onclick="winOldLater()">حسناً</button>`;
+  document.body.insertBefore(b,document.body.firstChild)}
+function winOldGet(){dlFile('/app/holy.exe?u='+encodeURIComponent(location.origin),'TheHolyDashboard.exe');
+  toast('⬇️ افتح الملف المنزّل مرة واحدة — يحل محل البرنامج القديم واختصاراته، ثم أغلق هذه النافذة',true)}
+function winOldLater(){try{localStorage.setItem('holy_winold_later',String(Date.now()+3*864e5))}catch(e){}const b=document.getElementById('winOld');if(b)b.remove()}
 async function openWinPanel(){
   showModal(`<h2>💻 برنامج ويندوز</h2><div id="wn_body" style="color:var(--mut);font-size:12.5px;padding:16px;text-align:center">${LDR('')}</div>
     <div class="mbtns"><button onclick="hideModal()">إغلاق</button></div>`);
@@ -32051,7 +32070,7 @@ const STK=(()=>{
       cracks:fx.filter(e=>e.k==='cr').length,rot:F.rot,
       grab:F.J?{x:(F.J.hip.x+F.J.nk.x)/2,y:(F.J.hip.y+F.J.nk.y)/2}:null}},
     put(x,y){if(!on)return;ball=null;F.play=false;F.rot=0;F.x=x;F.y=y;toAir('fall')}}})();
-tick();schedPoll();applyTheme(uiTheme());STK.boot();setTimeout(rmBoot,3600);try{winInit()}catch(e){}try{glintInit()}catch(e){}try{coverWatch()}catch(e){}try{document.addEventListener('fullscreenchange',fsSync);fsSync()}catch(e){}try{appBioSync()}catch(e){}
+tick();schedPoll();applyTheme(uiTheme());STK.boot();setTimeout(rmBoot,3600);try{winInit()}catch(e){}setTimeout(()=>{try{winOldBar()}catch(e){}},2500);try{glintInit()}catch(e){}try{coverWatch()}catch(e){}try{document.addEventListener('fullscreenchange',fsSync);fsSync()}catch(e){}try{appBioSync()}catch(e){}
 document.body.classList.add('boot');setTimeout(()=>document.body.classList.remove('boot'),1400);
 setInterval(()=>{if(CUR&&$('#tab_log').style.display!=='none')loadHist()},8000);
 </script>
