@@ -97,8 +97,10 @@ const SNAP = `(() => { const c = document.getElementById('hbg'); if (!c || !c.wi
   ok(`🃏 «⋯ القائمة» ⇒ «تكبير + الأزرار بالتتابع»: the sample menu opens and its ${mn.n} buttons come one after another («${mStag.d}») · saved`,
     mn.menu && mStag.a.filter(x => x.c === 'cfx-menu').length === 1 && mStag.a.filter(x => x.c === '' && x.d >= 60).length === 4 && mStag.ls === 'stag' && mStag.on === 'stag', { mStag, mn });
   const v0 = await pg.evaluate(() => +document.getElementById('cfxV').firstChild.nodeValue);
-  const nBoth = await tapCa('num', 'both'); await pg.waitForTimeout(150);
-  const mid = await pg.evaluate(() => +document.getElementById('cfxV').firstChild.nodeValue); await pg.waitForTimeout(800);
+  const nBoth = await tapCa('num', 'both');
+  const mid = await pg.evaluate(async v0 => { const seen = [], t0 = performance.now();   // every frame for 0.8 s — the first value between start and end
+    await new Promise(res => { const f = () => { const n = document.getElementById('cfxV'); if (n) seen.push(+n.firstChild.nodeValue); performance.now() - t0 < 800 ? requestAnimationFrame(f) : res() }; requestAnimationFrame(f) });
+    return seen.find(v => v > v0 + 1e-9 && v < v0 + 0.0613 - 1e-9) }, v0); await pg.waitForTimeout(200);
   const v1 = await pg.evaluate(() => document.getElementById('cfxV').firstChild.nodeValue);
   ok(`🃏 «💰 رقم الربح» ⇒ «عدّ + وميض»: the sample number counts ${v0} → ${v1} (passing ${mid}) and flashes green · the default ⇒ nothing stored`,
     mid > v0 && mid < +v1 && v1 === (v0 + 0.0613).toFixed(4) && nBoth.a.some(x => x.id === 'cfxV') && nBoth.ls === null, { v0, mid, v1, nBoth });
@@ -126,11 +128,11 @@ const SNAP = `(() => { const c = document.getElementById('hbg'); if (!c || !c.wi
     const a = window.__an.filter(x => x.t >= t); return { a: a.map(x => x.c), prof: el._r.profit.getAnimations().length } });
   ok('🃏 the old look: a winning trade on a grid card ⇒ its profit flashes green (it already counts)', r0.prof > 0, r0);
   const r1 = await pg.evaluate(async () => { const b = DATA.bots.find(x => (x.bot_type || 'grid') === 'grid'); const el = CARDS.get(b.dir);
-    const t = performance.now(); syncCards(DATA.bots); el._caT = 0; await new Promise(r => setTimeout(r, 60)); const same = window.__an.filter(x => x.t >= t).length;
+    const t = performance.now(); syncCards(DATA.bots); el._caT = -1e9; await new Promise(r => setTimeout(r, 60)); const same = window.__an.filter(x => x.t >= t).length;
     b.profit = +(+b.profit - 0.1).toFixed(4); syncCards(DATA.bots); await new Promise(r => setTimeout(r, 60)); return { same, down: window.__an.filter(x => x.t >= t).length } });
   ok('🃏 no motion when the number stays the same or goes down', r1.same === 0 && r1.down === 0, r1);
   const r2 = await pg.evaluate(async () => { localStorage.setItem('dash_ca_num', 'pulse'); const b = DATA.bots.find(x => (x.bot_type || 'grid') === 'grid'); const el = CARDS.get(b.dir);
-    el._caT = 0; const t = performance.now(); b.profit = +(+b.profit + 0.3).toFixed(4); syncCards(DATA.bots); await new Promise(r => setTimeout(r, 60));
+    el._caT = -1e9; const t = performance.now(); b.profit = +(+b.profit + 0.3).toFixed(4); syncCards(DATA.bots); await new Promise(r => setTimeout(r, 60));
     localStorage.removeItem('dash_ca_num'); return { card: el.getAnimations().length, a: window.__an.filter(x => x.t >= t).map(x => x.c) } });
   ok('🃏 «نبضة للبطاقة» ⇒ the real card pulses', r2.card > 0 && r2.a.some(c => /\bcard\b/.test(c)), r2);
   const r3 = await pg.evaluate(async () => { const b = DATA.bots.find(x => x.bot_type === 'dca' || x.bot_type === 'dca_buy'); if (!b) return { none: 1 }; const el = CARDS.get(b.dir);
@@ -160,15 +162,20 @@ const SNAP = `(() => { const c = document.getElementById('hbg'); if (!c || !c.wi
     const k0 = await pg.evaluate(async () => { const b = DATA.bots.find(x => (x.bot_type || 'grid') === 'grid'); const el = CARDS.get(b.dir);
       skAct(el, 'menu'); await new Promise(r => setTimeout(r, 40)); const m = el.querySelector('.sk-menu'); const menu = m ? m.getAnimations().length : -1; skAct(el, 'menu');
       const N = () => el.querySelector('.sk-big .v,.sk-kpi>div:first-child>b,.ok-pnl .v'), big = () => { const n = N(); return n && parseFloat(n.firstChild.nodeValue) }; const p0 = big();
-      el._caT = 0; b.profit = +(+b.profit + 0.5).toFixed(4); syncCards(DATA.bots); await new Promise(r => setTimeout(r, 200)); const mid = big();
-      const fl = N().getAnimations().length, unit = N().firstChild.nodeValue.replace(/^[\d.,\s-]+/, ''); await new Promise(r => setTimeout(r, 700)); const p1 = big(), unit1 = N().firstChild.nodeValue.replace(/^[\d.,\s-]+/, '');
+      el._caT = -1e9; b.profit = +(+b.profit + 0.5).toFixed(4); syncCards(DATA.bots);
+      // every frame for 0.9 s: the values it passes · any animation on it. The card allows one motion per 1.5 s (`_caT`) counted from the page's
+      //   start, and this step runs ~1.45 s after the page opens ⇒ `_caT = 0` still blocked it on a fast machine (the old flake) ⇒ `-1e9` clears it
+      const seen = [], t0 = performance.now(); let fl = 0, unit = '';
+      await new Promise(res => { const f = () => { const n = N(); if (n) { const v = big(); if (isFinite(v)) seen.push(v); fl = Math.max(fl, n.getAnimations().length); if (!unit) unit = n.firstChild.nodeValue.replace(/^[\d.,\s-]+/, '') }
+        performance.now() - t0 < 900 ? requestAnimationFrame(f) : res() }; requestAnimationFrame(f) });
+      const p1 = big(), unit1 = N().firstChild.nodeValue.replace(/^[\d.,\s-]+/, ''); const mid = seen.find(v => v > p0 + 1e-9 && v < p1 - 1e-9);
       const bars = el.querySelectorAll('rect.skb').length;
       const rc = DATA.bots.find(x => x.bot_type === 'rec_buy' || x.bot_type === 'rec_sell'); let sec = 'no rec';
       if (rc) { const re = CARDS.get(rc.dir); const w = re._skxe || 'lots'; skAct(re, 'x:' + w); await new Promise(r => setTimeout(r, 40)); skAct(re, 'x:' + w); await new Promise(r => setTimeout(r, 40));
         const n = re._skx.querySelector('[data-skx].on'); sec = n ? n.getAnimations().length : -1 }
       return { menu, p0, mid, p1, fl, bars, sec, unit, unit1 } });
     ok(`🃏 skin ${sk.toUpperCase()}: ⋯ menu grows from its button · the big number counts ${k0.p0} → ${k0.p1} (passing ${k0.mid}) and flashes · a section opens growing (${k0.sec}) · the ladder bars are marked (${k0.bars})`,
-      k0.menu > 0 && k0.mid > k0.p0 && k0.mid < k0.p1 && Math.abs(k0.p1 - k0.p0 - 0.5) < 1e-6 && k0.fl > 0 && k0.sec > 0 && k0.unit === k0.unit1, k0);
+      k0.menu > 0 && k0.mid !== undefined && k0.mid > k0.p0 && k0.mid < k0.p1 && Math.abs(k0.p1 - k0.p0 - 0.5) < 1e-6 && k0.fl > 0 && k0.sec > 0 && k0.unit === k0.unit1, k0);
     await ctx.close();
   }
   // the light mode · the device's «reduce motion» ⇒ the cards stand still (the sample still plays when tapped)
@@ -176,7 +183,7 @@ const SNAP = `(() => { const c = document.getElementById('hbg'); if (!c || !c.wi
     ({ ctx, pg } = await open(br, errs, o));
     await pg.evaluate(new Function(REC));
     const l0 = await pg.evaluate(async () => { const b = DATA.bots.find(x => (x.bot_type || 'grid') === 'grid'); const el = CARDS.get(b.dir);
-      const t = performance.now(); el._caT = 0; b.profit = +(+b.profit + 0.4).toFixed(4); syncCards(DATA.bots); await new Promise(r => setTimeout(r, 60));
+      const t = performance.now(); el._caT = -1e9; b.profit = +(+b.profit + 0.4).toFixed(4); syncCards(DATA.bots); await new Promise(r => setTimeout(r, 60));
       const cards = window.__an.filter(x => x.t >= t).length; openSettings(); stTog('cfx'); await new Promise(r => setTimeout(r, 200));
       const v = document.querySelector('#modal .sx[data-k="cfx"] .sval').textContent, note = [...document.querySelectorAll('#modal .sx[data-k="cfx"] .snote')].map(x => x.textContent).join(' ');
       const t2 = performance.now(); cfxRun('num'); await new Promise(r => setTimeout(r, 60)); const sample = window.__an.filter(x => x.t >= t2 && x.id === 'cfxV').length; hideModal();
