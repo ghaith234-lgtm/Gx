@@ -24062,6 +24062,9 @@ body.btopen{overflow:hidden}
 .dpxset .fld small,.dpxhint{color:var(--mut2);font-size:10.5px;line-height:1.7}
 .dpxb{padding:5px 8px;border-radius:8px;font-size:11.5px;margin:1px}
 .dpxb.dz{color:var(--red);border-color:rgb(var(--red-rgb)/.4)}
+.dpxt tr.dpxr td{border-bottom:0;padding-bottom:2px}
+.dpxt tr.dpxbr td{padding-top:0;text-align:start}
+.dpxt tr.dpxbr .num{margin-inline-end:8px;font-size:11px}
 .dcahist{padding:9px 10px;border-radius:10px;font-size:12.5px;white-space:nowrap}
 .dcaopts{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
 .dcaopts .dcashield{margin-bottom:0}
@@ -27339,17 +27342,18 @@ function dcaPlusPanel(b){
   const L=P.layers||[];
   h+=`<div class="dnsec">🧩 الطبقات المفتوحة الآن (${L.length})</div>`;
   if(!L.length)h+='<p style="color:var(--mut);font-size:12px">لا طبقة أمان منفّذة الآن — تظهر هنا حين ينفّذ البوت أوامر الأمان.</p>';
-  else{h+=`<div style="overflow-x:auto"><table class="dntbl"><thead><tr><th>الطبقة</th><th>بيعت بسعر</th><th>الكمية ${base}</th><th>⚡ تخرج عند</th><th>البعد الآن</th><th>الحالة</th><th></th></tr></thead><tbody>`;
+  else{h+=`<div style="overflow-x:auto"><table class="dntbl dpxt"><thead><tr><th>الطبقة</th><th>بيعت بسعر</th><th>⚡ تخرج عند</th><th>البعد الآن</th><th>الحالة</th></tr></thead><tbody>`;
     L.forEach(x=>{const st=x.now?'⏏ تخرج الآن':x.off?'⛔ لا تخرج وحدها':x.small?'صغيرة — لهدف الدورة':x.low?'قبل «يبدأ من» — لهدف الدورة':!P.on?'الخروج متوقف':'⚡ تخرج وحدها';
       const n0=x.ns[0];
-      h+=`<tr><td>${lb(x.ns)}</td><td class="num">${f4(x.px)}</td><td class="num">${x.q}</td><td class="num" style="color:var(--green)">${f4(x.ex)}</td>
-        <td class="num" style="color:var(--mut)">${x.dist==null?'—':(x.dist>0?'▼ '+x.dist+'%':'✓ وصل')}</td><td style="white-space:nowrap">${st}</td>
-        <td style="white-space:nowrap"><button class="dpxb" onclick="dcaPlusLayer('${b.dir}',${n0},${x.off?0:1})">${x.off?'⚡ يخرج وحده':'⛔ أوقف خروجه'}</button>
+      h+=`<tr class="dpxr"><td>${lb(x.ns)}</td><td class="num">${f4(x.px)}</td><td class="num" style="color:var(--green)">${f4(x.ex)}</td>
+        <td class="num" style="color:var(--mut)">${x.dist==null?'—':(x.dist>0?'▼ '+x.dist+'%':'✓ وصل')}</td><td>${st}</td></tr>
+        <tr class="dpxbr"><td colspan="5"><span class="num" style="color:var(--mut2)">${x.q} ${base}</span>
+        <button class="dpxb" onclick="dcaPlusLayer('${b.dir}',${n0},${x.off?0:1})">${x.off?'⚡ يخرج وحده':'⛔ أوقف خروجه'}</button>
         <button class="dpxb dz" onclick="dcaPlusNow('${b.dir}',${x.fid})" ${x.now?'disabled':''}>⏏ أخرجها الآن</button></td></tr>`});
     h+='</tbody></table></div>'}
   const G=P.log||[];
   if(G.length){h+=`<div class="dnsec">🧾 آخر الخروجات</div><div style="overflow-x:auto"><table class="dntbl"><thead><tr><th>الوقت</th><th>الطبقة</th><th>بيعت</th><th>اشترى</th><th>الربح ${base}</th></tr></thead><tbody>`;
-    G.forEach(e=>{const t=new Date((+e.ts||0)*1000);h+=`<tr><td class="num">${t.toLocaleString('ar-IQ',{hour12:false,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
+    G.forEach(e=>{const t=new Date((+e.ts||0)*1000),z=v=>String(v).padStart(2,'0');h+=`<tr><td class="num">${z(t.getMonth()+1)}/${z(t.getDate())} ${z(t.getHours())}:${z(t.getMinutes())}</td>
       <td>${lb(e.ns||[])}${e.manual?' · يدوي':''}${e.whole===false?' · جزء':''}</td><td class="num">${f4(e.sold)}</td><td class="num">${f4(e.px)}</td>
       <td class="num" style="color:${(+e.profit||0)>=0?'var(--green)':'var(--red)'}">${sg(+(+e.profit||0).toFixed(8))}</td></tr>`});
     h+='</tbody></table></div>'}
@@ -27433,13 +27437,13 @@ function dcaTable(b){
   </div>`;
   if(!rows.length)h+='<p style="color:var(--mut);font-size:12px;margin-top:12px">لا توجد دورة مفتوحة الآن — يظهر الجدول عند بدء الدورة.</p>';
   else{h+=`<div class="dnsec">📋 كل أوامر الدورة</div><div style="overflow-x:auto"><table class="dntbl"><thead><tr>
-    <th>الأمر</th><th>السعر</th><th>الكمية ${base}</th><th>الحالة</th><th>بعده عن السعر</th><th>المتوسط<br><small>لو نفّذ</small></th><th>🎯 الخروج<br><small>لو نفّذ</small></th><th>💎 ربح صافي<br><small>لو خرج</small></th>${d.plus?`<th>⚡ خروج الطبقة<br><small>رجوع ${d.plus.pct}%</small></th>`:''}</tr></thead><tbody>`;
+    <th>الأمر</th><th>السعر</th>${d.plus?`<th>⚡ خروج الطبقة<br><small>رجوع ${d.plus.pct}%</small></th>`:''}<th>الكمية ${base}</th><th>الحالة</th><th>بعده عن السعر</th><th>المتوسط<br><small>لو نفّذ</small></th><th>🎯 الخروج<br><small>لو نفّذ</small></th><th>💎 ربح صافي<br><small>لو خرج</small></th></tr></thead><tbody>`;
     rows.forEach(r=>{const dn=r.st==='done';
-      h+=`<tr><td>${r.n===0?'أساسي':'أمان '+r.n}</td><td class="num">${f4(r.px)}</td><td class="num">${r.q}</td>
+      h+=`<tr><td>${r.n===0?'أساسي':'أمان '+r.n}</td><td class="num">${f4(r.px)}</td>${d.plus?dcaPlusCell(d.plus,r):''}<td class="num">${r.q}</td>
       <td style="white-space:nowrap">${stl[r.st]||r.st}${(dn||r.st==='part')&&r.fpx?` <small>@${f4(r.fpx)}</small>`:''}</td>
       <td class="num" style="color:var(--mut);white-space:nowrap">${dn?'—':(r.dist>0?'▲ ':'▼ ')+Math.abs(r.dist)+'%'}</td>
       <td class="num">${f4(r.avg)}</td><td class="num" style="color:var(--green)">${f4(r.tgt)}</td>
-      <td class="num" style="color:${r.prof>=0?'var(--green)':'var(--red)'}">${sg(r.prof)}</td>${d.plus?dcaPlusCell(d.plus,r):''}</tr>`});
+      <td class="num" style="color:${r.prof>=0?'var(--green)':'var(--red)'}">${sg(r.prof)}</td></tr>`});
     h+='</tbody></table></div>';
     h+=`<p style="font-size:10.5px;color:var(--mut2);margin-top:8px;line-height:1.8">💡 «لو نفّذ» = لو بلغ السعر هذا الأمر ثم عاد إلى الهدف: هذا المتوسط وسعر الخروج والربح — صافي بعد عمولة OKX (المنفّذ بأسعاره وعمولته الفعلية والباقي بالخطة). «بعده عن السعر» ${arrU} = كم يجب أن يتحرك السعر ليبلغه.</p>`}
   showModal(`<h2>📋 جدول الدورة — ${b.symbol}${d.cycles!=null?` <small style="color:var(--mut2);font-size:12px">(دورة #${(d.cycles||0)+1})</small>`:''}</h2>${h}
@@ -30742,16 +30746,16 @@ async function dcaPreview(){
   if(s.cov_warn)h+=`<div class="dnwarn" style="background:rgb(var(--red-rgb)/.10);border:1px solid rgb(var(--red-rgb)/.3);color:var(--red)">⚠️ التغطية ${s.coverage}% فقط — اليوم العادي يتحرك 3–6%، فقد ينفد السلم بحركة عادية ويبقى ينتظر العودة. زِد «عدد أوامر الأمان» أو «المسافة» أو «تغيّر المسافة» (مثلاً 1.2)، أو شغّل 🛡️ الدرع.</div>`;
   if(s.fee_warn)h+=`<div class="dnwarn" style="background:rgb(var(--amber-rgb)/.12);border:1px solid rgb(var(--amber-rgb)/.3);color:var(--amber)">🛡️ هدفك أقل من العمولات — المحرك يرفعه تلقائياً لـ${s.tp_used}% (الجدول محسوب عليه)</div>`;
   h+=`<div class="dnsec">📋 جدول الأوامر — كل صف: لو بلغ السعر هذا الأمر ثم عاد إلى الهدف</div><div style="overflow-x:auto"><table class="dntbl"><thead><tr>
-    <th>الأمر</th><th>السعر</th><th>المسافة<br><small>من الذي قبله · من الأساس</small></th><th>الكمية ${base}</th><th>قيمته $</th><th>المجموع<br><small>${base} · $</small></th>
-    <th>المتوسط</th><th>🎯 سعر الخروج</th><th>${buy?'الصعود':'الرجوع'} للخروج</th><th>💎 ربح صافي<br><small>${unit}</small></th>${body.dca_plus?`<th>⚡ خروج الطبقة<br><small>رجوع ${+body.lx_pct||0}%</small></th>`:''}</tr></thead><tbody>`;
+    <th>الأمر</th><th>السعر</th>${body.dca_plus?`<th>⚡ خروج الطبقة<br><small>رجوع ${+body.lx_pct||0}%</small></th>`:''}<th>المسافة<br><small>من الذي قبله · من الأساس</small></th><th>الكمية ${base}</th><th>قيمته $</th><th>المجموع<br><small>${base} · $</small></th>
+    <th>المتوسط</th><th>🎯 سعر الخروج</th><th>${buy?'الصعود':'الرجوع'} للخروج</th><th>💎 ربح صافي<br><small>${unit}</small></th></tr></thead><tbody>`;
   res.rows.forEach(r=>{const ep=r.exit_profit>=0;
-    h+=`<tr><td>${r.label}</td><td class="num">${f4(r.price)}</td>
+    h+=`<tr><td>${r.label}</td><td class="num">${f4(r.price)}</td>${body.dca_plus?(r.n>=(+body.lx_from||1)?`<td class="num" style="color:var(--green)">${f4(r.price*(1-(+body.lx_pct||0)/100))}</td>`:'<td style="color:var(--mut2)">هدف الدورة</td>'):''}
     <td class="num" style="color:var(--vio);white-space:nowrap">${r.n===0?'—':arr+' '+r.step+'% · '+r.dev+'%'}</td>
     <td class="num">${r.order_qty}</td><td class="num" style="color:var(--mut)">${r.order_val}</td>
     <td class="num" style="white-space:nowrap">${r.cum_qty} · <span style="color:var(--mut)">${r.cum_vol}$</span></td>
     <td class="num">${f4(r.avg)}</td><td class="num" style="color:var(--green)">${f4(r.target)}</td>
     <td class="num" style="color:var(--cyan);font-weight:700">${back} ${r.gap_pct}%</td>
-    <td class="num" style="color:${ep?'var(--green)':'var(--red)'}">${sg(r.exit_profit)}</td>${body.dca_plus?(r.n>=(+body.lx_from||1)?`<td class="num" style="color:var(--green)">${f4(r.price*(1-(+body.lx_pct||0)/100))}</td>`:'<td style="color:var(--mut2)">هدف الدورة</td>'):''}</tr>`});
+    <td class="num" style="color:${ep?'var(--green)':'var(--red)'}">${sg(r.exit_profit)}</td></tr>`});
   h+='</tbody></table></div>';
   h+=`<p style="font-size:10.5px;color:var(--mut2);margin-top:6px;line-height:1.8">💡 صافي بعد عمولة OKX: الأساس آخذ ${s.fee_taker}% · الأمان صانع ${s.fee_maker}%${s.trail?' (بالدرع آخذ '+s.fee_taker+'%)':''} · الإغلاق آخذ ${s.fee_taker}%. «${buy?'الصعود':'الرجوع'} للخروج» = كم % يجب أن يتحرك السعر من هذا الأمر ليخرج بربح. الأرقام على سعر المعاينة — البوت يحسب من سعر التنفيذ الفعلي.</p>`;
   h+='<div class="dnsec">📈 مخطط نسبة الخروج لكل أمر</div>'+dcaChart(res.rows,s,base);

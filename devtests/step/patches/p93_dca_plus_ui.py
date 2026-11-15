@@ -159,17 +159,18 @@ function dcaPlusPanel(b){
   const L=P.layers||[];
   h+=`<div class="dnsec">🧩 الطبقات المفتوحة الآن (${L.length})</div>`;
   if(!L.length)h+='<p style="color:var(--mut);font-size:12px">لا طبقة أمان منفّذة الآن — تظهر هنا حين ينفّذ البوت أوامر الأمان.</p>';
-  else{h+=`<div style="overflow-x:auto"><table class="dntbl"><thead><tr><th>الطبقة</th><th>بيعت بسعر</th><th>الكمية ${base}</th><th>⚡ تخرج عند</th><th>البعد الآن</th><th>الحالة</th><th></th></tr></thead><tbody>`;
+  else{h+=`<div style="overflow-x:auto"><table class="dntbl dpxt"><thead><tr><th>الطبقة</th><th>بيعت بسعر</th><th>⚡ تخرج عند</th><th>البعد الآن</th><th>الحالة</th></tr></thead><tbody>`;
     L.forEach(x=>{const st=x.now?'⏏ تخرج الآن':x.off?'⛔ لا تخرج وحدها':x.small?'صغيرة — لهدف الدورة':x.low?'قبل «يبدأ من» — لهدف الدورة':!P.on?'الخروج متوقف':'⚡ تخرج وحدها';
       const n0=x.ns[0];
-      h+=`<tr><td>${lb(x.ns)}</td><td class="num">${f4(x.px)}</td><td class="num">${x.q}</td><td class="num" style="color:var(--green)">${f4(x.ex)}</td>
-        <td class="num" style="color:var(--mut)">${x.dist==null?'—':(x.dist>0?'▼ '+x.dist+'%':'✓ وصل')}</td><td style="white-space:nowrap">${st}</td>
-        <td style="white-space:nowrap"><button class="dpxb" onclick="dcaPlusLayer('${b.dir}',${n0},${x.off?0:1})">${x.off?'⚡ يخرج وحده':'⛔ أوقف خروجه'}</button>
+      h+=`<tr class="dpxr"><td>${lb(x.ns)}</td><td class="num">${f4(x.px)}</td><td class="num" style="color:var(--green)">${f4(x.ex)}</td>
+        <td class="num" style="color:var(--mut)">${x.dist==null?'—':(x.dist>0?'▼ '+x.dist+'%':'✓ وصل')}</td><td>${st}</td></tr>
+        <tr class="dpxbr"><td colspan="5"><span class="num" style="color:var(--mut2)">${x.q} ${base}</span>
+        <button class="dpxb" onclick="dcaPlusLayer('${b.dir}',${n0},${x.off?0:1})">${x.off?'⚡ يخرج وحده':'⛔ أوقف خروجه'}</button>
         <button class="dpxb dz" onclick="dcaPlusNow('${b.dir}',${x.fid})" ${x.now?'disabled':''}>⏏ أخرجها الآن</button></td></tr>`});
     h+='</tbody></table></div>'}
   const G=P.log||[];
   if(G.length){h+=`<div class="dnsec">🧾 آخر الخروجات</div><div style="overflow-x:auto"><table class="dntbl"><thead><tr><th>الوقت</th><th>الطبقة</th><th>بيعت</th><th>اشترى</th><th>الربح ${base}</th></tr></thead><tbody>`;
-    G.forEach(e=>{const t=new Date((+e.ts||0)*1000);h+=`<tr><td class="num">${t.toLocaleString('ar-IQ',{hour12:false,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
+    G.forEach(e=>{const t=new Date((+e.ts||0)*1000),z=v=>String(v).padStart(2,'0');h+=`<tr><td class="num">${z(t.getMonth()+1)}/${z(t.getDate())} ${z(t.getHours())}:${z(t.getMinutes())}</td>
       <td>${lb(e.ns||[])}${e.manual?' · يدوي':''}${e.whole===false?' · جزء':''}</td><td class="num">${f4(e.sold)}</td><td class="num">${f4(e.px)}</td>
       <td class="num" style="color:${(+e.profit||0)>=0?'var(--green)':'var(--red)'}">${sg(+(+e.profit||0).toFixed(8))}</td></tr>`});
     h+='</tbody></table></div>'}
@@ -263,9 +264,11 @@ function dcaViz(el,d,cp){'''),
      '''<span style="color:var(--amber)">┅ المتوسط</span>${d.plus?'<span style="color:var(--green)">┄ ⚡ خروج الطبقة</span>':''}</div>`;'''),
     # ── 📋 the table
     ('''<th>الأمر</th><th>السعر</th><th>الكمية ${base}</th><th>الحالة</th><th>بعده عن السعر</th><th>المتوسط<br><small>لو نفّذ</small></th><th>🎯 الخروج<br><small>لو نفّذ</small></th><th>💎 ربح صافي<br><small>لو خرج</small></th></tr></thead><tbody>`;''',
-     '''<th>الأمر</th><th>السعر</th><th>الكمية ${base}</th><th>الحالة</th><th>بعده عن السعر</th><th>المتوسط<br><small>لو نفّذ</small></th><th>🎯 الخروج<br><small>لو نفّذ</small></th><th>💎 ربح صافي<br><small>لو خرج</small></th>${d.plus?`<th>⚡ خروج الطبقة<br><small>رجوع ${d.plus.pct}%</small></th>`:''}</tr></thead><tbody>`;'''),
+     '''<th>الأمر</th><th>السعر</th><th>الكمية ${base}</th><th>الحالة</th><th>بعده عن السعر</th><th>المتوسط<br><small>لو نفّذ</small></th><th>🎯 الخروج<br><small>لو نفّذ</small></th><th>💎 ربح صافي<br><small>لو خرج</small></th></tr></thead><tbody>`;'''.replace('<th>السعر</th>','<th>السعر</th>${d.plus?`<th>⚡ خروج الطبقة<br><small>رجوع ${d.plus.pct}%</small></th>`:\'\'}',1)),
     ('''      <td class="num" style="color:${r.prof>=0?'var(--green)':'var(--red)'}">${sg(r.prof)}</td></tr>`});''',
-     '''      <td class="num" style="color:${r.prof>=0?'var(--green)':'var(--red)'}">${sg(r.prof)}</td>${d.plus?dcaPlusCell(d.plus,r):''}</tr>`});'''),
+     '''      <td class="num" style="color:${r.prof>=0?'var(--green)':'var(--red)'}">${sg(r.prof)}</td></tr>`});'''),
+    ('''      h+=`<tr><td>${r.n===0?'أساسي':'أمان '+r.n}</td><td class="num">${f4(r.px)}</td>''',
+     '''      h+=`<tr><td>${r.n===0?'أساسي':'أمان '+r.n}</td><td class="num">${f4(r.px)}</td>${d.plus?dcaPlusCell(d.plus,r):''}'''),
     ('''function cfb(el,b){if(el.dataset.alt)''', r'''function dcaPlusCell(P,r){      // ⚡ v3.36.56: خانة «خروج الطبقة» لصف من جدول الدورة
   if(r.n===0)return '<td style="color:var(--mut2)">هدف الدورة</td>';
   const x=(P.layers||[]).find(z=>z.ns.includes(r.n));
@@ -301,9 +304,13 @@ function cfb(el,b){if(el.dataset.alt)'''),
     ('''    dca_type:$('#dn_type').value,''', '''    dca_type:$('#dn_type').value,
     ...($('#dn_type').value==='dca_plus'?{dca_plus:'1',lx_pct:($('#dn_lx_pct')||{}).value,lx_from:($('#dn_lx_from')||{}).value,lx_reopen:!!($('#dn_lx_re')||{}).checked}:{}),'''),
     ('''<th>${buy?'الصعود':'الرجوع'} للخروج</th><th>💎 ربح صافي<br><small>${unit}</small></th></tr></thead><tbody>`;''',
-     '''<th>${buy?'الصعود':'الرجوع'} للخروج</th><th>💎 ربح صافي<br><small>${unit}</small></th>${body.dca_plus?`<th>⚡ خروج الطبقة<br><small>رجوع ${+body.lx_pct||0}%</small></th>`:''}</tr></thead><tbody>`;'''),
+     '''<th>${buy?'الصعود':'الرجوع'} للخروج</th><th>💎 ربح صافي<br><small>${unit}</small></th></tr></thead><tbody>`;'''),
+    ('''    <th>الأمر</th><th>السعر</th><th>المسافة<br><small>من الذي قبله · من الأساس</small></th>''',
+     '''    <th>الأمر</th><th>السعر</th>${body.dca_plus?`<th>⚡ خروج الطبقة<br><small>رجوع ${+body.lx_pct||0}%</small></th>`:''}<th>المسافة<br><small>من الذي قبله · من الأساس</small></th>'''),
     ('''    <td class="num" style="color:${ep?'var(--green)':'var(--red)'}">${sg(r.exit_profit)}</td></tr>`});''',
-     '''    <td class="num" style="color:${ep?'var(--green)':'var(--red)'}">${sg(r.exit_profit)}</td>${body.dca_plus?(r.n>=(+body.lx_from||1)?`<td class="num" style="color:var(--green)">${f4(r.price*(1-(+body.lx_pct||0)/100))}</td>`:'<td style="color:var(--mut2)">هدف الدورة</td>'):''}</tr>`});'''),
+     '''    <td class="num" style="color:${ep?'var(--green)':'var(--red)'}">${sg(r.exit_profit)}</td></tr>`});'''),
+    ('''    h+=`<tr><td>${r.label}</td><td class="num">${f4(r.price)}</td>''',
+     '''    h+=`<tr><td>${r.label}</td><td class="num">${f4(r.price)}</td>${body.dca_plus?(r.n>=(+body.lx_from||1)?`<td class="num" style="color:var(--green)">${f4(r.price*(1-(+body.lx_pct||0)/100))}</td>`:'<td style="color:var(--mut2)">هدف الدورة</td>'):''}'''),
     # ── 🧪 the trial path from the form: DCA+ is a sell DCA with dca_plus
     ('''  const k=kind==='rec'?(body.rec_type||'rec_buy'):kind==='dca'?(body.dca_type||'dca'):''',
      '''  const k=kind==='rec'?(body.rec_type||'rec_buy'):kind==='dca'?(body.dca_type==='dca_buy'?'dca_buy':'dca'):'''),
@@ -320,7 +327,10 @@ function cfb(el,b){if(el.dataset.alt)'''),
 .dpxset{display:grid;gap:8px;margin:12px 0;padding:10px 12px;border:1px solid rgb(var(--green-rgb)/.3);border-radius:10px;background:rgb(var(--green-rgb)/.05)}
 .dpxset .fld small,.dpxhint{color:var(--mut2);font-size:10.5px;line-height:1.7}
 .dpxb{padding:5px 8px;border-radius:8px;font-size:11.5px;margin:1px}
-.dpxb.dz{color:var(--red);border-color:rgb(var(--red-rgb)/.4)}'''),
+.dpxb.dz{color:var(--red);border-color:rgb(var(--red-rgb)/.4)}
+.dpxt tr.dpxr td{border-bottom:0;padding-bottom:2px}
+.dpxt tr.dpxbr td{padding-top:0;text-align:start}
+.dpxt tr.dpxbr .num{margin-inline-end:8px;font-size:11px}'''),
 ]
 
 if __name__ == "__main__":

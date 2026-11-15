@@ -52,21 +52,21 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   // ③ the ⚡ window
   const w = await pg.evaluate(async dir => {
     CARDS.get(dir)._r.dplus.click(); await new Promise(r => setTimeout(r, 400));
-    const m = document.getElementById('modal'), rows = [...m.querySelectorAll('tbody')[0].querySelectorAll('tr')].map(r => [...r.children].map(td => td.textContent.trim()));
+    const m = document.getElementById('modal'), rows = [...m.querySelectorAll('tbody')[0].querySelectorAll('tr.dpxr')].map(r => [...r.children].map(td => td.textContent.trim()));
     return { h2: m.querySelector('h2').textContent, pct: m.querySelector('#dpx_pct').value, from: m.querySelector('#dpx_from').value, on: m.querySelector('#dpx_on').checked,
       re: m.querySelector('#dpx_re').checked, rows, logs: m.querySelectorAll('tbody').length, first: m.querySelector('.hwb').firstElementChild.tagName };
   }, DIR);
   ok(`③ «⚡ الخروج بالطبقات» opens the window (rule 14: <h2> first): on · 0.5% · from 1 · no re-open · 3 open layers with their exit price and state · the last exits`,
-    /DCA\+/.test(w.h2) && w.first === 'H2' && w.on && w.pct === '0.5' && w.from === '1' && !w.re && w.rows.length === 3 && w.rows[1][5] === '⛔ لا تخرج وحدها'
-    && w.rows[0][5] === '⚡ تخرج وحدها' && w.logs === 2, w);
+    /DCA\+/.test(w.h2) && w.first === 'H2' && w.on && w.pct === '0.5' && w.from === '1' && !w.re && w.rows.length === 3 && w.rows[1][4] === '⛔ لا تخرج وحدها'
+    && w.rows[0][4] === '⚡ تخرج وحدها' && w.logs === 2, w);
   // switch safety 2 back on
   await pg.evaluate(() => { const b = [...document.querySelectorAll('#modal .dpxb')].find(x => x.textContent.includes('يخرج وحده')); b.click() });
   await sleep(2600);
   const w2 = await pg.evaluate(() => { const m = document.getElementById('modal'), bg = document.getElementById('mbg');
-    const rows = bg.hidden ? [] : [...m.querySelectorAll('tbody')[0].querySelectorAll('tr')].map(r => [...r.children].map(td => td.textContent.trim()));
+    const rows = bg.hidden ? [] : [...m.querySelectorAll('tbody')[0].querySelectorAll('tr.dpxr')].map(r => [...r.children].map(td => td.textContent.trim()));
     return { open: !bg.hidden, rows } });
   ok('③ «⚡ يخرج وحده» on safety 2: the window reopens by itself with the fresh state — safety 2 «⚡ تخرج وحدها»',
-    w2.open && w2.rows.length === 3 && w2.rows[1][5] === '⚡ تخرج وحدها', w2);
+    w2.open && w2.rows.length === 3 && w2.rows[1][4] === '⚡ تخرج وحدها', w2);
   // the settings
   await pg.evaluate(() => { document.getElementById('dpx_pct').value = '0.7'; document.getElementById('dpx_re').checked = true;
     [...document.querySelectorAll('#modal button')].find(x => x.textContent.includes('حفظ الإعدادات')).click() });
@@ -108,7 +108,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     document.getElementById('dn_sym').value = 'ETH-USDT'; document.getElementById('dn_bp').value = '2000';
     await dcaPreview(); await new Promise(r => setTimeout(r, 400));
     const th = [...document.querySelectorAll('#dn_preview th')].map(x => x.textContent), body = dcaFormBody();
-    const tr = [...document.querySelectorAll('#dn_preview tbody tr')].map(r => r.lastElementChild.textContent.trim());
+    const ci = th.findIndex(x => x.startsWith('⚡ خروج الطبقة')), tr = [...document.querySelectorAll('#dn_preview tbody tr')].map(r => (r.children[ci] || {}).textContent.trim());
     document.querySelector('.tutx').click(); await new Promise(r => setTimeout(r, 400));
     const tabs = [...document.querySelectorAll('.tuttabs button')].map(x => x.textContent);
     return { opts, hid, shown: document.getElementById('dn_lx_box') ? document.getElementById('dn_lx_box').style.display !== 'none' : null, th, tr, body, tabs,
