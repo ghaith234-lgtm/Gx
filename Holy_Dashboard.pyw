@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.54"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.55"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -15628,7 +15628,7 @@ def _pro_bytes(url, timeout=25):
     hdr = {"User-Agent": "Mozilla/5.0 (HolyDashboard)"}
     if _RQ is not None:
         try:
-            r = _RQ.get(url, headers=hdr, timeout=timeout, verify=False)
+            r = _RQ.get(url, headers=hdr, timeout=timeout)
             return r.content if r.status_code == 200 else None
         except Exception:
             pass
@@ -20276,9 +20276,37 @@ def wallet_op(data):
 # ───── 📡 قراءة فقط من OKX: الأرصدة + عدادات أوامر المنصة (اللوحة لا تضع ولا تلغي أي أمر أبداً) ─────
 import hmac as _hmac
 import ssl as _ssl2
-_OKX_CTX = _ssl2.create_default_context()
-_OKX_CTX.check_hostname = False
-_OKX_CTX.verify_mode = _ssl2.CERT_NONE  # نفس تسامح تيليغرام مع جدران الحماية
+
+
+def _tls_ctx():
+    """🔒 v3.36.55: اتصال مشفّر **يتحقّق من شهادة الخادم** — جذور النظام (بويندوز: يشمل جذر برنامج الحماية اللي يفحص الاتصالات المشفّرة)
+    + جذور certifi (نسخ بايثون بلا جذور نظام). قبلها كان التحقق مطفأ ⇒ أي وسيط بالشبكة يقرأ توكن تيليغرام ومفتاح OKX."""
+    ctx = _ssl2.create_default_context()
+    try:
+        import certifi as _cf
+        ctx.load_verify_locations(_cf.where())
+    except Exception:
+        pass
+    return ctx
+
+
+def _tls_bad(ex):
+    """الخطأ = شهادة الخادم مرفوضة؟ (يحصل وقت المصافحة — قبل ما ينكتب الطلب ⇒ ولا شي انرسل)"""
+    seen = 0
+    while ex is not None and seen < 8:
+        if isinstance(ex, _ssl2.SSLCertVerificationError) or "CERTIFICATE_VERIFY_FAILED" in str(ex):
+            return True
+        ex = getattr(ex, "reason", None) if isinstance(getattr(ex, "reason", None), BaseException) else (ex.__cause__ or ex.__context__)
+        seen += 1
+    return False
+
+
+def _tls_warn(where, host):
+    journal("system", f"🔒 لم تُقبل شهادة {where} على هذه الشبكة — لم يُرسل الطلب (حماية لمفاتيحك وتوكن تيليغرام). إذا كان على الحاسوب "
+                      f"برنامج حماية يفحص الاتصالات المشفّرة فاستثنِ {host} منه، أو جرّب شبكة أخرى", "warn", rl="tls:" + where)
+
+
+_OKX_CTX = _tls_ctx()                    # 🔒 v3.36.55: كان بلا تحقق من الشهادة
 
 BAL, WBAL, WDET = {}, {}, {}
 
@@ -20314,13 +20342,13 @@ def _http_json(url, headers=None, payload=None, timeout=12, once=False):
     if _RQ is not None:
         try:
             if payload is None:
-                r = _RQ.get(url, headers=hdr, timeout=timeout, verify=False)
+                r = _RQ.get(url, headers=hdr, timeout=timeout)
             else:
                 hdr.setdefault("Content-Type", "application/json")
-                r = _RQ.post(url, headers=hdr, data=json.dumps(payload), timeout=timeout, verify=False)
+                r = _RQ.post(url, headers=hdr, data=json.dumps(payload), timeout=timeout)
             return r.json()
-        except Exception:
-            if once:
+        except Exception as _ex:
+            if once and not _tls_bad(_ex):      # 🔒 v3.36.55: شهادة مرفوضة ⇒ الطلب ما انكتب أصلاً ⇒ مرة وحدة بجذور النظام (بلا تكرار)
                 return None
     try:
         data = json.dumps(payload).encode("utf-8") if payload is not None else None
@@ -20332,7 +20360,9 @@ def _http_json(url, headers=None, payload=None, timeout=12, once=False):
     except urllib.error.HTTPError as e:
         try: return json.loads(e.read().decode("utf-8"))
         except Exception: return None
-    except Exception:
+    except Exception as _ex:
+        if _tls_bad(_ex):
+            _tls_warn("OKX", urlparse(url).hostname or "okx.com")
         return None
 
 def _okx_pub(path):
@@ -20797,9 +20827,7 @@ def price_loop():
         time.sleep(4)
 
 import ssl as _ssl
-_TG_CTX = _ssl.create_default_context()
-_TG_CTX.check_hostname = False
-_TG_CTX.verify_mode = _ssl.CERT_NONE  # يتسامح مع جدران الحماية/مضادات الفيروسات التي تحقن شهادتها
+_TG_CTX = _tls_ctx()                     # 🔒 v3.36.55: يتحقّق من الشهادة (كان بلا تحقق ⇒ التوكن مكشوف لأي وسيط بالشبكة)
 
 TG_DIAG = {"last": "لم يُرسل شيء بعد"}
 
@@ -20843,7 +20871,11 @@ def tg_send(text, force=False, plain=False):
         TG_DIAG["last"] = f"❌ HTTP {e.code}: {body or 'تحقق من صحة التوكن'}"
         return False
     except Exception as ex:
-        TG_DIAG["last"] = f"❌ تعذّر الاتصال بتيليغرام: {ex}"
+        if _tls_bad(ex):
+            TG_DIAG["last"] = "❌ لم تُقبل شهادة تيليغرام على هذه الشبكة — لم يُرسل شيء (حماية للتوكن)"
+            _tls_warn("تيليغرام", "api.telegram.org")
+        else:
+            TG_DIAG["last"] = f"❌ تعذّر الاتصال بتيليغرام: {ex}"
         return False
 
 
@@ -20879,6 +20911,9 @@ def tg_photo(png, caption=""):
             pass
         return False, f"❌ HTTP {e.code}: {body or 'تحقق من صحة التوكن'}"
     except Exception as ex:
+        if _tls_bad(ex):
+            _tls_warn("تيليغرام", "api.telegram.org")
+            return False, "❌ لم تُقبل شهادة تيليغرام على هذه الشبكة — لم يُرسل شيء (حماية للتوكن)"
         return False, f"❌ تعذّر الاتصال بتيليغرام: {type(ex).__name__}"
 
 
