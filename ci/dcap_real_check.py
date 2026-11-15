@@ -69,7 +69,7 @@ if "--one" in sys.argv:
     lx = [c for c in st.get("cycles_log") or [] if c.get("lx")]
     print(json.dumps({"why": r["why"], "profit_coin": prof, "profit_usd": prof * pe, "cycles": int(st.get("cycles_done") or 0), "lx": len(lx),
                       "lx_min": min([float(c["profit"]) for c in lx] or [0]), "mean_exp": sum(exp) / max(1, len(exp)),
-                      "longest_h": longest * dt_h, "end_open": opn / full, "rej": len(ex.rejects),
+                      "longest_h": longest * dt_h, "end_open": opn / full, "rej": len(ex.rejects), "rej_codes": sorted({str(c) for _, c in ex.rejects}),
                       "check": (ex.bal[ex.base] - b0) + opn - prof, "secs": time.time() - a0, "p0": p0, "pe": pe}))
     shutil.rmtree(R, ignore_errors=True)
     sys.exit(0)
@@ -121,8 +121,8 @@ with ThreadPoolExecutor(max(2, os.cpu_count() or 2)) as tp:
             P_(f"run {d['sym']} m{d['k'] + 1} {d['v']}: ERROR {d['err'][:300]}"); continue
         P_(f"run {d['sym']} m{d['k'] + 1} {d['v']:14} profit {d['profit_coin']:+.6g} coin ({d['profit_usd']:+.3f}$) · cycles {d['cycles']} · "
            f"layer exits {d['lx']} · mean exposure {d['mean_exp'] * 100:.1f}% · longest >½ ladder {d['longest_h']:.1f}h · open at end "
-           f"{d['end_open'] * 100:.0f}% · refused {d['rej']} · wallet−books {d['check']:+.1e} · {d['secs']:.0f}s · {d['why']}")
-        if d["why"] != "end" or d["rej"] or abs(d["check"]) > 1e-6 or (d["lx"] and d["lx_min"] <= 0):
+           f"{d['end_open'] * 100:.0f}% · refused {d['rej']} {','.join(d.get('rej_codes') or [])} · wallet−books {d['check']:+.1e} · {d['secs']:.0f}s · {d['why']}")
+        if d["why"] != "end" or set(d.get("rej_codes") or []) - {"51008"} or abs(d["check"]) > 1e-6 or (d["lx"] and d["lx_min"] <= 0):   # 51008 = the paper wallet ran short (the normal DCA too)
             FAIL.append(f"{d['sym']} {d['k']} {d['v']}: why {d['why']} rej {d['rej']} check {d['check']} lx_min {d['lx_min']}")
 
 for v in VAR:
