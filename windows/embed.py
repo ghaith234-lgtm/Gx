@@ -1,5 +1,5 @@
 # 💻 put a built Windows program 2.0 into the dashboard (used by ci/win_build.ps1 and by hand):
-#   the page part not there yet ⇒ patch 62 with the program · already there ⇒ only the program (WIN_EXE_CODE 4 · NAME «2.0» · B64)
+#   the page part not there yet ⇒ patch 62 with the program · already there ⇒ only the program (WIN_EXE_CODE 5 · NAME «2.0.1» · B64 — 2.0.1 = v3.36.55)
 #   python3 windows/embed.py Holy_Dashboard.pyw TheHolyDashboard.exe
 import base64, hashlib, os, re, subprocess, sys
 
@@ -14,7 +14,7 @@ assert raw[:2] == b"MZ" and tag > 0 and raw.count(b"HOLY-URL-SLOT:") == 1 and ra
 assert "HolyTray2".encode("utf-16-le") in raw, "not the 2.0 program (HolyTray2)"
 RE = re.compile(r'^WIN_EXE_CODE = \d+\nWIN_EXE_NAME = "[^"]*"\nWIN_EXE_B64 = "[A-Za-z0-9+/=]+"$', re.M)
 assert len(RE.findall(s)) == 1, "the WIN_EXE_* block not found exactly once"
-s = RE.sub(lambda m: 'WIN_EXE_CODE = 4\nWIN_EXE_NAME = "2.0"\nWIN_EXE_B64 = "' + base64.b64encode(raw).decode() + '"', s)
+s = RE.sub(lambda m: 'WIN_EXE_CODE = 5\nWIN_EXE_NAME = "2.0.1"\nWIN_EXE_B64 = "' + base64.b64encode(raw).decode() + '"', s)
 compile(s, dash, "exec")
 open(dash + ".tmp", "w", encoding="utf-8").write(s)
 os.replace(dash + ".tmp", dash)

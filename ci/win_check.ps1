@@ -76,7 +76,7 @@ for ($k = 0; $k -lt 90; $k++) { try { if ((Invoke-WebRequest "$base/" -UseBasicP
 Check "dashboard up (python $((Get-Command python).Version))" (-not $dash.HasExited) "pid=$($dash.Id)"
 # 1) the dashboard serves the app (logged in: a fresh dashboard has no password)
 $info = Invoke-RestMethod "$base/api/app/info"
-Check "the dashboard knows the Windows app 2.0" ($info.win.size -gt 50000 -and $info.win.name -eq "2.0") "size=$($info.win.size) name=$($info.win.name) apk=$($info.apk.name)"
+Check "the dashboard knows the Windows app 2.0.1" ($info.win.size -gt 50000 -and $info.win.name -eq "2.0.1") "size=$($info.win.size) name=$($info.win.name) apk=$($info.apk.name)"
 Invoke-WebRequest "$base/app/holy.exe?u=$([uri]::EscapeDataString($base))" -OutFile "$A\TheHolyDashboard.exe" -UseBasicParsing
 $bytes = [IO.File]::ReadAllBytes("$A\TheHolyDashboard.exe")
 $txt = [Text.Encoding]::ASCII.GetString($bytes)
@@ -93,7 +93,7 @@ Check "the download linked a computer (💻 · not opened yet)" (($devs0 | Where
 $sig = Get-AuthenticodeSignature "$A\TheHolyDashboard.exe"
 Write-Host "HOLYWIN ℹ️ signature: $($sig.Status) (unsigned ⇒ SmartScreen asks once)"
 $vi = (Get-Item "$A\TheHolyDashboard.exe").VersionInfo
-Check "version info" ($vi.ProductName -eq "The Holy Dashboard" -and $vi.ProductVersion -eq "2.0") "$($vi.ProductName) $($vi.ProductVersion)"
+Check "version info" ($vi.ProductName -eq "The Holy Dashboard" -and $vi.ProductVersion -eq "2.0.1") "$($vi.ProductName) $($vi.ProductVersion)"
 $fav = Invoke-WebRequest "$base/favicon.ico" -UseBasicParsing
 Check "favicon.ico served (no login needed)" ($fav.StatusCode -eq 200 -and $fav.RawContentLength -gt 10000) "len=$($fav.RawContentLength)"
 

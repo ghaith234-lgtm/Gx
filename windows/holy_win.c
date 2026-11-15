@@ -1,4 +1,4 @@
-// 💻 The Holy Dashboard — Windows program 2.0 (dashboard v3.36.40)
+// 💻 The Holy Dashboard — Windows program 2.0.1 (dashboard v3.36.55 · 2.0 = v3.36.40)
 //   The owner (13-11, screenshot of the 1.2 window): «اريد تلغي الرموز الفوق … واتخليهم مع ايقونة الاشعارات · كيف احرك المربع كله اذا انزال
 //   الشريط الفوق». 1.2 opened the dashboard in an Edge app window, and that title bar (— □ ✕) belongs to Edge. 2.0 shows the dashboard in its
 //   own window through WebView2 (the engine inside Edge) with no title bar: the dashboard draws — □ ✕ beside 🔔 ⛶, its top bar moves the
@@ -11,6 +11,8 @@
 //   ⇒ ask · 401 ⇒ «this computer was unlinked». No WebView2 runtime (Windows 7/8) ⇒ the Edge/Chrome app window as in 1.2.
 //   Built on GitHub's Windows machine (.github/workflows/holy-win-check.yml): MSVC x86 · /MT (no runtime DLL) · Microsoft's static
 //   WebView2 loader (NuGet Microsoft.Web.WebView2).
+//   2.0.1 (v3.36.55 · the audit): the notification reader on a reply that arrives cut off — 2.0 could loop for ever on one cut inside the
+//   list (the watcher spun, the notifications stopped) or read past the end after a «\\»; a cut reply is now asked again (devtests/t_win_json.py).
 #define WIN32_LEAN_AND_MEAN
 #ifndef UNICODE
 #define UNICODE
@@ -47,10 +49,10 @@
 #pragma comment(lib, "version.lib")
 #endif
 
-#define APP_VER   L"2.0"
-#define APP_BUILD 200                       // a watcher with a lower build steps aside for a newer copy
+#define APP_VER   L"2.0.1"
+#define APP_BUILD 201                       // a watcher with a lower build steps aside for a newer copy
 #define APP_TITLE L"The Holy Dashboard"
-#define UA_STR    L"TheHolyDashboard/2.0"
+#define UA_STR    L"TheHolyDashboard/2.0.1"
 #define WM_TRAY   (WM_APP + 1)
 #define WM_FEED   (WM_APP + 2)
 #define CMD_MAGIC 0x484F4C59                // 'HOLY' — WM_COPYDATA between two copies of the program
@@ -167,7 +169,7 @@ static int http_get(const WCHAR *url, const char *tok, DWORD timeout, char **bod
         if (WinHttpSendRequest(r, hd[0] ? hd : WINHTTP_NO_ADDITIONAL_HEADERS, hd[0] ? (DWORD)-1 : 0, NULL, 0, 0, 0) && WinHttpReceiveResponse(r, NULL)) {
             DWORD sc = 0, l = sizeof sc; WinHttpQueryHeaders(r, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, NULL, &sc, &l, NULL); status = (int)sc;
             DWORD cap = 16384, n = 0; char *b = (char *)malloc(cap + 1);
-            for (;;) { DWORD av = 0, rd = 0; if (!WinHttpQueryDataAvailable(r, &av) || !av) break;
+            for (;;) { DWORD av = 0, rd = 0; if (!b || !WinHttpQueryDataAvailable(r, &av) || !av) break;
                 if (n + av > cap) { if (cap > 8 * 1024 * 1024) break; while (n + av > cap) cap *= 2; char *nb = (char *)realloc(b, cap + 1); if (!nb) break; b = nb; }
                 if (!WinHttpReadData(r, b + n, av, &rd) || !rd) break; n += rd; }
             if (b) { b[n] = 0; *body = b; *blen = n; }
@@ -183,7 +185,7 @@ static const char *js_str(const char *p, char *out, int n) {           // p at t
     int k = 0; p++;
     while (*p && *p != '"') {
         unsigned c = (unsigned char)*p++;
-        if (c == '\\') { char e = *p++; if (!e) break;
+        if (c == '\\') { char e = *p; if (!e) break; p++;                // a reply cut right after «\» ⇒ stop at its end (2.0 read past it)
             if (e == 'u') { unsigned v = 0; for (int i = 0; i < 4 && *p; i++, p++) v = v * 16 + (unsigned)((*p >= '0' && *p <= '9') ? *p - '0' : ((*p | 32) - 'a' + 10));
                 if (v >= 0xD800 && v <= 0xDBFF && p[0] == '\\' && p[1] == 'u') { unsigned lo = 0; p += 2; for (int i = 0; i < 4 && *p; i++, p++) lo = lo * 16 + (unsigned)((*p >= '0' && *p <= '9') ? *p - '0' : ((*p | 32) - 'a' + 10));
                     v = 0x10000 + ((v - 0xD800) << 10) + (lo - 0xDC00); }
@@ -206,13 +208,14 @@ static const char *js_skip(const char *p) {
 typedef struct { char k[16], t[260], b[400], go[160]; double usd; } FeedItem;
 typedef struct { long last; int muted, n; FeedItem it[50]; } Feed;
 static int feed_parse(const char *s, Feed *f) {
-    memset(f, 0, sizeof *f); f->last = -1; const char *p = js_ws(s); if (*p != '{') return 0; p++;
-    while (*p) { p = js_ws(p); if (*p == '}') break; if (*p == ',') { p++; continue; } if (*p != '"') return 0;
+    memset(f, 0, sizeof *f); f->last = -1; const char *p = js_ws(s); if (*p != '{') return 0; p++; int closed = 0;
+    while (*p) { p = js_ws(p); if (*p == '}') { closed = 1; break; } if (*p == ',') { p++; continue; } if (*p != '"') return 0;
         char key[32]; p = js_str(p, key, sizeof key); p = js_ws(p); if (*p != ':') return 0; p = js_ws(p + 1);
         if (!strcmp(key, "last")) f->last = strtol(p, NULL, 10);
         else if (!strcmp(key, "muted")) f->muted = !strncmp(p, "true", 4);
         if (!strcmp(key, "items") && *p == '[') { p++;
-            for (;;) { p = js_ws(p); if (*p == ']') { p++; break; } if (*p == ',') { p++; continue; } if (*p != '{') { p = js_skip(p); continue; }
+            for (;;) { p = js_ws(p); if (*p == ']') { p++; break; } if (*p == ',') { p++; continue; }
+                if (*p != '{') { const char *q = js_skip(p); if (q == p) return 0; p = q; continue; }   // a cut/broken list ⇒ stop (2.0 looped for ever)
                 FeedItem *it = f->n < 50 ? &f->it[f->n] : NULL; if (it) memset(it, 0, sizeof *it); p++;
                 for (;;) { p = js_ws(p); if (*p == '}') { p++; break; } if (*p == ',') { p++; continue; } if (*p != '"') return 0;
                     char ik[16]; p = js_str(p, ik, sizeof ik); p = js_ws(p); if (*p != ':') return 0; p = js_ws(p + 1);
@@ -225,7 +228,7 @@ static int feed_parse(const char *s, Feed *f) {
                 if (it) f->n++; }
         } else p = js_skip(p);
     }
-    return f->last >= 0;
+    return closed && f->last >= 0;                                   // only a whole reply counts (a cut one is asked again — nothing skipped)
 }
 
 // ───────────────────────────── notifications (near the clock · Windows 10/11 turn them into its own notifications)
@@ -692,7 +695,7 @@ int WINAPI wWinMain(HINSTANCE hi, HINSTANCE prev, LPWSTR cmdline, int show) {
     wc.lpfnWndProc = WinProc; wc.lpszClassName = L"HolyDash"; wc.hbrBackground = NULL; wc.style = CS_HREDRAW | CS_VREDRAW; RegisterClassExW(&wc);
     wc.lpfnWndProc = TrayProc; wc.lpszClassName = L"HolyTray2"; wc.style = 0; RegisterClassExW(&wc);
     config_load();
-    { char a[200]; w8(g_url, a, sizeof a); hlog("start v2.0%s%s%s · %s", a_tray ? " (with Windows)" : "", a_setup ? " (setup)" : "", a_restart ? " (restart)" : "", a[0] ? "address set" : "no address"); }
+    { char a[200]; w8(g_url, a, sizeof a); hlog("start v2.0.1%s%s%s · %s", a_tray ? " (with Windows)" : "", a_setup ? " (setup)" : "", a_restart ? " (restart)" : "", a[0] ? "address set" : "no address"); }
 
     HWND run = FindWindowW(L"HolyTray2", NULL);
     if (a_tray && run) return 0;                                  // Windows started it while one is running
