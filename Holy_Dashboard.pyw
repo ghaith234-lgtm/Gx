@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.52"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.53"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -249,6 +249,40 @@ _JR_SECRET = ("key", "secret", "pass", "token", "pw", "pin", "chat_id")
 _JR_SECRET_EXACT = {"api", "sec"}      # 🔒 v3.22.7: حقول المحافظ (api · sec · pass) — «api» و«sec» ما كانت تنحجب بالسجلات ولا بالتقرير التشخيصي
 
 
+def _jr_scrub_pw():
+    """🔒 v3.36.53: سطور «set_pw» المكتوبة قبل هذه النسخة تحمل كلمة السر بنص واضح ⇒ تُحجب بملفات السجل (السطر يبقى) — مرة عند الإقلاع."""
+    try:
+        for fn in os.listdir(JOURNAL_DIR):
+            if not fn.endswith(".jsonl"):
+                continue
+            fp = os.path.join(JOURNAL_DIR, fn)
+            with open(fp, "r", encoding="utf-8", errors="ignore") as fh:
+                txt = fh.read()
+            if "/api/set_pw" not in txt:
+                continue
+            out, ch = [], False
+            for ln in txt.split("\n"):
+                if "/api/set_pw" in ln:
+                    try:
+                        e = json.loads(ln)
+                        rq = (e.get("d") or {}).get("request") if isinstance(e.get("d"), dict) else None
+                        if isinstance(rq, dict) and any(rq.get(k) not in (None, "***") for k in ("new", "cur")):
+                            for k in ("new", "cur"):
+                                if k in rq:
+                                    rq[k] = "***"
+                            ln, ch = json.dumps(e, ensure_ascii=False), True
+                    except Exception:
+                        pass
+                out.append(ln)
+            if ch:
+                tmp = fp + ".tmp"
+                with open(tmp, "w", encoding="utf-8") as fh:
+                    fh.write("\n".join(out))
+                os.replace(tmp, fp)
+    except Exception:
+        pass
+
+
 def _jr_clean(v, depth=0):
     """🔒 ولا مفتاح/كلمة سر/توكن يدخل السجل."""
     if depth > 4:
@@ -315,6 +349,9 @@ def _jr_prune(today):
                     pass
     except Exception:
         pass
+
+
+_safe_scrub = _jr_scrub_pw()                          # 🔒 v3.36.53: مرة عند الإقلاع
 
 
 def journal(cat, msg, lv="info", bot="", sym="", t=None, rl=None, **data):
@@ -22686,7 +22723,7 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
             except Exception as ex:
                 return self._json({"ok": False, "msg": f"تعذّر: {type(ex).__name__}"})
         if not ("preview" in path or str(data.get("act") or "") == "preview" or path in ("/api/journal", "/api/card_tg")):
-            self._jpost = (path, data)                     # 📜 v3.22.6: كل أمر منك ينكتب بالسجلات ويّا نتيجته (بلا أسرار)
+            self._jpost = (path, ({**data, **{k: "***" for k in ("new", "cur") if k in data}} if path == "/api/set_pw" else data))   # 📜 v3.22.6: كل أمر منك ينكتب بالسجلات ويّا نتيجته (بلا أسرار) · 🔒 v3.36.53: كلمة السر الجديدة والحالية كانتا تنكتبان بالسجل
         if path == "/api/control":
             act = data.get("action", "")
             if act == "tg_test":
