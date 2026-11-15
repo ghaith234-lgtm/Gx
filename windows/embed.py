@@ -18,4 +18,4 @@ s = RE.sub(lambda m: 'WIN_EXE_CODE = 5\nWIN_EXE_NAME = "2.0.1"\nWIN_EXE_B64 = "'
 compile(s, dash, "exec")
 open(dash + ".tmp", "w", encoding="utf-8").write(s)
 os.replace(dash + ".tmp", dash)
-print(f"✅ the Windows program 2.0 in {dash}: {len(raw)} bytes · sha256 {hashlib.sha256(raw).hexdigest()}")
+print(f"✅ the Windows program 2.0.1 in {dash}: {len(raw)} bytes · sha256 {hashlib.sha256(raw).hexdigest()}")
