@@ -27,9 +27,9 @@ if VAR is None:                                     # the runner: each variant i
             D[v] = {"err": (p.stdout + p.stderr)[-800:]}
     a, b = D["once"], D["twice"]
     ok(f"once: the run ends and the dollars ran out on the way ({a.get('events')})", a.get("ended") and a.get("events"), a)
-    ok(f"once: the card counts exactly the stored levels the price crossed — «📦 شراء {a.get('card_nb')} ≈ {a.get('card_ub')}$» (the owner's card: 15 ≈ 46.22$)",
-       a.get("card_nb") == len(a.get("crossed_levels") or [1]) == 15 and abs(float(a.get("card_ub") or 0) - 46.0) < 1.5, a)
-    ok("once: every one is a different level (one per rung · 0.04 SOL each — 3$ at its price) and all under the floor", a.get("distinct") and a.get("qty") == [0.04] and not a.get("above_floor"), a)
+    ok(f"once: the card counts exactly the stored levels the price crossed — «📦 شراء {a.get('card_nb')} ≈ {a.get('card_ub')}$» (the owner's card: 15 ≈ 46.22$ at 0.04 SOL a level — since v3.36.51 each level is exactly 3$, so the dollars last one level longer: 14 × 3$)",
+       a.get("card_nb") == len(a.get("crossed_levels") or [1]) and 13 <= a["card_nb"] <= 15 and abs(float(a.get("card_ub") or 0) - 3.0 * a["card_nb"]) < 0.5, a)
+    ok("once: every one is a different level (one per rung · each 3$ at its own price — on the coin's step since v3.36.51, it was 0.04 SOL flat) and all under the floor", a.get("distinct") and a.get("usd_each") and all(2.94 <= x <= 3.06 for x in a["usd_each"]) and not a.get("above_floor"), a)
     ok(f"twice: dollars back for a moment (one level bought) then gone again ⇒ a new, lower floor {b.get('floor')} · the card still counts every owed level: {b.get('card_nb')}",
        b.get("ended") and b.get("card_nb") == len(b.get("crossed_levels") or [1]) and b.get("distinct") and len(b.get("events") or []) >= 4, b)
     ok(f"twice: … some of them sit above the new floor ({b.get('above_floor')}) — counted because they are still owed (why the count can look like more than the floor shows)",
@@ -114,6 +114,6 @@ print(json.dumps({"variant": VAR, "ended": r["i_end"] >= r["n"] - 1, "distinct":
                   "crossed_levels": [round(x, 4) for x in crossed], "above_floor": [round(x, 4) for x in crossed if x > fl * (1 + 1e-9)],
                   "levels_floor_to_price": levels_between, "virtual_buys_above_price": sorted([round(float(v['target_price']), 4) for v in vb.values() if float(v['target_price']) >= cp], reverse=True),
                   "live_buys": sorted([round(float(v['target_price']), 4) for v in lb.values()], reverse=True), "acc_and_virtual_same_level": overlap,
-                  "qty": sorted(set(round(float(v['locked_qty']), 6) for v in acc.values())),
+                  "qty": sorted(set(round(float(v['locked_qty']), 6) for v in acc.values())), "usd_each": sorted(round(float(v['locked_qty']) * float(v['target_price']), 3) for v in acc.values()),
                   "store_lines": [e["msg"][:90] for e in EV["log"] if "حُجز مستوى" in e["msg"]][:3]}, ensure_ascii=False))
 shutil.rmtree(R, ignore_errors=True)

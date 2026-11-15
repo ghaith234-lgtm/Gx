@@ -30,6 +30,11 @@ err = open(os.path.join(R, "_stderr.txt"), "w")
 d = subprocess.Popen([sys.executable, os.path.join(H, "step", "video", "vid_dash.py"), R, str(P)], stdout=subprocess.PIPE, stderr=err, text=True, env=env,
                      preexec_fn=lambda: resource.setrlimit(resource.RLIMIT_AS, (3 * 2**30, 3 * 2**30)))   # a runaway table fails here, not the machine
 assert "dashboard up" in d.stdout.readline()
+for _ in range(100):                                          # the line is printed just before the port listens
+    try:
+        socket.create_connection(("127.0.0.1", P), timeout=0.3).close(); break
+    except OSError:
+        time.sleep(0.1)
 
 
 def post(path, body=None, raw=None, t=20):
@@ -72,6 +77,9 @@ try:
     k = post("/api/control", {"action": "shutdown_beacon"})
     time.sleep(1.2)
     ok("⑦ the leftover «shutdown_beacon» no longer stops the bots and closes the dashboard", d.poll() is None and k["st"] is not None and post("/api/control", {"action": "mute"})["st"] == 200, k)
+    w = post("/api/deploy", {"symbol": "SOL-USDT", "g_type": "grid", "grid_pct": "1", "usd_value": "3", "min_price": "0", "forced_base": "100", "wallet": "main"})
+    ok("⑧ (v3.36.51) a grid order smaller than the exchange's minimum for the coin is refused before deploying, with the amount needed (the bot was deployed and never traded)",
+       w["st"] == 200 and (w["j"] or {}).get("ok") is False and "الحد الأدنى للمنصة" in str((w["j"] or {}).get("msg")) and "$" in str((w["j"] or {}).get("msg")), w)
     err.flush()
     tb = open(err.name, encoding="utf-8", errors="replace").read().count("Traceback")
     ok("the server wrote no error trace through all of it and is still up", tb == 0 and d.poll() is None, tb)
