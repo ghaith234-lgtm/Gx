@@ -27396,8 +27396,9 @@ function dcaViz(el,d,cp){
   if(el._k===key)return;el._k=key;
   if(!rows.length||!cp){el.innerHTML='<div class="vempty">📊 يظهر الرسم عند بدء الدورة</div>';return}
   const buy=!!d.is_buy,avg=+d.avg_price||0,tgt=+d.target_price||0,pk=d.trail_on?(+d.trail_peak||0):0;
-  const nL=rows.length+3+(pk>0?1:0),W=320,H=Math.max(180,Math.min(340,34+nL*18)),pt=12,pb=14,X0=60,X1=228;
   const ps=rows.map(r=>+r.px).concat([avg,tgt,cp,pk].filter(x=>x>0));
+  const X0=Math.max(60,Math.ceil(8+6.7*Math.max(...ps.map(p=>f4(p).length))));      // 🔎 v3.36.58: عمود الأسعار بعرض أطولها (1000 فأكثر ما ينقص أول رقم)
+  const nL=rows.length+3+(pk>0?1:0),W=320,H=Math.max(180,Math.min(340,34+nL*18)),pt=12,pb=14,X1=228;
   let lo=Math.min(...ps),hi=Math.max(...ps);const pad=(hi-lo)*0.07||hi*0.002;lo-=pad;hi+=pad;
   const y=p=>pt+(hi-p)/(hi-lo)*(H-pt-pb);
   const cLv=buy?'var(--cyan)':'var(--red)',tagOf={done:'✅',part:'◐',live:'🟢',mem:'📦',trail:'🛡️'};

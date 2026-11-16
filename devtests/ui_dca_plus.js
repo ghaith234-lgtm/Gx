@@ -52,6 +52,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     /⚡ DCA\+ بيعي/.test(c.tag) && c.shown && /✏️ أوامر DCA\+ \(5 أمر أمان\)/.test(c.btn) && c.plus && c.plus.rows.length === 6
     && JSON.stringify(c.plus.locked) === '[0,1,2]' && c.plus.base === 2000 && !c.plus.pending, c);
   ok(`① the normal sell DCA next to it: «${c.dtag}» · no ✏️ button`, /📉 DCA بيعي/.test(c.dtag) && !c.dshown, c);
+  const lb = await pg.evaluate(dir => { const svg = CARDS.get(dir)._r.viz.querySelector('svg');
+    return [...svg.querySelectorAll('text')].filter(t => /^\d/.test(t.textContent)).map(t => ({ t: t.textContent, x: +t.getBBox().x.toFixed(1) })) }, DIR);
+  ok(`① the card's drawing: prices of 1000 and more fit — no label starts outside the frame (${lb.slice(0, 2).map(o => o.t).join(' · ')})`,
+    lb.length >= 6 && lb.every(o => o.x >= 0) && lb.some(o => o.t.startsWith('2207')), lb);   // 🔎 v3.36.58 (p98): «2207.9000» was «207.9000»
   // ② 📋 the card's table: the exit % of each row
   const t = await pg.evaluate(async dir => {
     CARDS.get(dir)._r.dtable.click(); await new Promise(r => setTimeout(r, 400));
