@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.57"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.58"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -9961,6 +9961,14 @@ def _cw_cached():
     return _CW_CACHE["d"]
 
 
+_CW_MODE = {"auto": False}      # ▶️ v3.36.58: إعداد الجولة الحالية (يُضبط ببداية _cash_watch)
+
+
+def _cw_auto(g):
+    """▶️ v3.36.58: يعود الشراء تلقائياً حين يعود الدولار؟ (افتراضياً لا — ينتظر موافقة المالك)"""
+    return bool((g or {}).get("cash_auto_resume"))
+
+
 def _cw_key(d):
     return os.path.relpath(os.path.abspath(str(d)), ROOT)
 
@@ -9999,9 +10007,11 @@ def _cw_low(g, wid, q, rec, snap, now):
         det = (f"المتاح {av:.2f} {q}" + (f" (منه {held:.2f} للمستويات المحفوظة في البوتات الموقوفة)" if held > 0.005 else "")
                + f" · أصغر أمر شراء {mn:.2f} {q}\n"
                + (f"⏳ تنتظر الدولار: {names}\n" if names else "")
-               + (f"⏸ أُوقف شراؤها تلقائياً فوق السعر بقليل: {' · '.join(paused)} — كل مستوى ينزل إليه السعر يُحفظ ويُشترى بأمر واحد حين يعود الدولار\n"
-                  if paused else "")
-               + "البوتات تكمل البيع، ويعود الشراء وحده حين يتوفر الدولار — رسالة الآن وأخرى حين يعود (وتذكير مرة في اليوم على الأكثر).")
+               + (f"⏸ أُوقف شراؤها تلقائياً فوق السعر بقليل: {' · '.join(paused)} — كل مستوى ينزل إليه السعر يُحفظ"
+                  + (" ويُشترى بأمر واحد حين يعود الدولار\n" if _cw_auto(g) else " ويُشترى بأمر واحد حين تستأنف أنت الشراء\n") if paused else "")
+               + ("البوتات تكمل البيع، ويعود الشراء وحده حين يتوفر الدولار" if _cw_auto(g) else
+                  "البوتات تكمل البيع، ويبقى الشراء الموقوف حتى تستأنفه أنت من البطاقة (▶️ استأنف الشراء)")
+               + " — رسالة الآن وأخرى حين يعود (وتذكير مرة في اليوم على الأكثر).")
         e = _gd_event(g, key, "🟡", f"💵 نفد الدولار الحر — {q}", det, wid=wid, sym=q, kind="low_quote")
         if e.get("tg") is True and now - float(e.get("rem_ts") or e.get("ts") or now) >= 86400:
             e["rem_ts"], e["tg"], e["rem"] = now, False, int(e.get("rem") or 0) + 1      # ⏰ تذكير مرة باليوم
@@ -10018,8 +10028,12 @@ def _cw_low(g, wid, q, rec, snap, now):
     _gd_resolve(g, key, note=f"عاد الدولار: المتاح {av:.2f} {q}")
     rec.pop("ok_since", None)
     _gd_event(g, f"back:{wid}:{q}:{int(now)}", "🟢", f"✅ عاد الدولار الحر — {q}",
-              f"المتاح {av:.2f} {q} يغطي أمر الشراء ({mn:.2f} {q}) منذ {CW_BACK_S // 60} دقيقة — تعود البوتات إلى الشراء"
-              + (" ويُستأنف الشراء الموقوف تلقائياً (المستويات المحفوظة تُشترى بأمر واحد بقدر الدولار)" if _cw_recs(wid, q) else ""),
+              f"المتاح {av:.2f} {q} يغطي أمر الشراء ({mn:.2f} {q}) منذ {CW_BACK_S // 60} دقيقة"
+              + ((" — تعود البوتات إلى الشراء ويُستأنف الشراء الموقوف تلقائياً (المستويات المحفوظة تُشترى بأمر واحد بقدر الدولار)" if _cw_auto(g) else
+                  " — الشراء الموقوف ينتظر موافقتك: اضغط «▶️ استأنف الشراء» في بطاقة "
+                  + " · ".join(_cw_lbl(r) for r in _cw_recs(wid, q))
+                  + " (تعود أرضيتك إن كانت لك أرضية، والمستويات المحفوظة تُشترى بأمر واحد بقدر الدولار)") if _cw_recs(wid, q) else
+                 " — تعود البوتات إلى الشراء"),
               wid=wid, sym=q, kind="quote_back", status="info")
 
 
@@ -10065,7 +10079,8 @@ def _cw_pause(k, i, r, d, wid, q, eff, now):
         if new <= cur * (1 + 1e-9):
             return True                                  # 🔕 v3.36.45: أرضيتك فوق السعر أصلاً ⇒ ما تغيّر شي ⇒ ولا سطر «أُوقف» (نتذكرها بس)
         _dash_event(i.get("sym") or "", f"⏸💵 أُوقف الشراء تلقائياً — الدولار الحر ({max(0.0, eff):.2f}$) لا يكفي أمر الشراء ({need:g}$) · "
-                                        f"الأرضية {_px_s(new)} فوق السعر بقليل: كل مستوى ينزل إليه السعر يُحفظ ويُشترى بأمر واحد حين يعود الدولار"
+                                        f"الأرضية {_px_s(new)} فوق السعر بقليل: كل مستوى ينزل إليه السعر يُحفظ ويُشترى بأمر واحد حين "
+                                        + ("يعود الدولار" if _CW_MODE["auto"] else "تستأنف أنت الشراء")
                                         + (f" · أرضيتك {_px_s(cur)} تعود بعدها" if cur > 0 else ""))
         return True
     if abs(cur - float(r.get("set") or 0)) > max(1e-12, float(r.get("set") or 0) * 1e-7):
@@ -10081,7 +10096,7 @@ def _cw_pause(k, i, r, d, wid, q, eff, now):
     return False
 
 
-def _cw_restore(k, r, d, why):
+def _cw_restore(k, r, d, why, owner=False):
     """▶️ عاد الدولار (أو أُطفئ الإيقاف التلقائي) ⇒ أرضية المالك كما كانت (أو بلا أرضية) — والمحرك يشتري المحفوظ بأمر واحد"""
     b = _cw_bot(os.path.join(ROOT, k))
     if b and not r.get("hands_off"):
@@ -10094,7 +10109,7 @@ def _cw_restore(k, r, d, why):
             o = float(r.get("orig") or 0)
             if abs(cur - o) > 1e-15 and not save_state_keys(sp, {"buy_floor": o, "pause_buy": False}):
                 return False
-            _dash_event(r.get("sym") or "", (f"▶️💵 {why} — استؤنف الشراء تلقائياً"
+            _dash_event(r.get("sym") or "", (f"▶️💵 {why} — استؤنف الشراء" + ("" if owner else " تلقائياً")
                                              + (f" · عادت أرضيتك {_px_s(o)}" if o > 0 else
                                                 " · المستويات المحفوظة تُشترى بأمر واحد بقدر الدولار الحر")))
     d["bots"].pop(k, None)
@@ -10104,6 +10119,7 @@ def _cw_restore(k, r, d, why):
 def _cash_watch(g, now, snaps):
     """② ⏸ إيقاف الشراء تلقائياً لبوتات الشبكة اللي دولار محفظتها ما يغطي أمرها القادم (فحصان متتاليان) · ▶️ رجوعه بعد نصف ساعة من عودة الدولار"""
     on = g.get("cash_pause", True) is not False
+    _CW_MODE["auto"] = _cw_auto(g)
     with _CW_LOCK:
         d = _cw_load()
         ch = False
@@ -10128,7 +10144,16 @@ def _cash_watch(g, now, snaps):
                         d["ok"].setdefault(wq, now)
                     else:
                         d["ok"].pop(wq, None)
-                    if (not on) or now - float(d["ok"].get(wq) or now) >= CW_BACK_S:
+                    _bk = (not on) or now - float(d["ok"].get(wq) or now) >= CW_BACK_S
+                    if _bk and not _cw_auto(g):
+                        for k, r in recs:                   # 👤 v3.36.58: الشراء ينتظر موافقة المالك — ولا شي يُستأنف من هنا
+                            if r.get("hands_off") or not on:
+                                d["bots"].pop(k, None)      # المالك تصرّف بنفسه · أو أُطفئ المفتاح ⇒ يبقى إيقافاً عادياً (▶️ من البطاقة)
+                                ch = True
+                            elif not r.get("back"):
+                                r["back"] = now             # عاد الدولار ⇒ شارة «▶️ استأنف الشراء» بالكرت
+                                ch = True
+                    elif _bk:
                         left = eff
                         for j, (k, r) in enumerate(recs):
                             if on and j and left < float(r.get("need") or 0):
@@ -10147,6 +10172,9 @@ def _cash_watch(g, now, snaps):
                         seen_now.add(k)
                         ch = True
                     else:
+                        _rw = d["bots"].get(k)              # 👤 v3.36.58: ينتظر موافقتك ⇒ الأرضية تبقى تتبع السعر صعوداً (ولا شراء فوقها أيضاً)
+                        if on and _rw is not None and _rw.get("back") and not _rw.get("hands_off") and _cw_pause(k, i, _rw, d, wid, q, eff, now):
+                            ch = True
                         continue
                     if not on:
                         continue
@@ -10172,11 +10200,19 @@ def _cash_watch(g, now, snaps):
 
 
 def _cw_release_all(why):
-    """▶️ كل بوت أوقفه النظام للدولار يُستأنف الآن (أرضية المالك ترجع) — حين تُوقف الرقابة أو يُطفأ المفتاح (لا جولة قادمة تستأنفه)"""
+    """▶️ كل بوت أوقفه النظام للدولار يُستأنف الآن (أرضية المالك ترجع) — حين تُوقف الرقابة أو يُطفأ المفتاح (لا جولة قادمة تستأنفه)
+    👤 v3.36.58: بلا «يعود الشراء تلقائياً» ⇒ تبقى موقوفة (إيقاف عادي — ▶️ من كل بطاقة) · الرقم سالب = عدد الباقية موقوفة"""
     n = 0
+    auto = _cw_auto(_gd_load())
     with _CW_LOCK:
         d = _cw_load()
         for k, r in list(d["bots"].items()):
+            if not auto:
+                d["bots"].pop(k, None)
+                if not r.get("hands_off"):
+                    n -= 1
+                    _dash_event(r.get("sym") or "", f"⏸💵 {why} — يبقى الشراء موقوفاً حتى تستأنفه من البطاقة (▶️ استئناف الشراء)")
+                continue
             if _cw_restore(k, r, d, why):
                 n += 1
         d["ok"], d["seen"] = {}, {}
@@ -10191,7 +10227,7 @@ def _cw_card(bdir):
         k = _cw_key(bdir)
         r = (d.get("bots") or {}).get(k)
         if r and not r.get("hands_off"):
-            return {"need": round(float(r.get("need") or 0), 4), "auto": True}
+            return {"need": round(float(r.get("need") or 0), 4), "auto": True, "back": bool(r.get("back"))}   # back: ينتظر موافقتك
         sv = (d.get("seen") or {}).get(k)
         if isinstance(sv, dict) and time.time() - float(sv.get("ts") or 0) < 3 * GUARD_EVERY:
             return {"need": round(float(sv.get("need") or 0), 4), "auto": False}
@@ -10627,6 +10663,7 @@ def guard_view():
             "scan_wallets": g.get("scan_wallets"), "scan_fail": g.get("scan_fail"),
             "auto_fix": bool(g.get("auto_fix")), "paused": bool(g.get("paused")), "busy": busy,
             "cash_pause": g.get("cash_pause", True) is not False,                       # 💵 v3.36.44
+            "cash_auto_resume": bool(g.get("cash_auto_resume")),                         # ▶️ v3.36.58
             "every": GUARD_EVERY, "alerts": _gd_alerts(g, now), "wallets": wallets, "bots": bots,
             "events": ev, "legacy": g.get("legacy") or {}, "selfcheck": guard_selfcheck(g),
             "acc": g.get("acc") or {}, "ri": g.get("ri") or {},
@@ -10717,15 +10754,18 @@ def guard_ack(key, mode="accept", note="", by=""):
     return {"ok": False, "msg": "لا يوجد تنبيه بهذا المفتاح"}
 
 
-def guard_cfg(auto_fix=None, paused=None, by="", cash_pause=None):
+def guard_cfg(auto_fix=None, paused=None, by="", cash_pause=None, cash_auto_resume=None):
     """⚙️ مفاتيح الرقابة: التصحيح التلقائي · الإيقاف المؤقت · 💵 إيقاف الشراء تلقائياً حين ينفد الدولار (v3.36.44)."""
     with _GUARD_IO:
         g = _gd_load()
         msg = []
         if cash_pause is not None:
             g["cash_pause"] = bool(cash_pause)
-            msg.append("⏸💵 إيقاف الشراء تلقائياً حين ينفد الدولار " + ("مفعّل" if g["cash_pause"] else
-                                                                       "معطّل — البوتات الموقوفة تلقائياً تُستأنف بالفحص القادم"))
+            msg.append("⏸💵 إيقاف الشراء تلقائياً حين ينفد الدولار " + ("مفعّل" if g["cash_pause"] else "معطّل"))
+        if cash_auto_resume is not None:                 # ▶️ v3.36.58
+            g["cash_auto_resume"] = bool(cash_auto_resume)
+            msg.append("▶️ عودة الشراء تلقائياً حين يعود الدولار " + ("مفعّلة" if g["cash_auto_resume"] else
+                                                                   "متوقفة — الشراء الموقوف ينتظر موافقتك (▶️ استأنف الشراء في البطاقة)"))
         if auto_fix is not None:
             g["auto_fix"] = bool(auto_fix)
             msg.append("🤖 التصحيح التلقائي " + ("مفعّل — الفروق المفسَّرة بأدلة المنصة تُصحَّح تلقائياً"
@@ -10738,8 +10778,10 @@ def guard_cfg(auto_fix=None, paused=None, by="", cash_pause=None):
         _gd_save(g)
         if (cash_pause is not None and not g.get("cash_pause", True)) or (paused is not None and g.get("paused")):
             _n = _safe(_cw_release_all, "أُوقفت الرقابة" if g.get("paused") else "أُطفئ الإيقاف التلقائي", default=0) or 0
-            if _n:                                       # 💵 v3.36.44: لا جولة قادمة تستأنفها ⇒ الآن
+            if _n > 0:                                   # 💵 v3.36.44: لا جولة قادمة تستأنفها ⇒ الآن
                 msg.append(f"▶️ استؤنف شراء {_n} بوت أوقفه النظام لنفاد الدولار")
+            elif _n < 0:                                 # 👤 v3.36.58: تبقى موقوفة حتى تستأنفها
+                msg.append(f"⏸ يبقى شراء {-_n} بوت موقوفاً حتى تستأنفه من بطاقته")
     try:
         log_event("🛡️ [الرقابة] " + " · ".join(msg) + f" — {by}")
     except Exception:
@@ -20201,6 +20243,18 @@ def control(d_rel, action, value):
         _buy = b["cfg"].get("bot_type") == "dca_buy"
         return {"ok": True, "msg": (f"🏁 يكمل هذه الدورة حتى {'يبيع' if _buy else 'يشتري'} بالهدف، ثم يتوقف — لا يفتح دورة جديدة"
                                     if _on else "▶️ أُلغيت «آخر دورة» — يكمل الدورات كالمعتاد")}
+    if action == "cash_resume":                               # ▶️ v3.36.58: عاد الدولار ⇒ المالك يستأنف (حقول التحكم فقط — المحرك يشتري)
+        with _CW_LOCK:
+            d = _cw_load()
+            k = _cw_key(b["dir"])
+            r = d["bots"].get(k)
+            if not r:
+                return {"ok": False, "msg": "لا يوجد إيقاف تلقائي لهذا البوت"}
+            ok_ = _cw_restore(k, r, d, "استأنفتَ الشراء", owner=True)
+            save_json_atomic(CASHW_FILE, d)
+        o = float(r.get("orig") or 0)
+        return {"ok": bool(ok_), "msg": ("▶️ استؤنف الشراء" + (f" · عادت أرضيتك {_px_s(o)}" if o > 0 else
+                                                               " — المستويات المحفوظة تُشترى بأمر واحد بقدر الدولار الحر")) if ok_ else "تعذّر الاستئناف — أعد المحاولة"}
     if action == "plus_edit":                                 # ⚡ v3.36.57: DCA+ — الأوامر من الجدول/الرسم والبوت شغّال (حقول فقط — المحرك يرسل)
         if b["cfg"].get("bot_type") != "dca" or not b["cfg"].get("dca_plus"):
             return {"ok": False, "msg": "تعديل الأوامر لبوتات DCA+ فقط"}
@@ -23062,7 +23116,8 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
             if act == "guard_cfg":
                 v = (data.get("value") if isinstance(data.get("value"), dict) else {})
                 _by = "👤 اللوحة (" + str((self.client_address or ["?"])[0]) + ")"
-                return self._json(guard_cfg(auto_fix=v.get("auto_fix"), paused=v.get("paused"), by=_by, cash_pause=v.get("cash_pause")))
+                return self._json(guard_cfg(auto_fix=v.get("auto_fix"), paused=v.get("paused"), by=_by, cash_pause=v.get("cash_pause"),
+                                            cash_auto_resume=v.get("cash_auto_resume")))
             if act == "ri_report":
                 txt = _safe(reinvest_report, data.get("value") or "daily", default=None)
                 if not txt:
@@ -25989,10 +26044,16 @@ function accBtnSync(dir){const el=CARDS.get(dir),b=botOf(dir);if(!el||!el._r||!e
   R.ab.textContent=abL;R.ab.className=(b.floor>0||b.pause_buy)?'on':'';
   R.as.textContent=asL;R.as.className=(b.ceil>0||b.pause_sell)?'on':''}
 /* 📦 v3.21.2: شارة المخزن — وقت الإيقاف: المقطوع بس (يتنفّذ بأمر واحد لو تستأنف) · بلا إيقاف (حجوزات النطاق): مثل قبل */
+function cashResume(dir){const b=botOf(dir)||{};      // ▶️ v3.36.58: عاد الدولار — الاستئناف بقرارك
+  showDialog(`<h2>▶️ استئناف الشراء — ${gEsc(b.symbol||'')}</h2>
+    <p style="color:var(--mut);font-size:13px;line-height:1.9;margin-bottom:14px">عاد الدولار الحر. عند الاستئناف تعود أرضيتك كما كانت (إن كانت لك أرضية)، والمستويات التي نزل إليها السعر والشراء موقوف تُشترى <b>بأمر واحد بسعر السوق</b> — أرخص من مستوياتها — بقدر الدولار الحر، ويعود البوت إلى الشراء العادي.</p>
+    <div class="mbtns"><button class="primary" onclick="hideModal();ctl('${dir}','cash_resume')">▶️ استأنف الشراء</button><button onclick="hideModal()">رجوع</button></div>`)}
 function accChipsOf(b){
   const AX=b.accx||{};let c='';
-  const CW=b.cashw;if(CW&&+CW.need>0)c+=`<span class="chip cashw" style="color:var(--amber);border-color:rgb(var(--amber2-rgb)/.45);background:rgb(var(--amber2-rgb)/.08)"
-    title="${CW.auto?'⏸ أُوقف الشراء تلقائياً فوق السعر بقليل لأن الدولار الحر في المحفظة لا يكفي أمر الشراء — كل مستوى ينزل إليه السعر يُحفظ ويُشترى بأمر واحد حين يعود الدولار (وتعود أرضيتك إن كانت لك أرضية) · زر الاستئناف يلغي الإيقاف التلقائي لهذا البوت':'الدولار الحر في المحفظة لا يكفي أمر الشراء القادم — يكمل البوت البيع وينتظر الدولار'}">🟠 ينتظر دولار — يحتاج $${(+CW.need).toFixed(2)}${CW.auto?' · ⏸':''}</span>`;
+  const CW=b.cashw;if(CW&&CW.back)c+=`<span class="chip cashw cwback" onclick="event.stopPropagation();cashResume('${b.dir}')" style="cursor:pointer;color:var(--green);border-color:rgb(var(--green-rgb)/.5);background:rgb(var(--green-rgb)/.10)"
+    title="عاد الدولار الحر — الشراء ما زال موقوفاً بانتظار موافقتك · اضغط للاستئناف">▶️ عاد الدولار — استأنف الشراء</span>`;
+  else if(CW&&+CW.need>0)c+=`<span class="chip cashw" style="color:var(--amber);border-color:rgb(var(--amber2-rgb)/.45);background:rgb(var(--amber2-rgb)/.08)"
+    title="${CW.auto?'⏸ أُوقف الشراء تلقائياً فوق السعر بقليل لأن الدولار الحر في المحفظة لا يكفي أمر الشراء — كل مستوى ينزل إليه السعر يُحفظ ويُشترى بأمر واحد حين تستأنف الشراء (وتعود أرضيتك إن كانت لك أرضية) · زر الاستئناف يلغي الإيقاف التلقائي لهذا البوت':'الدولار الحر في المحفظة لا يكفي أمر الشراء القادم — يكمل البوت البيع وينتظر الدولار'}">🟠 ينتظر دولار — يحتاج $${(+CW.need).toFixed(2)}${CW.auto?' · ⏸':''}</span>`;
   if(b.floor>0){if((AX.nb||0)>0){c+=`<span class="chip acc" title="${AX.nb} تُشترى بأمر واحد إن استأنفت الآن · ${Math.max(0,(AX.kb||0)-AX.nb)} محفوظة تعود إلى أماكنها">📦 شراء ${AX.nb} ≈ $${AX.ub}</span>`;
     if(AX.ab!=null&&AX.ab<AX.nb)c+=`<span class="chip" style="color:var(--red);border-color:rgb(var(--red2-rgb)/.45);background:rgb(var(--red2-rgb)/.08)"
       title="💵 ب٢٤: دولارك الحر $${AX.qa} يغطي ${AX.ab} من ${AX.nb} درجة إن استأنفت الآن (الكل ≈ $${AX.qn}) — يشتري البوت ما يغطيه بأمر واحد وينتظر الباقي في المخزن حتى يتوفر دولار · الدولار الحر مشترك بين بوتات الحساب نفسه">💵 يغطي ${AX.ab}/${AX.nb}</span>`}}
@@ -28412,9 +28473,13 @@ function guardRender(){
   h+=`<div id="gv_cash" style="${box};display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between">
     <div style="font-size:12px;line-height:1.8">⏸💵 <b>إيقاف الشراء تلقائياً حين ينفد الدولار:</b> <b style="color:${V.cash_pause?'var(--green)':'var(--mut2)'}">${V.cash_pause?'مفعّل':'متوقف'}</b><br>
       <span style="color:var(--mut2);font-size:11px">حين لا يكفي الدولار الحر أمر الشراء القادم لبوت شبكة (فحصان متتاليان) يُوقف شراءه فوق السعر بقليل — كل مستوى ينزل إليه السعر
-      يُحفظ، والأرضية تتبع السعر إن صعد · وحين يعود الدولار نصف ساعة يُستأنف الشراء (يُشترى المحفوظ بأمر واحد) وتعود أرضيتك إن كانت لك أرضية.
+      يُحفظ، والأرضية تتبع السعر إن صعد · ${V.cash_auto_resume?'وحين يعود الدولار نصف ساعة يُستأنف الشراء (يُشترى المحفوظ بأمر واحد) وتعود أرضيتك إن كانت لك أرضية':'وحين يعود الدولار يبقى الشراء موقوفاً حتى تستأنفه أنت: شارة خضراء «▶️ استأنف الشراء» في البطاقة'}.
       رسالة واحدة للمحفظة حين ينفد وأخرى حين يعود.</span></div>
     <button onclick="guardCfg({cash_pause:${V.cash_pause?'false':'true'}})" class="${V.cash_pause?'on':''}" style="font-size:12px;padding:6px 12px">${V.cash_pause?'⏹️ أطفِه':'▶️ شغّله'}</button></div>`;
+  h+=`<div id="gv_cashr" style="${box};display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between">
+    <div style="font-size:12px;line-height:1.8">▶️💵 <b>يعود الشراء تلقائياً حين يعود الدولار:</b> <b style="color:${V.cash_auto_resume?'var(--green)':'var(--mut2)'}">${V.cash_auto_resume?'مفعّل':'متوقف — ينتظر موافقتك'}</b><br>
+      <span style="color:var(--mut2);font-size:11px">متوقف (الافتراضي): البوت الذي أُوقف شراؤه لنفاد الدولار لا يشتري حتى تضغط «▶️ استأنف الشراء» في بطاقته · مفعّل: يُستأنف وحده بعد نصف ساعة من عودة الدولار.</span></div>
+    <button onclick="guardCfg({cash_auto_resume:${V.cash_auto_resume?'false':'true'}})" class="${V.cash_auto_resume?'on':''}" style="font-size:12px;padding:6px 12px">${V.cash_auto_resume?'⏹️ أطفِه':'▶️ شغّله'}</button></div>`;
   const A=V.alerts||[];
   h+=H(`🚨 تنبيهات مفتوحة (${A.length})`);
   if(!A.length)h+=`<div style="${box};text-align:center;color:${(allFail||!scanned)?'var(--amber)':'var(--green)'}">${!scanned?'⏳ لم يُفحص بعد — أول فحص بعد دقيقة من إقلاع اللوحة':allFail?'⚠️ تعذّر الوصول إلى المنصة في آخر فحص — لا يمكن تأكيد المطابقة':'✅ لا يوجد تنبيه مفتوح — كل المفحوص مطابق'}</div>`;

@@ -5,12 +5,15 @@
 #       the dollars come back:
 #       ① one «💵 نفد الدولار الحر» for the wallet (which bot waits · what it needs) and one «✅ عاد الدولار الحر» — nothing between
 #       ② ⏸ after two scans the floor goes a little ABOVE the price · OKX refuses no buy while it waits · the floor follows the price
-#          up · the dollars the pulled orders freed are not «dollars back» · back for 30 minutes ⇒ the floor goes back (none) and the
-#          engine buys the stored levels in one order
+#          up · the dollars the pulled orders freed are not «dollars back» · back for 30 minutes ⇒ 👤 v3.36.58 (p97): it STAYS paused
+#          (the owner decides) · the card turns green «▶️ عاد الدولار — استأنف الشراء» · the floor still follows the price · the card's
+#          button (control «cash_resume») ⇒ the floor goes back (none) and the engine takes its stored levels
 #       ③ the card says «🟠 ينتظر دولار — يحتاج X$» (⏸ automatic) and nothing once the dollars are back
 #   B · the rules one by one: the balance flapping 3$ ⇄ 12$ opens no second message · the owner's own floor is kept and comes back ·
 #       the owner presses ▶️ while paused ⇒ the system lets that bot alone · a daily reminder (and it is really sent) · the switch
-#       off (or the guard paused — p71: at once) ⇒ the paused bots resume · the recurring bot's «الرصيد لا يكفي»: once, then quiet until a buy goes through · the 🔔
+#       off (or the guard paused — p71: at once) ⇒ 👤 v3.36.58: they stay paused (plain pauses — ▶️ from each card) · with «يعود الشراء
+#       تلقائياً» on (🛡️) ⇒ the old automatic resume (the owner's floor back · the switch off / the guard paused resume them) · the
+#       recurring bot's «الرصيد لا يكفي»: once, then quiet until a buy goes through · the 🔔
 #       centre hides the engines' dollar lines while the wallet message is open · the card chip (the page's own function, in node)
 #   python3 devtests/t_cash_watch.py [Holy_Dashboard.pyw] [-q]
 import importlib.machinery, importlib.util, json, math, os, re, shutil, subprocess, sys, tempfile, urllib.request
@@ -69,7 +72,7 @@ def evs(g, kind):
 SYM, P0, DT = "SOL-USDT", 80.0, 60.0
 px = [P0] * 200 + [P0 - 6.0 * i / 500 for i in range(1, 501)] + [74.0] * 300 + [74.0 + 5.6 * i / 300 for i in range(1, 301)] + [79.6] * 500
 # (the climb ends at 79.6 — above the first floor ≈ 78.9 · under the plus bot's first inventory sell 80.48: no sell brings dollars back)
-I_DRAIN, I_BACK = 300, 1350
+I_DRAIN, I_BACK, I_RES = 300, 1350, 1450
 CFG = {"grid_percentage": 0.006, "usd_value": 10.0, "min_price": 60.0, "forced_base_price": P0, "knife_guard": False,
        "bot_type": "grid_plus", "lower_price": 0.0, "upper_price": 0.0, "buy_offset": 0.012}
 SPEC = {"tickSz": 0.01, "lotSz": 0.0001, "minSz": 0.01}
@@ -110,7 +113,10 @@ class Clock(_Clock):
                 ex.bal[ex.quote] += 300.0                          # 💵 back
             if i % 10:
                 return
-            m.bot_dirs = lambda: {f: {"dir": f, "symbol": SYM, "cfg": dict(CFG, symbol=SYM)}}
+            m.ROOT = os.path.dirname(f)
+            m.bot_dirs = lambda: {os.path.realpath(f): {"dir": f, "symbol": SYM, "cfg": dict(CFG, symbol=SYM), "cfg_path": os.path.join(f, f"config_{SYM}.json")}}
+            if i == I_RES:
+                EV["res"] = m.control(os.path.basename(f), "cash_resume", None)      # ▶️ the card's green chip (the owner's decision)
             try:
                 st = json.load(open(os.path.join(f, f"grid_state_{SYM}.json"), encoding="utf-8"))
             except Exception:
@@ -153,20 +159,30 @@ ok("… the floor follows the price up (74 ⇒ 79.6 — past the first floor) an
 heldv = [(i, a) for i, p, f, a in FL if I_DRAIN + 30 <= i < I_BACK]
 ok("… the pulled orders' dollars show in the wallet but are not «dollars back» (no «back» before the deposit)",
    heldv and max(a for _, a in heldv) > 10 and t_back >= I_BACK, heldv[:3])
-rest = [(i, f) for i, p, f, a in FL if i >= I_BACK + 40]
-ok("… back for 30 minutes ⇒ the floor goes back (it had none)", rest and all(f == 0 for i, f in rest), rest[:3])
+wait = [(i, f) for i, p, f, a in FL if I_BACK + 40 <= i < I_RES]
+ok("… 👤 back for 30 minutes ⇒ it STAYS paused (the floor stays above the price — the owner decides) · no buy while it waits",
+   wait and all(f > 0 for i, f in wait) and not [x for x in r["ex"].fills if x[1] == "buy" and I_DRAIN + 20 <= round((x[0] - m._BT_T0) / DT) < I_RES], wait[:3])
+ch_g = [c for i, c in EV["chip"] if I_BACK + 40 <= i < I_RES]
+ok("… the card's chip turns green: «▶️ عاد الدولار — استأنف الشراء» (back) — until the owner presses it", ch_g and all(c and c.get("back") for c in ch_g), ch_g[:2])
+rest = [(i, f) for i, p, f, a in FL if i >= I_RES + 10]
+ok(f"… the owner presses it (control «cash_resume»: {(EV.get('res') or {}).get('msg', '')}) ⇒ the floor goes back (it had none)",
+   (EV.get("res") or {}).get("ok") and rest and all(f == 0 for i, f in rest), (EV.get("res"), rest[:3]))
 res_l = [e["msg"] for e in L if "[استئناف الشراء]" in e["msg"] or "[إعادة نشر]" in e["msg"]]
 st_end = EV.get("st") or {}
 ok("… and the engine takes its stored levels back (the price climbed above them ⇒ they return to their places as buy orders — none bought dearer) · "
-   "the store empty · buy orders live again", res_l and all(idx(e) >= I_BACK + 30 for e in L if "[استئناف الشراء]" in e["msg"] or "[إعادة نشر]" in e["msg"])
+   "the store empty · buy orders live again", res_l and all(idx(e) >= I_RES for e in L if "[استئناف الشراء]" in e["msg"] or "[إعادة نشر]" in e["msg"])
    and not (st_end.get("accum_buys") or {}) and (st_end.get("limit_buys") or {}) and not float(st_end.get("buy_floor") or 0),
    (res_l, len(st_end.get("accum_buys") or {}), len(st_end.get("limit_buys") or {})))
 ch_w = [c for i, c in EV["chip"] if I_DRAIN + 20 <= i < I_BACK]
-ch_b = [c for i, c in EV["chip"] if i >= I_BACK + 40]
-ok("③ the card: «🟠 ينتظر دولار — يحتاج 10$ · ⏸» while it waits · nothing once the dollars are back",
-   ch_w and all(c and c["auto"] and c["need"] == 10 for c in ch_w) and ch_b and not any(ch_b), (ch_w[:2], ch_b[:2]))
+ch_b = [c for i, c in EV["chip"] if i >= I_RES + 10]
+ok("③ the card: «🟠 ينتظر دولار — يحتاج 10$ · ⏸» while it waits · nothing once the owner resumed",
+   ch_w and all(c and c["auto"] and c["need"] == 10 and not c.get("back") for c in ch_w) and ch_b and not any(ch_b), (ch_w[:2], ch_b[:2]))
 dash = [e["msg"] for e in m.DASH_EVENTS]
-ok("… and the 🔔 centre says it once each way (⏸ paused · ▶️ resumed)", sum("⏸💵" in x for x in dash) == 1 and sum("▶️💵" in x for x in dash) == 1, dash[:4])
+ok("… and the 🔔 centre says it once each way (⏸ paused · ▶️ resumed by the owner)", sum("⏸💵" in x for x in dash) == 1 and sum("▶️💵" in x for x in dash) == 1
+   and any("استأنفتَ الشراء" in x for x in dash), dash[:4])
+bk = evs(g, "quote_back")
+ok("… the «✅ عاد الدولار الحر» message says buying waits for the owner and names the bot", bk and "ينتظر موافقتك" in bk[0]["detail"] and "SOL ➕" in bk[0]["detail"],
+   [e["detail"][:200] for e in bk])
 
 # ═══════════ B · the rules one by one (bot folders with a state file — no engine) ═══════════
 B = os.path.join(R, "bots")
@@ -224,9 +240,26 @@ round_(g, snapof([d2], 79.0), 3, T + 1200)
 f_b = stf(d2)["buy_floor"]
 for j in range(5):
     round_(g, snapof([d2], 79.0), 300, T + 1800 + j * 600)
+f_w = stf(d2)["buy_floor"]
+round_(g, snapof([d2], 81.0), 300, T + 1800 + 5 * 600)
+f_u = stf(d2)["buy_floor"]
+m.bot_dirs = lambda: {os.path.realpath(d2): {"dir": d2, "symbol": SYM, "cfg": dict(CFG, symbol=SYM), "cfg_path": os.path.join(d2, f"config_{SYM}.json")}}
+r_own = m.control(os.path.relpath(d2, R), "cash_resume", None)      # ▶️ the card's green chip
 f_c = stf(d2)["buy_floor"]
-ok(f"… the owner's floor (76, the price under it): kept while it is above the price ({f_a}) · moved up with the price ({f_b}) · back to 76 when the dollars are ({f_c})",
-   f_a == 76.0 and 79.0 < f_b <= 79.0 * 1.0035 and f_c == 76.0, (f_a, f_b, f_c))
+ok(f"… the owner's floor (76, the price under it): kept while it is above the price ({f_a}) · moved up with the price ({f_b}) · 👤 the dollars "
+   f"back: still paused ({f_w}) and following the price up ({f_u} at 81) · the owner resumes ⇒ back to 76 ({f_c} · «{r_own.get('msg')}»)",
+   f_a == 76.0 and 79.0 < f_b <= 79.0 * 1.0035 and f_w == f_b and 81.0 < f_u <= 81.0 * 1.0035 and f_c == 76.0 and r_own.get("ok"), (f_a, f_b, f_w, f_u, f_c, r_own))
+g = fresh()
+g["cash_auto_resume"] = True                                       # ▶️ the 🛡️ switch on ⇒ the old automatic resume
+d2 = mkbot("own", floor=76.0, cp=74.0)
+m.bot_dirs = lambda: {d2: {"dir": d2, "symbol": SYM, "cfg": dict(CFG, symbol=SYM)}}
+round_(g, snapof([d2], 74.0), 3, T)
+round_(g, snapof([d2], 74.0), 3, T + 600)
+round_(g, snapof([d2], 79.0), 3, T + 1200)
+for j in range(5):
+    round_(g, snapof([d2], 79.0), 300, T + 1800 + j * 600)
+f_ar = stf(d2)["buy_floor"]
+ok(f"… with «▶️ يعود الشراء تلقائياً» on (🛡️): the old way — back to 76 by itself 30 minutes after the dollars ({f_ar})", f_ar == 76.0, f_ar)
 ok("… and while the owner's floor already covers the price nothing changed ⇒ no «⏸💵 أُوقف الشراء تلقائياً» line (p73)", _quiet,
    [e["msg"][:80] for e in m.DASH_EVENTS[:4]])
 # the owner presses ▶️ while paused
@@ -269,8 +302,8 @@ g["cash_pause"] = False
 round_(g, snapof([d5]), 3, T + 1200)
 f_off = stf(d5)["buy_floor"]
 round_(g, snapof([d5]), 3, T + 1800)
-ok("… 🛡️ the switch off ⇒ the paused bot resumes at the next round and is not paused again", f_on > 74 and f_off == 0 and stf(d5)["buy_floor"] == 0
-   and not m._cw_load()["bots"], (f_on, f_off))
+ok("… 🛡️ the switch off ⇒ 👤 the bot stays paused (a plain pause — ▶️ from its card) and is not paused again by the system",
+   f_on > 74 and f_off == f_on and stf(d5)["buy_floor"] == f_on and not m._cw_load()["bots"], (f_on, f_off))
 # ⏸️ the guard paused ⇒ no next round ⇒ the paused bots resume at once (p71)
 g = fresh()
 d7 = mkbot("gp", floor=76.0, cp=74.0)
@@ -280,9 +313,21 @@ round_(g, snapof([d7, d8], 79.0), 3, T)
 round_(g, snapof([d7, d8], 79.0), 3, T + 600)
 f7a, f8a = stf(d7)["buy_floor"], stf(d8)["buy_floor"]
 r71 = m.guard_cfg(paused=True, by="test")
-ok(f"… 🛡️ the guard paused (no next round) ⇒ every bot it paused resumes at once — the owner's floor back ({f7a} ⇒ {stf(d7)['buy_floor']}) · none ({f8a} ⇒ {stf(d8)['buy_floor']})",
-   f7a > 79 and f8a > 79 and stf(d7)["buy_floor"] == 76.0 and stf(d8)["buy_floor"] == 0 and not m._cw_load()["bots"] and "استؤنف شراء 2" in r71.get("msg", ""), r71)
+ok(f"… 🛡️ the guard paused (no next round) ⇒ 👤 every bot it paused stays paused (resume from each card): {f7a} ⇒ {stf(d7)['buy_floor']} · {f8a} ⇒ {stf(d8)['buy_floor']} · «{r71.get('msg')}»",
+   f7a > 79 and f8a > 79 and stf(d7)["buy_floor"] == f7a and stf(d8)["buy_floor"] == f8a and not m._cw_load()["bots"] and "يبقى شراء 2" in r71.get("msg", ""), r71)
 m.guard_cfg(paused=False, by="test")
+g = fresh()
+d7 = mkbot("gp", floor=76.0, cp=74.0)
+d8 = mkbot("gq")
+m.bot_dirs = lambda: {d7: {"dir": d7, "symbol": SYM, "cfg": dict(CFG, symbol=SYM)}, d8: {"dir": d8, "symbol": SYM, "cfg": dict(CFG, symbol=SYM)}}
+round_(g, snapof([d7, d8], 79.0), 3, T)
+round_(g, snapof([d7, d8], 79.0), 3, T + 600)
+m.guard_cfg(cash_auto_resume=True, by="test")
+r71b = m.guard_cfg(paused=True, by="test")
+ok(f"… with «▶️ يعود الشراء تلقائياً» on: the guard paused ⇒ they resume at once as before (the owner's floor back {stf(d7)['buy_floor']} · none {stf(d8)['buy_floor']})",
+   stf(d7)["buy_floor"] == 76.0 and stf(d8)["buy_floor"] == 0 and "استؤنف شراء 2" in r71b.get("msg", ""), r71b)
+m.guard_cfg(paused=False, by="test")
+m.guard_cfg(cash_auto_resume=False, by="test")
 # the recurring bot's «not enough dollars»
 TG.clear()
 m.REC_TG_FILE = os.path.join(R, "rec_tg.json")
@@ -326,13 +371,14 @@ page = open(DASH, encoding="utf-8").read()
 js = page[page.index("function accChipsOf(b){"):]
 js = js[:js.index("\nfunction accumPrompt(")]
 try:
-    out = subprocess.run(["node", "-e", js + "\nconst r=[accChipsOf({cashw:{need:10,auto:true}}),accChipsOf({cashw:{need:12.5,auto:false}}),accChipsOf({cashw:null})];"
+    out = subprocess.run(["node", "-e", js + "\nconst r=[accChipsOf({cashw:{need:10,auto:true}}),accChipsOf({cashw:{need:12.5,auto:false}}),accChipsOf({cashw:null}),accChipsOf({dir:'b1',cashw:{need:10,auto:true,back:true}})];"
                           "console.log(JSON.stringify(r))"], capture_output=True, text=True, timeout=30)
     C = json.loads(out.stdout.strip().splitlines()[-1])
 except Exception as e:
-    C = [str(e), "", "x"]
+    C = [str(e), "", "x", ""]
 ok("③ the card chip (the page's function): «🟠 ينتظر دولار — يحتاج $10.00 · ⏸» (automatic) · «$12.50» without ⏸ · nothing without a wait",
-   "🟠 ينتظر دولار — يحتاج $10.00 · ⏸" in C[0] and "أُوقف الشراء تلقائياً" in C[0] and "يحتاج $12.50<" in C[1] and "⏸<" not in C[1] and C[2] == "", C)
+   "🟠 ينتظر دولار — يحتاج $10.00 · ⏸" in C[0] and "أُوقف الشراء تلقائياً" in C[0] and "يحتاج $12.50<" in C[1] and "⏸<" not in C[1] and C[2] == ""
+   and "▶️ عاد الدولار — استأنف الشراء" in C[3] and "cashResume('b1')" in C[3] and "🟠" not in C[3], C)
 ok("no order placed or cancelled by the dashboard (only control fields)", True)
 print(f"✅ t_cash_watch: {sum(res)}/{len(res)}" if all(res) else f"❌ t_cash_watch: {sum(res)}/{len(res)}")
 os.chdir(H)
