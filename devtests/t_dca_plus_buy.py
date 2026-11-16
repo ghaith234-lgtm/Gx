@@ -13,6 +13,7 @@
 #     refused order · every cycle closed sold EVERYTHING it bought at a dollar gain · every safety buy at the ladder (never dearer) · the
 #     wallet = the books to the cent
 #   ⑥ the trial path from the form (the kind · the settings · the dollars it needs) · the demo's kind
+#   ⑦ the normal buy DCA's ladder written as rows, the same wallet ⇒ the very same fills (the engines agree)
 #   python3 devtests/t_dca_plus_buy.py [Holy_Dashboard.pyw] [-q]
 import base64, importlib.machinery, importlib.util, json, math, os, re, shutil, sys, tempfile, types, urllib.request, zlib
 
@@ -465,6 +466,32 @@ ok(f"⑥ «🧪 جرّب» from the form: «dca_plus_buy» ⇒ the buy kind ({kd
    and abs(q6 - round(need * 1.03 + 1.0, 2)) < 0.011 and b6 == 0, (kd, err6, cfg6, q6, b6, need))
 ok("⑥ the classic kinds still: «dca» ⇒ dca · «dca_buy» ⇒ dca_buy · «dca_plus» ⇒ dca", m._bt_kind_of({"dca_type": "dca"}) == "dca"
    and m._bt_kind_of({"dca_type": "dca_buy"}) == "dca_buy" and m._bt_kind_of({"dca_type": "dca_plus"}) == "dca")
+
+# ⑦ the same ladder as the normal buy DCA (written as rows · 1% on every order) and the SAME wallet ⇒ fill for fill the same
+#   (the real-prices CI showed a small gap between dcab and dcapb_same — it came from the trial wallet: the DCA+ one is sized at each
+#   row's own price, the classic one at the base price, and both ran short on some paths)
+import random
+random.seed(7)
+SP7, P7, px7, p_ = {"tickSz": 0.01, "lotSz": 0.0001, "minSz": 0.01}, 100.0, [], 100.0
+for _ in range(12000):
+    p_ *= math.exp(random.gauss(0, 0.0025)); px7.append(round(p_, 2))
+rows7, cum, prev = [{"d": 0, "q": 10 / P7, "x": 1}], 0.0, 1.0
+for k_ in range(1, 7):
+    cum += 1.2 ** (k_ - 1); cur = 1 - cum / 100
+    rows7.append({"d": (1 - cur / prev) * 100, "q": 10 / P7 * 1.5 ** (k_ - 1), "x": 1}); prev = cur
+B7 = {"symbol": "SOL-USDT", "dca_type": "dca_buy", "base_order_qty": repr(10 / P7), "avg_order_qty": repr(10 / P7), "first_deviation": "1",
+      "step_multiplier": "1.2", "size_multiplier": "1.5", "max_safety_orders": "6", "take_profit_pct": "1", "exchange_orders": "3", "cycle_wait_sec": "60"}
+o7 = {}
+for nm7, b7 in (("dcab", B7), ("dcapb", dict(B7, dca_type="dca_plus_buy", plus_rows=json.dumps(rows7)))):
+    c7, e7 = m._bt_dry_cfg("dca_buy", b7, "SOL-USDT", SP7, P7)
+    m.__dict__.update(keep)
+    r7 = m._bt_run("dca_buy", c7, "SOL-USDT", px7, 75.0, 5000.0, 0.0, SP7, samples=2000)
+    s7 = r7.get("state") or {}
+    o7[nm7] = (bool(c7.get("dca_plus")), round(float(s7.get("total_coin_profit") or 0), 8), int(s7.get("cycles_done") or 0),
+               [(f[1], round(f[2], 6), round(f[3], 8)) for f in r7["ex"].fills])
+ok(f"⑦ the same ladder as the normal buy DCA and the same wallet ⇒ DCA+ الشرائي trades fill for fill like it ({len(o7['dcab'][3])} fills · "
+   f"{o7['dcab'][2]} cycles · {o7['dcab'][1]:+.4f}$ both)", o7["dcab"][0] is False and o7["dcapb"][0] is True and o7["dcab"][3] == o7["dcapb"][3]
+   and o7["dcab"][1:3] == o7["dcapb"][1:3] and o7["dcab"][2] > 5, {k: v[:3] for k, v in o7.items()})
 
 print(f"✅ t_dca_plus_buy: {sum(res)}/{len(res)}" if all(res) else f"❌ t_dca_plus_buy: {sum(res)}/{len(res)}")
 shutil.rmtree(R, ignore_errors=True)
