@@ -1,9 +1,10 @@
-# ⚡ v3.36.56 — DCA+ in the books (rule 12 «🔗 الترابط»): a DCA+ bot = a sell DCA with dca_plus, so every place that counts the sell DCA
-#   counts it — and each layer exit is its own entry in cycles_log. A closed folder (fake keys · no network · nothing launched): a DCA+
-#   bot and a normal sell DCA, each with today's cycles (the DCA+ one: one closed cycle + two layer exits — one of them by hand, at a loss):
-#   · 🪙 the coin ledger today: the DCA+ coin = its cycle + both exits (to the last decimal) · the normal DCA's coin = its cycle
+# ⚡ v3.36.57 — the new DCA+ (the free ladder) in the books (rule 12 «🔗 الترابط»): a DCA+ bot = a sell DCA with dca_plus and its rows,
+#   so every place that counts the sell DCA counts it — each closed cycle (bought back in one go) is one entry in cycles_log, exactly
+#   like the sell DCA. A closed folder (fake keys · no network · nothing launched): a DCA+ bot and a normal sell DCA, each with today's
+#   cycles (the DCA+ one: three closed cycles — one of them closed by hand at a loss with «💰 اشترِ الآن»):
+#   · 🪙 the coin ledger today: the DCA+ coin = its three cycles (to the last decimal) · the normal DCA's coin = its cycle
 #   · 🧾 the day's trades (bot_day_events · trade_log): three lines for the DCA+ bot
-#   · 📉 the losses: the hand exit at a loss is listed (DCA بيعي) · the automatic ones are not
+#   · 📉 the losses: the hand close at a loss is listed · the automatic ones are not
 #   · 🔗 the linkage audit (link_audit): no ❌
 #   python3 devtests/t_dca_plus_books.py [Holy_Dashboard.pyw] [-q]
 import importlib.machinery, importlib.util, json, os, shutil, sys, tempfile, time, urllib.request
@@ -45,7 +46,8 @@ m.wallet_keys = lambda w: {"api_key": "devtests-a", "secret_key": "devtests-s", 
 BODY = {"base_order_qty": "0.01", "avg_order_qty": "0.01", "first_deviation": "0.5", "step_multiplier": "1.2", "size_multiplier": "1.5",
         "max_safety_orders": "5", "take_profit_pct": "1", "exchange_orders": "3", "cycle_wait_sec": "30", "wallet": "main"}
 made = {}
-for sym, extra in (("ETH-USDT", {"dca_type": "dca_plus", "lx_pct": "0.5"}), ("LTC-USDT", {"dca_type": "dca"})):
+ROWS = [{"d": 0, "q": 0.01, "x": 0.5}, {"d": 1, "q": 0.01, "x": 0.6}, {"d": 1.5, "q": 0.02, "x": 0.4}, {"d": 2, "q": 0.03, "x": 0.3}]
+for sym, extra in (("ETH-USDT", {"dca_type": "dca_plus", "plus_rows": json.dumps(ROWS)}), ("LTC-USDT", {"dca_type": "dca"})):
     before = set(m.bot_dirs())
     r = m.deploy_dca(dict(BODY, symbol=sym, **extra))
     made[sym] = sorted(set(m.bot_dirs()) - before)[0]
@@ -54,16 +56,16 @@ bots = m.bot_dirs()
 bp, bn = bots[made["ETH-USDT"]], bots[made["LTC-USDT"]]
 ok("the two bots: ETH a DCA+ (sell DCA + dca_plus · its engine dca_plus.py) · LTC a normal sell DCA (dca.py)",
    bp["cfg"].get("dca_plus") and bp["cfg"]["bot_type"] == "dca" and not bn["cfg"].get("dca_plus")
-   and m.engine_for(bp["cfg"])[0] == m.DCAP_SRC and m.engine_for(bn["cfg"])[0] == m.DCA_SRC)
+   and m.engine_for(bp["cfg"])[0] == m.DCAP_SRC and m.engine_for(bn["cfg"])[0] == m.DCA_SRC and bp["cfg"].get("plus_rows") and "plus_rows" not in bn["cfg"])
 now = time.time()
 CP = [{"id": "HDP-1-%d" % int(now - 7200), "n": 1, "ts": now - 7200, "profit": 0.0004, "px": 1990.0, "out": 0.05, "in": 0.0504, "manual": False},
-      {"id": "HDP-x3-%d-1" % int(now - 3600), "n": 1, "ts": now - 3600, "profit": 0.00007, "px": 2026.3, "out": 0.0225, "in": 0.02257, "manual": False, "lx": [3]},
-      {"id": "HDP-x4-%d-2" % int(now - 1800), "n": 1, "ts": now - 1800, "profit": -0.00011, "px": 2060.0, "out": 0.03375, "in": 0.03364, "manual": True, "lx": [4]}]
+      {"id": "HDP-2-%d" % int(now - 3600), "n": 2, "ts": now - 3600, "profit": 0.00007, "px": 2026.3, "out": 0.02, "in": 0.02007, "manual": False},
+      {"id": "HDP-3-%d" % int(now - 1800), "n": 3, "ts": now - 1800, "profit": -0.00011, "px": 2060.0, "out": 0.04, "in": 0.03989, "manual": True}]
 CN = [{"id": "HDN-1-%d" % int(now - 5400), "n": 1, "ts": now - 5400, "profit": 0.0123, "px": 70.0, "out": 1.0, "in": 1.0123, "manual": False}]
 for b, cl in ((bp, CP), (bn, CN)):
     sp = m.paths_of(b)[0]
     st = m.load_json(sp) or {}
-    st.update(phase="selling", current_price=2030.0 if b is bp else 70.0, cycles_done=1, cycles_log=cl, total_coin_profit=round(sum(c["profit"] for c in cl), 10),
+    st.update(phase="selling", current_price=2030.0 if b is bp else 70.0, cycles_done=len(cl), cycles_log=cl, total_coin_profit=round(sum(c["profit"] for c in cl), 10),
               filled=[{"price": 2000.0 if b is bp else 70.0, "qty": 0.01, "n": 0, "net": 19.98 if b is bp else 0.699, "fid": 1}])
     m.save_json_atomic(sp, st)
 today = datetime.now().strftime("%Y-%m-%d")
@@ -94,9 +96,9 @@ if got_p is None:                                   # the ledger's shape: look f
     for pth, v in walk(led or {}):
         if today in pth and "ETH" in pth and isinstance(v, (int, float)) and abs(float(v) - want_p) < 1e-9:
             got_p = round(float(v), 10)
-ok(f"🪙 the coin ledger today: ETH = its cycle + both layer exits ({want_p:+.8f} — the hand exit at a loss included)", got_p is not None and abs(got_p - want_p) < 1e-9, txt)
+ok(f"🪙 the coin ledger today: ETH = its three cycles ({want_p:+.8f} — the hand close at a loss included)", got_p is not None and abs(got_p - want_p) < 1e-9, txt)
 ev = m.bot_day_events(bp, today) or []
-ok("🧾 the day's events of the DCA+ bot: three (the cycle · two layer exits)", len(ev) == 3, ev)
+ok("🧾 the day's events of the DCA+ bot: three (its three cycles)", len(ev) == 3, ev)
 tl = m.trade_log(today) or {}
 crow = [e for e in (tl.get("coin_rows") or []) if "ETH" in json.dumps(e, ensure_ascii=False)]
 ok("🧾 the day's trade log: the DCA+ bot's three entries in the coin section (to the last decimal)", len(crow) == 3
@@ -104,12 +106,12 @@ ok("🧾 the day's trade log: the DCA+ bot's three entries in the coin section (
 lv = m.loss_view() or {}
 s_lv = json.dumps(lv, ensure_ascii=False)
 li = [x for x in (lv.get("items") or []) if "ETH" in json.dumps(x, ensure_ascii=False)]
-ok("📉 the losses page: the hand exit at a loss is there (−0.00011 ETH) · the automatic exits (profits) are not", len(li) == 1 and "-0.00011" in json.dumps(li, ensure_ascii=False)
+ok("📉 the losses page: the hand close at a loss is there (−0.00011 ETH) · the automatic cycles (profits) are not", len(li) == 1 and "-0.00011" in json.dumps(li, ensure_ascii=False)
    or (len(li) == 1 and abs(abs(float(li[0].get("q") or li[0].get("coin") or li[0].get("amt") or 0)) - 0.00011) < 1e-9), (li, s_lv[:600]))
 la = m.link_audit(force=True) or {}
 s_la = json.dumps(la, ensure_ascii=False)
 bad = [x for x in (la.get("items") or la.get("rows") or []) if "❌" in json.dumps(x, ensure_ascii=False)]
-ok("🔗 the linkage audit (link_audit): no ❌ with a DCA+ bot and its layer exits in the books", "❌" not in s_la, (bad or s_la)[:1500] if isinstance(bad, list) else bad)
+ok("🔗 the linkage audit (link_audit): no ❌ with a DCA+ bot and its cycles in the books", "❌" not in s_la, (bad or s_la)[:1500] if isinstance(bad, list) else bad)
 print(f"✅ t_dca_plus_books: {sum(res)}/{len(res)}" if all(res) else f"❌ t_dca_plus_books: {sum(res)}/{len(res)}")
 shutil.rmtree(R, ignore_errors=True)
 sys.exit(0 if all(res) else 1)

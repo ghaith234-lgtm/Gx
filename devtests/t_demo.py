@@ -7,7 +7,7 @@
 #     fill there and the engine books them (its own state) · the paper wallet stays whole (coins and dollars add up with the fills)
 #   · the card reads the paper wallet (free dollars · coins · open orders) · nothing is sent anywhere (no OKX private call)
 #   · stop and start again: the paper wallet survives (the same orders, the same balances)
-#   · ⚡ v3.36.56 --kind=dca_plus: a DCA+ from the form («dca_type: dca_plus») ⇒ a sell DCA with dca_plus · its engine dca_plus.py
+#   · ⚡ v3.36.57 --kind=dca_plus: the new DCA+ from the form («dca_type: dca_plus» + its rows) ⇒ a sell DCA with dca_plus and the rows · its engine dca_plus.py
 #   python3 devtests/t_demo.py [Holy_Dashboard.pyw] [-q] [--kind=grid_plus|grid|grid_range|grid_step|dca|dca_plus|dca_buy|rec_buy|rec_sell|rec_va] [--ri]
 import importlib.machinery, importlib.util, json, os, shutil, sys, tempfile, time, urllib.request
 
@@ -64,9 +64,8 @@ BODY = {"grid_plus": {"symbol": SYM, "g_type": "grid_plus", "grid_pct": "0.6", "
         "grid_step": {"symbol": SYM, "usd_value": "30", "step_parts": "3", "step_sell_pct": "0.8", "grid_pct": "1.5", "min_price": "50", "up_groups": "2"},
         "dca": {"symbol": SYM, "base_order_qty": "0.1", "avg_order_qty": "0.1", "first_deviation": "0.6", "step_multiplier": "1.2",
                 "size_multiplier": "1.2", "max_safety_orders": "5", "take_profit_pct": "0.6", "dca_type": "dca"},
-        "dca_plus": {"symbol": SYM, "base_order_qty": "0.1", "avg_order_qty": "0.1", "first_deviation": "0.6", "step_multiplier": "1.2",
-                     "size_multiplier": "1.2", "max_safety_orders": "5", "take_profit_pct": "0.6", "dca_type": "dca_plus", "lx_pct": "0.5",
-                     "lx_from": "1", "lx_reopen": False},
+        "dca_plus": {"symbol": SYM, "dca_type": "dca_plus", "plus_rows": json.dumps([{"d": 0, "q": 0.1, "x": 0.6}, {"d": 0.6, "q": 0.1, "x": 0.6},
+                     {"d": 0.8, "q": 0.15, "x": 0.5}, {"d": 1.0, "q": 0.2, "x": 0.4}, {"d": 1.3, "q": 0.3, "x": 0.3}])},
         "dca_buy": {"symbol": SYM, "base_order_qty": "0.1", "avg_order_qty": "0.1", "first_deviation": "0.6", "step_multiplier": "1.2",
                     "size_multiplier": "1.2", "max_safety_orders": "5", "take_profit_pct": "0.6", "dca_type": "dca_buy"},
         "rec_buy": {"symbol": SYM, "rec_type": "rec_buy", "mode": "lots", "amount": "10", "every": "1", "unit": "h", "tp_pct": "0.6",
@@ -84,7 +83,7 @@ cfgp = os.path.join(D, f"config_{SYM}.json")
 cfg = json.load(open(cfgp, encoding="utf-8")) if os.path.exists(cfgp) else {}
 BT = "dca" if KIND == "dca_plus" else KIND              # ⚡ DCA+ = the sell DCA + dca_plus
 ok("the settings are a demo's: is_demo · the kind asked · no keys anywhere", cfg.get("is_demo") is True and cfg.get("bot_type") == BT
-   and (KIND != "dca_plus" or (cfg.get("dca_plus") is True and cfg.get("lx_pct") == 0.5 and m.engine_for(cfg)[0] == m.DCAP_SRC))
+   and (KIND != "dca_plus" or (cfg.get("dca_plus") is True and len(cfg.get("plus_rows") or []) == 5 and m.engine_for(cfg)[0] == m.DCAP_SRC))
    and not any(cfg.get(k) for k in ("api_key", "secret_key", "passphrase")), {k: cfg.get(k) for k in ("is_demo", "bot_type", "api_key")})
 eng_src, eng_script, _ = m.engine_for(cfg)
 ok(f"the folder holds the very engine a real {KIND} bot runs ({eng_script} · byte for byte) + the demo runner + the paper wallet",

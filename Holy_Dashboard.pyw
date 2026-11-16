@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.56"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.57"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -1032,6 +1032,116 @@ DCA_FEE_TAKER = 0.001       # الأساس والإغلاق والأوامر ا�
 DCA_MAX_SAFETY = 100        # 🩺 v3.36.50: حد عدد أوامر الأمان (كان بلا حد ⇒ رقم خاطئ كبير يملأ الذاكرة ويوقف اللوحة)
 
 
+PLUS_MAX_ROWS = 101          # ⚡ v3.36.57 DCA+: الأساس + 100 أمر أمان (نفس DCA_MAX_SAFETY)
+
+
+def _plus_rows_ok(rows):
+    """⚡ DCA+: صفوف السلّم الحر سليمة؟ ⇒ (صفوف نظيفة، "") أو (None، السبب) — نفس قواعد المحرك (plus_rows_ok)"""
+    if isinstance(rows, str):
+        try:
+            rows = json.loads(rows)
+        except Exception:
+            return None, "صفوف الأوامر غير صالحة"
+    if not isinstance(rows, list) or not (1 <= len(rows) <= PLUS_MAX_ROWS):
+        return None, f"عدد الأوامر بين 2 و{PLUS_MAX_ROWS}"
+    out = []
+    for i, r in enumerate(rows):
+        try:
+            d, q, x = float((r or {}).get("d") or 0), float((r or {}).get("q") or 0), float((r or {}).get("x") or 0)
+        except Exception:
+            return None, f"أرقام الصف {i + 1} غير صالحة"
+        if not all(v == v and abs(v) != float("inf") for v in (d, q, x)):
+            return None, f"أرقام الصف {i + 1} غير صالحة"
+        if q <= 0 or x <= 0 or x > 50 or (i > 0 and not (0 < d <= 50)):
+            return None, f"الصف {i + 1}: الكمية أكبر من صفر · المسافة بين 0 و50% · نسبة الخروج بين 0 و50%"
+        out.append({"d": 0.0 if i == 0 else round(d, 6), "q": q, "x": round(x, 6)})
+    return out, ""
+
+
+def _plus_tp_n(cfg, n):
+    """⚡ DCA+: هدف الصف n (كسر عشري) — لا ينزل تحت 0.20% مثل المحرك"""
+    rows, _w = _plus_rows_ok(cfg.get("plus_rows"))
+    if not rows:
+        return _dca_tp(cfg)
+    return max(float(rows[min(max(0, int(n)), len(rows) - 1)]["x"]), 0.20) / 100.0
+
+
+def _plus_locked(st):
+    """أوامر هذه الدورة اللي نفّذت (لا تتحرك)"""
+    out = set()
+    if (st or {}).get("phase") not in ("selling", "buying"):
+        return out
+    for f in (st.get("filled") or []):
+        try:
+            k = int(f.get("n", 0))
+            out |= set(int(x) for x in (f.get("ns") or [])) if k < 0 else {k}
+        except Exception:
+            pass
+    return out
+
+
+def _plus_table(cfg, base_price):
+    """⚡ DCA+: جدول المعاينة من صفوف المالك — لكل صف: لو وصل السعر لهالأمر ورجع لخروجه (صافي بعد العمولة كالمحرك)"""
+    rows, why = _plus_rows_ok(cfg.get("plus_rows"))
+    if rows is None:
+        return {"rows": [], "msg": why}
+    if base_price <= 0:
+        return []
+    trail = str(cfg.get("trail_on")).lower() in ("1", "true", "on", "yes")
+    f_lv = DCA_FEE_TAKER if trail else DCA_FEE_MAKER
+    out, cq, cv, cnet, p = [], 0.0, 0.0, 0.0, float(base_price)
+    for i, r in enumerate(rows):
+        if i:
+            p = p * (1 + r["d"] / 100.0)
+        q, fee = r["q"], (DCA_FEE_TAKER if i == 0 else f_lv)
+        cq += q; cv += p * q; cnet += p * q * (1 - fee)
+        avg = cv / cq
+        x_used = max(r["x"], 0.20)
+        tgt = avg * (1 - x_used / 100.0)
+        prof = cnet / tgt * (1 - DCA_FEE_TAKER) - cq
+        out.append({"n": i, "label": "أساسي" if i == 0 else f"أمان {i}", "price": round(p, 10), "order_qty": round(q, 6),
+                    "order_val": round(p * q, 2), "step": round(r["d"], 4), "dev": round((p / base_price - 1) * 100, 3),
+                    "cum_qty": round(cq, 6), "cum_vol": round(cv, 2), "avg": round(avg, 10), "target": round(tgt, 10),
+                    "gap_pct": round((1 - tgt / p) * 100, 3), "exit_profit": round(prof, 6), "exit_usd": round(prof * tgt, 4),
+                    "gap": round(abs(tgt - avg), 10), "x": r["x"], "x_used": x_used})
+    last, first = out[-1], out[0]
+    cov = (last["price"] / base_price - 1) * 100
+    gaps = [r["gap_pct"] for r in out]
+    return {"rows": out, "summary": {
+        "is_buy": False, "trail": trail, "plus": True, "tp_used": round(rows[0]["x"], 3), "fee_warn": any(r["x"] < 0.20 for r in rows),
+        "low_rows": [r["n"] for r in out if r["exit_profit"] <= 0],
+        "coverage": round(cov, 3), "cov_warn": cov < 3.0, "capital_needed": round(last["cum_qty"], 6), "capital_usd": round(last["cum_vol"], 2),
+        "max_exit": round(max(gaps), 3), "avg_exit": round(sum(gaps) / len(gaps), 3), "profit_base": first["exit_profit"],
+        "profit_full": last["exit_profit"], "profit_full_usd": last["exit_usd"], "final_avg": last["avg"], "final_target": last["target"],
+        "last_price": last["price"], "fee_maker": DCA_FEE_MAKER * 100, "fee_taker": DCA_FEE_TAKER * 100,
+        "drop_needed": round(last["gap_pct"], 3), "coin_profit": last["exit_profit"], "total_sold": last["cum_qty"], "total_usdt": last["cum_vol"]}}
+
+
+_CANDLES = {}
+
+
+def candles_view(data):
+    """📈 v3.36.57: شموع السعر لرسم DCA+ (بيانات OKX العامة · بلا مفاتيح · ذاكرة 60 ثانية)"""
+    sym = str((data or {}).get("sym") or "").strip().upper()
+    bar = str((data or {}).get("bar") or "1H")
+    if not re.fullmatch(r"[A-Z0-9]{2,15}-[A-Z]{2,10}", sym) or bar not in ("15m", "1H", "4H", "1D"):
+        return {"ok": False, "rows": [], "msg": "طلب غير صالح"}
+    k = (sym, bar)
+    c = _CANDLES.get(k)
+    if c and time.time() - c[0] < 60:
+        return {"ok": True, "rows": c[1]}
+    r = _okx_pub(f"/api/v5/market/candles?instId={sym}&bar={bar}&limit=168")
+    rows = []
+    for x in ((r or {}).get("data") or [])[::-1]:
+        try:
+            rows.append([int(x[0]) // 1000, float(x[1]), float(x[2]), float(x[3]), float(x[4])])
+        except Exception:
+            pass
+    if rows:
+        _CANDLES[k] = (time.time(), rows)
+    return {"ok": bool(rows), "rows": rows}
+
+
 def _dca_tp(cfg):
     """هدف الربح الفعلي بالمحرك: ما ينزل تحت 0.20% (حماية العمولات)"""
     try:
@@ -1105,7 +1215,8 @@ def _dca_live(st, cfg, is_buy, cp, trail_on):
         else:
             stt = "trail" if trail_on else "mem"
         avg = cv / cq if cq > 0 else 0.0
-        tgt = avg * (1 + tp) if is_buy else avg * (1 - tp)
+        _tpn = _plus_tp_n(cfg, n) if cfg.get("plus_rows") else tp     # ⚡ DCA+: هدف صفّه هو
+        tgt = avg * (1 + _tpn) if is_buy else avg * (1 - _tpn)
         if is_buy:
             prof = cnet * tgt * (1 - DCA_FEE_TAKER) - cv
             exitp = (tgt / px0 - 1) * 100 if px0 > 0 else 0.0
@@ -1115,56 +1226,9 @@ def _dca_live(st, cfg, is_buy, cp, trail_on):
         rows.append({"n": n, "px": _pv_sig(px0), "q": round(q0, 6), "st": stt, "fpx": _pv_sig(fpx) if fq > 0 else 0,
                      "dist": round((px0 / cp - 1) * 100, 3) if cp > 0 else 0, "avg": _pv_sig(avg), "tgt": _pv_sig(tgt),
                      "exitp": round(exitp, 3), "prof": round(prof, 6 if is_buy else 4), "cq": round(cq, 4), "cv": round(cv, 2)})
+        if cfg.get("plus_rows"):
+            rows[-1]["x"] = round(_tpn * 100, 3)                # ⚡ DCA+: نسبة خروج هذا الصف
     return rows
-
-
-def _dcap_view(cfg, st, cp):
-    """⚡ v3.36.56: DCA+ في الكرت — إعدادات الخروج بالطبقات الفعلية (الكرت أولاً ثم الإعدادات) · كل طبقة منفّذة وسعر خروجها · ما خرج"""
-    def pick(k, d):
-        v = st.get(k)
-        return cfg.get(k, d) if v is None else v
-    try:
-        pct = min(10.0, max(0.3, float(pick("lx_pct", 0.5))))
-    except Exception:
-        pct = 0.5
-    try:
-        frm = max(1, int(float(pick("lx_from", 1))))
-    except Exception:
-        frm = 1
-    def ints(xs):
-        out = []
-        for x in xs or []:
-            try:
-                out.append(int(x))
-            except Exception:
-                pass
-        return out
-    off, now, on = set(ints(st.get("lx_off"))), set(ints(st.get("lx_now"))), bool(pick("lx_on", True))
-    layers = []
-    for f in st.get("filled") or []:
-        if not isinstance(f, dict):
-            continue
-        try:
-            n = int(f.get("n", 0))
-            ns = [int(x) for x in (f.get("ns") or [])] if n < 0 else [n]
-            px, q = float(f.get("price") or 0), float(f.get("qty") or 0)
-        except Exception:
-            continue
-        if not ns or min(ns) < 1 or px <= 0:
-            continue
-        ex = px * (1 - pct / 100.0)
-        fid = int(f.get("fid") or 0)
-        layers.append({"fid": fid, "ns": ns, "px": _pv_sig(px), "q": round(q, 8), "ex": _pv_sig(ex), "off": bool(set(ns) & off),
-                       "low": min(ns) < frm, "small": bool(f.get("lx_small")), "now": fid in now,
-                       "elig": on and min(ns) >= frm and not (set(ns) & off) and not f.get("lx_small"),
-                       "dist": round((cp / ex - 1) * 100, 3) if ex > 0 and cp > 0 else None,
-                       "net": round(float(f.get("net") or 0), 6)})
-    log = [{k: e.get(k) for k in ("ts", "ns", "sold", "px", "out", "in", "profit", "manual", "whole")} for e in (st.get("lx_log") or [])[-8:]
-           if isinstance(e, dict)]
-    return {"on": on, "pct": pct, "from": frm, "reopen": bool(pick("lx_reopen", True)), "off": sorted(off), "layers": layers,
-            "n": int(st.get("lx_count") or 0), "p": round(float(st.get("lx_profit") or 0), 8),
-            "cn": int(st.get("lx_cycle_n") or 0), "cp": round(float(st.get("lx_cycle_p") or 0), 8), "log": log[::-1],
-            "max": int(cfg.get("max_safety_orders", 5) or 5)}
 
 
 def _dca_snapshot(b, st):
@@ -1199,7 +1263,13 @@ def _dca_snapshot(b, st):
     except Exception:
         trail_pct = 0.3
     _ts, _tt = st.get("trail_s") or {}, st.get("trail_t") or {}
-    plus = _safe(_dcap_view, cfg, st, cp, default=None) if cfg.get("dca_plus") else None    # ⚡ v3.36.56: DCA+
+    plus = None
+    if cfg.get("dca_plus"):                                     # ⚡ v3.36.57: DCA+ — الصفوف · المنفّذة · سعر الأساس · تعديل ينتظر
+        _pr, _pw = _plus_rows_ok(cfg.get("plus_rows"))
+        _pe = st.get("plus_edit") if isinstance(st.get("plus_edit"), dict) else {}
+        plus = {"rows": _pr or [], "locked": sorted(_plus_locked(st)), "base": _pv_sig(float(st.get("base_price") or 0)),
+                "pending": bool(_pe.get("seq") is not None and str(_pe.get("seq")) != str(st.get("plus_seq"))),
+                "err": str(st.get("plus_edit_err") or "")}
     # الربح اللحظي:
     #   البيعي: لو اشترى بكل USDT بالسعر الحالي → ربح عملة
     #   الشرائي: لو باع كل العملة بالسعر الحالي → ربح دولار
@@ -5437,6 +5507,10 @@ def _bt_wallet_def(kind, cfg, body, p0, spec):
             return round(f("cap", 60), 2), 0.0
         if kind == "rec_sell":
             return 0.0, round(f("cap", 60) / p0, 8)
+        if kind == "dca" and ((cfg or {}).get("dca_plus") or str(g.get("dca_type") or "") == "dca_plus"):
+            _pr, _pw = _plus_rows_ok(g.get("plus_rows"))              # ⚡ v3.36.57: DCA+ — مجموع كميات الصفوف
+            if _pr:
+                return 0.0, round(sum(r["q"] for r in _pr) * 1.02, 8)
         if kind in ("dca", "dca_buy"):
             bq, aq, sm, n = f("base_order_qty", 0), f("avg_order_qty", 0), f("size_multiplier", 1), min(DCA_MAX_SAFETY, int(min(1e6, f("max_safety_orders", 0))))   # 🩺 v3.36.50
             tot = bq + sum(aq * sm ** i for i in range(max(0, n)))           # أقصى ما تحتاجه الخطة كاملة (بالعملة)
@@ -5812,9 +5886,7 @@ def _bt_dry_cfg(kind, body, sym, spec, p0):
         if kind in ("grid", "grid_range", "grid_plus"):
             b["g_type"], b["demo"] = kind, False
         elif kind in ("dca", "dca_buy"):
-            b["dca_type"] = kind
-            if str(body.get("dca_type") or "") == "dca_plus":   # ⚡ v3.36.56: DCA+ من النموذج
-                b["dca_plus"] = "1"
+            b["dca_type"] = "dca_plus" if kind == "dca" and str(body.get("dca_type") or "") == "dca_plus" else kind   # ⚡ DCA+ من النموذج
         elif kind in ("rec_buy", "rec_sell"):
             b["rec_type"] = kind
         r = fn(b) or {}
@@ -7253,7 +7325,7 @@ def deploy_demo(kind, data):
     بلا مفاتيح) · يتداول على منصة وهمية بسعر OKX الحي ومحفظة وهمية · خارج كل المجاميع والإشعارات"""
     if getattr(sys, "frozen", False):
         return {"ok": False, "msg": "الديمو يحتاج نسخة بايثون من اللوحة"}
-    if kind == "dca_plus":                                   # ⚡ v3.36.56: DCA+ = البيعي + dca_plus
+    if kind == "dca_plus":                                   # ⚡ v3.36.57: DCA+ = البيعي بصفوف المالك
         kind = "dca"
     if kind not in _BT_KINDS:
         return {"ok": False, "msg": "نوع بوت غير معروف للديمو"}
@@ -18732,6 +18804,12 @@ def wallet_keys(name):
     return None
 
 def compute_dca_table(cfg, base_price):
+    if str(cfg.get("dca_type") or "") == "dca_plus":         # ⚡ v3.36.57: DCA+ — من صفوف المالك
+        return _plus_table(cfg, base_price)
+    return _dca_table_classic(cfg, base_price)
+
+
+def _dca_table_classic(cfg, base_price):
     """📋 v3.22.1 (ح٥): جدول خطة DCA قبل النشر — **صافي بعد العمولة** بنفس حساب المحرك:
     الأساس ماركت (آخذ 0.1%) · الأمان ليمت (صانع 0.08% · بالدرع فوري آخذ 0.1%) · الإغلاق فوري (آخذ 0.1%).
     كل صف = لو السعر وصل لهالأمر ورجع للهدف: كم صرفت لحد هنا · متوسطك · سعر خروجك · كم لازم يرجع · ربحك الصافي."""
@@ -18958,10 +19036,19 @@ def compute_grid_range_table(cfg, cp):
 
 
 def deploy_dca(data):
-    """ينشئ بوت DCA بإعدادات نمط 3Commas"""
+    """ينشئ بوت DCA بإعدادات نمط 3Commas · ⚡ v3.36.57: DCA+ = صفوف المالك (plus_rows)"""
     sym = str(data.get("symbol", "")).strip().upper()
     if not sym or "-" not in sym:
         return {"ok": False, "msg": "اكتب الرمز كاملاً مثل XRP-USDT"}
+    _plus = None
+    if str(data.get("dca_type") or "").strip() == "dca_plus":
+        _plus, _why = _plus_rows_ok(data.get("plus_rows"))
+        if _plus is None:
+            return {"ok": False, "msg": _why}
+        if len(_plus) < 2:
+            return {"ok": False, "msg": "أضف أمر أمان واحداً على الأقل"}
+        data = dict(data, base_order_qty=_plus[0]["q"], avg_order_qty=_plus[1]["q"], first_deviation=_plus[1]["d"], step_multiplier=1,
+                    size_multiplier=1, max_safety_orders=len(_plus) - 1, take_profit_pct=_plus[0]["x"])
     try:
         fields = {
             "base_order_qty": float(data.get("base_order_qty", 0)),
@@ -18987,21 +19074,6 @@ def deploy_dca(data):
         return {"ok": False, "msg": f"عدد أوامر الأمان أكبر من الحد ({DCA_MAX_SAFETY}) — اكتب عدداً أصغر"}
     if fields["take_profit_pct"] <= 0:
         return {"ok": False, "msg": "يجب أن يكون هدف الربح أكبر من صفر"}
-    # ⚡ v3.36.56: DCA+ (بيعي + الخروج بالطبقات) — يتحقق قبل ما ينعمل أي مجلد
-    lx = {}
-    if str(data.get("dca_type") or "").strip() == "dca_plus" or str(data.get("dca_plus") or "").lower() in ("1", "true", "on", "yes"):
-        try:
-            _lp = float(data.get("lx_pct") if data.get("lx_pct") not in (None, "") else 0.5)
-            _lf = int(float(data.get("lx_from") if data.get("lx_from") not in (None, "") else 1))
-        except Exception:
-            return {"ok": False, "msg": "تأكد من أرقام الخروج بالطبقات"}
-        if not (_lp == _lp) or _lp < 0.3 or _lp > 10:
-            return {"ok": False, "msg": "ارتداد الخروج بالطبقات بين 0.3% و10% (أقل من 0.3% لا يغطي العمولة)"}
-        if _lf < 1 or _lf > fields["max_safety_orders"]:
-            return {"ok": False, "msg": f"الخروج بالطبقات يبدأ من أمر أمان بين 1 و{fields['max_safety_orders']}"}
-        _rv = data.get("lx_reopen", True)
-        lx = {"dca_plus": True, "lx_on": True, "lx_pct": round(_lp, 4), "lx_from": _lf,
-              "lx_reopen": _rv is True or str(_rv).lower() in ("1", "true", "on", "yes")}
     keys = wallet_keys(data.get("wallet", "")) or {
         "api_key": str(data.get("api_key", "")).strip(),
         "secret_key": str(data.get("secret_key", "")).strip(),
@@ -19015,8 +19087,8 @@ def deploy_dca(data):
     if dn_type not in ("dca", "dca_buy"): dn_type = "dca"
     cfg = {**keys, "symbol": sym, "bot_type": dn_type, **fields,
            "auto_restart": bool(data.get("auto", True))}
-    if lx and dn_type == "dca":                              # ⚡ DCA+ بيعي بهذا الإصدار
-        cfg.update(lx)
+    if _plus and dn_type == "dca":                                  # ⚡ DCA+ (بيعي)
+        cfg.update({"dca_plus": True, "plus_rows": _plus})
     save_json_atomic(os.path.join(full, f"config_{sym}.json"), cfg)
     eng_src, eng_script, _ = engine_for(cfg)
     with open(os.path.join(full, eng_script), "w", encoding="utf-8") as f:
@@ -20129,71 +20201,31 @@ def control(d_rel, action, value):
         _buy = b["cfg"].get("bot_type") == "dca_buy"
         return {"ok": True, "msg": (f"🏁 يكمل هذه الدورة حتى {'يبيع' if _buy else 'يشتري'} بالهدف، ثم يتوقف — لا يفتح دورة جديدة"
                                     if _on else "▶️ أُلغيت «آخر دورة» — يكمل الدورات كالمعتاد")}
-    if action in ("lx_set", "lx_layer", "lx_now"):              # ⚡ v3.36.56: DCA+ — الخروج بالطبقات من الكرت (حقول الحالة فقط — المحرك يرسل)
+    if action == "plus_edit":                                 # ⚡ v3.36.57: DCA+ — الأوامر من الجدول/الرسم والبوت شغّال (حقول فقط — المحرك يرسل)
         if b["cfg"].get("bot_type") != "dca" or not b["cfg"].get("dca_plus"):
-            return {"ok": False, "msg": "الخروج بالطبقات لبوتات DCA+ فقط"}
+            return {"ok": False, "msg": "تعديل الأوامر لبوتات DCA+ فقط"}
+        rows, why = _plus_rows_ok((value or {}).get("rows") if isinstance(value, dict) else None)
+        if rows is None:
+            return {"ok": False, "msg": why}
+        if len(rows) < 2:
+            return {"ok": False, "msg": "أضف أمر أمان واحداً على الأقل"}
         sp, _, _ = paths_of(b)
         stt = load_json(sp) or {}
-        v = value if isinstance(value, dict) else {}
-        upd = {}
-        def _ints(xs):
-            out = []
-            for x in xs or []:
-                try:
-                    out.append(int(x))
-                except Exception:
-                    pass
-            return out
-        if action == "lx_set":
-            try:
-                if "pct" in v:
-                    p_ = float(v["pct"])
-                    if not (p_ == p_) or p_ < 0.3 or p_ > 10:
-                        return {"ok": False, "msg": "ارتداد الخروج بالطبقات بين 0.3% و10% (أقل من 0.3% لا يغطي العمولة)"}
-                    upd["lx_pct"] = round(p_, 4)
-                if "from" in v:
-                    f_ = int(float(v["from"]))
-                    mx = int(b["cfg"].get("max_safety_orders", 5) or 5)
-                    if f_ < 1 or f_ > mx:
-                        return {"ok": False, "msg": f"الخروج بالطبقات يبدأ من أمر أمان بين 1 و{mx}"}
-                    upd["lx_from"] = f_
-            except Exception:
-                return {"ok": False, "msg": "تأكد من أرقام الخروج بالطبقات"}
-            if "on" in v:
-                upd["lx_on"] = bool(v["on"])
-            if "reopen" in v:
-                upd["lx_reopen"] = bool(v["reopen"])
-            if not upd:
-                return {"ok": False, "msg": "لا يوجد تغيير"}
-            msg = "⚡ حُفظت إعدادات الخروج بالطبقات — يطبّقها البوت خلال ثوانٍ"
-        elif action == "lx_layer":
-            try:
-                n_ = int(v.get("n"))
-            except Exception:
-                return {"ok": False, "msg": "طلب غير صالح"}
-            off = set(_ints(stt.get("lx_off")))
-            if v.get("off"):
-                off.add(n_)
-            else:
-                off.discard(n_)
-            upd["lx_off"] = sorted(off)
-            msg = (f"⛔ لن يخرج أمر الأمان {n_} وحده — يبقى لهدف الدورة" if v.get("off") else f"⚡ أمر الأمان {n_} يخرج وحده من جديد")
-        else:
-            try:
-                fid = int(v.get("fid"))
-            except Exception:
-                return {"ok": False, "msg": "طلب غير صالح"}
-            if stt.get("phase") != "selling" or not any(isinstance(f, dict) and str(f.get("fid")) == str(fid) for f in stt.get("filled") or []):
-                return {"ok": False, "msg": "هذه الطبقة لم تعد مفتوحة"}
-            now = _ints(stt.get("lx_now"))
-            if fid not in now:
-                now.append(fid)
-            upd["lx_now"] = now
-            msg = "⏏ أُرسل طلب الخروج — يشتري البوت كمية هذه الطبقة الآن بسعر السوق"
+        old, _w = _plus_rows_ok(b["cfg"].get("plus_rows"))
+        old = old or []
+        locked = _plus_locked(stt)
+        if locked and max(locked) >= len(rows):
+            return {"ok": False, "msg": "لا يمكن حذف أمر نُفّذ في هذه الدورة"}
+        for n_ in locked:
+            if n_ < len(old):
+                rows[n_]["d"], rows[n_]["q"] = old[n_]["d"], old[n_]["q"]     # المنفّذة: مسافتها وكميتها كما هي (نسبة خروجها تتغيّر)
+        write_cfg_keys(b["cfg_path"], {"plus_rows": rows, "base_order_qty": rows[0]["q"], "avg_order_qty": rows[1]["q"],
+                                       "first_deviation": rows[1]["d"], "max_safety_orders": len(rows) - 1, "take_profit_pct": rows[0]["x"]})
+        upd = {"plus_edit": {"seq": int(time.time() * 1000), "rows": rows}}
         if not save_state_keys(sp, upd):
             stt.update(upd)
             save_json_atomic(sp, stt)
-        return {"ok": True, "msg": msg}
+        return {"ok": True, "msg": "✏️ حُفظت الأوامر — يطبّقها البوت خلال ثوانٍ (المنفّذة في هذه الدورة تبقى بأسعارها)"}
     if action in ("trail_on", "trail_off"):
         if b["cfg"].get("bot_type") not in ("dca", "dca_buy"):
             return {"ok": False, "msg": "الدرع لبوتات DCA فقط"}
@@ -23062,6 +23094,8 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
         if path in ("/api/bt_prep", "/api/bt_start", "/api/bt_status", "/api/bt_path", "/api/bt_stop"):   # 🧪 v3.36.0: الاختبار التجريبي
             return self._json({"/api/bt_prep": bt_prep, "/api/bt_start": bt_start, "/api/bt_status": bt_status,
                                "/api/bt_path": bt_path, "/api/bt_stop": bt_stop}[path](data))       # 📋 v3.35.0: جدول ما قبل التشغيل (حساب فقط) · 👆 v3.35.1: البيع من مستوى مختار (حي أيضاً · قراءة فقط)
+        if path == "/api/candles":                                # 📈 v3.36.57: شموع رسم DCA+ (بيانات عامة)
+            return self._json(_safe(candles_view, data, default={"ok": False, "rows": []}))
         if path == "/api/dca_preview":
             try:
                 bp = float(data.get("base_price", 0))
@@ -24056,15 +24090,36 @@ body.btopen{overflow:hidden}
 .dcabuy.loss{background:linear-gradient(94deg,var(--red),#dc2626);color:#fff}
 .dcabtns{display:grid;grid-template-columns:repeat(4,1fr) auto auto;gap:5px;margin-bottom:10px}
 .dcaopts.x3{grid-template-columns:1fr 1fr auto}
-.dcaplusb{width:100%;padding:9px 10px;margin-bottom:6px;border-radius:10px;font-size:12.5px;border:1px solid var(--line);background:rgb(var(--ov-rgb)/.03);color:var(--mut);text-align:center}
-.dcaplusb.on{border-color:rgb(var(--green-rgb)/.5);background:rgb(var(--green-rgb)/.10);color:var(--green)}
-.dpxset{display:grid;gap:8px;margin:12px 0;padding:10px 12px;border:1px solid rgb(var(--green-rgb)/.3);border-radius:10px;background:rgb(var(--green-rgb)/.05)}
-.dpxset .fld small,.dpxhint{color:var(--mut2);font-size:10.5px;line-height:1.7}
-.dpxb{padding:5px 8px;border-radius:8px;font-size:11.5px;margin:1px}
-.dpxb.dz{color:var(--red);border-color:rgb(var(--red-rgb)/.4)}
-.dpxt tr.dpxr td{border-bottom:0;padding-bottom:2px}
-.dpxt tr.dpxbr td{padding-top:0;text-align:start}
-.dpxt tr.dpxbr .num{margin-inline-end:8px;font-size:11px}
+.dcaplusb{width:100%;padding:9px 10px;margin-bottom:6px;border-radius:10px;font-size:12.5px;border:1px solid rgb(var(--green-rgb)/.45);background:rgb(var(--green-rgb)/.08);color:var(--green);text-align:center}
+.dcaplusb.wait{border-color:rgb(var(--amber-rgb)/.5);background:rgb(var(--amber-rgb)/.1);color:var(--amber)}
+.dcaplusb.bad{border-color:rgb(var(--red-rgb)/.5);background:rgb(var(--red-rgb)/.08);color:var(--red)}
+.plx{display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}
+.plx>*{min-width:0}
+.plxhd{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:12.5px}
+.plxhint{flex:1 1 100%;color:var(--mut2);font-size:10.5px;line-height:1.7}
+.plxbars{display:inline-flex;gap:4px}.plxbars button{padding:3px 9px;font-size:11px;border-radius:7px}
+.plxbars button.on{background:linear-gradient(94deg,var(--cyan),var(--vio));color:#fff}
+.plxch{border:1px solid var(--line);border-radius:12px;background:rgb(var(--ov-rgb)/.02);overflow:hidden}
+.plxch svg{display:block;width:100%;height:auto;direction:ltr;touch-action:none;user-select:none;-webkit-user-select:none;cursor:crosshair}
+.plxselb{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 10px;border:1px solid rgb(var(--amber-rgb)/.4);border-radius:10px;background:rgb(var(--amber-rgb)/.06);font-size:12px}
+.plxselb label{display:inline-flex;align-items:center;gap:4px;color:var(--mut)}
+.plxselb input,.plxtbl input{width:68px;padding:4px 6px;font-size:12px}
+.plxsi{flex:1 1 220px;color:var(--mut);font-size:11.5px}
+.plxsb{display:inline-flex;gap:4px}.plxsb button{padding:3px 9px;font-size:12px}
+.plxtbl{overflow-x:auto}.plxtbl td,.plxtbl th{white-space:nowrap}
+.plxtbl tr.on td{background:rgb(var(--amber-rgb)/.10)}
+.plxtbl tr.lk td{background:rgb(var(--green-rgb)/.06)}
+.plxtbl input.bad,.plxselb input.bad{border-color:var(--red);color:var(--red)}
+.plxtbl input:disabled,.plxselb input:disabled{opacity:.55}
+.plxn{cursor:pointer}
+.plxdel{padding:2px 7px;font-size:11px;color:var(--red);border-color:rgb(var(--red-rgb)/.4)}
+.plxadd{display:flex;gap:8px}
+.plxfill{border:1px dashed var(--line);border-radius:10px;padding:6px 10px;font-size:12px}
+.plxfill summary{cursor:pointer;color:var(--cyan)}
+.plxfill .frm{margin-top:8px}
+.plxnote{color:var(--mut);font-size:11.5px;line-height:1.8}
+.dnwarn.plxred{background:rgb(var(--red-rgb)/.10);border:1px solid rgb(var(--red-rgb)/.3);color:var(--red)}
+.dnwarn.plxamb{background:rgb(var(--amber-rgb)/.12);border:1px solid rgb(var(--amber-rgb)/.3);color:var(--amber)}
 .dcahist{padding:9px 10px;border-radius:10px;font-size:12.5px;white-space:nowrap}
 .dcaopts{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
 .dcaopts .dcashield{margin-bottom:0}
@@ -25568,7 +25623,7 @@ const TUT_BTN={
   table:['📋 الجدول','ماذا سيفعل البوت عند كل سعر — قبل أن يحدث — ويتحدّث مع التشغيل.'],
   dca_close:['💰 أغلق الدورة الآن','يغلق الدورة الحالية فوراً بسعر السوق: في الشرائي يبيع الكمية كلها، وفي البيعي يعيد شراءها (قد يكون بخسارة إن لم يصل السعر إلى الهدف).'],
   dca_trail:['🛡️ الدرع','التتبّع: حين يعبر السعر مستوى أمان لا ينفّذ فوراً، بل يلاحق القاع (أو القمة في البيعي) وينفّذ عند الارتداد بالنسبة المحددة — سعر أفضل في الهبوط الطويل.'],
-  dca_plus:['⚡ الخروج بالطبقات','DCA+ فقط: نافذة التحكم — تشغيل وإيقاف الخروج بالطبقات · نسبة الارتداد · من أي أمر أمان يبدأ · إعادة الفتح · كل طبقة مفتوحة بسعر خروجها، مع «⛔ أوقف خروجه» و«⏏ أخرجها الآن».'],
+  dca_plus:['✏️ أوامر DCA+','DCA+ فقط: الجدول والرسم معاً — حرّك أي أمر لم يُنفّذ أو غيّر كميته ونسبة خروجه، أو أضف أوامر واحذفها، ويطبّقها البوت خلال ثوانٍ. المنفّذ في هذه الدورة ثابت بسعره وكميته، وتتغيّر نسبة خروجه فقط.'],
   dca_last:['🏁 آخر دورة ويخرج','يكمل الدورة الحالية حتى تُغلق بربحها، ثم يتوقف ولا يبدأ دورة جديدة.'],
   dca_pause:['⏸ إيقاف','يوقف البوت مؤقتاً — أوامره ودورته تبقى كما هي.'],
   rngb:['✏️','تعديل نطاق السعر الذي يشتري (أو يبيع) داخله — خارج النطاق يتخطّى الموعد.'],
@@ -25671,19 +25726,20 @@ const TUT={
     btns:['dca_close','dca_trail','dca_last','hist','table','lddr','chart','dca_pause','cset','del'],
     faq:[['لماذا الربح بالعملة؟','لأنه يبيع غالياً ويشتري رخيصاً بالدولار نفسه، فيعود بعملات أكثر مما باع.'],
          ['ماذا لو واصل السعر الصعود؟','يبيع أوامر الأمان واحداً بعد الآخر حتى تنفد، ثم ينتظر نزول السعر إلى الهدف. دولار البيعات محفوظ، لكن العملات لم تعد بعد؛ ويمكنك إغلاق الدورة بنفسك من 💰 (قد يكون بخسارة بالعملة).']]},
-  dca_plus:{t:'DCA+',
-    idea:['نسخة من DCA البيعي بإضافة واحدة: الخروج بالطبقات. كل أمر أمان منفّذ يخرج وحده حين يعود السعر تحت سعر بيعه بنسبة صغيرة تختارها (0.5% مثلاً) — يعيد شراء كميته بدولارها بربح صغير، بدل انتظار هدف الدورة كاملاً.',
-          'الغاية: الخروج من الأوامر بسرعة على حساب ربح أقل، حتى آخر أمر. الأساس والأوامر قبل «يبدأ من» تبقى لهدف الدورة العادي.'],
-    steps:[['كالبيعي','بيع أولي ثم أوامر أمان فوقه تتسع ويكبر حجمها.'],['الطبقة','كل أمر أمان يُنفَّذ أصبح طبقة لها سعر خروج: سعر بيعها ناقص النسبة.'],
-           ['الخروج','عاد السعر إلى سعر خروج طبقة ⇐ يشتري كميتها بدولارها بأمر فوري سقفه نقطة التعادل (لا خسارة) ⇐ ربح صغير بالعملة يُسجَّل فوراً.'],
-           ['الباقي','المتوسط والهدف يُحسبان من جديد على ما بقي · وإعادة الفتح (اختيارية) تعيد الطبقة للمخزون لتُباع إذا عاد السعر إلى مستواها.']],
-    ex:['باع البوت أمان 5 بسعر 110.74 (50 عملة). الخروج بالطبقات 0.5% ⇐ سعر خروجها 110.19.',
-        'نزل السعر إلى 110.19 ⇐ اشترى البوت الخمسين عملة بدولارها ⇐ ربح نحو 0.15 عملة بعد العمولتين، وخرجت أكبر طبقة. في DCA العادي كان عليه انتظار نزول 4.37% ليخرج.'],
+  dca_plus:{t:'DCA+ البيعي',
+    idea:['مثل DCA البيعي: يبيع جزءاً من عملتك ثم يبيع أكثر كلما صعد السعر، وحين ينزل السعر يعيد شراء كل ما باع دفعة واحدة — الربح بالعملة.',
+          'الفرق: أنت تضع كل أمر بنفسك — مسافته عن الأمر الذي قبله وكميته ونسبة خروجه — في الجدول أو على الرسم، بدل معادلة واحدة لكل الأوامر.',
+          'نسبة الخروج تخص الأمر نفسه: إن كان أعمق أمر نُفّذ هو أمان 5 فالهدف = المتوسط ناقص نسبة خروج أمان 5. فتجعل الأوامر الأولى بربح جيد، والأخيرة الكبيرة بربح صغير فيخرج بسرعة ولا يبقى معلّقاً.'],
+    steps:[['البيع الأولي','بيع الأمر الأساسي بسعر السوق.'],['أوامرك','كل أمر فوق الذي قبله بالمسافة التي وضعتها وبكميته هو.'],['المتوسط','متوسط مرجّح لكل ما بِيع (كالعادي).'],
+           ['الهدف','المتوسط ناقص نسبة خروج أعمق أمر نُفّذ — يتغيّر فوراً كلما نُفّذ أمر أعمق.'],['الإغلاق','حين ينزل السعر إلى الهدف يعيد شراء كل ما باع بدولاره دفعة واحدة ⇐ عملات أكثر.'],
+           ['✏️ التعديل والبوت يعمل','من زر «✏️ أوامر DCA+» في البطاقة: الأوامر التي لم تُنفّذ تنتقل إلى أسعارها الجديدة خلال ثوانٍ، والمنفّذة تبقى بسعرها وكميتها (تتغيّر نسبة خروجها فقط).']],
+    ex:['الأساس 10 عملات عند 1.00$ بخروج 0.5% · أمان 1 بعده بـ1% (1.01$) 10 عملات بخروج 0.6% · أمان 2 بعده بـ2% (1.0302$) 30 عملة بخروج 0.3%.',
+        'نُفّذت الثلاثة ⇐ المتوسط نحو 1.0201$ والهدف 0.3% تحته نحو 1.0171$ — أي نزول نحو 1.3% فقط من آخر سعر بيع. لو كانت نسبة الخروج 1% لاحتاج نزولاً نحو 2%.'],
     btns:['dca_plus','dca_close','dca_trail','dca_last','hist','table','lddr','chart','dca_pause','cset','del'],
-    faq:[['متى أختار DCA+؟','حين تريد ألا تبقى عالقاً بكل الأوامر بعد صعود سريع: أكبر الطبقات تخرج عند أول رجوع صغير للسعر.'],
-         ['هل يربح أكثر من DCA العادي؟','قِسناه على أسعار حقيقية لسبع عملات في آخر ثلاثة أشهر: مع إعادة الفتح ربح أكثر من DCA العادي، وبلا إعادة فتح ربح أقل لكن زمن البقاء عالقاً بنصف السلم أو أكثر أقل بكثير (نحو 60%). القرار لك من نافذة ⚡.'],
-         ['هل يخرج بخسارة؟','الخروج التلقائي لا: سقف أمره نقطة التعادل للطبقة. أما «⏏ أخرجها الآن» فقرارك — يشتري بسعر السوق ولو كان بخسارة، ويُسجَّل خسارة.'],
-         ['ماذا تعني «⛔ أوقف خروجه»؟','تبقى هذه الطبقة لهدف الدورة كما في DCA العادي، والباقي يخرج وحده.']]},
+    faq:[['هل يبيع كل أمر وحده؟','لا. يعيد شراء كل ما باع في الدورة دفعة واحدة عند الهدف — مثل DCA العادي. نسبة الخروج تحدد مكان الهدف فقط.'],
+         ['لماذا أجعل خروج الأوامر الأخيرة صغيراً؟','لأن المتوسط يبتعد عن السعر بعد أوامر كثيرة؛ خروج صغير يقرّب الهدف فيخرج أسرع بربح أقل بدل أن يبقى معلّقاً.'],
+         ['هل أخسر لو جعلت النسبة صغيرة جداً؟','أقل نسبة يستعملها البوت 0.20% (تغطي العمولتين)، والجدول يعرض الربح الصافي لكل صف قبل التشغيل.'],
+         ['ماذا لو عدّلت أمراً والبوت يعمل؟','يلغي أوامره على المنصة التي لم تُنفّذ ويضعها بأسعارها الجديدة خلال ثوانٍ، ولا يمس ما نُفّذ.']]},
   rec_buy:{t:'الشراء الدوري',
     idea:['يشتري مبلغاً ثابتاً كل مدة (ساعة · يوم · أسبوع) مهما كان السعر — يوزّع الدخول على الزمن. ولكل شراء هدف ربح يُباع عنده.',
           'تختار بيع كل شراء وحده عند هدفه، أو بيع الكمية كلها عند المتوسط.'],
@@ -27144,7 +27200,7 @@ function buildDcaCard(b,i){
       <b class="num" data-k="lp">—</b>
     </div>
     <button class="dcabuy" data-k="buynow">${b.bot_type==='dca_buy'?'💰 بِع الآن وأغلق الدورة':'💰 اشترِ الآن وأغلق الدورة'}</button>
-    <button class="dcaplusb" data-k="dplus" style="display:${b.dca&&b.dca.plus?'':'none'}">⚡ الخروج بالطبقات</button>
+    <button class="dcaplusb" data-k="dplus" style="display:${b.dca&&b.dca.plus?'':'none'}">✏️ أوامر DCA+ — الجدول والرسم</button>
     <div class="dcaopts x3"><button class="dcashield" data-k="dtrail">🛡️ الدرع —</button><button class="dcalast" data-k="dlast">🏁 آخر دورة ويخرج</button><button class="dcahist" data-k="dhist">📜 السجل</button></div>
     <div class="dcabtns">
       <button data-k="dtable">📋 الجدول</button>
@@ -27164,7 +27220,7 @@ function buildDcaCard(b,i){
   R.dladder.onclick=()=>dcaLadderInline(el,botOf(b.dir)||b);
   R.dchart.onclick=()=>toggleChart(el,b);
   R.dtrail.onclick=()=>dcaShield(botOf(b.dir)||b);
-  R.dplus.onclick=()=>dcaPlusPanel(botOf(b.dir)||b);      // ⚡ v3.36.56: DCA+
+  R.dplus.onclick=()=>dcaPlusEdit(botOf(b.dir)||b);       // ⚡ v3.36.57: DCA+
   R.dlast.onclick=()=>dcaLast(botOf(b.dir)||b);
   R.dhist.onclick=()=>botHist(botOf(b.dir)||b);
   R.dpause.onclick=()=>{const bb=botOf(b.dir)||b,d=bb.dca||(bb.dca={}),p=!!d.paused;   // 🔁 الحالة الحالية + يتبدّل فوراً
@@ -27266,23 +27322,21 @@ function updDcaCard(el,b){
     R.dtrail.className='dcashield'+(on?' on':'');
     R.dtrail.textContent=on?`🛡️ الدرع ✓ ${d.trail_pct||0.3}%`:'🛡️ الدرع: متوقف';R.dtrail.title=on?'اضغط للإيقاف':'أوامر الأمان تتبع القمة/القاع — ولا مرة أسوأ من المستوى'}
   R.dpause.textContent=d.paused?'▶️ استئناف':'⏸ إيقاف';
-  if(R.dplus){const P=d.plus;R.dplus.style.display=P?'':'none';      // ⚡ v3.36.56: DCA+
-    if(P){R.dplus.className='dcaplusb'+(P.on?' on':'');
-      R.dplus.textContent=P.on?`⚡ الخروج بالطبقات ✓ ${P.pct}%${P.cn?` · خرجت ${P.cn} في هذه الدورة`:''}`:'⚡ الخروج بالطبقات: متوقف';
-      R.dplus.title='اضغط للتحكم: النسبة · من أي أمر · إعادة الفتح · كل طبقة وحدها · أخرجها الآن';
-      const t=el.querySelector('.dcatag');if(t&&!/DCA\+/.test(t.textContent))t.textContent='⚡ DCA+ بيعي';
-      if(P.cn&&R.status)R.status.textContent+=` · ⚡ ${P.cn} طبقة خرجت`}}
+  if(R.dplus){const P=d.plus;R.dplus.style.display=P?'':'none';      // ⚡ v3.36.57: DCA+
+    if(P){R.dplus.className='dcaplusb'+(P.err?' bad':(P.pending?' wait':''));
+      R.dplus.textContent=P.err?'⚠️ لم يُطبَّق آخر تعديل — اضغط للتفاصيل':(P.pending?'⏳ تعديل الأوامر ينتظر البوت…':`✏️ أوامر DCA+ (${Math.max(0,(P.rows||[]).length-1)} أمر أمان) — الجدول والرسم`);
+      R.dplus.title='اضغط لتعديل الأوامر: المسافة والكمية ونسبة الخروج لكل أمر — في الجدول أو على الرسم';
+      const t=el.querySelector('.dcatag');if(t&&!/DCA\+/.test(t.textContent))t.textContent='⚡ DCA+ بيعي'}}
 }
 function dcaViz(el,d,cp){
   if(!el)return;
   const rows=d.rows||[];
-  const LX=(d.plus&&d.plus.layers)||[];      // ⚡ v3.36.56: DCA+ — خط خروج كل طبقة منفّذة
-  const key=JSON.stringify([rows.map(r=>[r.n,r.st,r.px]),d.avg_price,d.target_price,cp,d.trail_on&&d.trail_peak,d.is_buy,LX.map(x=>[x.fid,x.ex,x.elig,x.off]),d.plus&&d.plus.on]);
+  const key=JSON.stringify([rows.map(r=>[r.n,r.st,r.px]),d.avg_price,d.target_price,cp,d.trail_on&&d.trail_peak,d.is_buy]);
   if(el._k===key)return;el._k=key;
   if(!rows.length||!cp){el.innerHTML='<div class="vempty">📊 يظهر الرسم عند بدء الدورة</div>';return}
   const buy=!!d.is_buy,avg=+d.avg_price||0,tgt=+d.target_price||0,pk=d.trail_on?(+d.trail_peak||0):0;
-  const nL=rows.length+3+(pk>0?1:0)+LX.length,W=320,H=Math.max(180,Math.min(340,34+nL*18)),pt=12,pb=14,X0=60,X1=228;
-  const ps=rows.map(r=>+r.px).concat([avg,tgt,cp,pk].filter(x=>x>0)).concat(LX.map(x=>+x.ex).filter(x=>x>0));
+  const nL=rows.length+3+(pk>0?1:0),W=320,H=Math.max(180,Math.min(340,34+nL*18)),pt=12,pb=14,X0=60,X1=228;
+  const ps=rows.map(r=>+r.px).concat([avg,tgt,cp,pk].filter(x=>x>0));
   let lo=Math.min(...ps),hi=Math.max(...ps);const pad=(hi-lo)*0.07||hi*0.002;lo-=pad;hi+=pad;
   const y=p=>pt+(hi-p)/(hi-lo)*(H-pt-pb);
   const cLv=buy?'var(--cyan)':'var(--red)',tagOf={done:'✅',part:'◐',live:'🟢',mem:'📦',trail:'🛡️'};
@@ -27303,9 +27357,6 @@ function dcaViz(el,d,cp){
     L.push({y:yt,l:f4(tgt),r:'🎯 الخروج',c:'var(--green)'})}
   if(pk>0){const yp=y(pk);g+=`<line x1="${X0}" y1="${yp}" x2="${X1}" y2="${yp}" stroke="var(--green)" stroke-width="1" stroke-dasharray="1 3"/>`;
     L.push({y:yp,l:f4(pk),r:buy?'🛡️ القاع':'🛡️ القمة',c:'var(--green)'})}
-  LX.forEach(x=>{const yx=y(+x.ex),cl=x.elig?'var(--green)':'var(--mut2)';
-    g+=`<line x1="${X0+14}" y1="${yx}" x2="${X1-14}" y2="${yx}" stroke="${cl}" stroke-width="1.3" stroke-dasharray="3 3" opacity="${x.elig?0.95:0.55}"/>`;
-    L.push({y:yx,l:f4(x.ex),r:'⚡ '+(x.ns.length>1?'أمان '+x.ns[0]+'–'+x.ns[x.ns.length-1]:'أمان '+x.ns[0])+(x.off?' ⛔':''),c:cl})});
   const yc=y(cp);g+=`<line x1="${X0-4}" y1="${yc}" x2="${X1+4}" y2="${yc}" stroke="var(--vio)" stroke-width="1.6"/><path d="M${X1+5} ${yc} l7 -4.5 v9 z" fill="var(--vio)"/>`;
   L.push({y:yc,l:f4(cp),r:'⚡ الآن',c:'var(--vio)',b:1});
   // الأسماء بمسافات متساوية بالترتيب (ما تتراكب أبداً) — وخط صغير يوصل كل اسم بخطّه الحقيقي
@@ -27317,54 +27368,8 @@ function dcaViz(el,d,cp){
     g+=`<text x="${X0-6}" y="${ly}" font-size="11" fill="${o.c}" text-anchor="end" font-weight="${w}" font-family="ui-monospace,monospace">${o.l}</text>`;
     g+=`<text x="${X1+14}" y="${ly}" font-size="11" fill="${o.c}" text-anchor="start" font-weight="${w}">${o.r}</text>`});
   el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="سلم الدورة">${g}</svg>
-    <div class="vcap"><span>● منفّذ</span><span>○ بالمنصة</span><span>◇ ${d.trail_on?'بالذاكرة — الدرع يتتبّعه':'مخزون'}</span><span style="color:var(--green)">▬ الخروج</span><span style="color:var(--amber)">┅ المتوسط</span>${d.plus?'<span style="color:var(--green)">┄ ⚡ خروج الطبقة</span>':''}</div>`;
+    <div class="vcap"><span>● منفّذ</span><span>○ بالمنصة</span><span>◇ ${d.trail_on?'بالذاكرة — الدرع يتتبّعه':'مخزون'}</span><span style="color:var(--green)">▬ الخروج</span><span style="color:var(--amber)">┅ المتوسط</span></div>`;
 }
-/* ⚡ v3.36.56: DCA+ — نافذة الخروج بالطبقات (المالك: «واريد انا اتحكم فيه … وانا اختار الخروج») */
-function dcaPlusPanel(b){
-  const d=b.dca||{},P=d.plus;if(!P){toast('هذا البوت ليس DCA+',false);return}
-  const base=d.base_coin||'',cp=(window.JPX&&JPX[b.symbol])||b.cp||0,sg=v=>(v>=0?'+':'')+v;
-  const lb=ns=>ns.length>1?`أمان ${ns[0]}–${ns[ns.length-1]}`:`أمان ${ns[0]}`;
-  let h=`<h2>⚡ DCA+ — الخروج بالطبقات · ${b.symbol}</h2>
-  <p style="color:var(--mut);font-size:12.5px;line-height:1.9;margin-bottom:10px">كل أمر أمان منفّذ يخرج وحده حين يعود السعر تحت سعر بيعه بالنسبة التي تختارها — ربح صغير بدل انتظار هدف الدورة كاملاً. الأساس والأوامر قبل «يبدأ من» تبقى لهدف الدورة.</p>
-  <div class="dnsum">
-    <div class="dnstat"><span>⚡ خرجت (كل الدورات)</span><b class="num">${P.n}</b><small style="color:var(--green)">${sg(P.p)} ${base}</small></div>
-    <div class="dnstat"><span>⚡ خرجت في هذه الدورة</span><b class="num">${P.cn}</b><small style="color:var(--green)">${sg(P.cp)} ${base}</small></div>
-    <div class="dnstat"><span>🎯 هدف الدورة (الباقي)</span><b class="num" style="color:var(--green)">${d.target_price?f4(d.target_price):'—'}</b></div>
-  </div>
-  <div class="dpxset">
-    <label class="ck"><input type="checkbox" id="dpx_on" ${P.on?'checked':''}> ⚡ الخروج بالطبقات يعمل</label>
-    <div class="fld"><label>ارتداد الخروج %</label><input id="dpx_pct" class="num" value="${P.pct}"><small>0.3–10 · أقل من 0.3% لا يغطي العمولة</small></div>
-    <div class="fld"><label>يبدأ من أمر الأمان</label><input id="dpx_from" class="num" value="${P.from}"><small>1–${P.max} · ما قبله يبقى لهدف الدورة</small></div>
-    <label class="ck"><input type="checkbox" id="dpx_re" ${P.reopen?'checked':''}> ↩️ أعِد فتح الطبقة بعد خروجها</label>
-    <small class="dpxhint">إعادة الفتح: إذا عاد السعر إلى مستواها تُباع من جديد — ربح أكثر لكن يبقى البوت مفتوحاً أطول. بلا إعادة فتح: يخرج أسرع ويبقى معرّضاً أقل.</small>
-    <button class="primary" onclick="dcaPlusSave('${b.dir}')">💾 حفظ الإعدادات</button>
-  </div>`;
-  const L=P.layers||[];
-  h+=`<div class="dnsec">🧩 الطبقات المفتوحة الآن (${L.length})</div>`;
-  if(!L.length)h+='<p style="color:var(--mut);font-size:12px">لا طبقة أمان منفّذة الآن — تظهر هنا حين ينفّذ البوت أوامر الأمان.</p>';
-  else{h+=`<div style="overflow-x:auto"><table class="dntbl dpxt"><thead><tr><th>الطبقة</th><th>بيعت بسعر</th><th>⚡ تخرج عند</th><th>البعد الآن</th><th>الحالة</th></tr></thead><tbody>`;
-    L.forEach(x=>{const st=x.now?'⏏ تخرج الآن':x.off?'⛔ لا تخرج وحدها':x.small?'صغيرة — لهدف الدورة':x.low?'قبل «يبدأ من» — لهدف الدورة':!P.on?'الخروج متوقف':'⚡ تخرج وحدها';
-      const n0=x.ns[0];
-      h+=`<tr class="dpxr"><td>${lb(x.ns)}</td><td class="num">${f4(x.px)}</td><td class="num" style="color:var(--green)">${f4(x.ex)}</td>
-        <td class="num" style="color:var(--mut)">${x.dist==null?'—':(x.dist>0?'▼ '+x.dist+'%':'✓ وصل')}</td><td>${st}</td></tr>
-        <tr class="dpxbr"><td colspan="5"><span class="num" style="color:var(--mut2)">${x.q} ${base}</span>
-        <button class="dpxb" onclick="dcaPlusLayer('${b.dir}',${n0},${x.off?0:1})">${x.off?'⚡ يخرج وحده':'⛔ أوقف خروجه'}</button>
-        <button class="dpxb dz" onclick="dcaPlusNow('${b.dir}',${x.fid})" ${x.now?'disabled':''}>⏏ أخرجها الآن</button></td></tr>`});
-    h+='</tbody></table></div>'}
-  const G=P.log||[];
-  if(G.length){h+=`<div class="dnsec">🧾 آخر الخروجات</div><div style="overflow-x:auto"><table class="dntbl"><thead><tr><th>الوقت</th><th>الطبقة</th><th>بيعت</th><th>اشترى</th><th>الربح ${base}</th></tr></thead><tbody>`;
-    G.forEach(e=>{const t=new Date((+e.ts||0)*1000),z=v=>String(v).padStart(2,'0');h+=`<tr><td class="num">${z(t.getMonth()+1)}/${z(t.getDate())} ${z(t.getHours())}:${z(t.getMinutes())}</td>
-      <td>${lb(e.ns||[])}${e.manual?' · يدوي':''}${e.whole===false?' · جزء':''}</td><td class="num">${f4(e.sold)}</td><td class="num">${f4(e.px)}</td>
-      <td class="num" style="color:${(+e.profit||0)>=0?'var(--green)':'var(--red)'}">${sg(+(+e.profit||0).toFixed(8))}</td></tr>`});
-    h+='</tbody></table></div>'}
-  showModal(h)}
-function dcaPlusSave(dir){const g=id=>($('#'+id)||{});
-  ctl(dir,'lx_set',{on:!!g('dpx_on').checked,pct:g('dpx_pct').value,from:g('dpx_from').value,reopen:!!g('dpx_re').checked});hideModal()}
-async function dcaPlusLayer(dir,n,off){hideModal();await ctl(dir,'lx_layer',{n,off:!!off});setTimeout(()=>{const b=botOf(dir);if(b&&$('#mbg').hidden)dcaPlusPanel(b)},900)}
-function dcaPlusNow(dir,fid){const b=botOf(dir)||{},d=b.dca||{},P=d.plus||{},x=(P.layers||[]).find(z=>z.fid===fid);if(!x)return;
-  const cp=(window.JPX&&JPX[b.symbol])||b.cp||0,base=d.base_coin||'',est=cp>0?(x.net/cp*0.999-x.q):0,sg=v=>(v>=0?'+':'')+v.toFixed(6);
-  askConfirm('⏏ أخرج هذه الطبقة الآن؟',`يشتري البوت كمية ${x.ns.length>1?'الأوامر '+x.ns.join('، '):'أمر الأمان '+x.ns[0]} (${x.q} ${base}) بسعر السوق الآن، بدولار بيعها.<br>بيعت بسعر <b>${f4(x.px)}</b> · السعر الآن <b>${f4(cp)}</b> ⇐ النتيجة التقريبية <b style="color:${est>=0?'var(--green)':'var(--red)'}">${sg(est)} ${base}</b>${est<0?' (خسارة — قرارك)':''}.<br>لا تعود هذه الطبقة للمخزون بعد الخروج اليدوي.`,
-    ()=>{ctl(dir,'lx_now',{fid});hideModal()})}
 function dcaLast(b){
   const d=b.dca||{},on=!!d.stop_after,fin=d.phase==='finished',buy=d.is_buy;
   if(fin){toast('🏁 انتهت آخر دورة والبوت موقوف — للتشغيل من جديد زر ▶️ في البطاقة',true);return}
@@ -27437,24 +27442,18 @@ function dcaTable(b){
   </div>`;
   if(!rows.length)h+='<p style="color:var(--mut);font-size:12px;margin-top:12px">لا توجد دورة مفتوحة الآن — يظهر الجدول عند بدء الدورة.</p>';
   else{h+=`<div class="dnsec">📋 كل أوامر الدورة</div><div style="overflow-x:auto"><table class="dntbl"><thead><tr>
-    <th>الأمر</th><th>السعر</th>${d.plus?`<th>⚡ خروج الطبقة<br><small>رجوع ${d.plus.pct}%</small></th>`:''}<th>الكمية ${base}</th><th>الحالة</th><th>بعده عن السعر</th><th>المتوسط<br><small>لو نفّذ</small></th><th>🎯 الخروج<br><small>لو نفّذ</small></th><th>💎 ربح صافي<br><small>لو خرج</small></th></tr></thead><tbody>`;
+    <th>الأمر</th><th>السعر</th><th>الكمية ${base}</th><th>الحالة</th><th>بعده عن السعر</th><th>المتوسط<br><small>لو نفّذ</small></th>${d.plus?'<th>نسبة<br><small>الخروج</small></th>':''}<th>🎯 الخروج<br><small>لو نفّذ</small></th><th>💎 ربح صافي<br><small>لو خرج</small></th></tr></thead><tbody>`;
     rows.forEach(r=>{const dn=r.st==='done';
-      h+=`<tr><td>${r.n===0?'أساسي':'أمان '+r.n}</td><td class="num">${f4(r.px)}</td>${d.plus?dcaPlusCell(d.plus,r):''}<td class="num">${r.q}</td>
+      h+=`<tr><td>${r.n===0?'أساسي':'أمان '+r.n}</td><td class="num">${f4(r.px)}</td><td class="num">${r.q}</td>
       <td style="white-space:nowrap">${stl[r.st]||r.st}${(dn||r.st==='part')&&r.fpx?` <small>@${f4(r.fpx)}</small>`:''}</td>
       <td class="num" style="color:var(--mut);white-space:nowrap">${dn?'—':(r.dist>0?'▲ ':'▼ ')+Math.abs(r.dist)+'%'}</td>
-      <td class="num">${f4(r.avg)}</td><td class="num" style="color:var(--green)">${f4(r.tgt)}</td>
+      <td class="num">${f4(r.avg)}</td>${d.plus?`<td class="num">${r.x!=null?r.x+'%':'—'}</td>`:''}<td class="num" style="color:var(--green)">${f4(r.tgt)}</td>
       <td class="num" style="color:${r.prof>=0?'var(--green)':'var(--red)'}">${sg(r.prof)}</td></tr>`});
     h+='</tbody></table></div>';
     h+=`<p style="font-size:10.5px;color:var(--mut2);margin-top:8px;line-height:1.8">💡 «لو نفّذ» = لو بلغ السعر هذا الأمر ثم عاد إلى الهدف: هذا المتوسط وسعر الخروج والربح — صافي بعد عمولة OKX (المنفّذ بأسعاره وعمولته الفعلية والباقي بالخطة). «بعده عن السعر» ${arrU} = كم يجب أن يتحرك السعر ليبلغه.</p>`}
   showModal(`<h2>📋 جدول الدورة — ${b.symbol}${d.cycles!=null?` <small style="color:var(--mut2);font-size:12px">(دورة #${(d.cycles||0)+1})</small>`:''}</h2>${h}
     <div class="mbtns"><button onclick="hideModal()">إغلاق</button></div>`);
 }
-function dcaPlusCell(P,r){      // ⚡ v3.36.56: خانة «خروج الطبقة» لصف من جدول الدورة
-  if(r.n===0)return '<td style="color:var(--mut2)">هدف الدورة</td>';
-  const x=(P.layers||[]).find(z=>z.ns.includes(r.n));
-  if(x)return `<td class="num" style="color:${x.elig?'var(--green)':'var(--mut)'};white-space:nowrap">${f4(x.ex)}${x.off?' ⛔':x.low?' <small>لهدف الدورة</small>':x.small?' <small>صغيرة</small>':''}</td>`;
-  if(r.n<P.from)return '<td style="color:var(--mut2)">هدف الدورة</td>';
-  return `<td class="num" style="color:var(--mut)">${f4(r.px*(1-P.pct/100))}<small> إن نُفّذ</small></td>`}
 function cfb(el,b){if(el.dataset.alt){el.src=el.dataset.alt;el.dataset.alt=''}else{const s=document.createElement('span');s.className='coinltr';s.textContent=(b||'?')[0];el.replaceWith(s)}}
 function openLadder(dir){const b=botOf(dir);if(!b)return;if(b.bot_type==='grid_step')return stFull(dir);const L=b.ladder;
  const row=(x,c,t)=>`<div class="vrow"><span class="dot" style="background:${c}"></span><span class="p num">${f4(x.p)}</span><span class="q num">${x.q}</span><span class="tag">${t}</span></div>`;
@@ -28936,8 +28935,8 @@ function dcaDetails(b){
       <div class="dnstat"><span>الدورات</span><b>${d.cycles||0}</b></div>
       <div class="dnstat"><span>ربح ${d.is_buy?'USDT':base}</span><b class="bidi" style="color:var(--green)">${d.coin_profit!=null?(d.coin_profit>=0?'+':'')+d.coin_profit:'—'}</b></div>
     </div>
-    <div class="dnsec">⚙ الإعدادات</div>
-    <table class="dntbl"><tbody>
+    <div class="dnsec">⚙ الإعدادات${d.plus?' — أوامر DCA+':''}</div>
+    ${d.plus?dcaPlusRowsTbl(d.plus,base):''}<table class="dntbl"${d.plus?' style="display:none"':''}><tbody>
       <tr><td style="text-align:right">حجم الأمر الأساسي</td><td class="num">${c.base_order_qty||'—'}</td></tr>
       <tr><td style="text-align:right">حجم أمر المتوسط</td><td class="num">${c.avg_order_qty||'—'}</td></tr>
       <tr><td style="text-align:right">المسافة بين الأوامر</td><td class="num">${c.first_deviation||'—'}%</td></tr>
@@ -28948,7 +28947,7 @@ function dcaDetails(b){
       <tr><td style="text-align:right">أوامر على المنصة</td><td class="num">${c.exchange_orders||'—'}</td></tr>
       <tr><td style="text-align:right">انتظار بين الدورات</td><td class="num">${c.cycle_wait_sec||30} ثانية</td></tr>
     </tbody></table>
-    <p style="font-size:11px;color:var(--mut2);margin-top:10px">الإعدادات تثبت من الإنشاء. لتغييرها، احذف البوت وأنشئ واحداً جديداً بالأرقام الجديدة (لحماية الدورة الجارية).</p>
+    <p style="font-size:11px;color:var(--mut2);margin-top:10px">${d.plus?'تعدّل أوامر DCA+ والبوت يعمل من زر «✏️ أوامر DCA+» في البطاقة (الجدول والرسم) — المنفّذ في الدورة الجارية يبقى كما هو.':'الإعدادات تثبت من الإنشاء. لتغييرها، احذف البوت وأنشئ واحداً جديداً بالأرقام الجديدة (لحماية الدورة الجارية).'}</p>
     <div class="mbtns" style="margin-top:14px">
       <button class="primary" onclick="hideModal();dcaLadder(botOf('${b.dir}'))">🪜 السلم</button>
       <button onclick="btFromBot('${b.dir}')" title="إعدادات هذا البوت على مسار تجريبي — لا يمسّ البوت">🧪 اختبار تجريبي</button><button onclick="hideModal()">إغلاق</button></div>`);
@@ -30631,7 +30630,7 @@ async function openDeployDca(){
   <div class="fld"><label>نوع البوت</label><select id="dn_type" onchange="dcaTypeSwitch()">
     <option value="dca">📉 بيعي — يبيع عند الصعود، يجمّع العملة (الربح بالعملة)</option>
     <option value="dca_buy">📈 شرائي — يشتري عند النزول، يجمّع الدولار (الربح بالدولار)</option>
-    <option value="dca_plus">⚡ DCA+ بيعي — مثل البيعي، وكل أمر أمان يخرج وحده بسرعة</option>
+    <option value="dca_plus">⚡ DCA+ بيعي — كل أمر بمسافته وكميته ونسبة خروجه (جدول ورسم)</option>
   </select></div>
   <p id="dn_desc" style="color:var(--mut);font-size:12px;margin:8px 0 14px">يبيع عند الصعود، المتوسط يرتفع، يشتري عند النزول — الربح بالعملة. اضبط الأرقام وشوف الجدول قبل التشغيل.</p>
   <div class="frm">
@@ -30654,14 +30653,6 @@ async function openDeployDca(){
     <div class="fld"><label>🛡️ ارتداد الدرع %</label><input id="dn_trail_pct" class="num" value="0.3"></div>
     <p style="color:var(--mut);font-size:11.5px;line-height:1.8;margin-top:6px">تبقى أوامر الأمان في الذاكرة: حين يعبر السعر مستوى، يلاحق البوت القمة (القاع في الشرائي) وينفّذ عند ارتداد بهذه النسبة — <b>ولا مرة بسعر أسوأ من المستوى</b>. وبعد الهدف يلاحق السعر ويغلق عند الارتداد — <b>ولا مرة أسوأ من الهدف</b>. يمكنك إيقافه وتشغيله من البطاقة في أي وقت.</p>
   </div>
-  <div id="dn_lx_box" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid rgb(var(--green-rgb)/.35);border-radius:10px;background:rgb(var(--green-rgb)/.06)">
-    <div class="frm">
-      <div class="fld"><label>⚡ ارتداد الخروج %</label><input id="dn_lx_pct" class="num" value="0.5" oninput="dcaPreview()"><small style="color:var(--mut2);font-size:10px">0.3–10 · كم يعود السعر تحت سعر بيع الطبقة لتخرج</small></div>
-      <div class="fld"><label>يبدأ من أمر الأمان</label><input id="dn_lx_from" class="num" value="1" oninput="dcaPreview()"><small style="color:var(--mut2);font-size:10px">ما قبله يبقى لهدف الدورة</small></div>
-    </div>
-    <label class="ck" style="margin-top:8px"><input type="checkbox" id="dn_lx_re"> ↩️ أعِد فتح الطبقة بعد خروجها</label>
-    <p style="color:var(--mut);font-size:11.5px;line-height:1.8;margin-top:6px">كل أمر أمان منفّذ يخرج وحده بربح صغير حين يعود السعر تحت سعر بيعه بهذه النسبة (لا خسارة). بلا إعادة فتح يخرج البوت أسرع ويبقى معرّضاً أقل؛ مع إعادة الفتح يربح أكثر ويبقى مفتوحاً أطول. تتحكم بكل شيء لاحقاً من زر ⚡ في البطاقة.</p>
-  </div>
   <button class="primary" onclick="dcaPreview()" style="width:100%;margin-top:14px;background:linear-gradient(94deg,var(--cyan),var(--vio))">🔍 احسب الجدول والمخطط</button>
   <div id="dn_share"></div>
   <div id="dn_preview" style="margin-top:16px"></div>
@@ -30669,20 +30660,26 @@ async function openDeployDca(){
   $('#dn_go').onclick=async()=>{
     const body=Object.assign(dcaFormBody(),demoVal('dn'));   // 🧪 v3.36.46
     if(!body.symbol||!body.symbol.includes('-')){toast('اكتب الرمز كاملاً مثل XRP-USDT',false);return}
+    if(body.dca_type==='dca_plus'){const e=plxBad(plxRows());if(e){toast(e,false);return}}      // ⚡ v3.36.57: DCA+
     $('#dn_go').disabled=true;
     try{const r=await api('/api/deploy_dca',body);toast(r.msg,r.ok);if(r.ok){hideModal();tick()}}
     finally{$('#dn_go').disabled=false}};
   // معاينة أولية
   setTimeout(dcaPreview,200);
+  {const bp=$('#dn_bp'),sy=$('#dn_sym');let st=0;                 // ⚡ v3.36.57: DCA+ — السعر والرمز يحدّثان المحرر مباشرة
+    if(bp)bp.addEventListener('input',()=>{bp.dataset.man=1;if(($('#dn_type')||{}).value==='dca_plus')plxForm()});
+    if(sy)sy.addEventListener('input',()=>{if(($('#dn_type')||{}).value!=='dca_plus')return;clearTimeout(st);st=setTimeout(plxForm,600)})}
 }
 function dcaTypeSwitch(){
   const t=$('#dn_type').value;
-  const buy=t==='dca_buy';
-  {const lb=$('#dn_lx_box');if(lb)lb.style.display=t==='dca_plus'?'':'none'}      // ⚡ v3.36.56: DCA+
+  const buy=t==='dca_buy',plus=t==='dca_plus';                    // ⚡ v3.36.57: DCA+ — الحقول الكلاسيكية تختفي والمحرر مكان المعاينة
+  ['dn_base','dn_avg','dn_dev','dn_step','dn_size','dn_n','dn_tp'].forEach(id=>{const f=$('#'+id),fl=f&&f.closest('.fld');if(fl)fl.style.display=plus?'none':''});
+  if(!plus&&PLX&&PLX.box===$('#dn_preview')){window._plxKeep=plxRows();PLX=null}
   $('#dn_desc').textContent=buy
     ?'يشتري عند النزول، المتوسط ينخفض، يبيع عند الصعود — الربح بالدولار. اضبط الأرقام وشوف الجدول قبل التشغيل.'
     :'يبيع عند الصعود، المتوسط يرتفع، يشتري عند النزول — الربح بالعملة. اضبط الأرقام وشوف الجدول قبل التشغيل.';
   $('#dn_tp_lbl').textContent=buy?'هدف الربح % (فوق المتوسط)':'هدف الربح % (تحت المتوسط)';
+  if(plus)$('#dn_desc').textContent='⚡ DCA+: تضع كل أمر بنفسك — مسافته عن الذي قبله وكميته ونسبة خروجه — في الجدول أو على الرسم. المتوسط مرجّح كالعادي، وحين ينزل السعر إلى خروج أعمق أمر نُفّذ يعيد شراء كل ما باع دفعة واحدة.';
   dcaPreview();
 }
 /* 🧮 v3.36.26: حاسبة «مستويات فوق السعر من عملاتك» لبوتات الشبكة — حساب فقط (لا تدخل في النشر ولا في المحرك · gridFormBody لا يقرأها) */
@@ -30719,15 +30716,16 @@ function nRiSync(){const c=$('#n_ri'),f=$('#f_ri');if(f)f.style.display=c&&c.che
 function dcaFormBody(){
   return {symbol:$('#dn_sym').value.trim().toUpperCase(),base_price:$('#dn_bp').value,
     dca_type:$('#dn_type').value,
-    ...($('#dn_type').value==='dca_plus'?{dca_plus:'1',lx_pct:($('#dn_lx_pct')||{}).value,lx_from:($('#dn_lx_from')||{}).value,lx_reopen:!!($('#dn_lx_re')||{}).checked}:{}),
     base_order_qty:$('#dn_base').value,avg_order_qty:$('#dn_avg').value,first_deviation:$('#dn_dev').value,
     step_multiplier:$('#dn_step').value,size_multiplier:$('#dn_size').value,max_safety_orders:$('#dn_n').value,
     take_profit_pct:$('#dn_tp').value,exchange_orders:$('#dn_ex').value,
+    ...(($('#dn_type')||{}).value==='dca_plus'?{plus_rows:JSON.stringify(plxRows())}:{}),        // ⚡ v3.36.57: DCA+
     cycle_wait_sec:$('#dn_wait').value,
     trail_on:!!($('#dn_trail')&&$('#dn_trail').checked),trail_pct:($('#dn_trail_pct')||{}).value||'0.3',
     wallet:$('#dn_wallet').value,auto:$('#dn_auto').checked};
 }
 async function dcaPreview(){
+  if(($('#dn_type')||{}).value==='dca_plus')return plxForm();      // ⚡ v3.36.57: DCA+ — المحرر يحسب بنفسه (حساب المحرك نفسه)
   const body=dcaFormBody();
   let res;try{res=await api('/api/dca_preview',body)}catch(e){return}
   const box=$('#dn_preview');
@@ -30746,10 +30744,10 @@ async function dcaPreview(){
   if(s.cov_warn)h+=`<div class="dnwarn" style="background:rgb(var(--red-rgb)/.10);border:1px solid rgb(var(--red-rgb)/.3);color:var(--red)">⚠️ التغطية ${s.coverage}% فقط — اليوم العادي يتحرك 3–6%، فقد ينفد السلم بحركة عادية ويبقى ينتظر العودة. زِد «عدد أوامر الأمان» أو «المسافة» أو «تغيّر المسافة» (مثلاً 1.2)، أو شغّل 🛡️ الدرع.</div>`;
   if(s.fee_warn)h+=`<div class="dnwarn" style="background:rgb(var(--amber-rgb)/.12);border:1px solid rgb(var(--amber-rgb)/.3);color:var(--amber)">🛡️ هدفك أقل من العمولات — المحرك يرفعه تلقائياً لـ${s.tp_used}% (الجدول محسوب عليه)</div>`;
   h+=`<div class="dnsec">📋 جدول الأوامر — كل صف: لو بلغ السعر هذا الأمر ثم عاد إلى الهدف</div><div style="overflow-x:auto"><table class="dntbl"><thead><tr>
-    <th>الأمر</th><th>السعر</th>${body.dca_plus?`<th>⚡ خروج الطبقة<br><small>رجوع ${+body.lx_pct||0}%</small></th>`:''}<th>المسافة<br><small>من الذي قبله · من الأساس</small></th><th>الكمية ${base}</th><th>قيمته $</th><th>المجموع<br><small>${base} · $</small></th>
+    <th>الأمر</th><th>السعر</th><th>المسافة<br><small>من الذي قبله · من الأساس</small></th><th>الكمية ${base}</th><th>قيمته $</th><th>المجموع<br><small>${base} · $</small></th>
     <th>المتوسط</th><th>🎯 سعر الخروج</th><th>${buy?'الصعود':'الرجوع'} للخروج</th><th>💎 ربح صافي<br><small>${unit}</small></th></tr></thead><tbody>`;
   res.rows.forEach(r=>{const ep=r.exit_profit>=0;
-    h+=`<tr><td>${r.label}</td><td class="num">${f4(r.price)}</td>${body.dca_plus?(r.n>=(+body.lx_from||1)?`<td class="num" style="color:var(--green)">${f4(r.price*(1-(+body.lx_pct||0)/100))}</td>`:'<td style="color:var(--mut2)">هدف الدورة</td>'):''}
+    h+=`<tr><td>${r.label}</td><td class="num">${f4(r.price)}</td>
     <td class="num" style="color:var(--vio);white-space:nowrap">${r.n===0?'—':arr+' '+r.step+'% · '+r.dev+'%'}</td>
     <td class="num">${r.order_qty}</td><td class="num" style="color:var(--mut)">${r.order_val}</td>
     <td class="num" style="white-space:nowrap">${r.cum_qty} · <span style="color:var(--mut)">${r.cum_vol}$</span></td>
@@ -30761,6 +30759,228 @@ async function dcaPreview(){
   h+='<div class="dnsec">📈 مخطط نسبة الخروج لكل أمر</div>'+dcaChart(res.rows,s,base);
   box.innerHTML=h;
 }
+/* ⚡ v3.36.57: DCA+ — محرر السلّم الحر: كل أمر بمسافته وكميته ونسبة خروجه · الجدول والرسم معاً (أي تغيير في أحدهما يظهر في الآخر فوراً) ·
+   في نموذج النشر وفي نافذة «✏️ أوامر DCA+» من البطاقة · الحساب نفسه الذي يستعمله المحرك: متوسط مرجّح · هدف = المتوسط × (1 − خروج أعمق
+   أمر نُفّذ، لا أقل من 0.20%) · عمولة الأساس آخذ 0.1% · الأوامر صانع 0.08% (بالدرع آخذ) · إعادة الشراء آخذ 0.1% */
+const PLX_FM=0.0008,PLX_FT=0.001,PLX_MAX=101,PLX_W=640,PLX_BL=170;
+let PLX=null;
+function plxDef(){return [{d:0,q:10,x:0.5},{d:1,q:10,x:0.6},{d:1.5,q:15,x:0.7},{d:2,q:20,x:0.8},{d:2.5,q:30,x:0.7},{d:3,q:40,x:0.6}]}
+function plxN(v){const s=String(v==null?'':v).trim().replace(/[٠-٩]/g,c=>'٠١٢٣٤٥٦٧٨٩'.indexOf(c)).replace(/[٫,]/g,'.');
+  if(!/^-?(\d+\.?\d*|\.\d+)(e-?\d+)?$/i.test(s))return NaN;return parseFloat(s)}
+function plxR(v,k){v=+v;if(!isFinite(v))return '';const a=Math.abs(v);return String(+v.toFixed(k!=null?k:(a>=1000?0:a>=100?2:a>=1?4:8)))}
+function plxQ(q){return q>=100?Math.round(q):q>=1?+q.toFixed(2):+q.toPrecision(4)}
+function plxCalc(rows,base,trail){const out=[],fl=trail?PLX_FT:PLX_FM;let p=+base||0,cq=0,cv=0,cn=0;
+  rows.forEach((r,i)=>{const d=+r.d||0,q=+r.q||0,x=+r.x||0;if(i)p=p*(1+d/100);const fee=i?fl:PLX_FT;
+    cq+=q;cv+=p*q;cn+=p*q*(1-fee);const avg=cq>0?cv/cq:0,xu=Math.max(x,0.2),tgt=avg*(1-xu/100);
+    out.push({n:i,p,q,cq,cv,avg,tgt,xu,gap:p>0?(1-tgt/p)*100:0,dev:base>0?(p/base-1)*100:0,prof:tgt>0?cn/tgt*(1-PLX_FT)-cq:0})});
+  return out}
+function plxCellOk(rows,i,k){const v=+rows[i][k];if(!isFinite(v))return false;
+  return k==='d'?(i===0||(v>0&&v<=50)):k==='q'?v>0:(v>0&&v<=50)}
+function plxBad(rows){                                     // نفس قواعد المحرك واللوحة
+  if(!rows||rows.length<2)return 'أضف أمر أمان واحداً على الأقل';
+  if(rows.length>PLX_MAX)return `الحد ${PLX_MAX-1} أمر أمان`;
+  for(let i=0;i<rows.length;i++)if(!['d','q','x'].every(k=>plxCellOk(rows,i,k)))
+    return `${i?'أمان '+i:'الأساسي'}: الكمية أكبر من صفر · المسافة بين 0 و50% · نسبة الخروج بين 0 و50%`;
+  return ''}
+function plxRows(){return PLX?PLX.rows.map((r,i)=>({d:i?+r.d:0,q:+r.q,x:+r.x})):[]}
+function plxLockMax(){return PLX&&PLX.locked.size?Math.max(...PLX.locked):-1}
+function plxLen(q,qm){return 20+PLX_BL*Math.max(0,q)/(qm||1)}
+function plxOpen(box,o){
+  if(!box)return;
+  const rows=(o.rows&&o.rows.length?o.rows:plxDef()).map((r,i)=>({d:i?+r.d||0:0,q:+r.q,x:+r.x}));
+  PLX={box,rows,base:+o.base>0?+o.base:1,locked:new Set((o.locked||[]).map(Number)),sel:rows.length-1,sym:o.sym||'',trail:!!o.trail,cp:+o.cp||0,
+       mode:o.mode||'new',bar:'1H',cd:[],fz:null,drag:null,k:1,H:400,coin:((o.sym||'').split('-')[0])||'عملة',calc:[]};
+  const last=rows[rows.length-1]||{},r1=rows[1]||{};
+  box.innerHTML=`<div class="plx">
+   <div data-p="sum"></div><div data-p="warn"></div>
+   <div class="plxhd"><b>📈 الأوامر على الرسم</b><span class="plxbars" data-p="bars">${['15m','1H','4H','1D'].map(b=>`<button type="button" data-b="${b}" class="${b==='1H'?'on':''}">${b}</button>`).join('')}</span>
+     <span class="plxhint">اسحب خط أي أمر للأعلى أو الأسفل لتغيير سعره · اسحب دائرته يميناً أو يساراً لتغيير كميته · اضغط مكاناً فارغاً فوق السعر لإضافة أمر · اختر أمراً ثم اسحب خطه الأخضر 🎯 لتغيير نسبة خروجه</span></div>
+   <div class="plxch" data-p="ch"><svg viewBox="0 0 ${PLX_W} 400" role="img" aria-label="سلّم DCA+"><g data-p="g"></g></svg></div>
+   <div data-p="sel"></div>
+   <details class="plxfill"><summary>⚡ تعبئة سريعة — ثم عدّل أي أمر وحده</summary>
+    <div class="frm">
+     <div class="fld"><label>عدد أوامر الأمان</label><input class="num" data-f="n" value="${rows.length-1}"></div>
+     <div class="fld"><label>📏 أول مسافة %</label><input class="num" data-f="d1" value="${plxR(+r1.d||1,3)}"></div>
+     <div class="fld"><label>زيادة المسافة لكل أمر %</label><input class="num" data-f="dg" value="0.5"><small>0 = ثابتة</small></div>
+     <div class="fld"><label>كمية الأساسي</label><input class="num" data-f="q0" value="${plxR(+rows[0].q)}"></div>
+     <div class="fld"><label>كمية أول أمان</label><input class="num" data-f="q1" value="${plxR(+r1.q||+rows[0].q)}"></div>
+     <div class="fld"><label>مضاعف الكمية</label><input class="num" data-f="qm" value="1.3"><small>1 = متساوية</small></div>
+     <div class="fld"><label>🎯 خروج الأساسي %</label><input class="num" data-f="x0" value="${plxR(+rows[0].x,3)}"></div>
+     <div class="fld"><label>🎯 خروج آخر أمر %</label><input class="num" data-f="x1" value="${plxR(+last.x,3)}"><small>بينهما يتدرّج</small></div>
+    </div><button type="button" class="primary" onclick="plxFill()" style="margin-top:8px">املأ الجدول</button></details>
+   <div data-p="tw"></div>
+   <p class="plxnote">💡 صافٍ بعد عمولة OKX: الأساس آخذ 0.1% · الأوامر صانع 0.08%${o.trail?' (بالدرع آخذ 0.1%)':''} · إعادة الشراء آخذ 0.1%. الهدف = متوسط ما بِيع × (1 − نسبة خروج أعمق أمر نُفّذ)، وعنده يعيد شراء كل ما باع دفعة واحدة. الأرقام على سعر الأساس المعروض — البوت يحسب من سعر التنفيذ الفعلي.</p></div>`;
+  const q=k=>box.querySelector(`[data-p="${k}"]`);PLX.q=q;
+  const svg=q('ch').querySelector('svg');PLX.svg=svg;PLX.g=q('g');
+  svg.addEventListener('pointerdown',plxDown);svg.addEventListener('pointermove',plxMove);
+  svg.addEventListener('pointerup',plxUp);svg.addEventListener('pointercancel',plxUp);
+  q('bars').onclick=e=>{const b=e.target.closest('button');if(!b||!PLX)return;PLX.bar=b.dataset.b;q('bars').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));plxCandles()};
+  plxFull();plxCandles()}
+function plxFull(){const P=PLX;if(!P)return;P.calc=plxCalc(P.rows,P.base,P.trail);if(P.sel!=null&&P.sel>=P.rows.length)P.sel=P.rows.length-1;plxTbl();P.selK=null;plxSoft()}
+function plxTbl(){const P=PLX,lm=plxLockMax(),c=gEsc(P.coin);
+  let h=`<div class="plxtbl"><table class="dntbl"><thead><tr><th>الأمر</th><th>المسافة %<br><small>عن الذي قبله</small></th><th>الكمية<br><small>${c}</small></th><th>الخروج %<br><small>لو وصل هنا</small></th>
+    <th>السعر</th><th>عن الأساس</th><th>المجموع<br><small>${c}</small></th><th>المتوسط</th><th>🎯 سعر الخروج</th><th>يحتاج نزولاً</th><th>💎 ربح صافٍ<br><small>${c}</small></th><th></th></tr></thead><tbody>`;
+  P.rows.forEach((r,i)=>{const L=P.locked.has(i);
+    h+=`<tr data-i="${i}" class="${L?'lk':''}"><td class="plxn">${L?'✅ ':''}${i?'أمان '+i:'الأساسي'}</td>
+     <td>${i?`<input class="num" data-k="d" inputmode="decimal"${L?' disabled':''}>`:'—'}</td>
+     <td><input class="num" data-k="q" inputmode="decimal"${L?' disabled':''}></td>
+     <td><input class="num" data-k="x" inputmode="decimal"></td>
+     <td class="num" data-c="p"></td><td class="num" data-c="dev" style="color:var(--vio)"></td><td class="num" data-c="cq"></td><td class="num" data-c="avg"></td>
+     <td class="num" data-c="tgt" style="color:var(--green)"></td><td class="num" data-c="gap" style="color:var(--cyan);font-weight:700"></td><td class="num" data-c="prof"></td>
+     <td>${i>lm&&i>0?`<button type="button" class="plxdel" onclick="plxDel(${i})" title="حذف هذا الأمر">✕</button>`:''}</td></tr>`});
+  h+=`</tbody></table></div><div class="plxadd"><button type="button" onclick="plxAdd()"${P.rows.length>=PLX_MAX?' disabled':''}>➕ أمر في النهاية</button></div>`;
+  const tw=P.q('tw');tw.innerHTML=h;
+  tw.querySelectorAll('input[data-k]').forEach(inp=>{const i=+inp.closest('tr').dataset.i;
+    inp.oninput=()=>plxIn(i,inp.dataset.k,inp.value);inp.onfocus=()=>{if(PLX.sel!==i){PLX.sel=i;plxSoft()}}});
+  tw.querySelectorAll('td.plxn').forEach(td=>td.onclick=()=>plxSel(+td.closest('tr').dataset.i))}
+function plxIn(i,k,v){const P=PLX;if(!P||!P.rows[i])return;if(P.locked.has(i)&&k!=='x')return;P.rows[i][k]=plxN(v);plxSoft()}
+function plxSel(i){if(!PLX)return;PLX.sel=i;plxSoft()}
+function plxSoft(){const P=PLX;if(!P||!P.box.isConnected)return;
+  P.calc=plxCalc(P.rows,P.base,P.trail);
+  const tw=P.q('tw');
+  P.calc.forEach((c,i)=>{const tr=tw.querySelector(`tr[data-i="${i}"]`);if(!tr)return;tr.classList.toggle('on',i===P.sel);
+    const set=(k,v)=>{const e=tr.querySelector(`[data-c="${k}"]`);if(e&&e.textContent!==v)e.textContent=v};
+    set('p',f4(c.p));set('dev',i?'▲ '+c.dev.toFixed(2)+'%':'—');set('cq',plxR(c.cq));set('avg',f4(c.avg));set('tgt',f4(c.tgt));set('gap','▼ '+c.gap.toFixed(2)+'%');
+    const pe=tr.querySelector('[data-c="prof"]');if(pe){pe.textContent=(c.prof>=0?'+':'')+plxR(c.prof,6);pe.style.color=c.prof>0?'var(--green)':'var(--red)'}
+    ['d','q','x'].forEach(k=>{const inp=tr.querySelector(`input[data-k="${k}"]`);if(!inp)return;
+      if(document.activeElement!==inp){const val=plxR(+P.rows[i][k],k==='q'?null:3);if(inp.value!==val)inp.value=val}
+      inp.classList.toggle('bad',!plxCellOk(P.rows,i,k))})});
+  plxSum();plxDraw();plxSelBox();if(P.onchg)P.onchg()}
+function plxSum(){const P=PLX,C=P.calc,L=C[C.length-1]||{},F=C[0]||{},c=gEsc(P.coin),bad=plxBad(P.rows),sg=v=>(v>=0?'+':'')+plxR(v,6);
+  const low=P.rows.map((r,i)=>(+r.x>0&&+r.x<0.2)?i:-1).filter(i=>i>=0),neg=C.filter(z=>!(z.prof>0)).map(z=>z.n);
+  P.q('sum').innerHTML=`<div class="dnsum">
+    <div class="dnstat"><span>🪙 العملات لو نُفّذ الكل</span><b><bdi>${plxR(L.cq||0)} ${c}</bdi></b><small style="display:block;color:var(--mut2);font-size:10px"><bdi>≈ ${(L.cv||0).toFixed(2)}$</bdi></small></div>
+    <div class="dnstat"><span>📏 التغطية (مدى الصعود)</span><b style="color:var(--vio)">▲ ${(L.dev||0).toFixed(2)}%</b></div>
+    <div class="dnstat"><span>🎯 بعد آخر أمر يحتاج نزولاً</span><b style="color:var(--cyan)">▼ ${(L.gap||0).toFixed(2)}%</b></div>
+    <div class="dnstat"><span>💎 ربح صافٍ — الأساس فقط</span><b style="color:var(--green)">${sg(F.prof||0)} ${c}</b></div>
+    <div class="dnstat"><span>💎 ربح صافٍ — السلم كاملاً</span><b style="color:var(--green)">${sg(L.prof||0)} ${c}</b></div>
+    <div class="dnstat"><span>📋 الأوامر</span><b>${P.rows.length-1} أمر أمان</b></div></div>`;
+  let w='';
+  if(bad)w+=`<div class="dnwarn plxred">⚠️ ${gEsc(bad)}</div>`;
+  if(low.length)w+=`<div class="dnwarn plxamb">🛡️ نسبة خروج أقل من 0.20% (${low.map(n=>n?'أمان '+n:'الأساسي').join('، ')}) — لا تغطي العمولتين، فيستعمل البوت 0.20% (الجدول محسوب عليها)</div>`;
+  if(!bad&&neg.length)w+=`<div class="dnwarn plxred">⚠️ لا ربح صافياً لو خرج عند: ${neg.map(n=>n?'أمان '+n:'الأساسي').join('، ')} — ارفع نسبة خروجه</div>`;
+  if(P.locked.size)w+=`<p class="plxnote">✅ = نُفّذ في هذه الدورة: سعره وكميته ثابتان، ونسبة خروجه تتغيّر. الإضافة والحذف فوق آخر أمر نُفّذ.</p>`;
+  P.q('warn').innerHTML=w}
+function plxDraw(){const P=PLX,svg=P.svg;if(!svg||!P.calc.length)return;const C=P.calc;
+  if(!P.fz){const cw=svg.clientWidth||svg.getBoundingClientRect().width||PLX_W;P.k=Math.min(2.2,Math.max(1,PLX_W/Math.max(260,cw)));P.H=P.k>1.4?560:360}
+  const W=PLX_W,H=P.H,k=P.k,fs=11*k,pt=fs+8,pb=fs+6,XR=W-10,XC=Math.round(W*0.46);
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  let lo,hi;
+  if(P.fz){lo=P.fz.lo;hi=P.fz.hi}
+  else{const ps=[];C.forEach(c=>ps.push(c.p,c.tgt));if(P.cp>0)ps.push(P.cp);P.cd.slice(-72).forEach(r=>ps.push(+r[2],+r[3]));
+    lo=Math.min(...ps);hi=Math.max(...ps);const pd=(hi-lo)*0.05||hi*0.01,mp=Math.max(...C.map(c=>c.p));lo-=pd;hi=Math.max(hi+pd*2.5,mp*1.03);P.lo=lo;P.hi=hi}   // مكان فوق آخر أمر لإضافة أوامر بالضغط
+  const Y=p=>pt+(hi-p)/(hi-lo)*(H-pt-pb);P.Y=Y;P.P=y=>hi-(y-pt)/(H-pt-pb)*(hi-lo);
+  let g='';
+  const cd=P.cd.slice(-72);
+  if(cd.length){const w=(XC-14)/cd.length;cd.forEach((r,j)=>{const o=+r[1],h=+r[2],l=+r[3],c=+r[4],x=10+j*w+w/2,col=c>=o?'var(--green)':'var(--red)';
+      g+=`<line x1="${x}" y1="${Y(h)}" x2="${x}" y2="${Y(l)}" stroke="${col}" stroke-width="${Math.max(1,w*0.14)}" opacity=".4"/><rect x="${x-w*0.32}" y="${Y(Math.max(o,c))}" width="${w*0.64}" height="${Math.max(1,Math.abs(Y(o)-Y(c)))}" fill="${col}" opacity=".4"/>`});
+    g+=`<text x="12" y="${fs+2}" font-size="${fs*0.85}" fill="var(--mut2)">${gEsc(P.sym)} · ${P.bar}</text>`}
+  const s=P.sel!=null?C[P.sel]:null;
+  if(s){const ya=Y(s.avg),yt=Y(s.tgt),hk=7*k;
+    g+=`<rect x="${XC}" y="${yt}" width="${XR-XC}" height="${Math.max(0,H-pb-yt)}" fill="rgb(var(--green-rgb)/.07)"/>`;
+    g+=`<line x1="10" y1="${ya}" x2="${XR}" y2="${ya}" stroke="var(--amber)" stroke-width="${1.2*k}" stroke-dasharray="${6*k} ${4*k}"/>`;
+    g+=`<line x1="10" y1="${yt}" x2="${XR}" y2="${yt}" stroke="var(--green)" stroke-width="${2*k}"/>`;
+    g+=`<path d="M${XC} ${yt-hk} l${hk} ${hk} l${-hk} ${hk} l${-hk} ${-hk} z" fill="var(--green)"/>`;
+    g+=`<text x="${XC-hk-6}" y="${yt+fs+3}" font-size="${fs}" fill="var(--green)" font-weight="700" direction="rtl" unicode-bidi="embed">🎯 خروج ${s.n?'أمان '+s.n:'الأساسي'}</text>`;   // العربي يسار المقبض والأرقام يمينه (لا تختلط الاتجاهات)
+    g+=`<text x="${XC+hk+6}" y="${yt+fs+3}" font-size="${fs}" fill="var(--green)" font-weight="700">${plxR(+P.rows[s.n].x,3)}% → ${f4(s.tgt)} · ▼${s.gap.toFixed(2)}%</text>`;
+    g+=`<text x="12" y="${ya-5}" font-size="${fs*0.9}" fill="var(--amber)" direction="rtl" unicode-bidi="embed" text-anchor="end">المتوسط ${f4(s.avg)}</text>`}
+  if(P.cp>0&&Math.abs(P.cp/C[0].p-1)>0.0005){const yc=Y(P.cp);
+    g+=`<line x1="10" y1="${yc}" x2="${XR}" y2="${yc}" stroke="var(--vio)" stroke-width="${1.4*k}" stroke-dasharray="${2*k} ${3*k}"/><text x="12" y="${yc-5}" font-size="${fs*0.9}" fill="var(--vio)">⚡ الآن ${f4(P.cp)}</text>`}
+  const qm=Math.max(...C.map(c=>c.q).filter(v=>v>0),1e-12),lab=[];
+  C.forEach((c,i)=>{const y=Y(c.p),L=P.locked.has(i),on=i===P.sel,col=L?'var(--green)':(on?'var(--amber)':(i?'var(--red)':'var(--vio)')),x0=XR-plxLen(c.q,qm);
+    g+=`<line x1="10" y1="${y}" x2="${XR}" y2="${y}" stroke="${col}" stroke-width="${0.8*k}" opacity="${on?0.75:0.3}" stroke-dasharray="${3*k} ${3*k}"/>`;
+    g+=`<line x1="${x0}" y1="${y}" x2="${XR}" y2="${y}" stroke="${col}" stroke-width="${(on?7:5)*k}" stroke-linecap="round" opacity=".9"/>`;
+    if(!L)g+=`<circle cx="${x0}" cy="${y}" r="${6*k}" fill="rgb(var(--ov-rgb)/.04)" stroke="${col}" stroke-width="${2*k}"/>`;
+    lab.push({y,on,col,x:x0-10*k,t:`${L?'✅ ':''}${i?'أمان '+i:'الأساس'} · ${f4(c.p)} · ${plxR(c.q)}`})});
+  lab.sort((a,b)=>a.y-b.y);let ly=-1e9;const keep=lab.filter(o=>o.on);
+  lab.forEach(o=>{if(o.on)return;if(o.y-ly>=fs*1.2&&keep.every(z=>Math.abs(z.y-o.y)>=fs*1.2)){keep.push(o);ly=o.y}});
+  keep.forEach(o=>{g+=`<text x="${o.x}" y="${o.y+fs*0.36}" font-size="${fs}" fill="${o.col}" text-anchor="end" font-weight="${o.on?700:400}">${o.t}</text>`});
+  P.g.innerHTML=g}
+function plxPt(ev){const r=PLX.svg.getBoundingClientRect();return {x:(ev.clientX-r.left)/r.width*PLX_W,y:(ev.clientY-r.top)/r.height*PLX.H}}
+function plxSetP(i,pr){const P=PLX,C=P.calc;if(i<1||P.locked.has(i)||!C[i]||!(pr>0))return;
+  const lo=C[i-1].p*1.0001,hi=i+1<C.length?C[i+1].p/1.0001:C[i-1].p*1.5;pr=Math.min(Math.max(pr,lo),hi);
+  P.rows[i].d=+((pr/C[i-1].p-1)*100).toFixed(4);
+  if(i+1<C.length&&!P.locked.has(i+1))P.rows[i+1].d=+((C[i+1].p/pr-1)*100).toFixed(4)}   // التي بعده تبقى مكانها
+function plxDown(ev){const P=PLX;if(!P||!P.calc.length||!P.Y)return;const {x,y}=plxPt(ev),C=P.calc,tol=12*P.k;P.fz={lo:P.lo,hi:P.hi};
+  let dr=null;const s=P.sel!=null?C[P.sel]:null;
+  if(s&&Math.abs(y-P.Y(s.tgt))<tol)dr={k:'x',i:P.sel};
+  else{let b=-1,bd=1e9;C.forEach((c,i)=>{const d=Math.abs(y-P.Y(c.p));if(d<bd){bd=d;b=i}});
+    if(bd<tol){const qm=Math.max(...C.map(c=>c.q).filter(v=>v>0),1e-12),x0=PLX_W-10-plxLen(C[b].q,qm);
+      if(!P.locked.has(b)&&Math.abs(x-x0)<tol*1.4)dr={k:'q',i:b,x0:x,l0:plxLen(C[b].q,qm),qm};
+      else if(b>0&&!P.locked.has(b))dr={k:'p',i:b};
+      else dr={k:'sel',i:b};
+      P.sel=b}
+    else dr={k:'tap',x0:x,y0:y}}
+  P.drag=dr;try{P.svg.setPointerCapture(ev.pointerId)}catch(e){}ev.preventDefault();plxSoft()}
+function plxMove(ev){const P=PLX;if(!P||!P.drag)return;const {x,y}=plxPt(ev),d=P.drag;
+  if(d.k==='p')plxSetP(d.i,P.P(y));
+  else if(d.k==='x'){const c=P.calc[d.i];if(c&&c.avg>0)P.rows[d.i].x=+Math.min(50,Math.max(0.2,(1-P.P(y)/c.avg)*100)).toFixed(2)}
+  else if(d.k==='q'){const L=Math.max(21,d.l0+(d.x0-x));P.rows[d.i].q=plxQ(Math.max(d.qm*0.01,(L-20)/PLX_BL*d.qm))}
+  else return;
+  ev.preventDefault();if(!P.raf)P.raf=requestAnimationFrame(()=>{if(PLX){PLX.raf=0;plxSoft()}})}
+function plxUp(ev){const P=PLX;if(!P)return;const d=P.drag;P.drag=null;
+  if(d&&d.k==='tap'){const {x,y}=plxPt(ev);if(Math.hypot(x-d.x0,y-d.y0)<8*P.k){const pr=P.P(y);P.fz=null;plxAddAt(pr);return}}
+  P.fz=null;plxSoft()}
+function plxAddAt(pr){const P=PLX,C=P.calc,lm=plxLockMax();
+  if(P.rows.length>=PLX_MAX){toast(`الحد ${PLX_MAX-1} أمر أمان`,false);return}
+  let k=C.findIndex(c=>c.p>pr);if(k<0)k=C.length;
+  if(k<1){toast('أوامر البيعي فوق سعر الأساس — اضغط فوقه',false);plxSoft();return}
+  if(k<=lm){toast('أضف الأوامر فوق آخر أمر نُفّذ',false);plxSoft();return}
+  const d=(pr/C[k-1].p-1)*100;if(!(d>0.01&&d<=50)){toast('المسافة عن الأمر الذي قبله بين 0 و50%',false);plxSoft();return}
+  const tpl=P.rows[k-1];
+  if(k<C.length)P.rows[k].d=+((C[k].p/pr-1)*100).toFixed(4);
+  P.rows.splice(k,0,{d:+d.toFixed(4),q:+tpl.q,x:+tpl.x});P.sel=k;plxFull()}
+function plxAdd(){const P=PLX;if(!P||P.rows.length>=PLX_MAX)return;const l=P.rows[P.rows.length-1];
+  P.rows.push({d:+(P.rows.length>1?+l.d||1:1),q:+l.q||1,x:+l.x||0.5});P.sel=P.rows.length-1;plxFull()}
+function plxDel(i){const P=PLX;if(!P||i<1||i<=plxLockMax()||!P.rows[i])return;const C=P.calc;
+  if(i+1<P.rows.length&&C[i+1]&&C[i-1])P.rows[i+1].d=+((C[i+1].p/C[i-1].p-1)*100).toFixed(4);   // التي بعده تبقى مكانها
+  P.rows.splice(i,1);P.sel=Math.min(i,P.rows.length-1);plxFull()}
+function plxFill(){const P=PLX;if(!P)return;const v=k=>plxN((P.box.querySelector(`[data-f="${k}"]`)||{}).value);
+  const n=Math.round(v('n')),d1=v('d1'),dg=v('dg'),q0=v('q0'),q1=v('q1'),qm=v('qm'),x0=v('x0'),x1=v('x1');
+  if(!(n>=1&&n<=PLX_MAX-1)||!(d1>0)||!isFinite(dg)||!(q0>0)||!(q1>0)||!(qm>0)||!(x0>0)||!(x1>0)){toast('أكمل أرقام التعبئة السريعة',false);return}
+  const rows=P.rows.slice(0,plxLockMax()+1);
+  for(let i=rows.length;i<=n;i++)rows.push(i===0?{d:0,q:q0,x:x0}:{d:+Math.max(0.05,d1+dg*(i-1)).toFixed(3),q:plxQ(q1*Math.pow(qm,i-1)),x:+(x0+(x1-x0)*i/n).toFixed(2)});
+  P.rows=rows;P.sel=rows.length-1;plxFull()}
+function plxSelBox(){const P=PLX,box=P.q('sel'),i=P.sel,C=P.calc;
+  if(i==null||!C[i]){box.innerHTML='<p class="plxnote">اختر أمراً من الرسم أو من الجدول.</p>';P.selK=null;return}
+  const c=C[i],L=P.locked.has(i),key=i+'|'+P.rows.length+'|'+L;
+  if(P.selK!==key){P.selK=key;
+    box.innerHTML=`<div class="plxselb"><b>${L?'✅ ':''}${i?'أمان '+i:'الأساسي'}</b>
+      <label>السعر <input class="num" data-s="p" inputmode="decimal"${L||i===0?' disabled':''}></label>
+      <label>الكمية <input class="num" data-s="q" inputmode="decimal"${L?' disabled':''}></label>
+      <label>الخروج % <input class="num" data-s="x" inputmode="decimal"></label>
+      <span class="plxsi" data-s="info"></span>
+      <span class="plxsb"><button type="button" onclick="plxSel(${Math.max(0,i-1)})"${i?'':' disabled'} title="الأمر الذي قبله">▼</button><button type="button" onclick="plxSel(${Math.min(P.rows.length-1,i+1)})"${i<P.rows.length-1?'':' disabled'} title="الأمر الذي بعده">▲</button>${i>plxLockMax()&&i>0?`<button type="button" class="plxdel" onclick="plxDel(${i})">✕ حذف</button>`:''}</span></div>`;
+    const S=k=>box.querySelector(`[data-s="${k}"]`);
+    S('p').onchange=()=>{const v=plxN(S('p').value);if(v>0){plxSetP(i,v);plxSoft()}};
+    S('q').oninput=()=>plxIn(i,'q',S('q').value);S('x').oninput=()=>plxIn(i,'x',S('x').value)}
+  const S=k=>box.querySelector(`[data-s="${k}"]`),setv=(k,v)=>{const e=S(k);if(e&&document.activeElement!==e&&e.value!==v)e.value=v};
+  setv('p',String(+c.p.toPrecision(8)));setv('q',plxR(+P.rows[i].q));setv('x',plxR(+P.rows[i].x,3));
+  ['q','x'].forEach(k=>{const e=S(k);if(e)e.classList.toggle('bad',!plxCellOk(P.rows,i,k))});
+  S('info').innerHTML=`المتوسط <bdi>${f4(c.avg)}</bdi> · 🎯 الخروج <bdi>${f4(c.tgt)}</bdi> · يحتاج نزولاً <bdi>${c.gap.toFixed(2)}%</bdi> · 💎 <bdi>${(c.prof>=0?'+':'')+plxR(c.prof,6)} ${gEsc(P.coin)}</bdi>`}
+async function plxCandles(){const P=PLX;if(!P||!/^[A-Z0-9]{2,15}-[A-Z]{2,10}$/.test(P.sym))return;
+  let r=null;try{r=await api('/api/candles',{sym:P.sym,bar:P.bar},true)}catch(e){}
+  if(PLX!==P||!r||!r.ok)return;P.cd=r.rows||[];if(P.onCd)P.onCd(P.cd);plxSoft()}
+function plxForm(){const box=$('#dn_preview');if(!box)return;
+  const sym=($('#dn_sym').value||'').trim().toUpperCase(),bp=plxN($('#dn_bp').value),tr=!!($('#dn_trail')||{}).checked;
+  if(!PLX||PLX.box!==box||!box.querySelector('.plx')){
+    plxOpen(box,{rows:window._plxKeep||null,base:bp>0?bp:1,sym,trail:tr,mode:'new'});
+    PLX.onCd=cd=>{const e=$('#dn_bp');if(e&&!e.dataset.man&&cd.length){const lc=+cd[cd.length-1][4];if(lc>0){e.value=String(+lc.toPrecision(8));PLX.base=lc}}}}
+  else{const ch=PLX.sym!==sym;PLX.sym=sym;PLX.coin=sym.split('-')[0]||'عملة';if(bp>0)PLX.base=bp;PLX.trail=tr;plxSoft();if(ch)plxCandles()}}
+function dcaPlusEdit(b){const d=b.dca||{},P=d.plus||{};
+  const live=d.phase==='selling'||d.phase==='buying',cp=(window.JPX&&JPX[b.symbol])||b.cp||0,base=live&&P.base>0?P.base:cp;
+  showModal(`<h2 style="color:var(--green)">✏️ أوامر DCA+ — ${gEsc(b.symbol)}</h2>
+    <p class="plxnote" style="margin-bottom:8px">${live?'الأوامر المنفّذة في هذه الدورة ✅ ثابتة بسعرها وكميتها (تستطيع تغيير نسبة خروجها). حرّك أي أمر لم يُنفّذ أو غيّر كميته، أو أضف أوامر واحذفها — يطبّقها البوت خلال ثوانٍ: يلغي أوامره التي لم تُنفّذ على المنصة ويضعها بأسعارها الجديدة.':'لا توجد دورة مفتوحة الآن — تبدأ الدورة القادمة بهذه الأوامر.'}</p>
+    ${P.pending?'<div class="dnwarn plxamb">⏳ تعديل سابق ينتظر البوت</div>':''}${P.err?`<div class="dnwarn plxred">⚠️ لم يطبّق البوت آخر تعديل: ${gEsc(P.err)}</div>`:''}
+    <div id="plx_edit"></div>
+    <div class="mbtns" style="margin-top:12px"><button class="primary" id="plx_save" style="background:linear-gradient(94deg,var(--green),#16a34a)">💾 احفظ الأوامر</button><button onclick="hideModal()">إلغاء</button></div>`);
+  plxOpen($('#plx_edit'),{rows:P.rows,base:base||1,locked:live?P.locked:[],sym:b.symbol,trail:d.trail_on,cp,mode:'edit'});
+  $('#plx_save').onclick=async()=>{const e=plxBad(plxRows());if(e){toast(e,false);return}
+    const btn=$('#plx_save');btn.disabled=true;
+    try{const r=await api('/api/control',{dir:b.dir,action:'plus_edit',value:{rows:plxRows()}});toast(r.msg,r.ok);if(r.ok){hideModal();tick()}}
+    catch(e){toast('تعذر الاتصال',false)}finally{if(btn.isConnected)btn.disabled=false}}}
+function dcaPlusRowsTbl(P,base){return `<table class="dntbl" style="margin-bottom:10px"><thead><tr><th>الأمر</th><th>المسافة<br><small>عن الذي قبله</small></th><th>الكمية ${gEsc(base)}</th><th>نسبة الخروج</th></tr></thead><tbody>${(P.rows||[]).map((r,i)=>
+  `<tr><td>${(P.locked||[]).includes(i)?'✅ ':''}${i?'أمان '+i:'الأساسي'}</td><td class="num">${i?'▲ '+r.d+'%':'—'}</td><td class="num">${r.q}</td><td class="num">${r.x}%</td></tr>`).join('')}</tbody></table>`}
 function dcaChart(rows,s,base){
   const W=600,H=240,pad=46;
   // 📊 المخطط يرسم: نسبة الخروج لكل أمر (gap_pct = كم لازم ينزل السعر للخروج)
@@ -31677,12 +31897,12 @@ function skModel(el,b,kd){
     const ds=skText(el,'dist');M.pl=ds&&ds!=='—'?['للهدف',ds]:['الدورة',d.cycles?String((+d.cycles||0)+1):'—'];M.pc=ds&&ds.includes('✓')?'':'z';
     M.gfx='<div class="dcaviz skdv"></div>';M.after=v=>{const n=v.querySelector('.skdv');if(n)dcaViz(n,d,cp)};
     M.chips=[skText(el,'dtrail'),skText(el,'dlast')].filter(Boolean).map((t,i)=>`<span class="chip ${(i===0&&d.trail_on)||(i===1&&d.stop_after)?'gOn':''}">${SKE(t)}</span>`).join('')
-      +(d.plus?`<span class="chip ${d.plus.on?'gOn':''}" data-sk="dplus" style="cursor:pointer">${SKE(skText(el,'dplus'))}</span>`:'');
+      +(d.plus?`<span class="chip gOn">${SKE(skText(el,'dplus'))}</span>`:'');
     M.m=[[(el.querySelector('[data-k="avg"]')||{}).previousElementSibling?el.querySelector('[data-k="avg"]').previousElementSibling.textContent:'المتوسط',skText(el,'avg')],['تقدّم الدورة',skText(el,'prog')],['المسافة للهدف',skText(el,'dist')],
       [skShown(R.lpbox)?skText(el,'lplbl'):'لو أغلقت الآن',skShown(R.lpbox)?skText(el,'lp'):'—'],['التشغيل',skText(el,'age')],['المعدل يومي / شهري / سنوي',[skText(el,'rday'),skText(el,'rmon'),skText(el,'ryear')].join(' / ')]];
     const bn=skBtn(el,'buynow');M.main=bn?Object.assign(bn,{loss:R.buynow.classList.contains('loss')}):skBtn(el,'dpause');
     M.ic=[skBtn(el,'dchart','📈 شارت'),skBtn(el,'dtable','📋 الجدول'),skBtn(el,'dhist','📜 السجل')];
-    M.menu=[ME('🪜 السلم','dladder'),d.plus?ME('⚡ الخروج بالطبقات','dplus'):null,ME(null,'dtrail'),ME(null,'dlast'),bn?ME(null,'dpause'):null,{k:'drawer',t:'⚙ تفاصيل البوت'},ME('🗑 حذف نهائي','ddel',1)];
+    M.menu=[ME('🪜 السلم','dladder'),d.plus?ME('✏️ أوامر DCA+ (الجدول والرسم)','dplus'):null,ME(null,'dtrail'),ME(null,'dlast'),bn?ME(null,'dpause'):null,{k:'drawer',t:'⚙ تفاصيل البوت'},ME('🗑 حذف نهائي','ddel',1)];
     M.note=skText(el,'status')}
   else if(kd==='rec'){
     const r=b.rec||{},sell=r.side==='sell';M.kind=sell?'🔴 دوري بيعي':'🟢 دوري شرائي';M.sub=skText(el,'mode');
@@ -33324,224 +33544,218 @@ _DCAB_B64 = (
 DCAB_SRC = _zlib.decompress(_b64.b64decode(_DCAB_B64)).decode("utf-8")
 DCAB_VERSION = _eng_fp(DCAB_SRC)
 
-# ⚡ v3.36.56: DCA+ — البيعي + الخروج بالطبقات (نسخة من dca.py بإضافة ج1 · الأصل ما تغيّر · devtests/step/eng/dca_plus.py)
+# ⚡ v3.36.57: DCA+ — البيعي بسلّم حر (كل أمر بمسافته وكميته ونسبة خروجه) · نسخة من dca.py — الأصل ما تغيّر · devtests/step/eng/dca_plus.py
 _DCAP_B64 = (
-"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"
+"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"
+"oB+nS1Hh/wF+a52d"
 )
 DCAP_SRC = _zlib.decompress(_b64.b64decode(_DCAP_B64)).decode("utf-8")
 DCAP_VERSION = _eng_fp(DCAP_SRC)
@@ -36513,7 +36727,7 @@ VA_VERSION = _eng_fp(VA_SRC)
 def engine_for(cfg):
     bt = cfg.get("bot_type") if isinstance(cfg, dict) else None
     if bt == "dca":
-        if cfg.get("dca_plus"):                              # ⚡ v3.36.56: DCA+ (بيعي + الخروج بالطبقات)
+        if cfg.get("dca_plus"):                              # ⚡ v3.36.57: DCA+ (البيعي بسلّم حر)
             return DCAP_SRC, "dca.py", DCAP_VERSION
         return DCA_SRC, "dca.py", DCA_VERSION
     if bt == "dca_buy":

@@ -1,16 +1,19 @@
-# ⚡ v3.36.56 — DCA+ (the sell DCA + the layered exit ج1): the engine shipped inside the dashboard (`_DCAP_B64`), driven step by step
-#   against a small fake exchange in a closed folder (no network · fake keys). The owner (15-11): «اتضيف واحد اخر وانسميه dca+ بس
-#   لازم انجربه». What must hold before it ever touches real money:
-#   ① the normal sell DCA is untouched (dca.py byte for byte) and a DCA+ bot gets dca_plus.py — the deploy writes its settings
-#   ② a layer exits ALONE when the price comes back lx_pct under its sell price · the highest first · a profit > 0 after the fees ·
-#      the books: total_coin_profit += its profit · one entry in cycles_log (the dashboard counts it like a closed cycle) · the
-#      average and the target follow · it goes back to the store (re-open) with its planned price and size
-#   ③ the controls: a layer you switched off stays · lx_from · re-open off · «exit now» (your decision: even at a loss · no re-open)
-#   ④ safety: a partial fill exits that part (the rest exits later — the same total) · the engine stops right after sending ⇒ on the
-#      next start the order is settled ONCE (never bought twice) · a lost reply ⇒ found by its id, ONE order · a layer smaller than
-#      the exchange's minimum is never sent · a size never spends more than that layer's own dollars
-#   ⑤ the whole engine on the dashboard's paper exchange (rise through every order and back · a long oscillation): to the end, no
-#      refused order, the wallet = the books to the last decimal, every layer exit a profit
+# ⚡ v3.36.57 — the NEW DCA+ (a free ladder: every order its own distance, size and exit %) — the engine shipped inside the dashboard
+#   (`_DCAP_B64`), driven step by step against a small fake exchange in a closed folder (no network · fake keys), then the whole engine
+#   on the dashboard's paper exchange. The owner (15-11): «سويه بدل وسميه هو بلس» · «اقدر اضيفه يدوي لكل اوردر واقدر اضيف عبر الرسم
+#   البياني» · «هدفي ازيد العملات ما اريد ابيع عملات باسعار واطية او اتضل معلقة». What must hold before it ever touches real money:
+#   ① the normal sell DCA is untouched (dca.py byte for byte) · a DCA+ bot gets dca_plus.py · the deploy writes the rows and the classic
+#     fields that follow from them · bad rows are refused before any folder is made
+#   ② the ladder = the owner's rows (each price = the one before × (1 + its distance)) · the target = the weighted average × (1 − the exit %
+#     of the DEEPEST order filled) · never under 0.20% (the fees) · the preview table (deploy form) = the same numbers
+#   ③ an edit while it runs (from the table or the chart): live orders not filled yet are cancelled and placed again at their new price ·
+#     filled orders stay at their price and size (their exit % can change — the target follows) · a part filled before the cancel is
+#     booked and its rest keeps its price · a grouped order not settled yet ⇒ wait · a cancel not confirmed ⇒ wait (nothing half-done) ·
+#     between cycles ⇒ the rows wait for the next cycle · bad rows / removing a filled order ⇒ refused with the reason, nothing changed
+#   ④ the dashboard's control «plus_edit»: checks the rows · filled orders keep their distance and size · writes the config and the state
+#     fields only (no order from the dashboard) · the card snapshot shows the rows, the locked orders, a pending edit and a refusal
+#   ⑤ the whole engine on the dashboard's paper exchange (rise through every order and back · a long oscillation · an edit in the middle
+#     of a cycle): to the end, no refused order, every cycle closed buys back EVERYTHING it sold, the wallet = the books to the last decimal
 #   python3 devtests/t_dca_plus.py [Holy_Dashboard.pyw] [-q]
 import base64, importlib.machinery, importlib.util, json, math, os, re, shutil, sys, tempfile, types, urllib.request, zlib
 
@@ -45,50 +48,58 @@ def lit(var):
 
 
 ENG = lit("_DCAP_B64")
-SYM = "SOL-USDT"
+SYM = "XRP-USDT"
+ROWS = [{"d": 0, "q": 5, "x": 0.5}, {"d": 1, "q": 5, "x": 0.6}, {"d": 1.5, "q": 10, "x": 0.8}, {"d": 2, "q": 20, "x": 1.0},
+        {"d": 3, "q": 40, "x": 0.4}, {"d": 4, "q": 60, "x": 0.3}]
 
 
-# ── a small fake exchange: IOC buys fill at the ask (as much as `liq` allows) · ids · lookup by clOrdId · a lost reply on demand
+# ── a small fake exchange: limit sells wait (live) · cancel (optionally after a part filled) · lookups · a cancel that is not confirmed
 class FX:
     def __init__(self):
-        self.bid, self.ask, self.liq, self.n, self.orders, self.by_cl, self.lose, self.sent = 81.0, 81.0, 1.0, 0, {}, {}, False, []
+        self.p, self.n, self.orders, self.by_cl, self.sent, self.cancels, self.part_on_cancel, self.blind = 1.0, 0, {}, {}, [], [], {}, False
 
-    def place_order(self, instId=None, tdMode=None, clOrdId="", stpMode=None, side=None, ordType=None, sz=None, px=None, **k):
+    def place_order(self, instId=None, tdMode=None, clOrdId="", stpMode=None, side=None, ordType=None, sz=None, px=None, tgtCcy=None, **k):
         self.n += 1
         oid = f"O{self.n}"
         sz, px = float(sz), float(px or 0)
         self.sent.append({"oid": oid, "cl": clOrdId, "side": side, "type": ordType, "sz": sz, "px": px})
-        fill = 0.0
-        if ordType == "ioc" and side == "buy" and px >= self.ask:
-            fill = round(sz * self.liq, 4)
-        o = {"ordId": oid, "clOrdId": clOrdId, "state": "filled" if fill >= sz - 1e-12 else "canceled", "avgPx": str(self.ask) if fill else "0",
-             "accFillSz": str(fill), "fee": str(-fill * 0.001), "feeCcy": "SOL"}
+        o = {"ordId": oid, "clOrdId": clOrdId, "side": side, "state": "live", "avgPx": "0", "accFillSz": "0", "fee": "0", "feeCcy": "USDT",
+             "px": str(px), "sz": str(sz)}
         self.orders[oid] = o
         self.by_cl[clOrdId] = oid
-        if self.lose:
-            self.lose = False
-            raise ConnectionError("reply lost")
         return {"code": "0", "data": [{"ordId": oid, "sCode": "0"}]}
 
     def get_order(self, instId=None, ordId=None, clOrdId=None, **k):
+        if self.blind:
+            raise ConnectionError("no reply")
         oid = ordId or self.by_cl.get(clOrdId)
         if oid in self.orders:
-            return {"code": "0", "data": [self.orders[oid]]}
+            return {"code": "0", "data": [dict(self.orders[oid])]}
         return {"code": "51603", "msg": "Order does not exist", "data": []}
 
-    def cancel_order(self, **k):
+    def get_order_list(self, instId=None, **k):
+        return {"code": "0", "data": [dict(o) for o in self.orders.values() if o["state"] in ("live", "partially_filled")]}
+
+    def cancel_order(self, instId=None, ordId=None, **k):
+        self.cancels.append(ordId)
+        o = self.orders.get(ordId)
+        if o and o["state"] in ("live", "partially_filled") and not self.blind:
+            part = self.part_on_cancel.pop(ordId, 0.0)
+            if part > 0:
+                q = float(o["sz"]) * part
+                o.update(accFillSz=str(q), avgPx=o["px"], fee=str(-q * float(o["px"]) * 0.0008))
+            o["state"] = "canceled"
         return {"code": "0", "data": [{}]}
 
     def get_ticker(self, instId):
-        return {"code": "0", "data": [{"last": str((self.bid + self.ask) / 2), "bidPx": str(self.bid), "askPx": str(self.ask)}]}
+        return {"code": "0", "data": [{"last": str(self.p), "bidPx": str(self.p), "askPx": str(self.p)}]}
 
 
 R = tempfile.mkdtemp(prefix="t_dcap_")
 os.chdir(R)
-CFG = {"symbol": SYM, "bot_type": "dca", "dca_plus": True, "api_key": "x", "secret_key": "x", "passphrase": "x", "base_order_qty": 0.1,
-       "avg_order_qty": 0.1, "first_deviation": 0.6, "step_multiplier": 1.2, "size_multiplier": 1.5, "max_safety_orders": 6,
-       "take_profit_pct": 1.0, "exchange_orders": 3, "cycle_wait_sec": 30, "lx_on": True, "lx_pct": 0.5, "lx_from": 1, "lx_reopen": True,
-       "bot_id": "HDTEST00001"}
+CFG = {"symbol": SYM, "bot_type": "dca", "dca_plus": True, "api_key": "x", "secret_key": "x", "passphrase": "x", "plus_rows": ROWS,
+       "base_order_qty": 5, "avg_order_qty": 5, "first_deviation": 1, "step_multiplier": 1, "size_multiplier": 1, "max_safety_orders": 5,
+       "take_profit_pct": 0.5, "exchange_orders": 2, "cycle_wait_sec": 30, "bot_id": "HDTEST00001"}
 json.dump(CFG, open(f"config_{SYM}.json", "w"))
 for nm in ("okx", "okx.Trade", "okx.MarketData"):
     sys.modules[nm] = types.ModuleType(nm)
@@ -100,208 +111,340 @@ sys.modules["okx"].Trade, sys.modules["okx"].MarketData = sys.modules["okx.Trade
 def engine():
     g = {"__name__": "dcap_test", "__file__": os.path.join(R, "dca.py")}
     exec(compile(ENG, os.path.join(R, "dca.py"), "exec"), g)
-    g["INSTRUMENT_SPEC"].update({"tickSz": 0.01, "lotSz": 0.0001, "minSz": 0.01, "loaded": True})
+    g["INSTRUMENT_SPEC"].update({"tickSz": 0.0001, "lotSz": 0.000001, "minSz": 1, "loaded": True})
     g["time"].sleep = lambda s: None
     return g
 
 
 E = engine()
-fx = FX()
 
 
-def fresh_state(lv=(1, 2, 3)):
-    st = {"phase": "selling", "total_coin_profit": 0, "cycles_done": 0, "active_sells": {}, "filled": [], "pending_levels": []}
-    st["planned_levels"] = E["compute_sell_levels"](CFG, 80.0)
+def cfg_():
+    c = json.loads(json.dumps(CFG))
+    E["plus_apply_rows"](c, json.loads(json.dumps(ROWS)))
+    return c
+
+
+def state_(cfg, fx, filled=(0, 1), live=(2, 3)):
+    """a cycle in progress: `filled` sold · `live` resting at the fake exchange · the rest in the store"""
+    st = {"phase": "selling", "total_coin_profit": 0, "cycles_done": 0, "active_sells": {}, "filled": [], "pending_levels": [], "base_price": 1.0}
+    st["planned_levels"] = E["compute_sell_levels"](cfg, 1.0)
     for l in st["planned_levels"]:
-        if l["n"] == 0 or l["n"] in lv:
-            px, q = round(l["price"], 2), l["qty"]
+        px, q = round(l["price"], 4), l["qty"]
+        if l["n"] in filled:
             E["_rec_fill"](SYM, st, {"avgPx": px, "fillSz": q, "fee": -px * q * 0.0008, "feeCcy": "USDT"}, px, q, l["n"])
+        elif l["n"] in live:
+            o = E["place_sell"](fx, SYM, l["price"], q, str(l["n"]))
+            st["active_sells"][o["ordId"]] = {"price": o["price"], "qty": o["qty"], "n": l["n"]}
         else:
             st["pending_levels"].append(dict(l))
-    E["_recalc"](st, CFG)
+    E["_recalc"](st, cfg)
     E["save_json"](E["STATE_FILE"], st)
     return st
 
 
-def lxs(st):
-    return [c for c in st.get("cycles_log") or [] if c.get("lx")]
+def lv_px(st):
+    return {int(l["n"]): round(l["price"], 6) for l in st["planned_levels"]}
 
 
-def ns_of(st):
-    return sorted(n for f in st["filled"] for n in E["_lx_ns"](f))
-
-
-# ① the normal sell DCA is untouched · a DCA+ bot gets its own engine · the deploy writes the settings
+# ① engines and the deploy
 ld = importlib.machinery.SourceFileLoader("hd_dcap", DASH)
 os.makedirs(os.path.join(R, "root"), exist_ok=True)
 _cwd = os.getcwd(); os.chdir(os.path.join(R, "root"))
 m = importlib.util.module_from_spec(importlib.util.spec_from_loader("hd_dcap", ld)); a0 = sys.argv; sys.argv = ["x"]; ld.exec_module(m); sys.argv = a0
 os.chdir(_cwd)
 work = open(os.path.join(H, "step", "eng", "dca.py"), encoding="utf-8").read()
-ok("① the normal sell DCA's engine is the same file byte for byte (dca.py) · a DCA+ config gets dca_plus.py (its own fingerprint)",
-   m.DCA_SRC == work and m.engine_for({"bot_type": "dca"})[0] == m.DCA_SRC and m.engine_for({"bot_type": "dca", "dca_plus": True})[0] == m.DCAP_SRC
-   and m.DCAP_VERSION != m.DCA_VERSION and m.engine_for({"bot_type": "dca_buy", "dca_plus": True})[0] == m.DCAB_SRC)
+ok("① the normal sell DCA's engine is the same file byte for byte (dca.py) · a DCA+ config gets dca_plus.py (its own fingerprint) · "
+   "the buy DCA keeps its own", m.DCA_SRC == work and m.engine_for({"bot_type": "dca"})[0] == m.DCA_SRC
+   and m.engine_for({"bot_type": "dca", "dca_plus": True})[0] == m.DCAP_SRC and m.DCAP_VERSION != m.DCA_VERSION
+   and m.engine_for({"bot_type": "dca_buy", "dca_plus": True})[0] == m.DCAB_SRC and "plus_edit_apply" in m.DCAP_SRC and "lx_run" not in m.DCAP_SRC)
 m.ROOT = os.path.join(R, "root"); m.launch = lambda b: (True, "test"); m.wallet_keys = lambda w: {"api_key": "k", "secret_key": "s", "passphrase": "p"}
 m.tg_send = lambda *a, **k: True; m.journal = lambda *a, **k: None
-body = {"symbol": SYM, "wallet": "w", "base_order_qty": "0.1", "avg_order_qty": "0.1", "first_deviation": "0.6", "step_multiplier": "1.2",
-        "size_multiplier": "1.5", "max_safety_orders": "6", "take_profit_pct": "1", "dca_type": "dca_plus", "lx_pct": "0.7", "lx_from": "2", "lx_reopen": "0"}
+body = {"symbol": SYM, "wallet": "w", "dca_type": "dca_plus", "plus_rows": json.dumps(ROWS), "exchange_orders": "2", "cycle_wait_sec": "30",
+        "base_order_qty": "999", "max_safety_orders": "1"}
 r = m.deploy_dca(dict(body))
-cf = [json.load(open(os.path.join(m.ROOT, d, f"config_{SYM}.json"))) for d in os.listdir(m.ROOT) if os.path.isdir(os.path.join(m.ROOT, d))]
-eng_f = [open(os.path.join(m.ROOT, d, "dca.py"), encoding="utf-8").read() for d in os.listdir(m.ROOT) if os.path.isdir(os.path.join(m.ROOT, d))]
-ok("① deploy «DCA+»: a sell DCA (bot_type dca) with dca_plus · lx_pct 0.7 · lx_from 2 · re-open off · its folder holds dca_plus.py",
-   r.get("ok") and len(cf) == 1 and cf[0]["bot_type"] == "dca" and cf[0].get("dca_plus") is True and cf[0]["lx_pct"] == 0.7
-   and cf[0]["lx_from"] == 2 and cf[0]["lx_reopen"] is False and eng_f[0] == m.DCAP_SRC and "DCA+" in r.get("msg", ""), (r, cf))
-bad = [m.deploy_dca(dict(body, lx_pct=v)).get("msg") for v in ("0.1", "11", "abc")] + [m.deploy_dca(dict(body, lx_from=v)).get("msg") for v in ("0", "7")]
-ok("① refused: a bounce under 0.3% (it would not cover the fees) or over 10% · a start layer outside 1…6 · nothing written",
-   all(b and "✅" not in b for b in bad) and len(os.listdir(m.ROOT)) == 1, bad)
-r2 = m.deploy_dca(dict(body, dca_type="dca"))
-c2 = [json.load(open(os.path.join(m.ROOT, d, f"config_{SYM}.json"))) for d in sorted(os.listdir(m.ROOT))]
+dirs = [d for d in os.listdir(m.ROOT) if os.path.isdir(os.path.join(m.ROOT, d))]
+cf = [json.load(open(os.path.join(m.ROOT, d, f"config_{SYM}.json"))) for d in dirs]
+eng_f = [open(os.path.join(m.ROOT, d, "dca.py"), encoding="utf-8").read() for d in dirs]
+c0 = cf[0] if cf else {}
+ok("① deploy «DCA+»: a sell DCA (bot_type dca) with dca_plus and the six rows · the classic fields follow the rows (base 5 · 5 safety · "
+   "first distance 1% · exit 0.5%) — not the form's leftovers · its folder holds dca_plus.py",
+   r.get("ok") and len(cf) == 1 and c0["bot_type"] == "dca" and c0.get("dca_plus") is True and c0.get("plus_rows") == [dict(x, d=float(x["d"])) for x in ROWS]
+   and float(c0["base_order_qty"]) == 5 and int(c0["max_safety_orders"]) == 5 and float(c0["first_deviation"]) == 1
+   and float(c0["take_profit_pct"]) == 0.5 and eng_f[0] == m.DCAP_SRC and "DCA+" in r.get("msg", ""), (r, c0))
+BAD = {"a size of 0": [{"d": 0, "q": 5, "x": 0.5}, {"d": 1, "q": 0, "x": 0.5}],
+       "a distance of 0 on a safety order": [{"d": 0, "q": 5, "x": 0.5}, {"d": 0, "q": 5, "x": 0.5}],
+       "an exit of 0": [{"d": 0, "q": 5, "x": 0.5}, {"d": 1, "q": 5, "x": 0}], "an exit of 60%": [{"d": 0, "q": 5, "x": 0.5}, {"d": 1, "q": 5, "x": 60}],
+       "a distance of 70%": [{"d": 0, "q": 5, "x": 0.5}, {"d": 70, "q": 5, "x": 0.5}], "the base alone": [{"d": 0, "q": 5, "x": 0.5}],
+       "text instead of rows": "abc", "a word in a number": [{"d": 0, "q": 5, "x": 0.5}, {"d": "x", "q": 5, "x": 0.5}],
+       "NaN": [{"d": 0, "q": 5, "x": 0.5}, {"d": 1, "q": float("nan"), "x": 0.5}], "102 rows": [{"d": 0, "q": 5, "x": 0.5}] + [{"d": 1, "q": 5, "x": 0.5}] * 101}
+bad = {k: m.deploy_dca(dict(body, plus_rows=json.dumps(v) if not isinstance(v, str) else v)).get("msg") for k, v in BAD.items()}
+ok("① refused before any folder is made: " + " · ".join(BAD), all(v and not str(v).startswith(("✅", "🚀")) for v in bad.values())
+   and len([d for d in os.listdir(m.ROOT) if os.path.isdir(os.path.join(m.ROOT, d))]) == 1, bad)
+r2 = m.deploy_dca(dict(body, dca_type="dca", base_order_qty="5", avg_order_qty="5", first_deviation="1", step_multiplier="1",
+                       size_multiplier="1", max_safety_orders="3", take_profit_pct="1"))
+c2 = [json.load(open(os.path.join(m.ROOT, d, f"config_{SYM}.json"))) for d in sorted(os.listdir(m.ROOT)) if os.path.isdir(os.path.join(m.ROOT, d))]
 ok("① a normal sell DCA deployed next to it has none of the DCA+ fields (and gets dca.py)",
-   r2.get("ok") and sum(1 for c in c2 if not c.get("dca_plus") and not any(k.startswith("lx_") for k in c)) == 1)
+   r2.get("ok") and sum(1 for c in c2 if not c.get("dca_plus") and "plus_rows" not in c) == 1, (r2, c2))
 
-# ② the layer exit
-st = fresh_state()
-fx.ask = fx.bid = 81.5
-E["lx_run"](fx, fx, SYM, CFG, st, 81.5)
-ok("② the price above every layer's exit line ⇒ nothing is sent", fx.sent == [] and not lxs(st), fx.sent)
-L3 = next(f for f in st["filled"] if f["n"] == 3)
-p3 = L3["price"]
-fx.ask = fx.bid = round(p3 * 0.995 - 0.01, 2)
-avg0, tgt0 = st["avg_price"], st["target_price"]
-E["lx_run"](fx, fx, SYM, CFG, st, fx.ask)
-x = lxs(st)
-ok(f"② the price {fx.ask} (0.5% under the sell price {p3} of safety order 3) ⇒ safety order 3 exits ALONE (1 and 2 are not yet there)",
-   len(fx.sent) == 1 and fx.sent[0]["side"] == "buy" and fx.sent[0]["type"] == "ioc" and ns_of(st) == [0, 1, 2] and len(x) == 1 and x[0]["lx"] == [3],
-   (fx.sent, ns_of(st), x))
-ok("… its profit is a gain after both fees (coins back > coins sold) · total_coin_profit = that profit · cycles_log has its id and price",
-   x and x[0]["profit"] > 0 and abs(st["total_coin_profit"] - x[0]["profit"]) < 1e-12 and x[0]["id"].startswith("HDTEST00001-x") and x[0]["px"] == fx.ask
-   and x[0]["in"] > x[0]["out"], x)
-ok("… the size never spends more than that layer's own dollars", fx.sent[0]["sz"] * fx.sent[0]["px"] <= L3["net"] + 1e-9, (fx.sent[0], L3["net"]))
-ok("… the average and the cycle's target follow (they fall — the layer that pulled them up is out)",
-   st["avg_price"] < avg0 and st["target_price"] < tgt0, (avg0, st["avg_price"], tgt0, st["target_price"]))
-pl3 = next(l for l in st["planned_levels"] if l["n"] == 3)
-ok("… it is back in the store with its planned price and size (re-open) — once", [(l["n"], l["price"], l["qty"]) for l in st["pending_levels"] if l["n"] == 3]
-   == [(3, pl3["price"], pl3["qty"])], st["pending_levels"])
+# ② the ladder and the target
+c = cfg_()
+lv = E["compute_sell_levels"](c, 1.0)
+want, p = [], 1.0
+for i, x in enumerate(ROWS):
+    p = p * (1 + x["d"] / 100) if i else p
+    want.append((i, round(p, 8), x["q"]))
+ok("② the ladder = the owner's rows: each price = the one before × (1 + its distance) · each size its own (1 · 1.01 · 1.02515 · 1.045653 · …)",
+   [(l["n"], round(l["price"], 8), l["qty"]) for l in lv] == want, (lv, want))
+fx = FX()
+tg = {}
+for deep in range(6):
+    st = state_(c, fx, filled=tuple(range(deep + 1)), live=())
+    tq = sum(f["qty"] for f in st["filled"]); tv = sum(f["price"] * f["qty"] for f in st["filled"])
+    tg[deep] = (st["avg_price"], st["target_price"], tv / tq * (1 - max(ROWS[deep]["x"], 0.2) / 100))
+ok("② the target = the weighted average × (1 − the exit % of the DEEPEST order filled): rows 0…5 ⇒ 0.5 · 0.6 · 0.8 · 1.0 · 0.4 · 0.3%",
+   all(abs(t[1] - t[2]) < 1e-12 for t in tg.values()), tg)
+cl = cfg_(); cl["plus_rows"][3]["x"] = 0.05
+st = state_(cl, fx, filled=(0, 1, 2, 3), live=())
+ok("② an exit under 0.20% (0.05%) ⇒ the engine uses 0.20% (the two fees are covered)", abs(st["target_price"] - st["avg_price"] * 0.998) < 1e-12,
+   (st["avg_price"], st["target_price"]))
+pv = m.compute_dca_table(dict(dca_type="dca_plus", plus_rows=ROWS), 1.0)
+pr = pv.get("rows") or []
+ex_t, cq_, cv_ = {}, 0.0, 0.0
+for i, (_n, px_, q_) in enumerate(want):
+    cq_ += q_; cv_ += px_ * q_
+    ex_t[i] = cv_ / cq_ * (1 - max(ROWS[i]["x"], 0.2) / 100)
+ok("② the deploy preview (the form's table) = the same ladder · per row the average and the exit with ITS exit % · the profit after "
+   "the fees is a gain on every row",
+   [(x["n"], round(x["price"], 8), x["order_qty"]) for x in pr] == want and all(abs(pr[d]["target"] - ex_t[d]) < 1e-8 for d in range(6))
+   and all(x["exit_profit"] > 0 for x in pr) and pv["summary"].get("plus") and not pv["summary"]["low_rows"], (pr[:2], pv.get("summary")))
+pvb = m.compute_dca_table(dict(dca_type="dca_plus", plus_rows=[{"d": 0, "q": 5, "x": 0.5}, {"d": 1, "q": 5, "x": 0.1}]), 1.0)
+ok("② the preview warns when an exit does not cover the fees (0.1%)", pvb["summary"].get("fee_warn") is True, pvb.get("summary"))
+
+# ③ the edit while it runs (the engine side)
+NEW = [{"d": 0, "q": 5, "x": 0.5}, {"d": 1, "q": 5, "x": 0.7}, {"d": 2.5, "q": 15, "x": 0.6}, {"d": 2.5, "q": 25, "x": 0.5},
+       {"d": 3, "q": 30, "x": 0.4}, {"d": 3, "q": 50, "x": 0.3}, {"d": 4, "q": 80, "x": 0.25}]
+c = cfg_(); fx = FX()
+st = state_(c, fx)
+old_live = list(st["active_sells"])
+px0 = lv_px(st)
+st["plus_edit"] = {"seq": 11, "rows": json.loads(json.dumps(NEW))}
+done = E["plus_edit_apply"](fx, SYM, c, st)
+npx = lv_px(st)
+want_new = {}
+p = 1.0
+for i, x in enumerate(NEW):
+    p = p * (1 + x["d"] / 100) if i else p
+    want_new[i] = round(p, 6)
+ok("③ an edit while it runs (base + safety 1 filled · 2 and 3 live at the exchange): both live orders are cancelled · nothing at the "
+   "exchange until the next pass · the orders not filled take their new prices (2.5% · 2.5% · 3% …) · the new 7th order is added",
+   done is True and sorted(fx.cancels) == sorted(old_live) and st["active_sells"] == {} and npx[0] == px0[0] and npx[1] == px0[1]
+   and all(npx[n] == want_new[n] for n in range(2, 7)) and sorted(l["n"] for l in st["pending_levels"]) == [2, 3, 4, 5, 6], (npx, want_new, st["pending_levels"]))
+ok("… the target follows at once: the exit % of the deepest filled order (safety 1) is now 0.7%",
+   abs(st["target_price"] - st["avg_price"] * (1 - 0.007)) < 1e-12 and st.get("plus_seq") == 11 and not st.get("plus_edit_err")
+   and c["plus_rows"] == NEW and c["max_safety_orders"] == 6, (st["avg_price"], st["target_price"]))
+fx.p = 1.0
+E["topup_ladder"](fx, SYM, c, st, 1.0)
+lv_sent = sorted((round(float(v["price"]), 4), v["n"]) for v in st["active_sells"].values())
+ok("… the next pass places the nearest two again at their NEW prices (2 and 3)", [n for _, n in lv_sent] == [2, 3]
+   and all(abs(px - want_new[n]) <= 0.0001 + 1e-12 for px, n in lv_sent), (lv_sent, want_new))
 disk = json.load(open(E["STATE_FILE"]))
-ok("… all of it is in the state file (saved)", len([c for c in disk.get("cycles_log") or [] if c.get("lx")]) == 1 and not disk.get("pending_lx"))
+ok("… all of it is in the state file (saved · the edit marked done)", disk.get("plus_seq") == 11 and len(disk.get("planned_levels") or []) == 7)
+again = len(fx.sent)
+E["plus_edit_apply"](fx, SYM, c, st)
+ok("… the same edit is applied once (the next pass does nothing)", len(fx.sent) == again and len(fx.cancels) == 2)
 
-# ③ the controls
-st = fresh_state(); fx.sent.clear()
-st["lx_off"] = [2]
-fx.ask = fx.bid = 79.9
-E["lx_run"](fx, fx, SYM, CFG, st, 79.9)
-ok("③ «switched off» safety order 2 stays (1 and 3 exit — the highest first)", ns_of(st) == [0, 2] and [c["lx"] for c in lxs(st)] == [[3], [1]], (ns_of(st), lxs(st)))
-st = fresh_state(); fx.sent.clear()
-E["lx_run"](fx, fx, SYM, dict(CFG, lx_from=3), st, 79.9)
-ok("③ lx_from 3: only safety order 3 exits · 1 and 2 keep the cycle's target", ns_of(st) == [0, 1, 2] and [c["lx"] for c in lxs(st)] == [[3]], ns_of(st))
-st = fresh_state(); fx.sent.clear()
-st["lx_reopen"] = False
-E["lx_run"](fx, fx, SYM, CFG, st, 79.9)
-ok("③ re-open off (from the card): the layers exit and do not come back to the store", ns_of(st) == [0] and not any(l["n"] in (1, 2, 3) for l in st["pending_levels"]),
-   st["pending_levels"])
-st = fresh_state(); fx.sent.clear()
-st["lx_on"] = False
-E["lx_run"](fx, fx, SYM, CFG, st, 79.9)
-ok("③ the layered exit switched off: nothing exits (it is a normal sell DCA)", fx.sent == [] and ns_of(st) == [0, 1, 2, 3])
-L2 = next(f for f in st["filled"] if f["n"] == 2)
-st["lx_now"] = [L2["fid"]]
-fx.ask = fx.bid = round(L2["price"] * 1.01, 2)
-E["lx_run"](fx, fx, SYM, CFG, st, fx.ask)
-xm = lxs(st)
-ok("③ «exit this layer now» (even with the switch off and the price 1% ABOVE its sell price): it exits · your decision ⇒ a loss is written "
-   "as a loss · manual · not re-opened · the request is cleared",
-   ns_of(st) == [0, 1, 3] and len(xm) == 1 and xm[0]["manual"] and xm[0]["profit"] < 0 and not st.get("lx_now")
-   and not any(l["n"] == 2 for l in st["pending_levels"]), (ns_of(st), xm, st.get("lx_now")))
+# a part filled just before the cancel
+c = cfg_(); fx = FX()
+st = state_(c, fx)
+o2 = next(k for k, v in st["active_sells"].items() if v["n"] == 2)
+q2, p2 = st["active_sells"][o2]["qty"], st["active_sells"][o2]["price"]
+fx.part_on_cancel[o2] = 0.4
+st["plus_edit"] = {"seq": 12, "rows": json.loads(json.dumps(NEW))}
+E["plus_edit_apply"](fx, SYM, c, st)
+f2 = [f for f in st["filled"] if f["n"] == 2]
+rest2 = [l for l in st["pending_levels"] if l["n"] == 2]
+ok("③ safety 2 had filled 40% when it was cancelled: that part is booked · safety 2 is now «filled» (locked at ITS price) · its rest "
+   "(60%) waits at the same price · the target uses safety 2's exit (0.6%)",
+   len(f2) == 1 and abs(f2[0]["qty"] - q2 * 0.4) < 1e-6 and len(rest2) == 1 and abs(rest2[0]["qty"] - q2 * 0.6) < 1e-6
+   and abs(rest2[0]["price"] - p2) < 1e-12 and lv_px(st)[2] == round(st["planned_levels"][2]["price"], 6)
+   and abs(st["planned_levels"][2]["price"] - E["compute_sell_levels"](cfg_(), 1.0)[2]["price"]) < 1e-12
+   and abs(st["target_price"] - st["avg_price"] * (1 - 0.006)) < 1e-12, (f2, rest2, st["planned_levels"][2]))
 
-# ④ safety
-st = fresh_state(); fx.sent.clear()
-L3 = next(f for f in st["filled"] if f["n"] == 3); q3, u3 = L3["qty"], L3["net"]
-fx.liq = 0.4
-fx.ask = fx.bid = round(L3["price"] * 0.994, 2)
-E["lx_run"](fx, fx, SYM, CFG, st, fx.ask)
-L3b = next((f for f in st["filled"] if f["n"] == 3), None)
-ok("④ a partial fill (40%): that part exits with its own profit · the layer stays with the rest (same price)",
-   L3b is not None and abs(L3b["qty"] - q3 * 0.6) < 0.002 and len(lxs(st)) == 1 and lxs(st)[0]["profit"] > 0, (L3b, lxs(st)))
-fx.liq = 1.0
-E["lx_run"](fx, fx, SYM, CFG, st, fx.ask)
-tot = sum(c["profit"] for c in lxs(st))
-st_w = fresh_state(); fx.sent.clear()
-E["lx_run"](fx, fx, SYM, CFG, st_w, fx.ask)
-ok("… the next pass exits the rest · the two parts make the same profit as one whole exit",
-   ns_of(st) == [0, 1, 2] and len(lxs(st)) == 2 and abs(tot - lxs(st_w)[0]["profit"]) < 2e-6, (tot, lxs(st_w)))
-# the engine stops right after sending (before the confirmation)
-st = fresh_state(); fx.sent.clear()
-_co = E["confirm_order"]
-E["confirm_order"] = lambda *a, **k: None
-fx.ask = fx.bid = 81.2
-r_ = E["lx_run"](fx, fx, SYM, CFG, st, 81.2)
-disk = json.load(open(E["STATE_FILE"]))
-ok("④ the engine stops right after sending: the order's id was saved first (pending_lx in the file) · nothing counted yet",
-   r_ is False and disk.get("pending_lx", {}).get("oid") == fx.sent[-1]["oid"] and not lxs(disk), disk.get("pending_lx"))
-E2 = engine()                                         # the next start: a new engine, the state from the file
-st2 = E2["load_json"](E2["STATE_FILE"])
-E2["lx_settle"](fx, SYM, CFG, st2)
-E2["lx_run"](fx, fx, SYM, CFG, st2, 81.2)
-E2["lx_settle"](fx, SYM, CFG, st2)
-ok("… the next start settles it ONCE: one exit in the books · one order at the exchange (never bought twice)",
-   len(lxs(st2)) == 1 and len([o for o in fx.sent if o["cl"].endswith(str(o["cl"])[-7:]) and o["side"] == "buy"]) == 1 and not st2.get("pending_lx"),
-   (lxs(st2), fx.sent))
-E["confirm_order"] = _co
-# a lost reply
-E = engine()
-st = fresh_state(); fx.sent.clear()
-fx.lose = True
-E["lx_run"](fx, fx, SYM, CFG, st, 81.2)
-n_after_lost = len(fx.sent)
-pend_key = [k for k in E["_xs"]() if k.startswith("X")]
-for _ in range(3):
-    E["_xs_settle"](fx, SYM, st)
-    E["lx_settle"](fx, SYM, CFG, st)
-    E["lx_run"](fx, fx, SYM, CFG, st, 81.2)
-ok("④ the exchange's reply is lost: its id waits in the send journal · found by its id · ONE order · ONE exit in the books",
-   n_after_lost == 1 and pend_key and len(fx.sent) == 1 and len(lxs(st)) == 1 and not [k for k in E["_xs"]() if k.startswith("X")],
-   (n_after_lost, pend_key, fx.sent, lxs(st)))
-# smaller than the exchange's minimum
-st = fresh_state(); fx.sent.clear()
-st["filled"].append({"price": 82.0, "qty": 0.005, "n": 4, "net": 0.41, "fid": 99})
-E["lx_run"](fx, fx, SYM, CFG, st, 81.0)
-ok("④ a layer smaller than the exchange's minimum (0.005 < 0.01) is never sent — it stays for the cycle's target",
-   all(abs(o["sz"] - 0.005) > 1e-9 for o in fx.sent) and any(f.get("fid") == 99 and f.get("lx_small") for f in st["filled"]))
-# a grouped fill (one IOC for levels 4–5) exits as one and both levels come back
-st = fresh_state(); fx.sent.clear()
-pl = {l["n"]: l for l in st["planned_levels"]}
-st["pending_levels"] = [l for l in st["pending_levels"] if l["n"] not in (4, 5)]
-q45 = pl[4]["qty"] + pl[5]["qty"]
-E["_rec_fill"](SYM, st, {"avgPx": 83.6, "fillSz": q45, "fee": -83.6 * q45 * 0.001, "feeCcy": "USDT"}, 83.6, q45, -1, {"ns": [4, 5]})
-E["_recalc"](st, CFG)
-fx.ask = fx.bid = 83.1
-E["lx_run"](fx, fx, SYM, CFG, st, 83.1)
-ok("④ a grouped fill (safety orders 4–5 in one order) exits as one · both levels come back to the store",
-   [c["lx"] for c in lxs(st)] == [[4, 5]] and sorted(l["n"] for l in st["pending_levels"] if l["n"] in (4, 5)) == [4, 5], (lxs(st), st["pending_levels"]))
+# a grouped order not settled yet · a cancel not confirmed
+c = cfg_(); fx = FX()
+st = state_(c, fx)
+st["pending_grp"] = {"oid": "G1", "levels": [], "why": "t"}
+st["plus_edit"] = {"seq": 13, "rows": json.loads(json.dumps(NEW))}
+r_ = E["plus_edit_apply"](fx, SYM, c, st)
+ok("③ a grouped order not settled yet ⇒ the edit waits (nothing cancelled · nothing moved)", r_ is False and fx.cancels == [] and st.get("plus_seq") is None
+   and c["plus_rows"] == cfg_()["plus_rows"])
+st.pop("pending_grp")
+fx.blind = True
+r_ = E["plus_edit_apply"](fx, SYM, c, st)
+fx.blind = False
+ok("③ the cancel cannot be confirmed (no reply) ⇒ the edit waits · the rows are not half-applied", r_ is False and st.get("plus_seq") is None
+   and c["plus_rows"] == cfg_()["plus_rows"] and len(st["active_sells"]) == 2, (r_, st.get("active_sells")))
+r_ = E["plus_edit_apply"](fx, SYM, c, st)
+ok("… the next pass (replies back) applies it", r_ is True and st.get("plus_seq") == 13 and c["plus_rows"] == NEW and st["active_sells"] == {})
+
+# between cycles · bad rows · removing a filled order · removing a live one
+for ph in ("waiting", "init", "buying"):
+    c = cfg_(); fx = FX()
+    st = {"phase": ph, "plus_edit": {"seq": 20, "rows": json.loads(json.dumps(NEW))}}
+    E["plus_edit_apply"](fx, SYM, c, st)
+    ok(f"③ phase «{ph}»: the rows are kept for the next cycle · no order sent or cancelled", c["plus_rows"] == NEW and st.get("plus_seq") == 20
+       and fx.sent == [] and fx.cancels == [] and c["max_safety_orders"] == 6)
+c = cfg_(); fx = FX()
+st = state_(c, fx)
+n_sent = len(fx.sent)
+st["plus_edit"] = {"seq": 21, "rows": [{"d": 0, "q": 5, "x": 0.5}, {"d": 1, "q": -3, "x": 0.5}]}
+E["plus_edit_apply"](fx, SYM, c, st)
+ok("③ bad rows (a negative size) ⇒ refused with the reason (plus_edit_err) · nothing cancelled · the rows unchanged",
+   st.get("plus_seq") == 21 and st.get("plus_edit_err") and fx.cancels == [] and c["plus_rows"] == cfg_()["plus_rows"] and len(fx.sent) == n_sent)
+st = state_(c, fx, filled=(0, 1, 2), live=(3,))
+st["plus_edit"] = {"seq": 22, "rows": json.loads(json.dumps(NEW[:2]))}
+E["plus_edit_apply"](fx, SYM, c, st)
+ok("③ an edit that removes safety 2 (filled this cycle) ⇒ refused with the reason · nothing cancelled",
+   st.get("plus_seq") == 22 and "نُفّذ" in str(st.get("plus_edit_err")) and fx.cancels == [] and len(st["active_sells"]) == 1)
+c = cfg_(); fx = FX()
+st = state_(c, fx, filled=(0, 1), live=(2, 3))
+st["plus_edit"] = {"seq": 23, "rows": json.loads(json.dumps(NEW[:3]))}
+E["plus_edit_apply"](fx, SYM, c, st)
+ok("③ an edit that removes orders not filled (3, 4, 5): they are cancelled and gone · the ladder is the three rows",
+   sorted(lv_px(st)) == [0, 1, 2] and [l["n"] for l in st["pending_levels"]] == [2] and st["active_sells"] == {} and len(fx.cancels) == 2)
+c = cfg_(); fx = FX()
+st = state_(c, fx, filled=(0, 1, 2), live=(3,))
+e2 = json.loads(json.dumps(ROWS)); e2[2]["x"] = 0.35
+st["plus_edit"] = {"seq": 24, "rows": e2}
+E["plus_edit_apply"](fx, SYM, c, st)
+ok("③ the exit % of a filled order changed (safety 2: 0.8 → 0.35%) ⇒ its price stays · the target moves closer at once",
+   abs(st["target_price"] - st["avg_price"] * (1 - 0.0035)) < 1e-12 and lv_px(st) == lv_px(state_(cfg_(), FX(), filled=(0, 1, 2), live=(3,)))
+   , (st["avg_price"], st["target_price"]))
+
+# ④ the dashboard's control
+dp = [d for d in sorted(os.listdir(m.ROOT)) if os.path.isdir(os.path.join(m.ROOT, d)) and json.load(open(os.path.join(m.ROOT, d, f"config_{SYM}.json"))).get("dca_plus")][0]
+b = m.bot_dirs()[dp] if dp in m.bot_dirs() else [x for x in m.bot_dirs().values() if x["dir"].endswith(dp)][0]
+d_rel = [k for k, v in m.bot_dirs().items() if v["dir"] == b["dir"]][0]
+sp = m.paths_of(b)[0]
+cfgd = json.loads(json.dumps(b["cfg"]))
+st = state_(cfgd, FX())
+m.save_json_atomic(sp, st)
+m._JC.clear() if hasattr(m, "_JC") else None
+posted = []
+_op = getattr(m, "_okx_post", None)
+m._okx_post = lambda *a, **k: posted.append(a) or {"code": "1"}
+mv = json.loads(json.dumps(NEW)); mv[1]["d"], mv[1]["q"] = 9, 99
+r = m.control(d_rel, "plus_edit", {"rows": mv})
+s2 = json.load(open(sp, encoding="utf-8"))
+c3 = json.load(open(b["cfg_path"], encoding="utf-8"))
+pe = s2.get("plus_edit") or {}
+ok("④ «plus_edit» from the card: accepted · safety 1 (filled) keeps its distance and size even if the edit moved it (9% · 99 → 1% · 5) · "
+   "its exit % changes (0.7) · the config holds the new rows (the next start reads them) · the state holds the edit for the engine",
+   r.get("ok") and pe.get("rows") and pe["rows"][1]["d"] == 1 and pe["rows"][1]["q"] == 5 and pe["rows"][1]["x"] == 0.7
+   and c3.get("plus_rows") == pe["rows"] and int(c3["max_safety_orders"]) == 6 and pe["rows"][2] == dict(NEW[2], d=float(NEW[2]["d"])), (r, pe, c3.get("plus_rows")))
+ok("… the dashboard sent nothing to the exchange (state fields only) · the fills and the books are untouched",
+   posted == [] and s2.get("filled") == json.loads(json.dumps(st["filled"])) and s2.get("active_sells") == json.loads(json.dumps(st["active_sells"])))
+snap = m._dca_snapshot(dict(b, cfg=c3), s2)
+pl = snap.get("plus") or {}
+ok("… the card shows it: the rows · the locked orders (0 and 1) · «waiting for the bot» until the engine applies it",
+   pl.get("rows") == pe["rows"] and pl.get("locked") == [0, 1] and pl.get("pending") is True and not pl.get("err"), pl)
+s2["plus_seq"] = pe["seq"]; s2["plus_edit_err"] = "x"
+pl2 = (m._dca_snapshot(dict(b, cfg=c3), s2).get("plus") or {})
+ok("… after the engine: not pending · a refusal from the engine is shown", pl2.get("pending") is False and pl2.get("err") == "x", pl2)
+rows_live = m._dca_live(s2, dict(c3, plus_rows=NEW), False, 1.0, False)
+ok("… the card's table: each row carries ITS exit % and its exit price uses it", [x.get("x") for x in rows_live][:3] == [0.5, 0.7, 0.6]
+   and abs(rows_live[2]["tgt"] - m._pv_sig(rows_live[2]["avg"] * (1 - 0.006))) < 1e-6, rows_live[:3])
+st["filled"] += [{"price": 1.0252, "qty": 10, "n": 2, "net": 10.24}]
+m.save_json_atomic(sp, st)
+rb = [m.control(d_rel, "plus_edit", {"rows": NEW[:2]}), m.control(d_rel, "plus_edit", {"rows": [{"d": 0, "q": 5, "x": 0.5}]}),
+      m.control(d_rel, "plus_edit", {"rows": "junk"}), m.control(d_rel, "plus_edit", None)]
+ok("④ refused: removing safety 2 (filled this cycle) · the base alone · junk · nothing", all(not x.get("ok") for x in rb), rb)
+dn = [k for k, v in m.bot_dirs().items() if not v["cfg"].get("dca_plus")][0]
+ok("④ a normal sell DCA refuses «plus_edit»", not m.control(dn, "plus_edit", {"rows": NEW}).get("ok"))
+if _op is not None:
+    m._okx_post = _op
 
 # ⑤ the whole engine on the dashboard's paper exchange
-SPEC = {"tickSz": 0.01, "lotSz": 0.0001, "minSz": 0.01}
-B = {"base_order_qty": "0.1", "avg_order_qty": "0.1", "first_deviation": "0.6", "step_multiplier": "1.2", "size_multiplier": "1.5",
-     "max_safety_orders": "6", "take_profit_pct": "1", "dca_type": "dca", "exchange_orders": "3", "cycle_wait_sec": "60", "symbol": SYM,
-     "dca_plus": "1", "lx_pct": "0.5", "lx_from": "1", "lx_reopen": "1"}
-P0 = 80.0
-paths = {"rise through every order, then back": [P0] * 30 + [P0 * (1 + 0.12 * i / 300) for i in range(300)] + [P0 * 1.12] * 60
-         + [P0 * (1.12 - 0.13 * i / 900) for i in range(901)] + [P0 * 0.99] * 200,
-         "a long oscillation ±3%": [P0] * 30 + [P0 * (1 + 0.03 * math.sin(2 * math.pi * i / 150)) for i in range(1500)] + [P0 * 0.985] * 200}
+SPEC = {"tickSz": 0.0001, "lotSz": 0.000001, "minSz": 1}
+B = {"dca_type": "dca_plus", "plus_rows": json.dumps(ROWS), "exchange_orders": "2", "cycle_wait_sec": "60", "symbol": SYM}
+P0 = 1.0
+top = 1.0
+for x in ROWS[1:]:
+    top *= 1 + x["d"] / 100
+paths = {"rise through every order, then back": [P0] * 30 + [P0 * (1 + (top * 1.01 - 1) * i / 300) for i in range(300)] + [P0 * top * 1.01] * 60
+         + [P0 * (top * 1.01 - (top * 1.01 - 0.98) * i / 900) for i in range(901)] + [P0 * 0.98] * 200,
+         "a long oscillation ±4%": [P0] * 30 + [P0 * (1 + 0.04 * math.sin(2 * math.pi * i / 150)) for i in range(1500)] + [P0 * 0.97] * 200}
 keep = {k: m.__dict__.get(k) for k in ("ROOT", "wallet_keys", "launch", "tg_send", "journal", "log_event", "_acc_spec", "_acc_price", "_okx_get", "bot_dirs")}
-for nm, px in paths.items():
+_mk = m._bt_tmp.mkdtemp
+box = {}
+
+
+def _mk2(*a, **k):
+    d = _mk(*a, **k)
+    if str(k.get("prefix", "")).startswith("holy_bt_"):
+        box["dir"] = d
+    return d
+
+
+m._bt_tmp.mkdtemp = _mk2
+
+
+def run(nm, px, edit_at=None):
     cfg, err = m._bt_dry_cfg("dca", dict(B), SYM, SPEC, P0)
     m.__dict__.update(keep)
-    q0, b0 = m._bt_wallet_def("dca", cfg or {}, B, P0, SPEC)
-    rr = m._bt_run("dca", cfg, SYM, px, 60.0, q0, b0, SPEC, samples=2000)
+    q0, b0 = m._bt_wallet_def("dca", cfg or {}, dict(B, plus_rows=json.dumps(NEW)) if edit_at is not None else B, P0, SPEC)   # the edit adds orders ⇒ coins for them
+    sent = {}
+
+    def prog(i, n):
+        if edit_at is not None and i >= edit_at and not sent and box.get("dir"):
+            f = os.path.join(box["dir"], f"dca_state_{SYM}.json")
+            s = m.load_json(f) or {}
+            if s.get("phase") == "selling":
+                rows = json.loads(json.dumps(NEW))
+                for n_ in m._plus_locked(s):
+                    rows[n_]["d"], rows[n_]["q"] = ROWS[n_]["d"], ROWS[n_]["q"]
+                sent["n"] = len(m._plus_locked(s))
+                m.save_state_keys(f, {"plus_edit": {"seq": 77, "rows": rows}})
+
+    rr = m._bt_run("dca", cfg, SYM, px, 60.0, q0, b0, SPEC, samples=2000, prog=prog)
     ex, stt = rr["ex"], rr.get("state") or {}
     opn = sum(float(f["qty"]) for f in stt.get("filled") or [])
     chk = (ex.bal[ex.base] - b0) + opn - float(stt.get("total_coin_profit") or 0)
-    xl = [c for c in stt.get("cycles_log") or [] if c.get("lx")]
-    ok(f"⑤ the real DCA+ engine on the paper exchange — {nm}: to the end · no refused order · {len(xl)} layer exits, every one a profit · "
-       f"the wallet = the books ({chk:+.1e} coin)",
-       cfg and cfg.get("dca_plus") and rr["why"] == "end" and not ex.rejects and xl and min(c["profit"] for c in xl) > 0 and abs(chk) < 1e-6
-       and not stt.get("pending_lx"), (err, rr["why"], ex.rejects[:3], len(xl), chk))
+    cyc = stt.get("cycles_log") or []
+    return cfg, err, rr, ex, stt, chk, cyc, sent
+
+
+for nm, px in paths.items():
+    cfg, err, rr, ex, stt, chk, cyc, _s = run(nm, px)
+    ok(f"⑤ the real DCA+ engine on the paper exchange — {nm}: to the end · no refused order · {len(cyc)} cycles closed, every one a gain "
+       f"that bought back EVERYTHING it sold · the wallet = the books ({chk:+.1e} coin)",
+       cfg and cfg.get("dca_plus") and cfg.get("plus_rows") and rr["why"] == "end" and not ex.rejects and cyc and min(c_["profit"] for c_ in cyc) > 0
+       and all(c_["in"] > c_["out"] for c_ in cyc) and abs(chk) < 1e-6, (err, rr["why"], ex.rejects[:3], cyc[:2], chk))
+F = [1.0]
+for x in ROWS[1:]:
+    F.append(F[-1] * (1 + x["d"] / 100))
+base_px, miss, n_mk = None, [], 0
+for f in ex.fills:                                     # (ts, side, px, qty, fee, maker)
+    if f[1] == "buy":
+        base_px = None                                 # the cycle closed (bought back) ⇒ the next market sell is a new base
+    elif not f[5] and base_px is None:
+        base_px = f[2]
+    elif f[5]:
+        n_mk += 1
+        if base_px is None or min(abs(f[2] - base_px * k) for k in F[1:]) > 0.0002 + 1e-12:
+            miss.append((f, base_px))
+    elif base_px is not None and f[2] < base_px * F[1] - 0.0002:
+        miss.append((f, base_px))
+ok(f"⑤ … every safety sell ({n_mk} limit fills) was at the owner's ladder: the cycle's base × (1 + its distances) — never cheaper",
+   n_mk > 0 and not miss, miss[:4])
+cfg, err, rr, ex, stt, chk, cyc, s_ = run("an edit in the middle of a cycle", paths["rise through every order, then back"], edit_at=200)
+ok(f"⑤ an edit from the card in the middle of a cycle (the paper exchange · the real engine): applied (plus_seq) · {s_.get('n')} filled "
+   f"orders kept · to the end with no refused order · the cycle closed buying back everything · the wallet = the books ({chk:+.1e})",
+   s_ and stt.get("plus_seq") == 77 and not stt.get("plus_edit_err") and rr["why"] == "end" and not ex.rejects and cyc and all(c_["in"] > c_["out"] for c_ in cyc)
+   and abs(chk) < 1e-6, (s_, stt.get("plus_seq"), stt.get("plus_edit_err"), rr["why"], ex.rejects[:3], chk))
+lvl = sorted(round(float(l["price"]), 4) for l in (stt.get("planned_levels") or []))
+m._bt_tmp.mkdtemp = _mk
 
 print(f"✅ t_dca_plus: {sum(res)}/{len(res)}" if all(res) else f"❌ t_dca_plus: {sum(res)}/{len(res)}")
 shutil.rmtree(R, ignore_errors=True)
