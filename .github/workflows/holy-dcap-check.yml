@@ -1,6 +1,6 @@
-# ⚡ Holy DCA+ check on REAL OKX prices (v3.36.56): the normal sell DCA against DCA+ (the layered exit — 0.5% with and without re-open ·
-#    1%) on the last three real months of seven coins (5-minute candles · the trial path's own fetch) · the real engines on the
-#    dashboard's paper exchange. Results: lines HOLYDCAP. Public market data only — no keys, no orders, no notifications.
+# ⚡ Holy DCA+ check on REAL OKX prices (v3.36.57): the normal sell DCA against the new DCA+ (the free ladder — the same ladder as the
+#    DCA, and the same ladder with smaller exits on the deep orders) on the last three real months of seven coins (5-minute candles ·
+#    the trial path's own fetch) · the real engines on the dashboard's paper exchange. Results: lines HOLYDCAP. Public market data only — no keys, no orders, no notifications.
 name: Holy DCA+ real-prices check
 on:
   push:

@@ -1,21 +1,30 @@
-# ⚡ v3.36.56 — DCA+ against the normal sell DCA on REAL OKX prices (GitHub · public market data · no keys · no orders).
-#   The owner (15-11): «بس لازم انجربه». For each coin and each of the last three months (5-minute candles — the trial path's own
-#   fetch `_bt_hist` and path `_bt_ohlc`), the same settings (≈10$ base · 10$ first safety · ×1.5 size · ×1.2 step · 1% first step ·
-#   6 safety orders · 1% target), the real engines on the dashboard's paper exchange (`_bt_run`):
-#     dca            the normal sell DCA (dca.py)
-#     dcap           DCA+ · exit 0.5% · from safety 1 · re-open
-#     dcap_noreopen  DCA+ · exit 0.5% · no re-open (gets out fastest)
-#     dcap_1pct      DCA+ · exit 1% · re-open
-#   Measured: profit (coin and $ at the last price) · closed cycles · layer exits · mean exposure (coins sold and not bought back, as a
-#   share of the whole ladder) · the longest time stuck with more than half the ladder open · the wallet against the books.
+# ⚡ v3.36.57 — the NEW DCA+ (the free ladder: every order its own distance, size and exit %) against the normal sell DCA on REAL OKX
+#   prices (GitHub · public market data · no keys · no orders). The owner (15-11): «هدفي ازيد العملات ما اريد ابيع عملات باسعار واطية او
+#   اتضل معلقة». For each coin and each of the last three months (5-minute candles — the trial path's own fetch `_bt_hist` and path
+#   `_bt_ohlc`), the same ladder (≈10$ base · 10$ first safety · ×1.5 size · ×1.2 step · 1% first step · 6 safety orders), the real
+#   engines on the dashboard's paper exchange (`_bt_run`):
+#     dca         the normal sell DCA (dca.py) · 1% target
+#     dcap_same   DCA+ with exactly the same ladder and 1% on every order — must behave like the normal DCA (the same prices and sizes)
+#     dcap_fast   DCA+ · the same ladder · the exit shrinks on the deep orders: 1 · 1 · 1 · 0.8 · 0.6 · 0.45 · 0.3% (get out sooner)
+#   Measured: profit (coin and $ at the last price) · closed cycles · mean exposure (coins sold and not bought back, as a share of the
+#   whole ladder) · the longest time stuck with more than half the ladder open · the wallet against the books.
 #   python3 ci/dcap_real_check.py Holy_Dashboard.pyw            ⇒ lines starting with HOLYDCAP
 import importlib.machinery, importlib.util, json, os, shutil, subprocess, sys, tempfile, time
 
 DASH = os.path.abspath(sys.argv[1])
 COINS = ("SOL-USDT", "XRP-USDT", "DOGE-USDT", "ETH-USDT", "BTC-USDT", "ADA-USDT", "LTC-USDT")
-VAR = {"dca": {}, "dcap": {"dca_plus": "1", "lx_pct": "0.5", "lx_from": "1", "lx_reopen": "1"},
-       "dcap_noreopen": {"dca_plus": "1", "lx_pct": "0.5", "lx_from": "1", "lx_reopen": "0"},
-       "dcap_1pct": {"dca_plus": "1", "lx_pct": "1", "lx_from": "1", "lx_reopen": "1"}}
+VAR = {"dca": None, "dcap_same": [1, 1, 1, 1, 1, 1, 1], "dcap_fast": [1, 1, 1, 0.8, 0.6, 0.45, 0.3]}
+
+
+def rows_of(p0, xs):
+    """the normal DCA's own ladder (dca.py: price = base × (1 + the summed steps)) written as DCA+ rows (each a distance from the one before)"""
+    out, cum, prev = [{"d": 0, "q": 10 / p0, "x": xs[0]}], 0.0, 1.0
+    for k in range(1, 7):
+        cum += 1.0 * 1.2 ** (k - 1)
+        cur = 1 + cum / 100
+        out.append({"d": (cur / prev - 1) * 100, "q": 10 / p0 * 1.5 ** (k - 1), "x": xs[k]})
+        prev = cur
+    return out
 
 
 def P_(*a):
@@ -46,7 +55,9 @@ if "--one" in sys.argv:
     p0, spec, sym = px[0], W["spec"], W["sym"]
     body = {"symbol": sym, "wallet": "main", "dca_type": "dca", "base_order_qty": repr(10 / p0), "avg_order_qty": repr(10 / p0),
             "first_deviation": "1", "step_multiplier": "1.2", "size_multiplier": "1.5", "max_safety_orders": "6", "take_profit_pct": "1",
-            "exchange_orders": "3", "cycle_wait_sec": "60", **VAR[var]}
+            "exchange_orders": "3", "cycle_wait_sec": "60"}
+    if VAR[var]:
+        body.update(dca_type="dca_plus", plus_rows=json.dumps(rows_of(p0, VAR[var])))
     keep = {k: m.__dict__.get(k) for k in ("ROOT", "wallet_keys", "launch", "tg_send", "journal", "log_event", "_acc_spec", "_acc_price", "_okx_get", "bot_dirs")}
     cfg, err = m._bt_dry_cfg("dca", body, sym, spec, p0)
     m.__dict__.update(keep)
@@ -57,7 +68,7 @@ if "--one" in sys.argv:
     r = m._bt_run("dca", cfg, sym, px, sec / 4.0, q0, b0, spec, samples=6000)
     ex, st = r["ex"], r.get("state") or {}
     pe = float(r["curve"][-1][1])
-    full = float(cfg["base_order_qty"]) * (1 + sum(1.5 ** k for k in range(6)))
+    full = (10 / p0) * (1 + sum(1.5 ** k for k in range(6)))
     exp = [(b0 - c[3]) / full for c in r["curve"]]
     dt_h = (len(px) / max(1, len(r["curve"]))) * (sec / 4.0) / 3600.0
     run_, longest = 0, 0
@@ -66,9 +77,9 @@ if "--one" in sys.argv:
         longest = max(longest, run_)
     opn = sum(float(f["qty"]) for f in st.get("filled") or [])
     prof = float(st.get("total_coin_profit") or 0)
-    lx = [c for c in st.get("cycles_log") or [] if c.get("lx")]
-    print(json.dumps({"why": r["why"], "profit_coin": prof, "profit_usd": prof * pe, "cycles": int(st.get("cycles_done") or 0), "lx": len(lx),
-                      "lx_min": min([float(c["profit"]) for c in lx] or [0]), "mean_exp": sum(exp) / max(1, len(exp)),
+    cyc = st.get("cycles_log") or []
+    print(json.dumps({"why": r["why"], "profit_coin": prof, "profit_usd": prof * pe, "cycles": int(st.get("cycles_done") or 0), "plus": bool(cfg.get("dca_plus")),
+                      "cmin": min([float(c["profit"]) for c in cyc if not c.get("manual")] or [0]), "mean_exp": sum(exp) / max(1, len(exp)),
                       "longest_h": longest * dt_h, "end_open": opn / full, "rej": len(ex.rejects), "rej_codes": sorted({str(c) for _, c in ex.rejects}),
                       "check": (ex.bal[ex.base] - b0) + opn - prof, "secs": time.time() - a0, "p0": p0, "pe": pe}))
     shutil.rmtree(R, ignore_errors=True)
@@ -119,18 +130,18 @@ with ThreadPoolExecutor(max(2, os.cpu_count() or 2)) as tp:
         if d.get("err"):
             FAIL.append(f"{d['sym']} {d['k']} {d['v']}: {d['err']}")
             P_(f"run {d['sym']} m{d['k'] + 1} {d['v']}: ERROR {d['err'][:300]}"); continue
-        P_(f"run {d['sym']} m{d['k'] + 1} {d['v']:14} profit {d['profit_coin']:+.6g} coin ({d['profit_usd']:+.3f}$) · cycles {d['cycles']} · "
-           f"layer exits {d['lx']} · mean exposure {d['mean_exp'] * 100:.1f}% · longest >½ ladder {d['longest_h']:.1f}h · open at end "
+        P_(f"run {d['sym']} m{d['k'] + 1} {d['v']:10} profit {d['profit_coin']:+.6g} coin ({d['profit_usd']:+.3f}$) · cycles {d['cycles']} · "
+           f"mean exposure {d['mean_exp'] * 100:.1f}% · longest >½ ladder {d['longest_h']:.1f}h · open at end "
            f"{d['end_open'] * 100:.0f}% · refused {d['rej']} {','.join(d.get('rej_codes') or [])} · wallet−books {d['check']:+.1e} · {d['secs']:.0f}s · {d['why']}")
-        if d["why"] != "end" or set(d.get("rej_codes") or []) - {"51008", "51016"} or abs(d["check"]) > 1e-6 or (d["lx"] and d["lx_min"] <= 0):   # 51008 the paper wallet ran short · 51016 a client id repeated inside one simulated second (dca.py's own — the normal DCA too; the engine retries)
-            FAIL.append(f"{d['sym']} {d['k']} {d['v']}: why {d['why']} rej {d['rej']} check {d['check']} lx_min {d['lx_min']}")
+        if d["why"] != "end" or set(d.get("rej_codes") or []) - {"51008", "51016"} or abs(d["check"]) > 1e-6 or d["cmin"] < 0 or d["plus"] != (d["v"] != "dca"):   # 51008 the paper wallet ran short · 51016 a client id repeated inside one simulated second (dca.py's own — the normal DCA too; the engine retries)
+            FAIL.append(f"{d['sym']} {d['k']} {d['v']}: why {d['why']} rej {d['rej']} check {d['check']} cycle_min {d['cmin']} plus {d['plus']}")
 
 for v in VAR:
     g = [d for d in OUT if d.get("v") == v and not d.get("err")]
     if not g:
         continue
     a = lambda key: sum(float(d[key]) for d in g) / len(g)
-    P_(f"SUM {v:14} over {len(g)} paths: profit {a('profit_usd'):+.3f}$ a path · cycles {a('cycles'):.1f} · layer exits {a('lx'):.0f} · "
+    P_(f"SUM {v:10} over {len(g)} paths: profit {a('profit_usd'):+.3f}$ a path · cycles {a('cycles'):.1f} · "
        f"mean exposure {a('mean_exp') * 100:.1f}% · longest >½ ladder {a('longest_h'):.1f}h · open at end {a('end_open') * 100:.0f}%")
 P_("RESULT " + ("✅ all runs clean" if not FAIL else "❌ " + " | ".join(FAIL[:8])))
 shutil.rmtree(R, ignore_errors=True)
