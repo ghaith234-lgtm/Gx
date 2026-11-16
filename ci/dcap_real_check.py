@@ -6,6 +6,8 @@
 #     dca         the normal sell DCA (dca.py) · 1% target
 #     dcap_same   DCA+ with exactly the same ladder and 1% on every order — must behave like the normal DCA (the same prices and sizes)
 #     dcap_fast   DCA+ · the same ladder · the exit shrinks on the deep orders: 1 · 1 · 1 · 0.8 · 0.6 · 0.45 · 0.3% (get out sooner)
+#   ⚡ v3.36.59 — DCA+ الشرائي (the owner 16-11: «ضيف معه الشرائية وسويلهم تيست»): the same three on the BUY side (the ladder going down,
+#   the profit in dollars): dcab (the normal buy DCA) · dcapb_same (must behave like it) · dcapb_fast
 #   Measured: profit (coin and $ at the last price) · closed cycles · mean exposure (coins sold and not bought back, as a share of the
 #   whole ladder) · the longest time stuck with more than half the ladder open · the wallet against the books.
 #   python3 ci/dcap_real_check.py Holy_Dashboard.pyw            ⇒ lines starting with HOLYDCAP
@@ -13,16 +15,18 @@ import importlib.machinery, importlib.util, json, os, shutil, subprocess, sys, t
 
 DASH = os.path.abspath(sys.argv[1])
 COINS = ("SOL-USDT", "XRP-USDT", "DOGE-USDT", "ETH-USDT", "BTC-USDT", "ADA-USDT", "LTC-USDT")
-VAR = {"dca": None, "dcap_same": [1, 1, 1, 1, 1, 1, 1], "dcap_fast": [1, 1, 1, 0.8, 0.6, 0.45, 0.3]}
+VAR = {"dca": None, "dcap_same": [1, 1, 1, 1, 1, 1, 1], "dcap_fast": [1, 1, 1, 0.8, 0.6, 0.45, 0.3],
+       "dcab": None, "dcapb_same": [1, 1, 1, 1, 1, 1, 1], "dcapb_fast": [1, 1, 1, 0.8, 0.6, 0.45, 0.3]}
+BUYV = ("dcab", "dcapb_same", "dcapb_fast")
 
 
-def rows_of(p0, xs):
-    """the normal DCA's own ladder (dca.py: price = base × (1 + the summed steps)) written as DCA+ rows (each a distance from the one before)"""
+def rows_of(p0, xs, buy=False):
+    """the normal DCA's own ladder (price = base × (1 ± the summed steps)) written as DCA+ rows (each a distance from the one before)"""
     out, cum, prev = [{"d": 0, "q": 10 / p0, "x": xs[0]}], 0.0, 1.0
     for k in range(1, 7):
         cum += 1.0 * 1.2 ** (k - 1)
-        cur = 1 + cum / 100
-        out.append({"d": (cur / prev - 1) * 100, "q": 10 / p0 * 1.5 ** (k - 1), "x": xs[k]})
+        cur = 1 - cum / 100 if buy else 1 + cum / 100
+        out.append({"d": (1 - cur / prev) * 100 if buy else (cur / prev - 1) * 100, "q": 10 / p0 * 1.5 ** (k - 1), "x": xs[k]})
         prev = cur
     return out
 
@@ -53,23 +57,25 @@ if "--one" in sys.argv:
     px = m._bt_ohlc(W)
     sec = W["sec"]
     p0, spec, sym = px[0], W["spec"], W["sym"]
-    body = {"symbol": sym, "wallet": "main", "dca_type": "dca", "base_order_qty": repr(10 / p0), "avg_order_qty": repr(10 / p0),
+    BUY = var in BUYV
+    kind = "dca_buy" if BUY else "dca"
+    body = {"symbol": sym, "wallet": "main", "dca_type": kind, "base_order_qty": repr(10 / p0), "avg_order_qty": repr(10 / p0),
             "first_deviation": "1", "step_multiplier": "1.2", "size_multiplier": "1.5", "max_safety_orders": "6", "take_profit_pct": "1",
             "exchange_orders": "3", "cycle_wait_sec": "60"}
     if VAR[var]:
-        body.update(dca_type="dca_plus", plus_rows=json.dumps(rows_of(p0, VAR[var])))
+        body.update(dca_type="dca_plus_buy" if BUY else "dca_plus", plus_rows=json.dumps(rows_of(p0, VAR[var], BUY)))
     keep = {k: m.__dict__.get(k) for k in ("ROOT", "wallet_keys", "launch", "tg_send", "journal", "log_event", "_acc_spec", "_acc_price", "_okx_get", "bot_dirs")}
-    cfg, err = m._bt_dry_cfg("dca", body, sym, spec, p0)
+    cfg, err = m._bt_dry_cfg(kind, body, sym, spec, p0)
     m.__dict__.update(keep)
     if not cfg:
         print(json.dumps({"err": err})); sys.exit(0)
-    q0, b0 = m._bt_wallet_def("dca", cfg, body, p0, spec)
+    q0, b0 = m._bt_wallet_def(kind, cfg, body, p0, spec)
     a0 = time.time()
-    r = m._bt_run("dca", cfg, sym, px, sec / 4.0, q0, b0, spec, samples=6000)
+    r = m._bt_run(kind, cfg, sym, px, sec / 4.0, q0, b0, spec, samples=6000)
     ex, st = r["ex"], r.get("state") or {}
     pe = float(r["curve"][-1][1])
     full = (10 / p0) * (1 + sum(1.5 ** k for k in range(6)))
-    exp = [(b0 - c[3]) / full for c in r["curve"]]
+    exp = [((c[3] - b0) if BUY else (b0 - c[3])) / full for c in r["curve"]]     # the share of the ladder open (bought / sold)
     dt_h = (len(px) / max(1, len(r["curve"]))) * (sec / 4.0) / 3600.0
     run_, longest = 0, 0
     for e in exp:
@@ -78,10 +84,14 @@ if "--one" in sys.argv:
     opn = sum(float(f["qty"]) for f in st.get("filled") or [])
     prof = float(st.get("total_coin_profit") or 0)
     cyc = st.get("cycles_log") or []
-    print(json.dumps({"why": r["why"], "profit_coin": prof, "profit_usd": prof * pe, "cycles": int(st.get("cycles_done") or 0), "plus": bool(cfg.get("dca_plus")),
+    if BUY:                                                          # the buy side: the profit is dollars · the dollar wallet = the books
+        chk = (ex.bal[ex.quote] - q0) + sum(float(f["price"]) * float(f["qty"]) for f in st.get("filled") or []) - prof
+    else:
+        chk = (ex.bal[ex.base] - b0) + opn - prof
+    print(json.dumps({"why": r["why"], "profit_coin": prof, "profit_usd": prof if BUY else prof * pe, "cycles": int(st.get("cycles_done") or 0), "plus": bool(cfg.get("dca_plus")),
                       "cmin": min([float(c["profit"]) for c in cyc if not c.get("manual")] or [0]), "mean_exp": sum(exp) / max(1, len(exp)),
                       "longest_h": longest * dt_h, "end_open": opn / full, "rej": len(ex.rejects), "rej_codes": sorted({str(c) for _, c in ex.rejects}),
-                      "check": (ex.bal[ex.base] - b0) + opn - prof, "secs": time.time() - a0, "p0": p0, "pe": pe}))
+                      "check": chk, "secs": time.time() - a0, "p0": p0, "pe": pe}))
     shutil.rmtree(R, ignore_errors=True)
     sys.exit(0)
 
@@ -133,7 +143,7 @@ with ThreadPoolExecutor(max(2, os.cpu_count() or 2)) as tp:
         P_(f"run {d['sym']} m{d['k'] + 1} {d['v']:10} profit {d['profit_coin']:+.6g} coin ({d['profit_usd']:+.3f}$) · cycles {d['cycles']} · "
            f"mean exposure {d['mean_exp'] * 100:.1f}% · longest >½ ladder {d['longest_h']:.1f}h · open at end "
            f"{d['end_open'] * 100:.0f}% · refused {d['rej']} {','.join(d.get('rej_codes') or [])} · wallet−books {d['check']:+.1e} · {d['secs']:.0f}s · {d['why']}")
-        if d["why"] != "end" or set(d.get("rej_codes") or []) - {"51008", "51016"} or abs(d["check"]) > 1e-6 or d["cmin"] < 0 or d["plus"] != (d["v"] != "dca"):   # 51008 the paper wallet ran short · 51016 a client id repeated inside one simulated second (dca.py's own — the normal DCA too; the engine retries)
+        if d["why"] != "end" or set(d.get("rej_codes") or []) - {"51008", "51016"} or abs(d["check"]) > 1e-6 or d["cmin"] < 0 or d["plus"] != (d["v"] not in ("dca", "dcab")):   # 51008 the paper wallet ran short · 51016 a client id repeated inside one simulated second (dca.py's own — the normal DCA too; the engine retries)
             FAIL.append(f"{d['sym']} {d['k']} {d['v']}: why {d['why']} rej {d['rej']} check {d['check']} cycle_min {d['cmin']} plus {d['plus']}")
 
 for v in VAR:
