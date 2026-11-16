@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.61"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.62"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -540,6 +540,11 @@ def is_alive(d, state_path):
     p = PROCS.get(d)
     if p is not None and p.poll() is None:
         return True, "dash"
+    try:
+        if _one_held(d):                                   # 🔒 v3.36.62: قفل «نسخة وحدة» ممسوك ⇒ المحرك يعمل (ويندوز كمان)
+            return True, "lock"
+    except Exception:
+        pass
     try:
         if time.time() - os.path.getmtime(state_path) < ALIVE_WINDOW:
             return True, "external"
@@ -7331,6 +7336,103 @@ def demo_runner_src():
     return _DEMO_SRC["s"]
 
 
+ONE_RUNNER = "holy_one.py"
+ONE_LOCK, ONE_PID = ".holy_run.lock", ".holy_run.pid"
+_ONE_SRC = r"""# 🔒 Holy one-copy runner — written by the dashboard into the bot's folder (rewritten at every start). ONE engine per folder:
+#   an operating-system lock on .holy_run.lock held for the life of this process; a second copy finds it held and leaves at once
+#   (it touches nothing). Then the bot's own engine file runs, unchanged, in this same process.
+import os, sys, time, runpy
+
+def _take(f):
+    if os.name == "nt":
+        import msvcrt
+        f.seek(0)
+        msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+    else:
+        import fcntl
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+if __name__ == "__main__":
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    f = open(".holy_run.lock", "a+")
+    for _i in range(10):                      # the dashboard only peeks at the lock (microseconds) — a short wait covers that
+        try:
+            _take(f)
+            break
+        except OSError:
+            time.sleep(0.2)
+    else:
+        print("HOLY-ONE: another copy of this bot already runs in this folder — this one stops and touches nothing", flush=True)
+        sys.exit(3)
+    try:
+        with open(".holy_run.pid", "w") as p:
+            p.write(str(os.getpid()))
+    except Exception:
+        pass
+    sys.argv = sys.argv[1:]
+    sys.path.insert(0, os.getcwd())
+    runpy.run_path(sys.argv[0], run_name="__main__")
+"""
+
+
+def _one_write(d):
+    """🔒 v3.36.62: مشغّل «نسخة وحدة» بمجلد البوت (يُكتب من جديد بكل إقلاع)"""
+    p = os.path.join(d, ONE_RUNNER)
+    try:
+        if os.path.exists(p) and open(p, encoding="utf-8").read() == _ONE_SRC:
+            return True
+    except Exception:
+        pass
+    with open(p + ".tmp", "w", encoding="utf-8") as f:
+        f.write(_ONE_SRC)
+    os.replace(p + ".tmp", p)
+    return True
+
+
+def _one_held(d):
+    """🔒 v3.36.62: نسخة من المحرك تمسك قفل المجلد الآن؟ (نطلّ على القفل بلحظة ونتركه — يشتغل على ويندوز ولينكس)"""
+    lp = os.path.join(d, ONE_LOCK)
+    if not os.path.exists(lp):
+        return False
+    try:
+        f = open(lp, "a+")
+    except Exception:
+        return False
+    try:
+        if os.name == "nt":
+            import msvcrt
+            f.seek(0)
+            try:
+                msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+            except OSError:
+                return True
+            try:
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+            except OSError:
+                pass
+            return False
+        import fcntl
+        try:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            return True
+        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        return False
+    finally:
+        f.close()
+
+
+def _one_pid(d):
+    try:
+        return int(open(os.path.join(d, ONE_PID), encoding="utf-8").read().strip() or 0) or None
+    except Exception:
+        return None
+
+
+_LAUNCH_LOCKS = {}
+
+
 def _demo_write_runner(d):
     p = os.path.join(d, DEMO_RUNNER)
     src = demo_runner_src()
@@ -7449,6 +7551,17 @@ def _demo_cfg_child(jp):
 
 
 def launch(b):
+    """🔒 v3.36.62: إطلاق واحد بنفس اللحظة لكل مجلد · بوت تشغّله هذي اللوحة ما ينطلق مرة ثانية · كل بوت عبر holy_one.py (نسخة وحدة)"""
+    with LOCK:
+        lk = _LAUNCH_LOCKS.setdefault(os.path.realpath(b["dir"]), threading.Lock())
+    with lk:
+        p0 = PROCS.get(b["dir"])
+        if p0 is not None and p0.poll() is None:
+            return True, "يعمل أصلاً ✅"
+        return _launch_do(b)
+
+
+def _launch_do(b):
     sp, hp, lp = paths_of(b)
     eng_src, eng_script, _ = engine_for(b["cfg"])
     script = eng_script                                   # 🧪 v3.36.46: الديمو كمان = المحرك الحقيقي (عبر holy_demo.py) — مو demo.py
@@ -7503,13 +7616,25 @@ def launch(b):
         except Exception as _de:
             log_f.close()
             return False, f"تعذّر كتابة مشغّل الديمو: {type(_de).__name__}"
-    p = subprocess.Popen([PYTHON_EXE, "-u"] + ([DEMO_RUNNER, script, eng_script] if _demo else [script]), cwd=b["dir"], creationflags=flags,
+    try:
+        _one_write(b["dir"])                              # 🔒 v3.36.62: نسخة وحدة لكل مجلد (قفل نظام التشغيل)
+    except Exception as _oe:
+        log_f.close()
+        return False, f"تعذّر كتابة مشغّل البوت: {type(_oe).__name__}"
+    p = subprocess.Popen([PYTHON_EXE, "-u", os.path.join(os.path.abspath(b["dir"]), ONE_RUNNER)]
+                         + ([DEMO_RUNNER, script, eng_script] if _demo else [script]), cwd=b["dir"], creationflags=flags,
                          stdout=log_f, stderr=log_f, env=env)
     with LOCK:
         PROCS[b["dir"]] = p
     # تحقق ما بعد الإطلاق: إذا مات خلال 2.5 ثانية، اقرأ سبب موته من سجله بدل ادعاء النجاح
     time.sleep(2.5)
     if p.poll() is not None:
+        try:
+            if "HOLY-ONE:" in open(lp, encoding="utf-8", errors="ignore").read():
+                LAUNCH_ERR.pop(b["dir"], None)
+                return True, "يعمل أصلاً (نسخة أخرى تمسك المجلد) ✅"    # نسخة ثانية رفضت تشتغل — الأولى هي البوت
+        except Exception:
+            pass
         reason = _tail_reason(lp)
         LAUNCH_ERR[b["dir"]] = reason
         return False, f"💥 البوت مات فور الإطلاق — {reason}"
@@ -7552,7 +7677,8 @@ def bot_pids(full, ttl=4.0):
     out = []
     try:
         if os.name == "nt":
-            pass
+            if _one_held(full) and _one_pid(full):          # 🔒 v3.36.62: ويندوز — عملية المحرك من ملف القفل (كانت ما تنشاف أبداً)
+                out.append(_one_pid(full))
         else:
             real = os.path.realpath(full)
             me = os.getpid()
@@ -7573,7 +7699,7 @@ def bot_pids(full, ttl=4.0):
     _PIDS_CACHE[full] = (now, out)
     return out
 
-_ENG_SCRIPTS = ("main.py", "reinvest.py", "demo.py", "recur.py", "dca.py", "vpath.py")   # 🔧 v3.25.3: كل محركات البوتات (DCA = dca.py)
+_ENG_SCRIPTS = ("main.py", "reinvest.py", "demo.py", "recur.py", "dca.py", "vpath.py", "holy_one.py")   # 🔧 v3.25.3: كل محركات البوتات (DCA = dca.py)
 
 
 def _is_eng_cmd(s):
@@ -7611,6 +7737,9 @@ def kill_bot_pids(full, grace=6.0):
 
 def kill_external(full):
     try:
+        if os.name == "nt" and _one_held(full) and _one_pid(full):     # 🔒 v3.36.62: ويندوز — من ملف القفل
+            subprocess.run(["taskkill", "/PID", str(_one_pid(full)), "/F", "/T"], capture_output=True, timeout=10, creationflags=0x08000000)
+            return True
         if os.name == "nt":
             out = subprocess.run(["wmic", "process", "where", "name like 'python%'",
                                   "get", "ProcessId,CommandLine"], capture_output=True, text=True, timeout=10).stdout
