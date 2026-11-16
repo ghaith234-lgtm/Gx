@@ -2,7 +2,7 @@
 #   فقط كل بوت وكرته وينكتب عليه ديمو». Every card kind in a closed folder (devtests/seed_cards.py) + one demo bot (the plus bot's
 #   folder as a demo: no keys · a paper wallet · a big profit in its state that must not reach any total) · the steps in ui_demo.js
 #   python3 devtests/ui_demo.py [Holy_Dashboard.pyw] [-q]        (run with `unset TMPDIR`)
-import json, os, shutil, socket, subprocess, sys, tempfile
+import time, json, os, shutil, socket, subprocess, sys, tempfile
 
 H = os.path.dirname(os.path.abspath(__file__))
 Q = "-q" in sys.argv
@@ -33,6 +33,11 @@ try:
     st = json.load(open(sp, encoding="utf-8"))
     st["total_profit"] = 999.0
     json.dump(st, open(sp, "w", encoding="utf-8"))
+    _now = time.strftime("%Y-%m-%d %H:%M:%S")                       # 🧪 v3.36.59: today's sells in its own log ⇒ «اليوم» on its card
+    json.dump([{"time": _now, "msg": "🔴 [بيع فوري] السعر: 183.1 | الكمية: 0.1 | الربح: +1.5$ -> تم تجهيز شراء بسعر: 182"},
+               {"time": _now, "msg": "🔴 [بيع فوري] السعر: 184.2 | الكمية: 0.1 | الربح: +2.5$ -> تم تجهيز شراء بسعر: 183"},
+               {"time": "2020-01-01 09:00:00", "msg": "🔴 [بيع فوري] السعر: 100 | الكمية: 1 | الربح: +50$"}],
+              open(os.path.join(dd, "trade_history_SOL.json"), "w", encoding="utf-8"))
     json.dump({"v": 1, "sym": "SOL-USDT", "bal": {"USDT": 400.0, "SOL": 3.0}, "frz": {"USDT": 40.0, "SOL": 0.4}, "start": {"USDT": 400.0, "SOL": 3.0},
                "orders": {}, "by_cl": {}, "fills": [], "px": 182.37}, open(os.path.join(dd, "demo_wallet.json"), "w"))
     d = subprocess.Popen([sys.executable, os.path.join(H, "step", "video", "vid_dash.py"), R, str(P1)], stdout=subprocess.PIPE, text=True, env=env)

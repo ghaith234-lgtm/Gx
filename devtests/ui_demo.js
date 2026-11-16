@@ -43,6 +43,16 @@ function ok(name, cond, det) {
   ok(`… the counter counts them apart («${L.fc}»)`, /9 بوت/.test(L.fc) && /1 ديمو/.test(L.fc), L.fc);
   ok(`… its profit (999$ in its own state — ${(+L.demoProfit).toFixed(2)}$ on its card after fees) reaches no total (the top total ${L.total.toFixed(2)}$)`,
      L.total < 500 && L.demoProfit > 500, L);
+  // 🧪 v3.36.59: the profit inside the demo card — «اليوم» from its own log · «متوسط البوتات» among the demo bots only
+  const D = await pg.evaluate(() => { const b = DATA.bots.find(x => x.demo), el = CARDS.get(b.dir), R = el._r || {};
+    const real = DATA.bots.filter(x => !x.demo).map(x => +x.profit || 0);
+    return { today: b.today, nf: b.net_f, delta: R.delta ? R.delta.textContent : '', bavg: R.bavgv ? R.bavgv.textContent : '', profit: +b.profit,
+      realAvg: real.reduce((a, c) => a + c, 0) / (real.length || 1) } });
+  const exp = 4.0 * (+D.nf || 1);
+  ok(`… its «اليوم» = today's sells in its own log (1.5 + 2.5 × fees = ${exp.toFixed(4)} · the card «${D.delta}») · the old day not counted`,
+     Math.abs(+D.today - exp) < 1e-3 && D.delta.includes(exp.toFixed(4)), D);
+  ok(`… its «متوسط البوتات» is among the demo bots (${D.bavg} = its own ${D.profit.toFixed(2)}$ — not the real bots' ${D.realAvg.toFixed(2)}$)`,
+     D.bavg === D.profit.toFixed(2) + '$' && Math.abs(D.realAvg - D.profit) > 1, D);
   const shot = await pg.evaluate(() => { const s = document.getElementById('demoSep'); if (s) s.scrollIntoView({ block: 'center' }); return !!s });
   if (shot) await pg.screenshot({ path: '/tmp/ui_demo_cards.png' }).catch(() => {});
 

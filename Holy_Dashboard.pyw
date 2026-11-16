@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.58"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.59"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -938,6 +938,18 @@ def bot_snapshot(b):
                     today_profit += float(m.group(1))
             elif today_profit and not str(e.get("time", "")).startswith(today):
                 break            # السجل مرتّب بالأحدث — خرجنا من اليوم
+    elif b["cfg"].get("is_demo"):
+        # 🧪 v3.36.59 (المالك 16-11: «الديمو خلي الربح داخل الكرتات»): الدفاتر لا تعرف الديمو (عن قصد) ⇒ ربح اليوم من سجله هو × معامل البطاقة
+        _nf0 = _safe(net_factor, b, default=1.0)
+        for e in hist:
+            if not isinstance(e, dict):
+                continue
+            if str(e.get("time", "")).startswith(today):
+                m = PROFIT_RE.search(e.get("msg", ""))
+                if m:
+                    today_profit += float(m.group(1)) * _nf0
+            elif str(e.get("time", "")) < today:
+                break
     else:
         # 💵 الجرد: نقرأ من سجل الأرباح مباشرة — دقيق ولا يتأثر بعدد الأحداث
         #    (كان يُحسب بتحليل الرسائل ضمن أول 400 حدث، فينقص بيوم التذبذب العالي)
@@ -6799,7 +6811,9 @@ def _rate_fix(b, ta):
         tot, unit = float(r.get("profit") or 0), (r.get("base") or b["symbol"].split("-")[0])
     else:
         unit = "$"
-        if ta is not None and b.get("dir") in ta:
+        if b.get("demo"):                                # 🧪 v3.36.59: الديمو خارج الدفاتر ⇒ معدله من عدّاد ربحه هو
+            tot = float((b.get("rec") or {}).get("profit") or 0) if bt in _REC_T else float(b.get("profit") or 0)
+        elif ta is not None and b.get("dir") in ta:
             tot = float(ta[b["dir"]])
         elif ta is not None:
             tot = 0.0                                    # لا تداول مسجّل بعد
@@ -7651,7 +7665,7 @@ def _dca_finish_scan():
         _u = "USDT" if _isb else b["symbol"].split("-")[0]
         tot = round(float(st.get("total_coin_profit") or 0), 4)
         cyc = int(st.get("cycles_done") or 0)
-        tg_send(f"🏁 *آخر دورة انتهت — `{b['symbol']}`*\nتوقف البوت ولم يفتح دورة جديدة (أُطفئ الحارس عليه)\n"
+        _tg_b(b, f"🏁 *آخر دورة انتهت — `{b['symbol']}`*\nتوقف البوت ولم يفتح دورة جديدة (أُطفئ الحارس عليه)\n"
                 f"📊 إجمالي الربح: `{tot}` {_u} · {cyc} دورة\n▶️ للتشغيل من جديد: زر التشغيل في البطاقة")
         log_event(f"🏁 [{b['symbol']}] انتهت آخر دورة — توقف البوت · الإجمالي {tot} {_u} · {cyc} دورة")
 
@@ -7665,7 +7679,7 @@ def watchdog_loop():
             if not is_alive(b["dir"], sp)[0]:
                 ok, _ = launch(b)
                 if ok:
-                    tg_send(f"🤖 *الحارس* — أعاد إطلاق `{b['symbol']}` عند الإقلاع")
+                    _tg_b(b, f"🤖 *الحارس* — أعاد إطلاق `{b['symbol']}` عند الإقلاع")
             time.sleep(0.6)
     while True:
         try:
@@ -7688,13 +7702,13 @@ def watchdog_loop():
                     if len(hist) >= 4:
                         write_cfg_keys(b["cfg_path"], {"auto_restart": False})
                         why = LAUNCH_ERR.get(b["dir"], "سبب غير معروف — افحص سجله")
-                        tg_send(f"⚠️ *الحارس أوقف* `{b['symbol']}`\nالسبب: {why}\nأصلح المشكلة ثم اضغط ▶️ تشغيل")
+                        _tg_b(b, f"⚠️ *الحارس أوقف* `{b['symbol']}`\nالسبب: {why}\nأصلح المشكلة ثم اضغط ▶️ تشغيل")
                         hist.clear()
                         continue
                     ok, _ = launch(b)
                     if ok:
                         hist.append(now)
-                        tg_send(f"🤖 *الحارس* — `{b['symbol']}` طاح وأعدت تشغيله ({len(hist)}/4)")
+                        _tg_b(b, f"🤖 *الحارس* — `{b['symbol']}` طاح وأعدت تشغيله ({len(hist)}/4)")
         except Exception:
             pass
         time.sleep(5)
@@ -19988,7 +20002,7 @@ def rebuild(b):
         try: os.remove(f)
         except Exception: pass
     ok, msg = launch(b) if was_alive or True else (True, "")
-    tg_send(f"♻️ *إعادة بناء* — `{b['symbol']}` سيرسم شبكة جديدة من السعر الحالي")
+    _tg_b(b, f"♻️ *إعادة بناء* — `{b['symbol']}` سيرسم شبكة جديدة من السعر الحالي")
     return {"ok": ok, "msg": "♻️ مُسحت الذاكرة وانطلق البوت ببناء شبكة جديدة" if ok else msg}
 
 def _gone_archive(b):
@@ -20117,6 +20131,11 @@ def archive_view():
 
 
 def delete_bot(b):
+    with _demo_quiet(b):                                 # 🧪 v3.36.59: حذف الديمو بلا إشعار
+        return _delete_bot_do(b)
+
+
+def _delete_bot_do(b):
     stop_bot(b)
     time.sleep(0.5)
     _safe(loss_tick, default=None)        # 📉 v3.25.4: آخر خسارة للبوت تنكتب قبل الأرشفة
@@ -20154,12 +20173,13 @@ def shutdown_all(noexit=False):
     today = datetime.now().strftime("%Y-%m-%d")
     t_today = sum((d.get("daily", {}) or {}).get(today, 0.0) for d in led.values() if isinstance(d, dict))
     t_all = sum(float(d.get("last_seen_total", 0) or 0) for d in led.values() if isinstance(d, dict))
-    n = 0
+    n = nr = 0
     for b in bot_dirs().values():
         sp, _, _ = paths_of(b)
         if is_alive(b["dir"], sp)[0]:
             stop_bot(b); n += 1
-    tg_send(f"🛑 *[إغلاق مركز التحكم]*\nتم إيقاف `{n}` بوت.\n💵 أرباح اليوم: `{t_today:.4f}$`\n🏦 التراكمي: `{t_all:.4f}$`")
+            nr += 0 if b["cfg"].get("is_demo") else 1          # 🧪 v3.36.59: الرسالة تعدّ الحقيقية فقط
+    tg_send(f"🛑 *[إغلاق مركز التحكم]*\nتم إيقاف `{nr}` بوت.\n💵 أرباح اليوم: `{t_today:.4f}$`\n🏦 التراكمي: `{t_all:.4f}$`")
     if not noexit:
         threading.Timer(1.5, lambda: os._exit(0)).start()
     return {"ok": True, "msg": f"⏻ أوقفت {n} بوت" + ("" if noexit else " — تتوقف اللوحة الآن")}
@@ -20299,6 +20319,16 @@ _RI_BUSY = {"ok": False, "msg": "⏳ لم يستلم البوت طلبك الس�
 
 
 def control(d_rel, action, value):
+    """🧪 v3.36.59: أزرار بطاقة الديمو تعمل مثل الحقيقي — بلا إشعار"""
+    try:
+        _b = bot_dirs().get(os.path.realpath(os.path.join(ROOT, str(d_rel or ""))))
+    except Exception:
+        _b = None
+    with _demo_quiet(_b):
+        return _control_do(d_rel, action, value)
+
+
+def _control_do(d_rel, action, value):
     bots = bot_dirs()
     full = os.path.realpath(os.path.join(ROOT, d_rel))
     if not full.startswith(os.path.realpath(ROOT)) or full not in bots:
@@ -21314,8 +21344,36 @@ import ssl as _ssl
 _TG_CTX = _tls_ctx()                     # 🔒 v3.36.55: يتحقّق من الشهادة (كان بلا تحقق ⇒ التوكن مكشوف لأي وسيط بالشبكة)
 
 TG_DIAG = {"last": "لم يُرسل شيء بعد"}
+_TG_DEMO = threading.local()
+
+
+class _demo_quiet:
+    """🧪 v3.36.59 (المالك 16-11: «ما اريد اشعارات لانه حساب ديمو»): داخل هذا السياق لا يخرج أي إشعار يخص بوت الديمو —
+    لا تيليغرام ولا تطبيق الموبايل · لبوت حقيقي لا يغيّر شيئاً"""
+    def __init__(self, b):
+        self.on = bool(((b or {}).get("cfg") or {}).get("is_demo")) if isinstance(b, dict) else False
+
+    def __enter__(self):
+        self.prev = getattr(_TG_DEMO, "on", False)
+        if self.on:
+            _TG_DEMO.on = True
+        return self
+
+    def __exit__(self, *a):
+        _TG_DEMO.on = self.prev
+        return False
+
+
+def _tg_b(b, text, **k):
+    """🧪 v3.36.59: إشعار يخص بوتاً — بوت الديمو بلا إشعار"""
+    if ((b or {}).get("cfg") or {}).get("is_demo"):
+        return False
+    return tg_send(text, **k)
+
 
 def tg_send(text, force=False, plain=False):
+    if getattr(_TG_DEMO, "on", False):                 # 🧪 v3.36.59: فعل يخص بوت ديمو ⇒ ولا إشعار (ولا حتى «إجباري»)
+        return False
     if TG_MUTED["v"] and not force:
         TG_DIAG["last"] = "🔕 الإشعارات مكتومة (زر 🔔)"
         return False
@@ -26166,6 +26224,8 @@ function syncCards(allBots){
   RI_ON=(allBots||[]).filter(x=>x.ri&&(x.ri.on||x.ri.cfg_on)).length;
   let profits=allBots.filter(x=>!x.demo).map(x=>x.profit);   // 🧪 v3.36.46: الديمو خارج المقارنة
   const bench={max:Math.max(0,...profits),avg:profits.length?profits.reduce((a,c)=>a+c,0)/profits.length:0};
+  const dprof=allBots.filter(x=>x.demo).map(x=>+x.profit||0);   // 🧪 v3.36.59: كرت الديمو يُقارَن بالديمو فقط
+  const benchD={max:Math.max(0,...dprof),avg:dprof.length?dprof.reduce((a,c)=>a+c,0)/dprof.length:0};
   // بحث بالاسم
   let bots=allBots.filter(b=>!FILTER.q||b.symbol.toUpperCase().includes(FILTER.q));
   // ترتيب
@@ -26177,7 +26237,7 @@ function syncCards(allBots){
     let el=CARDS.get(b.dir);
     if(!el){el=buildCard(b,0);CARDS.set(b.dir,el);cardLockDeco(el);el._caNew=1}
     el.style.display='';
-    updCard(el,b,bench);skinUpd(el,b);caNumChk(el,b);demoMark(el,b)});
+    updCard(el,b,b.demo?benchD:bench);skinUpd(el,b);caNumChk(el,b);demoMark(el,b)});
   // رتّب الـ DOM حسب الترتيب الجديد — فقط إذا الترتيب تغيّر فعلاً
   // (نقل عنصر فيه iframe يعيد تحميل الشارت! فلا ننقل إلا عند الحاجة)
   const grid=$('#grid');
@@ -37089,6 +37149,7 @@ def start_all_bots(user=False):
     """user=True: زر «تشغيل الكل» — بوت DCA خلّص «آخر دورة» يبدي دورة جديدة (مثل ▶️ بكرته) ·
     user=False: إقلاع اللوحة — نفس البوت يبقى واقف (إنت وقفته بآخر دورة · v3.25.3)."""
     n = 0
+    _START_N["real"] = 0
     for b in bot_dirs().values():
         sp, _, _ = paths_of(b)
         if not is_alive(b["dir"], sp)[0]:
@@ -37107,9 +37168,14 @@ def start_all_bots(user=False):
                 ok2, _m = launch(b)
                 if ok2:
                     n += 1
+                    if not b["cfg"].get("is_demo"):
+                        _START_N["real"] += 1           # 🧪 v3.36.59: رسالة «فتح التطبيق» تعدّ الحقيقية فقط
             except Exception:
                 pass
     return n
+
+
+_START_N = {"real": 0}
 
 def kill_all_bot_procs():
     """💀 قتل قسري لكل عمليات البوتات تحت هذا الجذر — يمسح أي عملية يتيمة عالقة على المنفذ"""
@@ -37162,17 +37228,18 @@ def kill_all_bot_procs():
     return n
 
 def stop_all_bots(reason=""):
-    n = 0
+    n = nr = 0
     for b in bot_dirs().values():
         try:
             sp, _, _ = paths_of(b)
             if is_alive(b["dir"], sp)[0]:
                 stop_bot(b, disable_auto=True)
                 n += 1
+                nr += 0 if b["cfg"].get("is_demo") else 1      # 🧪 v3.36.59: الرسالة تعدّ الحقيقية فقط
         except Exception:
             pass
-    if n and reason:
-        tg_send(f"⏻ {reason} — توقف {n} بوت بأمان (أوامرهم المحددة باقية على المنصة)")
+    if nr and reason:
+        tg_send(f"⏻ {reason} — توقف {nr} بوت بأمان (أوامرهم المحددة باقية على المنصة)")
     return n
 
 def _write_state_flag(sp, key, val):
@@ -37247,7 +37314,7 @@ def delete_purge(b):
     return res
 
 def upgrade_engines():
-    upd, restarted, skipped = [], [], []
+    upd, restarted, skipped, upd_real = [], [], [], []
     for b in bot_dirs().values():
         eng_src, eng_script, eng_ver = engine_for(b["cfg"])  # المحرك الصحيح حسب النوع
         mp = os.path.join(b["dir"], eng_script)
@@ -37267,6 +37334,8 @@ def upgrade_engines():
             with open(mp, "w", encoding="utf-8") as f:
                 f.write(eng_src)
             upd.append(b["symbol"])
+            if not b["cfg"].get("is_demo"):
+                upd_real.append(b["symbol"])                   # 🧪 v3.36.59: الرسالة بالحقيقية فقط
             if was:
                 launch(b); restarted.append(b["symbol"])
         except Exception as ex:
@@ -37276,7 +37345,8 @@ def upgrade_engines():
     msg = f"🧬 تحدّث المحرك بـ {len(upd)} بوت"
     if restarted: msg += f" — أعيد تشغيل {len(restarted)}"
     if skipped: msg += f" — تخطيت: {', '.join(skipped)}"
-    tg_send(f"🧬 *تحديث المحرك*\n" + (", ".join(upd) if upd else "—"))
+    if upd_real or not upd:
+        tg_send(f"🧬 *تحديث المحرك*\n" + (", ".join(upd_real) if upd_real else "—"))
     return {"ok": True, "msg": msg}
 
 def _port_busy(port):
@@ -37418,8 +37488,8 @@ def main():
                 print(f"🧹 نظّفت {orphans} بوت يتيم من جلسة سابقة")
                 time.sleep(1.0)
             n = start_all_bots()
-            if n:
-                tg_send(f"⚡ *فتح التطبيق* — انطلق {n} بوت 🤖")
+            if n and _START_N["real"]:
+                tg_send(f"⚡ *فتح التطبيق* — انطلق {_START_N['real']} بوت 🤖")
         threading.Thread(target=_boot_army, daemon=True).start()
     else:
         print(f"⚡ المحرك يعمل مسبقاً — أفتح نافذة عليه: {url}")
