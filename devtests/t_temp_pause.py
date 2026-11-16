@@ -17,6 +17,7 @@
 #       leaves his floor · the guard paused or the switch off open nothing
 #   H · the update day: a bot calling for its missed levels closes above all of them (they are kept — none bought) · the old automatic
 #       pause's records carry on as temporary closes and do not resume when the dollars come back
+#   ⏳ v3.36.61 (I): the guard's estimate too small ⇒ OKX's own «Insufficient USDT» on the bot's buy closes it at the next round
 #   python3 devtests/t_temp_pause.py [Holy_Dashboard.pyw] [-q] [--kind=grid|grid_plus|grid_range|grid_step]
 import importlib.machinery, importlib.util, json, math, os, shutil, sys, tempfile, urllib.request, collections
 
@@ -381,6 +382,26 @@ for kind in KINDS:
         mig = m._cw_load()["bots"].get(mk) or {}
         ok("H · the old automatic pause's record (v3.36.44) carries on as a temporary close (temp 79 · own 0)",
            mig.get("v") == 2 and mig.get("temp") == 79.0 and mig.get("own") == 0.0, mig)
+
+# ═══ I · ⏳ v3.36.61: the guard's estimate of the next order is too SMALL (💠 reinvest grows it · several 🪜 parts at once) — the owner (16-11):
+#   «احنه قلنا اذا ماكو دولار يتفعل ايقاف الشراء المؤقت» · the estimate here is a fifth of the real order: by it the wallet never looks short,
+#   OKX refuses the real orders (51008) ⇒ the exchange's own refusal closes the pause at the next round · then nothing more is refused ═══
+for kind in [k for k in KINDS if k in ("grid_step", "grid_plus")]:
+    K = {"grid_plus": "➕", "grid_step": "🪜"}[kind]
+    ix = Box(kind, f"{kind}_i", 400.0, 6.0)
+    ix.need = need_of(ix.cfg) / 5.0                                   # the estimate: 2$ · the real order: 10$
+    I_I = N_FLAT + 60
+    ix.hooks[I_I] = lambda b: b.ex.bal.__setitem__(QC, b.ex.frz[QC] + 5.0)   # on the way down: 5$ free — more than the estimate, less than an order
+    ix.run(PX[:I_LOW1])
+    r0 = ix.rej(tt(I_I), None)
+    fi = first_closed(ix)
+    t_r0 = r0[0][0] if r0 else None
+    fi = next((x for x in ix.snaps if x["rec"] and x["t"] >= tt(I_I)), None) if not fi or fi["t"] < tt(I_I) else fi
+    late = ix.rej(fi["t"] + 600, None) if fi else ["never closed"]
+    ok(f"{K} I · 5$ free · the estimate 2$ (a fifth of the real 10$ order): OKX refused its buy ({len(r0)} in all) ⇒ the temporary pause closed at the next round "
+       f"({'%.0f s after the first refusal' % (fi['t'] - t_r0) if fi and t_r0 else 'never'}) · its need = the refused order's dollars "
+       f"({(fi or {}).get('rec', {}).get('need') if fi else '—'}) · no refusal after it ({len(late)})",
+       r0 and fi and fi["t"] - t_r0 <= 2 * 600 + 1 and not late and float(fi["rec"].get("need") or 0) > ix.need * 1.5, (r0[:3], fi, late[:3]))
 
 # ═══ the card chip — the page's own function, in node ═══
 import subprocess

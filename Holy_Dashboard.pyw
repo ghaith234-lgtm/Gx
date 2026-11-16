@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.60"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.61"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -10090,6 +10090,54 @@ def _cw_live_buys(st):
     return s
 
 
+_TP_REJ_RE = re.compile(r"(?:كمية \(|الكمية |أمر \()([0-9.eE+-]+)\)?\s*بسعر \(?([0-9.eE+-]+)")
+
+
+def _tp_rej_line(msg):
+    """سطر شراء رفضته المنصة لنفاد الدولار؟ (🪜 «⚠️ [رفض أمر شراء] …: Order failed. Insufficient USDT» · ♾️ ➕ 🎚️ «💵 [رفض أمر شراء] الدولار الحر ما يكفي»)"""
+    m = str(msg or "")
+    if "شراء" not in m:
+        return False
+    if "الدولار الحر ما يكفي" in m:
+        return True
+    return ("رفض" in m or "فشل" in m) and _rej_why(m)[1] == "51008"
+
+
+def _tp_rej_usd(msg):
+    m_ = _TP_REJ_RE.search(str(msg or ""))
+    try:
+        v = float(m_.group(1)) * float(m_.group(2)) if m_ else -1.0
+    except Exception:
+        v = -1.0
+    return v if v > 0 else -1.0
+
+
+def _tp_rej(b, since, now=None):
+    """⏳ v3.36.61: المنصة نفسها رفضت أمر شراء لهذا البوت لأن الدولار لا يكفي — بعد `since` (غلقه أو فتحه الأخير) وخلال 15 دقيقة ⇒
+    دولار ذلك الأمر (من سطر سجله) · -1 لو ما عُرف حجمه · 0 لا رفض. محركات الشبكة تكتب السطر بأول رفض فقط ⇒ وعدّاد «nocash» بحالتها
+    (until = وقت الرفض + انتظار ≤ 10 دقائق) يقول إنها ما زالت ترفض"""
+    now = float(now if now is not None else time.time())
+    lim = max(float(since or 0), now - 900)
+    try:
+        hist = [e for e in (load_json(paths_of(b)[1]) or [])[:300] if isinstance(e, dict)]
+    except Exception:
+        hist = []
+    for e in hist:                                        # الأحدث أولاً
+        if _parse_ts(e.get("time")) < lim:
+            break
+        if _tp_rej_line(e.get("msg")):
+            return _tp_rej_usd(e.get("msg"))
+    try:
+        st = load_json(paths_of(b)[0]) or {}
+        nc = st.get("nocash") if isinstance(st.get("nocash"), dict) else {}
+        u_ = float(nc.get("until") or 0)
+        if int(nc.get("n") or 0) >= 1 and u_ - 600 > float(since or 0) and u_ > now - 900:
+            return next((_tp_rej_usd(e.get("msg")) for e in hist if _tp_rej_line(e.get("msg"))), -1.0)
+    except Exception:
+        pass
+    return 0.0
+
+
 def _tp_kind(b):
     return str(((b or {}).get("cfg") or {}).get("bot_type") or "grid")
 
@@ -10433,10 +10481,14 @@ def _cash_watch(g, now, snaps):
                     if not b:
                         continue
                     r = d["bots"].get(k)
-                    short = un < u and i.get("alive")
+                    rj = (_safe(_tp_rej, b, max(float(d["opened"].get(k) or 0), float(r.get("ts") or 0) if isinstance(r, dict) else 0.0), now, default=0.0)
+                          if i.get("alive") else 0.0)
+                    if rj:                                      # ⏳ v3.36.61: المنصة نفسها رفضت شراءه لنفاد الدولار ⇒ قاصر مهما قال التقدير
+                        u = max(u, rj)
+                    short = (un < u or bool(rj)) and i.get("alive")
                     if short:
                         sv = d["seen"].get(k) if isinstance(d["seen"].get(k), dict) else {}
-                        d["seen"][k] = {"n": int(sv.get("n") or 0) + 1, "need": u, "ts": now}
+                        d["seen"][k] = {"n": max(int(sv.get("n") or 0) + 1, CW_SEEN if rj else 0), "need": u, "ts": now}   # رفض المنصة ⇒ بلا فحص ثانٍ
                         seen_now.add(k)
                         ch = True
                     if isinstance(r, dict) and r.get("v") == 2:

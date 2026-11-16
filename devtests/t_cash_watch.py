@@ -7,6 +7,8 @@
 #   · ▶️ on the card while closed moves his valve only · the wallet message stays in 🛡️ without Telegram while the temporary pause is
 #     on (with it off: once, no reminders) · the recurring bot's «الرصيد لا يكفي»: once, then quiet until a buy goes through · the 🔔
 #     centre hides the engines' dollar lines while the wallet message is open · the card chips (the page's own function, in node)
+#   ⏳ v3.36.61 (C): OKX's own «Insufficient USDT» on the bot's buy closes the pause at once, with the refused order's dollars — even when
+#     the guard's estimate says enough · an old refusal / one before the owner opened it / a sell or a price refusal ⇒ nothing
 #   python3 devtests/t_cash_watch.py [Holy_Dashboard.pyw] [-q]
 import importlib.machinery, importlib.util, json, math, os, re, shutil, subprocess, sys, tempfile, urllib.request
 
@@ -212,6 +214,66 @@ except Exception as e:
     C = [str(e), "", "x"]
 ok("③ the card chip (the page's function): «⏳ مؤقت (5)» while closed · «🟠 ينتظر دولار — يحتاج $12.50» (waiting, not closed) · nothing without a wait",
    "⏳ مؤقت (5)" in C[0] and "tempOpen('b0')" in C[0] and "يحتاج $12.50<" in C[1] and "⏸<" not in C[1] and C[2] == "", C)
+# ═══════════ C · ⏳ v3.36.61: the exchange's own «not enough dollars» (the owner 16-11: «احنه قلنا اذا ماكو دولار يتفعل ايقاف الشراء المؤقت») ═══════════
+#   the guard's estimate (the level's dollars — 10$) says 50$ free is enough · OKX refused a 57.5$ buy (💠 grown / several parts) ⇒ closes at once
+REJ = "⚠️ [رفض أمر شراء] الكمية 60 بسعر 0.9586 (المستوى -13 · الجزء 1): Order failed. Insufficient USDT balance in account"
+
+
+def rejbot(name, lines):
+    d = mkbot(name)
+    json.dump(lines, open(os.path.join(d, "trade_history_SOL.json"), "w"), ensure_ascii=False)
+    m.bot_dirs = lambda: {os.path.realpath(d): {"dir": d, "symbol": SYM, "cfg": dict(CFG, symbol=SYM), "cfg_path": os.path.join(d, f"config_{SYM}.json")}}
+    return d
+
+
+TS = lambda t: m.time.strftime("%Y-%m-%d %H:%M:%S", m.time.localtime(t))
+g = fresh()
+dn = rejbot("norej", [{"time": TS(T - 60), "msg": "🟢 [شراء] السعر: 73.5 | الكمية: 0.13"}])
+for j in range(3):
+    round_(g, snapof([dn]), 50, T + j * 600)
+ok("C · 50$ free, the next order 10$ by the estimate, no refusal ⇒ stays open (3 rounds)", not m._cw_load()["bots"].get(m._cw_key(dn)) and stf(dn)["buy_floor"] == 0)
+g = fresh()
+dr = rejbot("rej", [{"time": TS(T - 120), "msg": REJ}])
+round_(g, snapof([dr]), 50, T)
+rr = m._cw_load()["bots"].get(m._cw_key(dr)) or {}
+ok(f"C · the same 50$, but OKX refused its buy of 60 × 0.9586 ≈ 57.5$ two minutes ago (51008) ⇒ the temporary pause closes at the FIRST round "
+   f"(no second scan) · its need = the refused order's dollars ({rr.get('need')}) · the engine's floor set ({stf(dr)['buy_floor']})",
+   rr.get("v") == 2 and abs(float(rr.get("need") or 0) - 57.516) < 0.01 and stf(dr)["buy_floor"] > 0 and any(e.get("kind") == "tp_close" for e in g["events"]), (rr, g["events"][-2:]))
+g = fresh()
+do = rejbot("oldrej", [{"time": TS(T - 1500), "msg": REJ}])
+for j in range(2):
+    round_(g, snapof([do]), 50, T + j * 600)
+ok("C · a refusal 25 minutes old (before this check) ⇒ nothing (the estimate says enough)", not m._cw_load()["bots"].get(m._cw_key(do)))
+g = fresh()
+dp = rejbot("opened", [{"time": TS(T - 120), "msg": REJ}])
+d0 = m._cw_load(); d0.setdefault("opened", {})[m._cw_key(dp)] = T - 60; m.save_json_atomic(m.CASHW_FILE, d0); m._CW_CACHE.update(sig=None, d=None)
+round_(g, snapof([dp]), 50, T)
+ok("C · a refusal BEFORE the owner opened the pause (🔓) ⇒ not counted (it would close again at once)", not m._cw_load()["bots"].get(m._cw_key(dp)))
+g = fresh()
+ds_ = rejbot("sellrej", [{"time": TS(T - 120), "msg": "⚠️ [رفض أمر بيع] كمية (0.5) بسعر (81.0): Order failed. Insufficient SOL balance in account"},
+                         {"time": TS(T - 130), "msg": "⚠️ [رفض أمر شراء] كمية (0.13) بسعر (73.5): The order price is higher than the highest bid limit — 51006"}])
+for j in range(2):
+    round_(g, snapof([ds_]), 50, T + j * 600)
+ok("C · a SELL refused for coins / a buy refused for its price (not dollars) ⇒ the dollar pause stays out of it", not m._cw_load()["bots"].get(m._cw_key(ds_)))
+g = fresh()
+dg = rejbot("gridline", [{"time": TS(T - 90), "msg": "💵 [رفض أمر شراء] الدولار الحر ما يكفي أمر (0.8 بسعر 73.5) — ما نلح على المنصة: نعيد بعد 60 ثانية (أو أول ما يتنفّذ بيع)"}])
+round_(g, snapof([dg]), 50, T)
+rg = m._cw_load()["bots"].get(m._cw_key(dg)) or {}
+ok(f"C · ♾️ ➕ 🎚️ write it their own way («💵 … الدولار الحر ما يكفي أمر (0.8 بسعر 73.5)») ⇒ closes at once · need {rg.get('need')}",
+   rg.get("v") == 2 and abs(float(rg.get("need") or 0) - 58.8) < 0.01, rg)
+g = fresh()
+dc = rejbot("nocash", [{"time": TS(T - 7200), "msg": "💵 [رفض أمر شراء] الدولار الحر ما يكفي أمر (0.8 بسعر 73.5) — ما نلح"}])
+st_ = stf(dc); st_["nocash"] = {"n": 12, "until": T + 300}; json.dump(st_, open(os.path.join(dc, f"grid_state_{SYM}.json"), "w"))
+round_(g, snapof([dc]), 50, T)
+rc = m._cw_load()["bots"].get(m._cw_key(dc)) or {}
+ok(f"C · … they log only the first refusal: their «nocash» counter (12 refusals · retrying in 5 min) says they still can't buy ⇒ closes "
+   f"(need from that line {rc.get('need')})", rc.get("v") == 2 and abs(float(rc.get("need") or 0) - 58.8) < 0.01, rc)
+g = fresh()
+dq = rejbot("nocash_open", [])
+st_ = stf(dq); st_["nocash"] = {"n": 3, "until": T + 200}; json.dump(st_, open(os.path.join(dq, f"grid_state_{SYM}.json"), "w"))
+d0 = m._cw_load(); d0.setdefault("opened", {})[m._cw_key(dq)] = T - 100; m.save_json_atomic(m.CASHW_FILE, d0); m._CW_CACHE.update(sig=None, d=None)
+round_(g, snapof([dq]), 50, T)
+ok("C · … a counter that may come from before the owner opened it (🔓 100 s ago) ⇒ not counted", not m._cw_load()["bots"].get(m._cw_key(dq)))
 ok("no order placed or cancelled by the dashboard (only control fields)", True)
 print(f"✅ t_cash_watch: {sum(res)}/{len(res)}" if all(res) else f"❌ t_cash_watch: {sum(res)}/{len(res)}")
 os.chdir(H)
