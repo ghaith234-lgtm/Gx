@@ -155,9 +155,10 @@ m = importlib.util.module_from_spec(importlib.util.spec_from_loader("hd_dcap", l
 os.chdir(_cwd)
 work = open(os.path.join(H, "step", "eng", "dca.py"), encoding="utf-8").read()
 ok("① the normal sell DCA's engine is the same file byte for byte (dca.py) · a DCA+ config gets dca_plus.py (its own fingerprint) · "
-   "the buy DCA keeps its own", m.DCA_SRC == work and m.engine_for({"bot_type": "dca"})[0] == m.DCA_SRC
+   "the buy DCA keeps its own (and DCA+ الشرائي its own — v3.36.59)", m.DCA_SRC == work and m.engine_for({"bot_type": "dca"})[0] == m.DCA_SRC
    and m.engine_for({"bot_type": "dca", "dca_plus": True})[0] == m.DCAP_SRC and m.DCAP_VERSION != m.DCA_VERSION
-   and m.engine_for({"bot_type": "dca_buy", "dca_plus": True})[0] == m.DCAB_SRC and "plus_edit_apply" in m.DCAP_SRC and "lx_run" not in m.DCAP_SRC)
+   and m.engine_for({"bot_type": "dca_buy"})[0] == m.DCAB_SRC and "plus_edit_apply" in m.DCAP_SRC and "lx_run" not in m.DCAP_SRC
+   and m.engine_for({"bot_type": "dca_buy", "dca_plus": True})[0] == getattr(m, "DCAPB_SRC", None))   # ⚡ v3.36.59: a buy DCA+ has its own (t_dca_plus_buy)
 m.ROOT = os.path.join(R, "root"); m.launch = lambda b: (True, "test"); m.wallet_keys = lambda w: {"api_key": "k", "secret_key": "s", "passphrase": "p"}
 m.tg_send = lambda *a, **k: True; m.journal = lambda *a, **k: None
 body = {"symbol": SYM, "wallet": "w", "dca_type": "dca_plus", "plus_rows": json.dumps(ROWS), "exchange_orders": "2", "cycle_wait_sec": "30",

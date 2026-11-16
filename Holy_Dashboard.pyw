@@ -1100,30 +1100,37 @@ def _plus_table(cfg, base_price):
         return {"rows": [], "msg": why}
     if base_price <= 0:
         return []
+    is_buy = str(cfg.get("dca_type") or "") == "dca_plus_buy" or str(cfg.get("bot_type") or "") == "dca_buy"   # ⚡ v3.36.59: الشرائي
     trail = str(cfg.get("trail_on")).lower() in ("1", "true", "on", "yes")
     f_lv = DCA_FEE_TAKER if trail else DCA_FEE_MAKER
     out, cq, cv, cnet, p = [], 0.0, 0.0, 0.0, float(base_price)
     for i, r in enumerate(rows):
         if i:
-            p = p * (1 + r["d"] / 100.0)
+            p = p * (1 - r["d"] / 100.0) if is_buy else p * (1 + r["d"] / 100.0)
         q, fee = r["q"], (DCA_FEE_TAKER if i == 0 else f_lv)
-        cq += q; cv += p * q; cnet += p * q * (1 - fee)
+        cq += q; cv += p * q; cnet += q * (1 - fee) if is_buy else p * q * (1 - fee)
         avg = cv / cq
         x_used = max(r["x"], 0.20)
-        tgt = avg * (1 - x_used / 100.0)
-        prof = cnet / tgt * (1 - DCA_FEE_TAKER) - cq
+        tgt = avg * (1 + x_used / 100.0) if is_buy else avg * (1 - x_used / 100.0)
+        if is_buy:                                           # الشرائي: يبيع كل ما اشترى (صافيه) عند الهدف ⇒ ربح دولار
+            prof = cnet * tgt * (1 - DCA_FEE_TAKER) - cv
+            gap, prof_usd = (tgt / p - 1) * 100, prof
+        else:
+            prof = cnet / tgt * (1 - DCA_FEE_TAKER) - cq
+            gap, prof_usd = (1 - tgt / p) * 100, prof * tgt
         out.append({"n": i, "label": "أساسي" if i == 0 else f"أمان {i}", "price": round(p, 10), "order_qty": round(q, 6),
-                    "order_val": round(p * q, 2), "step": round(r["d"], 4), "dev": round((p / base_price - 1) * 100, 3),
+                    "order_val": round(p * q, 2), "step": round(r["d"], 4), "dev": round(abs(p / base_price - 1) * 100, 3),
                     "cum_qty": round(cq, 6), "cum_vol": round(cv, 2), "avg": round(avg, 10), "target": round(tgt, 10),
-                    "gap_pct": round((1 - tgt / p) * 100, 3), "exit_profit": round(prof, 6), "exit_usd": round(prof * tgt, 4),
+                    "gap_pct": round(gap, 3), "exit_profit": round(prof, 6), "exit_usd": round(prof_usd, 4),
                     "gap": round(abs(tgt - avg), 10), "x": r["x"], "x_used": x_used})
     last, first = out[-1], out[0]
-    cov = (last["price"] / base_price - 1) * 100
+    cov = abs(last["price"] / base_price - 1) * 100
     gaps = [r["gap_pct"] for r in out]
     return {"rows": out, "summary": {
-        "is_buy": False, "trail": trail, "plus": True, "tp_used": round(rows[0]["x"], 3), "fee_warn": any(r["x"] < 0.20 for r in rows),
+        "is_buy": is_buy, "trail": trail, "plus": True, "tp_used": round(rows[0]["x"], 3), "fee_warn": any(r["x"] < 0.20 for r in rows),
         "low_rows": [r["n"] for r in out if r["exit_profit"] <= 0],
-        "coverage": round(cov, 3), "cov_warn": cov < 3.0, "capital_needed": round(last["cum_qty"], 6), "capital_usd": round(last["cum_vol"], 2),
+        "coverage": round(cov, 3), "cov_warn": cov < 3.0, "capital_usd": round(last["cum_vol"], 2),
+        "capital_needed": round(last["cum_vol"], 2) if is_buy else round(last["cum_qty"], 6),
         "max_exit": round(max(gaps), 3), "avg_exit": round(sum(gaps) / len(gaps), 3), "profit_base": first["exit_profit"],
         "profit_full": last["exit_profit"], "profit_full_usd": last["exit_usd"], "final_avg": last["avg"], "final_target": last["target"],
         "last_price": last["price"], "fee_maker": DCA_FEE_MAKER * 100, "fee_taker": DCA_FEE_TAKER * 100,
@@ -5418,7 +5425,7 @@ def _bt_kind_of(body):
         g = str(body.get("g_type") or "grid")
         return g if g in ("grid", "grid_range", "grid_plus") else "grid"
     if body.get("dca_type") is not None:
-        return "dca_buy" if str(body.get("dca_type")) == "dca_buy" else "dca"
+        return "dca_buy" if str(body.get("dca_type")) in ("dca_buy", "dca_plus_buy") else "dca"
     if body.get("rec_type") is not None:
         return "rec_sell" if str(body.get("rec_type")) == "rec_sell" else "rec_buy"
     if body.get("start_usd") is not None:
@@ -5520,6 +5527,15 @@ def _bt_wallet_def(kind, cfg, body, p0, spec):
             return round(f("cap", 60), 2), 0.0
         if kind == "rec_sell":
             return 0.0, round(f("cap", 60) / p0, 8)
+        if kind == "dca_buy" and ((cfg or {}).get("dca_plus") or str(g.get("dca_type") or "") == "dca_plus_buy"):
+            _pr, _pw = _plus_rows_ok(g.get("plus_rows"))              # ⚡ v3.36.59: DCA+ الشرائي — دولار كل صف بسعره
+            if _pr:
+                _p, _usd = float(p0), 0.0
+                for _i, _r in enumerate(_pr):
+                    if _i:
+                        _p *= 1 - _r["d"] / 100.0
+                    _usd += _p * _r["q"]
+                return round(_usd * 1.03 + 1.0, 2), 0.0
         if kind == "dca" and ((cfg or {}).get("dca_plus") or str(g.get("dca_type") or "") == "dca_plus"):
             _pr, _pw = _plus_rows_ok(g.get("plus_rows"))              # ⚡ v3.36.57: DCA+ — مجموع كميات الصفوف
             if _pr:
@@ -5899,7 +5915,8 @@ def _bt_dry_cfg(kind, body, sym, spec, p0):
         if kind in ("grid", "grid_range", "grid_plus"):
             b["g_type"], b["demo"] = kind, False
         elif kind in ("dca", "dca_buy"):
-            b["dca_type"] = "dca_plus" if kind == "dca" and str(body.get("dca_type") or "") == "dca_plus" else kind   # ⚡ DCA+ من النموذج
+            b["dca_type"] = ({"dca": "dca_plus", "dca_buy": "dca_plus_buy"}[kind] if str(body.get("dca_type") or "") in ("dca_plus", "dca_plus_buy")
+                             else kind)                                            # ⚡ DCA+ (البيعي · الشرائي) من النموذج
         elif kind in ("rec_buy", "rec_sell"):
             b["rec_type"] = kind
         r = fn(b) or {}
@@ -7340,8 +7357,8 @@ def deploy_demo(kind, data):
     بلا مفاتيح) · يتداول على منصة وهمية بسعر OKX الحي ومحفظة وهمية · خارج كل المجاميع والإشعارات"""
     if getattr(sys, "frozen", False):
         return {"ok": False, "msg": "الديمو يحتاج نسخة بايثون من اللوحة"}
-    if kind == "dca_plus":                                   # ⚡ v3.36.57: DCA+ = البيعي بصفوف المالك
-        kind = "dca"
+    if kind in ("dca_plus", "dca_plus_buy"):                 # ⚡ v3.36.57: DCA+ = البيعي بصفوف المالك · v3.36.59: والشرائي
+        kind = "dca" if kind == "dca_plus" else "dca_buy"
     if kind not in _BT_KINDS:
         return {"ok": False, "msg": "نوع بوت غير معروف للديمو"}
     body = {k: v for k, v in dict(data or {}).items() if k not in ("demo", "demo_usd", "demo_coin", "wallet", "api_key", "secret_key", "passphrase")}
@@ -7391,7 +7408,7 @@ def deploy_demo(kind, data):
     ok, msg = launch(b)
     _lbl = (_BOT_KINDS.get(kind) or {}).get("ico", "") + " " + (_BOT_KINDS.get(kind) or {}).get("lbl", kind)
     if cfg.get("dca_plus"):
-        _lbl = "⚡ DCA+ بيعي"
+        _lbl = "⚡ DCA+ شرائي" if cfg.get("bot_type") == "dca_buy" else "⚡ DCA+ بيعي"
     return {"ok": ok, "dir": folder, "msg": (f"🧪 انطلق بوت ديمو ({_lbl.strip()}) — {sym} · بالمحرك الحقيقي على منصة وهمية بسعر OKX الحي · "
                                              f"المحفظة الوهمية {usd:g} {quote}" + (f" + {coin:g} {base}" if coin > 0 else "")) if ok else msg}
 
@@ -19126,7 +19143,7 @@ def wallet_keys(name):
     return None
 
 def compute_dca_table(cfg, base_price):
-    if str(cfg.get("dca_type") or "") == "dca_plus":         # ⚡ v3.36.57: DCA+ — من صفوف المالك
+    if str(cfg.get("dca_type") or "") in ("dca_plus", "dca_plus_buy"):   # ⚡ v3.36.57 · v3.36.59 (الشرائي): DCA+ — من صفوف المالك
         return _plus_table(cfg, base_price)
     return _dca_table_classic(cfg, base_price)
 
@@ -19363,14 +19380,16 @@ def deploy_dca(data):
     if not sym or "-" not in sym:
         return {"ok": False, "msg": "اكتب الرمز كاملاً مثل XRP-USDT"}
     _plus = None
-    if str(data.get("dca_type") or "").strip() == "dca_plus":
+    _dt0 = str(data.get("dca_type") or "").strip()
+    if _dt0 in ("dca_plus", "dca_plus_buy"):                       # ⚡ DCA+ البيعي · v3.36.59: والشرائي
         _plus, _why = _plus_rows_ok(data.get("plus_rows"))
         if _plus is None:
             return {"ok": False, "msg": _why}
         if len(_plus) < 2:
             return {"ok": False, "msg": "أضف أمر أمان واحداً على الأقل"}
         data = dict(data, base_order_qty=_plus[0]["q"], avg_order_qty=_plus[1]["q"], first_deviation=_plus[1]["d"], step_multiplier=1,
-                    size_multiplier=1, max_safety_orders=len(_plus) - 1, take_profit_pct=_plus[0]["x"])
+                    size_multiplier=1, max_safety_orders=len(_plus) - 1, take_profit_pct=_plus[0]["x"],
+                    dca_type="dca_buy" if _dt0 == "dca_plus_buy" else "dca")
     try:
         fields = {
             "base_order_qty": float(data.get("base_order_qty", 0)),
@@ -19409,7 +19428,7 @@ def deploy_dca(data):
     if dn_type not in ("dca", "dca_buy"): dn_type = "dca"
     cfg = {**keys, "symbol": sym, "bot_type": dn_type, **fields,
            "auto_restart": bool(data.get("auto", True))}
-    if _plus and dn_type == "dca":                                  # ⚡ DCA+ (بيعي)
+    if _plus:                                                      # ⚡ DCA+ (بيعي · شرائي)
         cfg.update({"dca_plus": True, "plus_rows": _plus})
     save_json_atomic(os.path.join(full, f"config_{sym}.json"), cfg)
     eng_src, eng_script, _ = engine_for(cfg)
@@ -19418,7 +19437,7 @@ def deploy_dca(data):
     _drop_reinvest(full)
     b = {"dir": full, "cfg_path": os.path.join(full, f"config_{sym}.json"), "cfg": cfg, "symbol": sym}
     ok, msg = launch(b)
-    _lbl = "DCA شرائي" if dn_type == "dca_buy" else ("DCA+ بيعي" if cfg.get("dca_plus") else "DCA بيعي")
+    _lbl = ("DCA+ شرائي" if cfg.get("dca_plus") else "DCA شرائي") if dn_type == "dca_buy" else ("DCA+ بيعي" if cfg.get("dca_plus") else "DCA بيعي")
     return {"ok": ok, "msg": ("✅ بوت " + _lbl + " انطلق — " + sym) if ok else msg}
 
 def deploy_rec(data):
@@ -20540,7 +20559,7 @@ def _control_do(d_rel, action, value):
         return {"ok": True, "msg": (f"🏁 يكمل هذه الدورة حتى {'يبيع' if _buy else 'يشتري'} بالهدف، ثم يتوقف — لا يفتح دورة جديدة"
                                     if _on else "▶️ أُلغيت «آخر دورة» — يكمل الدورات كالمعتاد")}
     if action == "plus_edit":                                 # ⚡ v3.36.57: DCA+ — الأوامر من الجدول/الرسم والبوت شغّال (حقول فقط — المحرك يرسل)
-        if b["cfg"].get("bot_type") != "dca" or not b["cfg"].get("dca_plus"):
+        if b["cfg"].get("bot_type") not in ("dca", "dca_buy") or not b["cfg"].get("dca_plus"):
             return {"ok": False, "msg": "تعديل الأوامر لبوتات DCA+ فقط"}
         rows, why = _plus_rows_ok((value or {}).get("rows") if isinstance(value, dict) else None)
         if rows is None:
@@ -34161,6 +34180,224 @@ _DCAP_B64 = (
 DCAP_SRC = _zlib.decompress(_b64.b64decode(_DCAP_B64)).decode("utf-8")
 DCAP_VERSION = _eng_fp(DCAP_SRC)
 
+# ⚡ v3.36.59: DCA+ الشرائي — السلّم الحر نزولاً (كل أمر بمسافته وكميته ونسبة خروجه فوق المتوسط) · نسخة من محرك DCA الشرائي — الأصل
+#   ما تغيّر · devtests/step/eng/dca_plus_buy.py (patch 101)
+_DCAPB_B64 = (
+"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"
+)
+DCAPB_SRC = _zlib.decompress(_b64.b64decode(_DCAPB_B64)).decode("utf-8")
+DCAPB_VERSION = _eng_fp(DCAPB_SRC)
+
 _GRIDR_B64 = (
 "eNrsvWt3G+eVLvidv6IaXm5WUSR40SUKEqZHluVLbEtqS+l0Dg+nGgSKJEIQgACQkszmrOjOMJlO5M6sWZM+Z7kdJSZFSZZlWVbkrNUfNH+C7I/+A5OfMPv2"
 "3qreAkBJTuw+dndsAqjLe9nvvj5775eCsZGxoNKs1hoLpWClOz92FL8Zein48wf/8tv/74+/Cvau7d7bfbB3Jdjd2rsKH+7v/Tz48me/4Y9X9zbg19vB7s7e"
@@ -37132,6 +37369,8 @@ def engine_for(cfg):
             return DCAP_SRC, "dca.py", DCAP_VERSION
         return DCA_SRC, "dca.py", DCA_VERSION
     if bt == "dca_buy":
+        if cfg.get("dca_plus"):                              # ⚡ v3.36.59: DCA+ الشرائي (سلّم حر نزولاً)
+            return DCAPB_SRC, "dca.py", DCAPB_VERSION
         return DCAB_SRC, "dca.py", DCAB_VERSION
     if bt == "grid_range":
         return GRIDR_SRC, "main.py", GRIDR_VERSION
