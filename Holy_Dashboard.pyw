@@ -25464,6 +25464,7 @@ html.abg header{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgb
     <div class="grp" aria-label="البوتات">
       <button class="primary" onclick="openDeploy()">➕ شبكة</button>
       <button class="primary" onclick="openDeployDca()" style="background:linear-gradient(94deg,rgb(var(--amber-rgb)/.9),rgb(var(--amber3-rgb)/.9))">📉 نشر DCA</button>
+      <button class="primary" id="bDcap" onclick="openDeployDca('plus')" title="DCA+: كل أمر بمسافته وكميته ونسبة خروجه — بيعي أو شرائي — بالجدول والرسم" style="background:linear-gradient(94deg,rgb(var(--green-rgb)/.9),rgb(var(--amber-rgb)/.9))">⚡ DCA+</button>
       <button class="primary" onclick="openDeployRec()" title="بوت دوري: يشتري (أو يبيع) بمبلغ ثابت كل ساعات/أيام/أشهر ويخرج بالربح" style="background:linear-gradient(94deg,rgb(var(--cyan-rgb)/.9),rgb(var(--vio-rgb)/.9))">🔁 دوري</button>
       <button class="primary" onclick="openDeployVa()" title="مسار القيمة: تحدد قيمة العملة المطلوبة، وعند كل خطوة يشتري الفرق أو يبيع الزائد — بلا أسعار تحددها" style="background:linear-gradient(94deg,rgb(var(--vio-rgb)/.9),rgb(var(--cyan-rgb)/.9))">💹 مسار القيمة</button>
       <button class="primary" onclick="openDeployStep()" title="الشبكي المتدرج: مثل الشبكة اللانهائية، لكن كل شراء ثابت في مكانه وكميته تُقسَّم على عدة بيعات متدرجة فوقه" style="background:linear-gradient(94deg,rgb(var(--cyan-rgb)/.9),rgb(var(--green-rgb)/.85))">🪜 شبكي متدرج</button>
@@ -26135,6 +26136,20 @@ const TUT={
          ['لماذا أجعل خروج الأوامر الأخيرة صغيراً؟','لأن المتوسط يبتعد عن السعر بعد أوامر كثيرة؛ خروج صغير يقرّب الهدف فيخرج أسرع بربح أقل بدل أن يبقى معلّقاً.'],
          ['هل أخسر لو جعلت النسبة صغيرة جداً؟','أقل نسبة يستعملها البوت 0.20% (تغطي العمولتين)، والجدول يعرض الربح الصافي لكل صف قبل التشغيل.'],
          ['ماذا لو عدّلت أمراً والبوت يعمل؟','يلغي أوامره على المنصة التي لم تُنفّذ ويضعها بأسعارها الجديدة خلال ثوانٍ، ولا يمس ما نُفّذ.']]},
+  dca_plus_buy:{t:'DCA+ الشرائي',
+    idea:['مثل DCA الشرائي: يشتري جزءاً بدولارك ثم يشتري أكثر كلما نزل السعر، وحين يصعد السعر يبيع كل ما اشترى دفعة واحدة — الربح بالدولار.',
+          'الفرق: أنت تضع كل أمر بنفسك — مسافته تحت الأمر الذي قبله وكميته ونسبة خروجه — في الجدول أو على الرسم، بدل معادلة واحدة لكل الأوامر.',
+          'نسبة الخروج تخص الأمر نفسه: إن كان أعمق أمر نُفّذ هو أمان 5 فالهدف = المتوسط زائد نسبة خروج أمان 5. فتجعل الأوامر الأولى بربح جيد، والأخيرة الكبيرة بربح صغير فيخرج بسرعة ولا يبقى معلّقاً.'],
+    steps:[['الشراء الأولي','شراء الأمر الأساسي بسعر السوق.'],['أوامرك','كل أمر تحت الذي قبله بالمسافة التي وضعتها وبكميته هو.'],['المتوسط','متوسط مرجّح لكل ما اشتُري (كالعادي).'],
+           ['الهدف','المتوسط زائد نسبة خروج أعمق أمر نُفّذ — يتغيّر فوراً كلما نُفّذ أمر أعمق.'],['الإغلاق','حين يصعد السعر إلى الهدف يبيع كل ما اشترى دفعة واحدة ⇐ دولار أكثر.'],
+           ['✏️ التعديل والبوت يعمل','من زر «✏️ أوامر DCA+» في البطاقة: الأوامر التي لم تُنفّذ تنتقل إلى أسعارها الجديدة خلال ثوانٍ، والمنفّذة تبقى بسعرها وكميتها (تتغيّر نسبة خروجها فقط).']],
+    ex:['الأساس 10 عملات عند 1.00$ بخروج 0.5% · أمان 1 تحته بـ1% (0.99$) 10 عملات بخروج 0.6% · أمان 2 تحته بـ2% (0.9702$) 30 عملة بخروج 0.3%.',
+        'نُفّذت الثلاثة ⇐ المتوسط نحو 0.9801$ والهدف 0.3% فوقه نحو 0.9830$ — أي صعود نحو 1.3% فقط من آخر سعر شراء. لو كانت نسبة الخروج 1% لاحتاج صعوداً نحو 2%.'],
+    btns:['dca_plus','dca_close','dca_trail','dca_last','hist','table','lddr','chart','dca_pause','cset','del'],
+    faq:[['هل يبيع كل أمر وحده؟','لا. يبيع كل ما اشترى في الدورة دفعة واحدة عند الهدف — مثل DCA الشرائي العادي. نسبة الخروج تحدد مكان الهدف فقط.'],
+         ['كم دولاراً يحتاج؟','مجموع كل أمر × سعره، ويعرضه الجدول قبل التشغيل («💵 الدولار لو نُفّذ الكل»).'],
+         ['هل أخسر لو جعلت النسبة صغيرة جداً؟','أقل نسبة يستعملها البوت 0.20% (تغطي العمولتين)، والجدول يعرض الربح الصافي لكل صف قبل التشغيل.'],
+         ['ماذا لو عدّلت أمراً والبوت يعمل؟','يلغي أوامره على المنصة التي لم تُنفّذ ويضعها بأسعارها الجديدة خلال ثوانٍ، ولا يمس ما نُفّذ.']]},
   rec_buy:{t:'الشراء الدوري',
     idea:['يشتري مبلغاً ثابتاً كل مدة (ساعة · يوم · أسبوع) مهما كان السعر — يوزّع الدخول على الزمن. ولكل شراء هدف ربح يُباع عنده.',
           'تختار بيع كل شراء وحده عند هدفه، أو بيع الكمية كلها عند المتوسط.'],
@@ -26184,7 +26199,7 @@ const TUT_FAQ=[
 ];
 function openTutKind(kind,back){
   const k=TUT[kind]?kind:'grid',T=TUT[k];
-  const IC={grid:'♾️',grid_plus:'➕',grid_range:'🎚️',grid_step:'🪜',dca_buy:'📈',dca:'📉',dca_plus:'⚡',rec_buy:'🔁',rec_sell:'🔂',rec_va:'💹'},ico=IC[k]||'🤖';
+  const IC={grid:'♾️',grid_plus:'➕',grid_range:'🎚️',grid_step:'🪜',dca_buy:'📈',dca:'📉',dca_plus:'⚡',dca_plus_buy:'⚡',rec_buy:'🔁',rec_sell:'🔂',rec_va:'💹'},ico=IC[k]||'🤖';
   const sec=(i,h)=>`<div class="tutsec"><h3>${i}</h3>${h}</div>`;
   let h=`<h2>📖 كيف يعمل بوت ${ico} ${T.t}</h2>`;
   if(back&&TUT_SET&&TUT_SET.length>1)h+=`<div class="tuttabs">${TUT_SET.map(x=>`<button type="button" class="${x===k?'on':''}" onclick="tutTab('${x}')">${IC[x]||'🤖'} ${TUT[x].t}</button>`).join('')}</div>`;   // 📖 p79: شروح النموذج كلها بنافذة وحدة
@@ -26201,9 +26216,9 @@ function openTutKind(kind,back){
   else showModal(h)}
 /* 📖 v3.36.47: الشرح داخل نماذج النشر — زر لكل نوع (المالك: «عند الدخول الى زر الشبكي فيه ثلاث بوتات كل بوت فيه زر اضغط عليه يخرج لي شرح») */
 /* 📖 p79: زر واحد بكل نموذج ⇒ نافذة وحدة بشروح بوتاته (المالك: «خليه فوق زر واحد وبداخله ثلاث شروحات والباقي كذلك») */
-const TUT_SETS={grid:['grid','grid_range','grid_plus'],dca:['dca','dca_buy','dca_plus'],rec:['rec_buy','rec_sell'],step:['grid_step'],va:['rec_va']};
-const TUT_SEL={grid:'#n_gtype',dca:'#dn_type',rec:'#rd_type'};
-const TUT_LBL={grid:'شرح الشبكي',dca:'شرح DCA',rec:'شرح الدوري',step:'شرح المتدرج',va:'شرح مسار القيمة'};   // 📖 p80: زر قصير بجانب ✕
+const TUT_SETS={grid:['grid','grid_range','grid_plus'],dca:['dca','dca_buy'],dcap:['dca_plus','dca_plus_buy'],rec:['rec_buy','rec_sell'],step:['grid_step'],va:['rec_va']};
+const TUT_SEL={grid:'#n_gtype',dca:'#dn_type',dcap:'#dn_type',rec:'#rd_type'};
+const TUT_LBL={grid:'شرح الشبكي',dca:'شرح DCA',dcap:'شرح DCA+',rec:'شرح الدوري',step:'شرح المتدرج',va:'شرح مسار القيمة'};   // 📖 p80: زر قصير بجانب ✕
 function tutX(set){return `<button type="button" class="tutx" onclick="tutQ(event,'${set}')" title="كيف يعمل — شرح ومثال بالأرقام وأسئلة وأجوبة">📖 ${TUT_LBL[set]||'شرح'}</button>`}
 let TUT_STASH=null,TUT_SET=null;
 function tutQ(ev,set){if(ev){ev.preventDefault();ev.stopPropagation()}const L=TUT_SETS[set]||[set],s=TUT_SEL[set]&&$(TUT_SEL[set]);
@@ -27260,7 +27275,7 @@ function btFromForm(kind){                                    // من نموذج
   const fb={rec_va:window.vaFormBody,rec:window.recFormBody,dca:window.dcaFormBody,grid:window.gridFormBody,step:window.stBody}[kind];
   if(!fb){toast('تعذّر قراءة النموذج',false);return}
   const body=fb();if(!body.symbol||!body.symbol.includes('-')){toast('اكتب الرمز كاملاً مثل XRP-USDT',false);return}
-  const k=kind==='rec'?(body.rec_type||'rec_buy'):kind==='dca'?(body.dca_type==='dca_buy'?'dca_buy':'dca'):kind==='grid'?(body.g_type||'grid'):kind==='step'?'grid_step':kind;
+  const k=kind==='rec'?(body.rec_type||'rec_buy'):kind==='dca'?(body.dca_type==='dca_buy'||body.dca_type==='dca_plus_buy'?'dca_buy':'dca'):kind==='grid'?(body.g_type||'grid'):kind==='step'?'grid_step':kind;
   btOpen({kind:k,body})}
 function btFromBot(dir){hideModal();btOpen({dir})}            // من بوت قائم — إعداداته الحالية (بلا مفاتيح)
 function btClose(){const o=$('#btov');if(o){const it=HW.st.find(s=>s.k==='bt');hwOut(o,'.btbox',false,it&&it.pt);o.remove();hwSync()}clearTimeout(BT.poll);BT.poll=0;btStopPlay();document.body.classList.remove('btopen');
@@ -27591,7 +27606,7 @@ function buildDcaCard(b,i){
   el.innerHTML=`
   <div class="dcahead">
     <span class="sym"><img class="coin" src="https://assets.coincap.io/assets/icons/${BASE.toLowerCase()}@2x.png" data-alt="https://static.okx.com/cdn/oksupport/asset/currency/icon/${BASE.toLowerCase()}.png" onerror="cfb(this,'${BASE}')"> ${b.symbol}</span>
-    <span class="dcatag">${b.bot_type==='dca_buy'?'📈 DCA شرائي':(b.dca&&b.dca.plus?'⚡ DCA+ بيعي':'📉 DCA بيعي')}</span>
+    <span class="dcatag">${b.bot_type==='dca_buy'?(b.dca&&b.dca.plus?'⚡ DCA+ شرائي':'📈 DCA شرائي'):(b.dca&&b.dca.plus?'⚡ DCA+ بيعي':'📉 DCA بيعي')}</span>
     <span class="pill off" data-k="pill">—</span><span class="hbadge" data-k="hb" style="display:none;cursor:pointer"></span></div>
   <div class="dcabody">
     <div class="dcatop">
@@ -27744,7 +27759,7 @@ function updDcaCard(el,b){
     if(P){R.dplus.className='dcaplusb'+(P.err?' bad':(P.pending?' wait':''));
       R.dplus.textContent=P.err?'⚠️ لم يُطبَّق آخر تعديل — اضغط للتفاصيل':(P.pending?'⏳ تعديل الأوامر ينتظر البوت…':`✏️ أوامر DCA+ (${Math.max(0,(P.rows||[]).length-1)} أمر أمان) — الجدول والرسم`);
       R.dplus.title='اضغط لتعديل الأوامر: المسافة والكمية ونسبة الخروج لكل أمر — في الجدول أو على الرسم';
-      const t=el.querySelector('.dcatag');if(t&&!/DCA\+/.test(t.textContent))t.textContent='⚡ DCA+ بيعي'}}
+      const t=el.querySelector('.dcatag'),tl=d.is_buy?'⚡ DCA+ شرائي':'⚡ DCA+ بيعي';if(t&&t.textContent!==tl)t.textContent=tl}}
 }
 function dcaViz(el,d,cp){
   if(!el)return;
@@ -29356,7 +29371,7 @@ function dcaDetails(b){
       <div class="dnstat"><span>ربح ${d.is_buy?'USDT':base}</span><b class="bidi" style="color:var(--green)">${d.coin_profit!=null?(d.coin_profit>=0?'+':'')+d.coin_profit:'—'}</b></div>
     </div>
     <div class="dnsec">⚙ الإعدادات${d.plus?' — أوامر DCA+':''}</div>
-    ${d.plus?dcaPlusRowsTbl(d.plus,base):''}<table class="dntbl"${d.plus?' style="display:none"':''}><tbody>
+    ${d.plus?dcaPlusRowsTbl(d.plus,base,d.is_buy):''}<table class="dntbl"${d.plus?' style="display:none"':''}><tbody>
       <tr><td style="text-align:right">حجم الأمر الأساسي</td><td class="num">${c.base_order_qty||'—'}</td></tr>
       <tr><td style="text-align:right">حجم أمر المتوسط</td><td class="num">${c.avg_order_qty||'—'}</td></tr>
       <tr><td style="text-align:right">المسافة بين الأوامر</td><td class="num">${c.first_deviation||'—'}%</td></tr>
@@ -31044,13 +31059,14 @@ function confirmRebuild(){askConfirm('♻️ إعادة بناء '+CUR+'؟','ي�
 function confirmPurge(d){d=d||CUR;const _vb=botOf(d);if(_vb&&_vb.bot_type==='rec_va')return vaDelete(_vb);askConfirm('💣 حذف نهائي لـ '+d+'؟','يأمر البوت بإلغاء كل أوامره هو من المنصة (بصمته فقط — أوامرك اليدوية لا تُلمس)، ثم يؤرشف مجلده.',()=>{ctl(d,'delete_purge');closeDrawer()})}
 function confirmDelete(){askConfirm('🗑 حذف '+CUR+'؟','يوقف البوت وينقله للأرشيف _archive.',()=>{ctl(CUR,'delete');closeDrawer()})}
 
-async function openDeployDca(){
+async function openDeployDca(mode){
   let ws=[];try{const s=await api('/api/settings');ws=s.wallets||[]}catch(e){}
-  showModal(`<h2 class="tuth" style="color:var(--amber)"><span>📊 نشر بوت DCA</span>${tutX('dca')}</h2>
+  const PL=mode==='plus';                                          // ⚡ v3.36.59: زر DCA+ مستقل (البيعي والشرائي) — نموذج DCA العادي بلا DCA+
+  showModal(`<h2 class="tuth" style="color:${PL?'var(--green)':'var(--amber)'}"><span>${PL?'⚡ نشر بوت DCA+':'📊 نشر بوت DCA'}</span>${tutX(PL?'dcap':'dca')}</h2>
   <div class="fld"><label>نوع البوت</label><select id="dn_type" onchange="dcaTypeSwitch()">
-    <option value="dca">📉 بيعي — يبيع عند الصعود، يجمّع العملة (الربح بالعملة)</option>
-    <option value="dca_buy">📈 شرائي — يشتري عند النزول، يجمّع الدولار (الربح بالدولار)</option>
-    <option value="dca_plus">⚡ DCA+ بيعي — كل أمر بمسافته وكميته ونسبة خروجه (جدول ورسم)</option>
+    ${PL?`<option value="dca_plus">⚡ DCA+ بيعي — يبيع عند الصعود ويعيد الشراء (الربح بالعملة)</option>
+    <option value="dca_plus_buy">⚡ DCA+ شرائي — يشتري عند النزول ويبيع (الربح بالدولار)</option>`:`<option value="dca">📉 بيعي — يبيع عند الصعود، يجمّع العملة (الربح بالعملة)</option>
+    <option value="dca_buy">📈 شرائي — يشتري عند النزول، يجمّع الدولار (الربح بالدولار)</option>`}
   </select></div>
   <p id="dn_desc" style="color:var(--mut);font-size:12px;margin:8px 0 14px">يبيع عند الصعود، المتوسط يرتفع، يشتري عند النزول — الربح بالعملة. اضبط الأرقام وشوف الجدول قبل التشغيل.</p>
   <div class="frm">
@@ -31080,26 +31096,29 @@ async function openDeployDca(){
   $('#dn_go').onclick=async()=>{
     const body=Object.assign(dcaFormBody(),demoVal('dn'));   // 🧪 v3.36.46
     if(!body.symbol||!body.symbol.includes('-')){toast('اكتب الرمز كاملاً مثل XRP-USDT',false);return}
-    if(body.dca_type==='dca_plus'){const e=plxBad(plxRows());if(e){toast(e,false);return}}      // ⚡ v3.36.57: DCA+
+    if(dcaIsPlus()){const e=plxBad(plxRows());if(e){toast(e,false);return}}      // ⚡ v3.36.57: DCA+ · v3.36.59: والشرائي
     $('#dn_go').disabled=true;
     try{const r=await api('/api/deploy_dca',body);toast(r.msg,r.ok);if(r.ok){hideModal();tick()}}
     finally{$('#dn_go').disabled=false}};
   // معاينة أولية
-  setTimeout(dcaPreview,200);
+  if(PL)dcaTypeSwitch();else setTimeout(dcaPreview,200);
   {const bp=$('#dn_bp'),sy=$('#dn_sym');let st=0;                 // ⚡ v3.36.57: DCA+ — السعر والرمز يحدّثان المحرر مباشرة
-    if(bp)bp.addEventListener('input',()=>{bp.dataset.man=1;if(($('#dn_type')||{}).value==='dca_plus')plxForm()});
-    if(sy)sy.addEventListener('input',()=>{if(($('#dn_type')||{}).value!=='dca_plus')return;clearTimeout(st);st=setTimeout(plxForm,600)})}
+    if(bp)bp.addEventListener('input',()=>{bp.dataset.man=1;if(dcaIsPlus())plxForm()});
+    if(sy)sy.addEventListener('input',()=>{if(!dcaIsPlus())return;clearTimeout(st);st=setTimeout(plxForm,600)})}
 }
+function dcaIsPlus(){const t=($('#dn_type')||{}).value;return t==='dca_plus'||t==='dca_plus_buy'}   // ⚡ v3.36.59
 function dcaTypeSwitch(){
   const t=$('#dn_type').value;
-  const buy=t==='dca_buy',plus=t==='dca_plus';                    // ⚡ v3.36.57: DCA+ — الحقول الكلاسيكية تختفي والمحرر مكان المعاينة
+  const plus=t==='dca_plus'||t==='dca_plus_buy',buy=t==='dca_buy'||t==='dca_plus_buy';   // ⚡ DCA+ (البيعي · الشرائي) — الحقول الكلاسيكية تختفي والمحرر مكان المعاينة
   ['dn_base','dn_avg','dn_dev','dn_step','dn_size','dn_n','dn_tp'].forEach(id=>{const f=$('#'+id),fl=f&&f.closest('.fld');if(fl)fl.style.display=plus?'none':''});
-  if(!plus&&PLX&&PLX.box===$('#dn_preview')){window._plxKeep=plxRows();PLX=null}
+  if(PLX&&PLX.box===$('#dn_preview')&&(!plus||PLX.buy!==buy)){window._plxKeep=plxRows();PLX=null}   // البيعي ⇄ الشرائي: الصفوف نفسها باتجاهه
   $('#dn_desc').textContent=buy
     ?'يشتري عند النزول، المتوسط ينخفض، يبيع عند الصعود — الربح بالدولار. اضبط الأرقام وشوف الجدول قبل التشغيل.'
     :'يبيع عند الصعود، المتوسط يرتفع، يشتري عند النزول — الربح بالعملة. اضبط الأرقام وشوف الجدول قبل التشغيل.';
   $('#dn_tp_lbl').textContent=buy?'هدف الربح % (فوق المتوسط)':'هدف الربح % (تحت المتوسط)';
-  if(plus)$('#dn_desc').textContent='⚡ DCA+: تضع كل أمر بنفسك — مسافته عن الذي قبله وكميته ونسبة خروجه — في الجدول أو على الرسم. المتوسط مرجّح كالعادي، وحين ينزل السعر إلى خروج أعمق أمر نُفّذ يعيد شراء كل ما باع دفعة واحدة.';
+  if(plus)$('#dn_desc').textContent=buy
+    ?'⚡ DCA+ الشرائي: تضع كل أمر بنفسك — مسافته تحت الذي قبله وكميته ونسبة خروجه — في الجدول أو على الرسم. المتوسط مرجّح كالعادي، وحين يصعد السعر إلى خروج أعمق أمر نُفّذ يبيع كل ما اشترى دفعة واحدة (الربح بالدولار).'
+    :'⚡ DCA+ البيعي: تضع كل أمر بنفسك — مسافته فوق الذي قبله وكميته ونسبة خروجه — في الجدول أو على الرسم. المتوسط مرجّح كالعادي، وحين ينزل السعر إلى خروج أعمق أمر نُفّذ يعيد شراء كل ما باع دفعة واحدة (الربح بالعملة).';
   dcaPreview();
 }
 /* 🧮 v3.36.26: حاسبة «مستويات فوق السعر من عملاتك» لبوتات الشبكة — حساب فقط (لا تدخل في النشر ولا في المحرك · gridFormBody لا يقرأها) */
@@ -31139,13 +31158,13 @@ function dcaFormBody(){
     base_order_qty:$('#dn_base').value,avg_order_qty:$('#dn_avg').value,first_deviation:$('#dn_dev').value,
     step_multiplier:$('#dn_step').value,size_multiplier:$('#dn_size').value,max_safety_orders:$('#dn_n').value,
     take_profit_pct:$('#dn_tp').value,exchange_orders:$('#dn_ex').value,
-    ...(($('#dn_type')||{}).value==='dca_plus'?{plus_rows:JSON.stringify(plxRows())}:{}),        // ⚡ v3.36.57: DCA+
+    ...(dcaIsPlus()?{plus_rows:JSON.stringify(plxRows())}:{}),        // ⚡ v3.36.57: DCA+ · v3.36.59: والشرائي
     cycle_wait_sec:$('#dn_wait').value,
     trail_on:!!($('#dn_trail')&&$('#dn_trail').checked),trail_pct:($('#dn_trail_pct')||{}).value||'0.3',
     wallet:$('#dn_wallet').value,auto:$('#dn_auto').checked};
 }
 async function dcaPreview(){
-  if(($('#dn_type')||{}).value==='dca_plus')return plxForm();      // ⚡ v3.36.57: DCA+ — المحرر يحسب بنفسه (حساب المحرك نفسه)
+  if(dcaIsPlus())return plxForm();      // ⚡ v3.36.57: DCA+ — المحرر يحسب بنفسه (حساب المحرك نفسه)
   const body=dcaFormBody();
   let res;try{res=await api('/api/dca_preview',body)}catch(e){return}
   const box=$('#dn_preview');
@@ -31189,10 +31208,11 @@ function plxN(v){const s=String(v==null?'':v).trim().replace(/[٠-٩]/g,c=>'٠١
   if(!/^-?(\d+\.?\d*|\.\d+)(e-?\d+)?$/i.test(s))return NaN;return parseFloat(s)}
 function plxR(v,k){v=+v;if(!isFinite(v))return '';const a=Math.abs(v);return String(+v.toFixed(k!=null?k:(a>=1000?0:a>=100?2:a>=1?4:8)))}
 function plxQ(q){return q>=100?Math.round(q):q>=1?+q.toFixed(2):+q.toPrecision(4)}
-function plxCalc(rows,base,trail){const out=[],fl=trail?PLX_FT:PLX_FM;let p=+base||0,cq=0,cv=0,cn=0;
-  rows.forEach((r,i)=>{const d=+r.d||0,q=+r.q||0,x=+r.x||0;if(i)p=p*(1+d/100);const fee=i?fl:PLX_FT;
-    cq+=q;cv+=p*q;cn+=p*q*(1-fee);const avg=cq>0?cv/cq:0,xu=Math.max(x,0.2),tgt=avg*(1-xu/100);
-    out.push({n:i,p,q,cq,cv,avg,tgt,xu,gap:p>0?(1-tgt/p)*100:0,dev:base>0?(p/base-1)*100:0,prof:tgt>0?cn/tgt*(1-PLX_FT)-cq:0})});
+function plxCalc(rows,base,trail,buy){const out=[],fl=trail?PLX_FT:PLX_FM;let p=+base||0,cq=0,cv=0,cn=0;   // ⚡ v3.36.59: buy = الشرائي (نزولاً · الخروج فوق · ربح دولار)
+  rows.forEach((r,i)=>{const d=+r.d||0,q=+r.q||0,x=+r.x||0;if(i)p=buy?p*(1-d/100):p*(1+d/100);const fee=i?fl:PLX_FT;
+    cq+=q;cv+=p*q;cn+=buy?q*(1-fee):p*q*(1-fee);const avg=cq>0?cv/cq:0,xu=Math.max(x,0.2),tgt=buy?avg*(1+xu/100):avg*(1-xu/100);
+    out.push({n:i,p,q,cq,cv,avg,tgt,xu,gap:p>0?(buy?tgt/p-1:1-tgt/p)*100:0,dev:base>0?Math.abs(p/base-1)*100:0,
+      prof:tgt>0?(buy?cn*tgt*(1-PLX_FT)-cv:cn/tgt*(1-PLX_FT)-cq):0})});
   return out}
 function plxCellOk(rows,i,k){const v=+rows[i][k];if(!isFinite(v))return false;
   return k==='d'?(i===0||(v>0&&v<=50)):k==='q'?v>0:(v>0&&v<=50)}
@@ -31208,13 +31228,13 @@ function plxLen(q,qm){return 20+PLX_BL*Math.max(0,q)/(qm||1)}
 function plxOpen(box,o){
   if(!box)return;
   const rows=(o.rows&&o.rows.length?o.rows:plxDef()).map((r,i)=>({d:i?+r.d||0:0,q:+r.q,x:+r.x}));
-  PLX={box,rows,base:+o.base>0?+o.base:1,locked:new Set((o.locked||[]).map(Number)),sel:rows.length-1,sym:o.sym||'',trail:!!o.trail,cp:+o.cp||0,
+  PLX={box,rows,base:+o.base>0?+o.base:1,locked:new Set((o.locked||[]).map(Number)),sel:rows.length-1,sym:o.sym||'',trail:!!o.trail,cp:+o.cp||0,buy:!!o.buy,
        mode:o.mode||'new',bar:'1H',cd:[],fz:null,drag:null,k:1,H:400,coin:((o.sym||'').split('-')[0])||'عملة',calc:[]};
   const last=rows[rows.length-1]||{},r1=rows[1]||{};
   box.innerHTML=`<div class="plx">
    <div data-p="sum"></div><div data-p="warn"></div>
    <div class="plxhd"><b>📈 الأوامر على الرسم</b><span class="plxbars" data-p="bars">${['15m','1H','4H','1D'].map(b=>`<button type="button" data-b="${b}" class="${b==='1H'?'on':''}">${b}</button>`).join('')}</span>
-     <span class="plxhint">اسحب خط أي أمر للأعلى أو الأسفل لتغيير سعره · اسحب دائرته يميناً أو يساراً لتغيير كميته · اضغط مكاناً فارغاً فوق السعر لإضافة أمر · اختر أمراً ثم اسحب خطه الأخضر 🎯 لتغيير نسبة خروجه</span></div>
+     <span class="plxhint">اسحب خط أي أمر للأعلى أو الأسفل لتغيير سعره · اسحب دائرته يميناً أو يساراً لتغيير كميته · اضغط مكاناً فارغاً ${o.buy?'تحت':'فوق'} السعر لإضافة أمر · اختر أمراً ثم اسحب خطه الأخضر 🎯 لتغيير نسبة خروجه</span></div>
    <div class="plxch" data-p="ch"><svg viewBox="0 0 ${PLX_W} 400" role="img" aria-label="سلّم DCA+"><g data-p="g"></g></svg></div>
    <div data-p="sel"></div>
    <details class="plxfill"><summary>⚡ تعبئة سريعة — ثم عدّل أي أمر وحده</summary>
@@ -31229,17 +31249,17 @@ function plxOpen(box,o){
      <div class="fld"><label>🎯 خروج آخر أمر %</label><input class="num" data-f="x1" value="${plxR(+last.x,3)}"><small>بينهما يتدرّج</small></div>
     </div><button type="button" class="primary" onclick="plxFill()" style="margin-top:8px">املأ الجدول</button></details>
    <div data-p="tw"></div>
-   <p class="plxnote">💡 صافٍ بعد عمولة OKX: الأساس آخذ 0.1% · الأوامر صانع 0.08%${o.trail?' (بالدرع آخذ 0.1%)':''} · إعادة الشراء آخذ 0.1%. الهدف = متوسط ما بِيع × (1 − نسبة خروج أعمق أمر نُفّذ)، وعنده يعيد شراء كل ما باع دفعة واحدة. الأرقام على سعر الأساس المعروض — البوت يحسب من سعر التنفيذ الفعلي.</p></div>`;
+   <p class="plxnote">💡 صافٍ بعد عمولة OKX: الأساس آخذ 0.1% · الأوامر صانع 0.08%${o.trail?' (بالدرع آخذ 0.1%)':''} · ${o.buy?'البيع':'إعادة الشراء'} آخذ 0.1%. ${o.buy?'الهدف = متوسط ما اشتُري × (1 + نسبة خروج أعمق أمر نُفّذ)، وعنده يبيع كل ما اشترى دفعة واحدة':'الهدف = متوسط ما بِيع × (1 − نسبة خروج أعمق أمر نُفّذ)، وعنده يعيد شراء كل ما باع دفعة واحدة'}. الأرقام على سعر الأساس المعروض — البوت يحسب من سعر التنفيذ الفعلي.</p></div>`;
   const q=k=>box.querySelector(`[data-p="${k}"]`);PLX.q=q;
   const svg=q('ch').querySelector('svg');PLX.svg=svg;PLX.g=q('g');
   svg.addEventListener('pointerdown',plxDown);svg.addEventListener('pointermove',plxMove);
   svg.addEventListener('pointerup',plxUp);svg.addEventListener('pointercancel',plxUp);
   q('bars').onclick=e=>{const b=e.target.closest('button');if(!b||!PLX)return;PLX.bar=b.dataset.b;q('bars').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));plxCandles()};
   plxFull();plxCandles()}
-function plxFull(){const P=PLX;if(!P)return;P.calc=plxCalc(P.rows,P.base,P.trail);if(P.sel!=null&&P.sel>=P.rows.length)P.sel=P.rows.length-1;plxTbl();P.selK=null;plxSoft()}
+function plxFull(){const P=PLX;if(!P)return;P.calc=plxCalc(P.rows,P.base,P.trail,P.buy);if(P.sel!=null&&P.sel>=P.rows.length)P.sel=P.rows.length-1;plxTbl();P.selK=null;plxSoft()}
 function plxTbl(){const P=PLX,lm=plxLockMax(),c=gEsc(P.coin);
-  let h=`<div class="plxtbl"><table class="dntbl"><thead><tr><th>الأمر</th><th>المسافة %<br><small>عن الذي قبله</small></th><th>الكمية<br><small>${c}</small></th><th>الخروج %<br><small>لو وصل هنا</small></th>
-    <th>السعر</th><th>عن الأساس</th><th>المجموع<br><small>${c}</small></th><th>المتوسط</th><th>🎯 سعر الخروج</th><th>يحتاج نزولاً</th><th>💎 ربح صافٍ<br><small>${c}</small></th><th></th></tr></thead><tbody>`;
+  let h=`<div class="plxtbl"><table class="dntbl"><thead><tr><th>الأمر</th><th>المسافة %<br><small>${P.buy?'تحت':'فوق'} الذي قبله</small></th><th>الكمية<br><small>${c}</small></th><th>الخروج %<br><small>لو وصل هنا</small></th>
+    <th>السعر</th><th>عن الأساس</th><th>المجموع<br><small>${c}</small></th><th>المتوسط</th><th>🎯 سعر الخروج</th><th>${P.buy?'يحتاج صعوداً':'يحتاج نزولاً'}</th><th>💎 ربح صافٍ<br><small>${P.buy?'$':c}</small></th><th></th></tr></thead><tbody>`;
   P.rows.forEach((r,i)=>{const L=P.locked.has(i);
     h+=`<tr data-i="${i}" class="${L?'lk':''}"><td class="plxn">${L?'✅ ':''}${i?'أمان '+i:'الأساسي'}</td>
      <td>${i?`<input class="num" data-k="d" inputmode="decimal"${L?' disabled':''}>`:'—'}</td>
@@ -31256,30 +31276,31 @@ function plxTbl(){const P=PLX,lm=plxLockMax(),c=gEsc(P.coin);
 function plxIn(i,k,v){const P=PLX;if(!P||!P.rows[i])return;if(P.locked.has(i)&&k!=='x')return;P.rows[i][k]=plxN(v);plxSoft()}
 function plxSel(i){if(!PLX)return;PLX.sel=i;plxSoft()}
 function plxSoft(){const P=PLX;if(!P||!P.box.isConnected)return;
-  P.calc=plxCalc(P.rows,P.base,P.trail);
-  const tw=P.q('tw');
+  P.calc=plxCalc(P.rows,P.base,P.trail,P.buy);
+  const tw=P.q('tw'),up=P.buy?'▼ ':'▲ ',dn=P.buy?'▲ ':'▼ ';
   P.calc.forEach((c,i)=>{const tr=tw.querySelector(`tr[data-i="${i}"]`);if(!tr)return;tr.classList.toggle('on',i===P.sel);
     const set=(k,v)=>{const e=tr.querySelector(`[data-c="${k}"]`);if(e&&e.textContent!==v)e.textContent=v};
-    set('p',f4(c.p));set('dev',i?'▲ '+c.dev.toFixed(2)+'%':'—');set('cq',plxR(c.cq));set('avg',f4(c.avg));set('tgt',f4(c.tgt));set('gap','▼ '+c.gap.toFixed(2)+'%');
+    set('p',f4(c.p));set('dev',i?up+c.dev.toFixed(2)+'%':'—');set('cq',plxR(c.cq));set('avg',f4(c.avg));set('tgt',f4(c.tgt));set('gap',dn+c.gap.toFixed(2)+'%');
     const pe=tr.querySelector('[data-c="prof"]');if(pe){pe.textContent=(c.prof>=0?'+':'')+plxR(c.prof,6);pe.style.color=c.prof>0?'var(--green)':'var(--red)'}
     ['d','q','x'].forEach(k=>{const inp=tr.querySelector(`input[data-k="${k}"]`);if(!inp)return;
       if(document.activeElement!==inp){const val=plxR(+P.rows[i][k],k==='q'?null:3);if(inp.value!==val)inp.value=val}
       inp.classList.toggle('bad',!plxCellOk(P.rows,i,k))})});
   plxSum();plxDraw();plxSelBox();if(P.onchg)P.onchg()}
-function plxSum(){const P=PLX,C=P.calc,L=C[C.length-1]||{},F=C[0]||{},c=gEsc(P.coin),bad=plxBad(P.rows),sg=v=>(v>=0?'+':'')+plxR(v,6);
+function plxSum(){const P=PLX,C=P.calc,L=C[C.length-1]||{},F=C[0]||{},c=gEsc(P.coin),bad=plxBad(P.rows),sg=v=>(v>=0?'+':'')+plxR(v,6),pu=P.buy?'$':c;
   const low=P.rows.map((r,i)=>(+r.x>0&&+r.x<0.2)?i:-1).filter(i=>i>=0),neg=C.filter(z=>!(z.prof>0)).map(z=>z.n);
   P.q('sum').innerHTML=`<div class="dnsum">
-    <div class="dnstat"><span>🪙 العملات لو نُفّذ الكل</span><b><bdi>${plxR(L.cq||0)} ${c}</bdi></b><small style="display:block;color:var(--mut2);font-size:10px"><bdi>≈ ${(L.cv||0).toFixed(2)}$</bdi></small></div>
-    <div class="dnstat"><span>📏 التغطية (مدى الصعود)</span><b style="color:var(--vio)">▲ ${(L.dev||0).toFixed(2)}%</b></div>
-    <div class="dnstat"><span>🎯 بعد آخر أمر يحتاج نزولاً</span><b style="color:var(--cyan)">▼ ${(L.gap||0).toFixed(2)}%</b></div>
-    <div class="dnstat"><span>💎 ربح صافٍ — الأساس فقط</span><b style="color:var(--green)">${sg(F.prof||0)} ${c}</b></div>
-    <div class="dnstat"><span>💎 ربح صافٍ — السلم كاملاً</span><b style="color:var(--green)">${sg(L.prof||0)} ${c}</b></div>
+    ${P.buy?`<div class="dnstat"><span>💵 الدولار لو نُفّذ الكل</span><b><bdi>${(L.cv||0).toFixed(2)}$</bdi></b><small style="display:block;color:var(--mut2);font-size:10px"><bdi>${plxR(L.cq||0)} ${c}</bdi></small></div>`
+    :`<div class="dnstat"><span>🪙 العملات لو نُفّذ الكل</span><b><bdi>${plxR(L.cq||0)} ${c}</bdi></b><small style="display:block;color:var(--mut2);font-size:10px"><bdi>≈ ${(L.cv||0).toFixed(2)}$</bdi></small></div>`}
+    <div class="dnstat"><span>📏 التغطية (مدى ${P.buy?'النزول':'الصعود'})</span><b style="color:var(--vio)">${P.buy?'▼':'▲'} ${(L.dev||0).toFixed(2)}%</b></div>
+    <div class="dnstat"><span>🎯 بعد آخر أمر يحتاج ${P.buy?'صعوداً':'نزولاً'}</span><b style="color:var(--cyan)">${P.buy?'▲':'▼'} ${(L.gap||0).toFixed(2)}%</b></div>
+    <div class="dnstat"><span>💎 ربح صافٍ — الأساس فقط</span><b style="color:var(--green)">${sg(F.prof||0)} ${pu}</b></div>
+    <div class="dnstat"><span>💎 ربح صافٍ — السلم كاملاً</span><b style="color:var(--green)">${sg(L.prof||0)} ${pu}</b></div>
     <div class="dnstat"><span>📋 الأوامر</span><b>${P.rows.length-1} أمر أمان</b></div></div>`;
   let w='';
   if(bad)w+=`<div class="dnwarn plxred">⚠️ ${gEsc(bad)}</div>`;
   if(low.length)w+=`<div class="dnwarn plxamb">🛡️ نسبة خروج أقل من 0.20% (${low.map(n=>n?'أمان '+n:'الأساسي').join('، ')}) — لا تغطي العمولتين، فيستعمل البوت 0.20% (الجدول محسوب عليها)</div>`;
   if(!bad&&neg.length)w+=`<div class="dnwarn plxred">⚠️ لا ربح صافياً لو خرج عند: ${neg.map(n=>n?'أمان '+n:'الأساسي').join('، ')} — ارفع نسبة خروجه</div>`;
-  if(P.locked.size)w+=`<p class="plxnote">✅ = نُفّذ في هذه الدورة: سعره وكميته ثابتان، ونسبة خروجه تتغيّر. الإضافة والحذف فوق آخر أمر نُفّذ.</p>`;
+  if(P.locked.size)w+=`<p class="plxnote">✅ = نُفّذ في هذه الدورة: سعره وكميته ثابتان، ونسبة خروجه تتغيّر. الإضافة والحذف ${P.buy?'تحت':'فوق'} آخر أمر نُفّذ.</p>`;
   P.q('warn').innerHTML=w}
 function plxDraw(){const P=PLX,svg=P.svg;if(!svg||!P.calc.length)return;const C=P.calc;
   if(!P.fz){const cw=svg.clientWidth||svg.getBoundingClientRect().width||PLX_W;P.k=Math.min(2.2,Math.max(1,PLX_W/Math.max(260,cw)));P.H=P.k>1.4?560:360}
@@ -31288,7 +31309,8 @@ function plxDraw(){const P=PLX,svg=P.svg;if(!svg||!P.calc.length)return;const C=
   let lo,hi;
   if(P.fz){lo=P.fz.lo;hi=P.fz.hi}
   else{const ps=[];C.forEach(c=>ps.push(c.p,c.tgt));if(P.cp>0)ps.push(P.cp);P.cd.slice(-72).forEach(r=>ps.push(+r[2],+r[3]));
-    lo=Math.min(...ps);hi=Math.max(...ps);const pd=(hi-lo)*0.05||hi*0.01,mp=Math.max(...C.map(c=>c.p));lo-=pd;hi=Math.max(hi+pd*2.5,mp*1.03);P.lo=lo;P.hi=hi}   // مكان فوق آخر أمر لإضافة أوامر بالضغط
+    lo=Math.min(...ps);hi=Math.max(...ps);const pd=(hi-lo)*0.05||hi*0.01,mp=Math.max(...C.map(c=>c.p)),np=Math.min(...C.map(c=>c.p));
+    if(P.buy){hi+=pd;lo=Math.min(lo-pd*2.5,np*0.97)}else{lo-=pd;hi=Math.max(hi+pd*2.5,mp*1.03)}P.lo=lo;P.hi=hi}   // مكان بعد آخر أمر لإضافة أوامر بالضغط (فوق البيعي · تحت الشرائي)
   const Y=p=>pt+(hi-p)/(hi-lo)*(H-pt-pb);P.Y=Y;P.P=y=>hi-(y-pt)/(H-pt-pb)*(hi-lo);
   let g='';
   const cd=P.cd.slice(-72);
@@ -31297,12 +31319,13 @@ function plxDraw(){const P=PLX,svg=P.svg;if(!svg||!P.calc.length)return;const C=
     g+=`<text x="12" y="${fs+2}" font-size="${fs*0.85}" fill="var(--mut2)">${gEsc(P.sym)} · ${P.bar}</text>`}
   const s=P.sel!=null?C[P.sel]:null;
   if(s){const ya=Y(s.avg),yt=Y(s.tgt),hk=7*k;
-    g+=`<rect x="${XC}" y="${yt}" width="${XR-XC}" height="${Math.max(0,H-pb-yt)}" fill="rgb(var(--green-rgb)/.07)"/>`;
+    g+=P.buy?`<rect x="${XC}" y="${pt}" width="${XR-XC}" height="${Math.max(0,yt-pt)}" fill="rgb(var(--green-rgb)/.07)"/>`
+      :`<rect x="${XC}" y="${yt}" width="${XR-XC}" height="${Math.max(0,H-pb-yt)}" fill="rgb(var(--green-rgb)/.07)"/>`;
     g+=`<line x1="10" y1="${ya}" x2="${XR}" y2="${ya}" stroke="var(--amber)" stroke-width="${1.2*k}" stroke-dasharray="${6*k} ${4*k}"/>`;
     g+=`<line x1="10" y1="${yt}" x2="${XR}" y2="${yt}" stroke="var(--green)" stroke-width="${2*k}"/>`;
     g+=`<path d="M${XC} ${yt-hk} l${hk} ${hk} l${-hk} ${hk} l${-hk} ${-hk} z" fill="var(--green)"/>`;
     g+=`<text x="${XC-hk-6}" y="${yt+fs+3}" font-size="${fs}" fill="var(--green)" font-weight="700" direction="rtl" unicode-bidi="embed">🎯 خروج ${s.n?'أمان '+s.n:'الأساسي'}</text>`;   // العربي يسار المقبض والأرقام يمينه (لا تختلط الاتجاهات)
-    g+=`<text x="${XC+hk+6}" y="${yt+fs+3}" font-size="${fs}" fill="var(--green)" font-weight="700">${plxR(+P.rows[s.n].x,3)}% → ${f4(s.tgt)} · ▼${s.gap.toFixed(2)}%</text>`;
+    g+=`<text x="${XC+hk+6}" y="${yt+fs+3}" font-size="${fs}" fill="var(--green)" font-weight="700">${plxR(+P.rows[s.n].x,3)}% → ${f4(s.tgt)} · ${P.buy?'▲':'▼'}${s.gap.toFixed(2)}%</text>`;
     g+=`<text x="12" y="${ya-5}" font-size="${fs*0.9}" fill="var(--amber)" direction="rtl" unicode-bidi="embed" text-anchor="end">المتوسط ${f4(s.avg)}</text>`}
   if(P.cp>0&&Math.abs(P.cp/C[0].p-1)>0.0005){const yc=Y(P.cp);
     g+=`<line x1="10" y1="${yc}" x2="${XR}" y2="${yc}" stroke="var(--vio)" stroke-width="${1.4*k}" stroke-dasharray="${2*k} ${3*k}"/><text x="12" y="${yc-5}" font-size="${fs*0.9}" fill="var(--vio)">⚡ الآن ${f4(P.cp)}</text>`}
@@ -31317,10 +31340,12 @@ function plxDraw(){const P=PLX,svg=P.svg;if(!svg||!P.calc.length)return;const C=
   keep.forEach(o=>{g+=`<text x="${o.x}" y="${o.y+fs*0.36}" font-size="${fs}" fill="${o.col}" text-anchor="end" font-weight="${o.on?700:400}">${o.t}</text>`});
   P.g.innerHTML=g}
 function plxPt(ev){const r=PLX.svg.getBoundingClientRect();return {x:(ev.clientX-r.left)/r.width*PLX_W,y:(ev.clientY-r.top)/r.height*PLX.H}}
+function plxDd(a,b){return PLX&&PLX.buy?(1-b/a)*100:(b/a-1)*100}   // ⚡ v3.36.59: مسافة الأمر b عن الذي قبله a (الشرائي: تحته)
 function plxSetP(i,pr){const P=PLX,C=P.calc;if(i<1||P.locked.has(i)||!C[i]||!(pr>0))return;
-  const lo=C[i-1].p*1.0001,hi=i+1<C.length?C[i+1].p/1.0001:C[i-1].p*1.5;pr=Math.min(Math.max(pr,lo),hi);
-  P.rows[i].d=+((pr/C[i-1].p-1)*100).toFixed(4);
-  if(i+1<C.length&&!P.locked.has(i+1))P.rows[i+1].d=+((C[i+1].p/pr-1)*100).toFixed(4)}   // التي بعده تبقى مكانها
+  const lo=P.buy?(i+1<C.length?C[i+1].p*1.0001:C[i-1].p*0.5):C[i-1].p*1.0001,hi=P.buy?C[i-1].p/1.0001:(i+1<C.length?C[i+1].p/1.0001:C[i-1].p*1.5);
+  pr=Math.min(Math.max(pr,lo),hi);
+  P.rows[i].d=+plxDd(C[i-1].p,pr).toFixed(4);
+  if(i+1<C.length&&!P.locked.has(i+1))P.rows[i+1].d=+plxDd(pr,C[i+1].p).toFixed(4)}   // التي بعده تبقى مكانها
 function plxDown(ev){const P=PLX;if(!P||!P.calc.length||!P.Y)return;const {x,y}=plxPt(ev),C=P.calc,tol=12*P.k;P.fz={lo:P.lo,hi:P.hi};
   let dr=null;const s=P.sel!=null?C[P.sel]:null;
   if(s&&Math.abs(y-P.Y(s.tgt))<tol)dr={k:'x',i:P.sel};
@@ -31334,7 +31359,7 @@ function plxDown(ev){const P=PLX;if(!P||!P.calc.length||!P.Y)return;const {x,y}=
   P.drag=dr;try{P.svg.setPointerCapture(ev.pointerId)}catch(e){}ev.preventDefault();plxSoft()}
 function plxMove(ev){const P=PLX;if(!P||!P.drag)return;const {x,y}=plxPt(ev),d=P.drag;
   if(d.k==='p')plxSetP(d.i,P.P(y));
-  else if(d.k==='x'){const c=P.calc[d.i];if(c&&c.avg>0)P.rows[d.i].x=+Math.min(50,Math.max(0.2,(1-P.P(y)/c.avg)*100)).toFixed(2)}
+  else if(d.k==='x'){const c=P.calc[d.i];if(c&&c.avg>0)P.rows[d.i].x=+Math.min(50,Math.max(0.2,(P.buy?P.P(y)/c.avg-1:1-P.P(y)/c.avg)*100)).toFixed(2)}
   else if(d.k==='q'){const L=Math.max(21,d.l0+(d.x0-x));P.rows[d.i].q=plxQ(Math.max(d.qm*0.01,(L-20)/PLX_BL*d.qm))}
   else return;
   ev.preventDefault();if(!P.raf)P.raf=requestAnimationFrame(()=>{if(PLX){PLX.raf=0;plxSoft()}})}
@@ -31343,17 +31368,17 @@ function plxUp(ev){const P=PLX;if(!P)return;const d=P.drag;P.drag=null;
   P.fz=null;plxSoft()}
 function plxAddAt(pr){const P=PLX,C=P.calc,lm=plxLockMax();
   if(P.rows.length>=PLX_MAX){toast(`الحد ${PLX_MAX-1} أمر أمان`,false);return}
-  let k=C.findIndex(c=>c.p>pr);if(k<0)k=C.length;
-  if(k<1){toast('أوامر البيعي فوق سعر الأساس — اضغط فوقه',false);plxSoft();return}
-  if(k<=lm){toast('أضف الأوامر فوق آخر أمر نُفّذ',false);plxSoft();return}
-  const d=(pr/C[k-1].p-1)*100;if(!(d>0.01&&d<=50)){toast('المسافة عن الأمر الذي قبله بين 0 و50%',false);plxSoft();return}
+  let k=C.findIndex(c=>P.buy?c.p<pr:c.p>pr);if(k<0)k=C.length;
+  if(k<1){toast(P.buy?'أوامر الشرائي تحت سعر الأساس — اضغط تحته':'أوامر البيعي فوق سعر الأساس — اضغط فوقه',false);plxSoft();return}
+  if(k<=lm){toast(P.buy?'أضف الأوامر تحت آخر أمر نُفّذ':'أضف الأوامر فوق آخر أمر نُفّذ',false);plxSoft();return}
+  const d=plxDd(C[k-1].p,pr);if(!(d>0.01&&d<=50)){toast('المسافة عن الأمر الذي قبله بين 0 و50%',false);plxSoft();return}
   const tpl=P.rows[k-1];
-  if(k<C.length)P.rows[k].d=+((C[k].p/pr-1)*100).toFixed(4);
+  if(k<C.length)P.rows[k].d=+plxDd(pr,C[k].p).toFixed(4);
   P.rows.splice(k,0,{d:+d.toFixed(4),q:+tpl.q,x:+tpl.x});P.sel=k;plxFull()}
 function plxAdd(){const P=PLX;if(!P||P.rows.length>=PLX_MAX)return;const l=P.rows[P.rows.length-1];
   P.rows.push({d:+(P.rows.length>1?+l.d||1:1),q:+l.q||1,x:+l.x||0.5});P.sel=P.rows.length-1;plxFull()}
 function plxDel(i){const P=PLX;if(!P||i<1||i<=plxLockMax()||!P.rows[i])return;const C=P.calc;
-  if(i+1<P.rows.length&&C[i+1]&&C[i-1])P.rows[i+1].d=+((C[i+1].p/C[i-1].p-1)*100).toFixed(4);   // التي بعده تبقى مكانها
+  if(i+1<P.rows.length&&C[i+1]&&C[i-1])P.rows[i+1].d=+plxDd(C[i-1].p,C[i+1].p).toFixed(4);   // التي بعده تبقى مكانها
   P.rows.splice(i,1);P.sel=Math.min(i,P.rows.length-1);plxFull()}
 function plxFill(){const P=PLX;if(!P)return;const v=k=>plxN((P.box.querySelector(`[data-f="${k}"]`)||{}).value);
   const n=Math.round(v('n')),d1=v('d1'),dg=v('dg'),q0=v('q0'),q1=v('q1'),qm=v('qm'),x0=v('x0'),x1=v('x1');
@@ -31377,30 +31402,32 @@ function plxSelBox(){const P=PLX,box=P.q('sel'),i=P.sel,C=P.calc;
   const S=k=>box.querySelector(`[data-s="${k}"]`),setv=(k,v)=>{const e=S(k);if(e&&document.activeElement!==e&&e.value!==v)e.value=v};
   setv('p',String(+c.p.toPrecision(8)));setv('q',plxR(+P.rows[i].q));setv('x',plxR(+P.rows[i].x,3));
   ['q','x'].forEach(k=>{const e=S(k);if(e)e.classList.toggle('bad',!plxCellOk(P.rows,i,k))});
-  S('info').innerHTML=`المتوسط <bdi>${f4(c.avg)}</bdi> · 🎯 الخروج <bdi>${f4(c.tgt)}</bdi> · يحتاج نزولاً <bdi>${c.gap.toFixed(2)}%</bdi> · 💎 <bdi>${(c.prof>=0?'+':'')+plxR(c.prof,6)} ${gEsc(P.coin)}</bdi>`}
+  S('info').innerHTML=`المتوسط <bdi>${f4(c.avg)}</bdi> · 🎯 الخروج <bdi>${f4(c.tgt)}</bdi> · يحتاج ${P.buy?'صعوداً':'نزولاً'} <bdi>${c.gap.toFixed(2)}%</bdi> · 💎 <bdi>${(c.prof>=0?'+':'')+plxR(c.prof,6)} ${P.buy?'$':gEsc(P.coin)}</bdi>`}
 async function plxCandles(){const P=PLX;if(!P||!/^[A-Z0-9]{2,15}-[A-Z]{2,10}$/.test(P.sym))return;
   let r=null;try{r=await api('/api/candles',{sym:P.sym,bar:P.bar},true)}catch(e){}
   if(PLX!==P||!r||!r.ok)return;P.cd=r.rows||[];if(P.onCd)P.onCd(P.cd);plxSoft()}
 function plxForm(){const box=$('#dn_preview');if(!box)return;
-  const sym=($('#dn_sym').value||'').trim().toUpperCase(),bp=plxN($('#dn_bp').value),tr=!!($('#dn_trail')||{}).checked;
+  const sym=($('#dn_sym').value||'').trim().toUpperCase(),bp=plxN($('#dn_bp').value),tr=!!($('#dn_trail')||{}).checked,buy=($('#dn_type')||{}).value==='dca_plus_buy';
+  if(PLX&&PLX.box===box&&PLX.buy!==buy){window._plxKeep=plxRows();PLX=null}
   if(!PLX||PLX.box!==box||!box.querySelector('.plx')){
-    plxOpen(box,{rows:window._plxKeep||null,base:bp>0?bp:1,sym,trail:tr,mode:'new'});
+    plxOpen(box,{rows:window._plxKeep||null,base:bp>0?bp:1,sym,trail:tr,mode:'new',buy});
     PLX.onCd=cd=>{const e=$('#dn_bp');if(e&&!e.dataset.man&&cd.length){const lc=+cd[cd.length-1][4];if(lc>0){e.value=String(+lc.toPrecision(8));PLX.base=lc}}}}
   else{const ch=PLX.sym!==sym;PLX.sym=sym;PLX.coin=sym.split('-')[0]||'عملة';if(bp>0)PLX.base=bp;PLX.trail=tr;plxSoft();if(ch)plxCandles()}}
 function dcaPlusEdit(b){const d=b.dca||{},P=d.plus||{};
   const live=d.phase==='selling'||d.phase==='buying',cp=(window.JPX&&JPX[b.symbol])||b.cp||0,base=live&&P.base>0?P.base:cp;
-  showModal(`<h2 style="color:var(--green)">✏️ أوامر DCA+ — ${gEsc(b.symbol)}</h2>
+  const buy=b.bot_type==='dca_buy'||!!d.is_buy;                     // ⚡ v3.36.59: DCA+ الشرائي
+  showModal(`<h2 style="color:var(--green)">✏️ أوامر DCA+ ${buy?'الشرائي':'البيعي'} — ${gEsc(b.symbol)}</h2>
     <p class="plxnote" style="margin-bottom:8px">${live?'الأوامر المنفّذة في هذه الدورة ✅ ثابتة بسعرها وكميتها (تستطيع تغيير نسبة خروجها). حرّك أي أمر لم يُنفّذ أو غيّر كميته، أو أضف أوامر واحذفها — يطبّقها البوت خلال ثوانٍ: يلغي أوامره التي لم تُنفّذ على المنصة ويضعها بأسعارها الجديدة.':'لا توجد دورة مفتوحة الآن — تبدأ الدورة القادمة بهذه الأوامر.'}</p>
     ${P.pending?'<div class="dnwarn plxamb">⏳ تعديل سابق ينتظر البوت</div>':''}${P.err?`<div class="dnwarn plxred">⚠️ لم يطبّق البوت آخر تعديل: ${gEsc(P.err)}</div>`:''}
     <div id="plx_edit"></div>
     <div class="mbtns" style="margin-top:12px"><button class="primary" id="plx_save" style="background:linear-gradient(94deg,var(--green),#16a34a)">💾 احفظ الأوامر</button><button onclick="hideModal()">إلغاء</button></div>`);
-  plxOpen($('#plx_edit'),{rows:P.rows,base:base||1,locked:live?P.locked:[],sym:b.symbol,trail:d.trail_on,cp,mode:'edit'});
+  plxOpen($('#plx_edit'),{rows:P.rows,base:base||1,locked:live?P.locked:[],sym:b.symbol,trail:d.trail_on,cp,mode:'edit',buy});
   $('#plx_save').onclick=async()=>{const e=plxBad(plxRows());if(e){toast(e,false);return}
     const btn=$('#plx_save');btn.disabled=true;
     try{const r=await api('/api/control',{dir:b.dir,action:'plus_edit',value:{rows:plxRows()}});toast(r.msg,r.ok);if(r.ok){hideModal();tick()}}
     catch(e){toast('تعذر الاتصال',false)}finally{if(btn.isConnected)btn.disabled=false}}}
-function dcaPlusRowsTbl(P,base){return `<table class="dntbl" style="margin-bottom:10px"><thead><tr><th>الأمر</th><th>المسافة<br><small>عن الذي قبله</small></th><th>الكمية ${gEsc(base)}</th><th>نسبة الخروج</th></tr></thead><tbody>${(P.rows||[]).map((r,i)=>
-  `<tr><td>${(P.locked||[]).includes(i)?'✅ ':''}${i?'أمان '+i:'الأساسي'}</td><td class="num">${i?'▲ '+r.d+'%':'—'}</td><td class="num">${r.q}</td><td class="num">${r.x}%</td></tr>`).join('')}</tbody></table>`}
+function dcaPlusRowsTbl(P,base,buy){return `<table class="dntbl" style="margin-bottom:10px"><thead><tr><th>الأمر</th><th>المسافة<br><small>${buy?'تحت':'فوق'} الذي قبله</small></th><th>الكمية ${gEsc(base)}</th><th>نسبة الخروج</th></tr></thead><tbody>${(P.rows||[]).map((r,i)=>
+  `<tr><td>${(P.locked||[]).includes(i)?'✅ ':''}${i?'أمان '+i:'الأساسي'}</td><td class="num">${i?(buy?'▼ ':'▲ ')+r.d+'%':'—'}</td><td class="num">${r.q}</td><td class="num">${r.x}%</td></tr>`).join('')}</tbody></table>`}
 function dcaChart(rows,s,base){
   const W=600,H=240,pad=46;
   // 📊 المخطط يرسم: نسبة الخروج لكل أمر (gap_pct = كم لازم ينزل السعر للخروج)

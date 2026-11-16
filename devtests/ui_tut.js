@@ -51,14 +51,15 @@ const CUT = /كهرباء|إنترنت|انترنت|انقطاع|انقطع|ان
     // the windows (on the phone run)
     if (tag === 'phone') {
       const FORMS = [['openDeploy', ['grid', 'grid_range', 'grid_plus'], 'grid_range', "gType('grid_range')", 'n_gtype'],
-                     ['openDeployDca', ['dca', 'dca_buy', 'dca_plus'], 'dca_buy', "(document.getElementById('dn_type').value='dca_buy',dcaTypeSwitch())", 'dn_type'],
+                     ['openDeployDca', ['dca', 'dca_buy'], 'dca_buy', "(document.getElementById('dn_type').value='dca_buy',dcaTypeSwitch())", 'dn_type'],
+                     ['openDeployDca:plus', ['dca_plus', 'dca_plus_buy'], 'dca_plus_buy', "(document.getElementById('dn_type').value='dca_plus_buy',dcaTypeSwitch())", 'dn_type'],   // ⚡ v3.36.59: its own button
                      ['openDeployRec', ['rec_buy', 'rec_sell'], 'rec_sell', "(document.getElementById('rd_type').value='rec_sell',recFormSync())", 'rd_type'],
                      ['openDeployStep', ['grid_step'], 'grid_step', '0', null], ['openDeployVa', ['rec_va'], 'rec_va', '0', null]];
-      const NAME = { grid: 'الشبكة اللانهائية', grid_range: 'المدى', grid_plus: 'بلس', dca: 'DCA البيعي', dca_buy: 'DCA الشرائي', dca_plus: 'DCA+', rec_buy: 'الشراء الدوري',
+      const NAME = { grid: 'الشبكة اللانهائية', grid_range: 'المدى', grid_plus: 'بلس', dca: 'DCA البيعي', dca_buy: 'DCA الشرائي', dca_plus: 'DCA+ البيعي', dca_plus_buy: 'DCA+ الشرائي', rec_buy: 'الشراء الدوري',
                      rec_sell: 'البيع الدوري', grid_step: 'المتدرج', rec_va: 'مسار القيمة' };
       const forms = [], seen = [];
       for (const [fn, kinds, pick, pickJs, selId] of FORMS) {
-        await pg.evaluate(f => { try { hideModal() } catch (e) {} ; window[f]() }, fn);
+        await pg.evaluate(f => { try { hideModal() } catch (e) {} ; const [n, a] = f.split(':'); window[n](a) }, fn);
         await pg.waitForTimeout(900);
         const pre = await pg.evaluate(([pickJs, selId]) => {
           eval(pickJs);
@@ -91,10 +92,10 @@ const CUT = /كهرباء|إنترنت|انترنت|انقطاع|انقطع|ان
                    back: !!document.querySelector('#modal .hwb .tutx') && getComputedStyle(f).display !== 'none' && !document.querySelector('#modal .tuthwb') } }, [pre.inp, selId]));
       }
       const need = ['💡 الفكرة', '🧩 خطوة بخطوة', '🧮 مثال بالأرقام', '🔘 أزرار البطاقة', '❓ أسئلة وأجوبة'];
-      ok('… it opens one window with a tab for each of the form\'s bots (the grid 3 · DCA 3 with ⚡ DCA+ · the recurring 2 · 🪜 and 💹 none) on the kind chosen · the form waits hidden in place',
+      ok('… it opens one window with a tab for each of the form\'s bots (the grid 3 · DCA 2 · ⚡ DCA+ 2 (its own button) · the recurring 2 · 🪜 and 💹 none) on the kind chosen · the form waits hidden in place',
          forms.every(f => (f.n > 1 ? f.tabs === f.n && f.on.length === 1 && f.on[0].includes(NAME[f.pick]) : f.tabs === 0) && f.h2.includes(NAME[f.pick]) && f.hid), forms);
       ok('… every bot\'s explanation: the idea · step by step · 🧮 an example in numbers · the card\'s buttons · questions and answers — and NO moving example',
-         seen.length === 10 && seen.every(s => s.h2.includes('كيف يعمل بوت') && s.h2.includes(NAME[s.kind]) && need.every(n => s.secs.includes(n)) && !s.secs.some(x => x.includes('🎬'))
+         seen.length === 11 && seen.every(s => s.h2.includes('كيف يعمل بوت') && s.h2.includes(NAME[s.kind]) && need.every(n => s.secs.includes(n)) && !s.secs.some(x => x.includes('🎬'))
            && !s.anim && s.ex >= 2 && (s.single || s.on.includes(NAME[s.kind]))), seen.map(s => [s.kind, s.secs, s.anim, s.ex]));
       ok('… fuller text: ≥ 2 idea paragraphs · ≥ 4 steps … · ≥ 2 questions of its own + 12 for all bots',
          seen.every(s => s.idea >= 2 && s.steps >= 3 && s.btns >= 8 && s.own >= 2 && s.qa >= 14 && s.chars > 2400), seen.map(s => [s.kind, s.idea, s.steps, s.own, s.qa, s.chars]));

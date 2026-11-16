@@ -158,7 +158,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const af = await pg.evaluate(dir => ({ open: !document.getElementById('mbg').hidden && !!document.querySelector('#plx_save'), btn: CARDS.get(dir)._r.dplus.textContent, toast: (document.querySelector('.toast') || {}).textContent || '' }), DIR);
   ok(`④ 💾 saved: the window closes · the card says «${af.btn}» (the edit waits for the bot)`, !af.open && /ينتظر البوت/.test(af.btn), af);
   // ⑤ the deploy form
-  await pg.evaluate(() => openDeployDca()); await sleep(500);
+  await pg.evaluate(() => document.getElementById('bDcap').click()); await sleep(500);     // ⚡ v3.36.59: its own button on the main bar
   await pg.selectOption('#dn_type', 'dca_plus'); await sleep(400);
   const f0 = await pg.evaluate(() => ({ hid: ['dn_base', 'dn_avg', 'dn_dev', 'dn_step', 'dn_size', 'dn_n', 'dn_tp'].every(id => document.getElementById(id).closest('.fld').style.display === 'none'),
     shown: ['dn_sym', 'dn_bp', 'dn_ex', 'dn_wait', 'dn_wallet'].every(id => document.getElementById(id).closest('.fld').style.display !== 'none'),
@@ -200,11 +200,11 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     const M = skModel(el, b, 'dca'); return { menu: (M.menu || []).filter(Boolean).map(x => x.t || x.text || ''), chips: M.chips || '' } }, DIR).catch(e => ({ err: String(e) }));
   ok('⑥ the card looks (C · B · OKX): «✏️ أوامر DCA+» in the menu and its state among the chips', sk.none || (sk.menu.some(t => /أوامر DCA\+/.test(t)) && /أوامر DCA\+|تعديل الأوامر/.test(sk.chips)), sk);
   // ⑦ 📖 the tutorial: the DCA+ tab
-  await pg.evaluate(() => { openDeployDca() }); await sleep(400);
+  await pg.evaluate(() => { openDeployDca('plus') }); await sleep(400);
   await pg.selectOption('#dn_type', 'dca_plus'); await sleep(200);
-  const tu = await pg.evaluate(async () => { tutQ(null, 'dca'); await new Promise(r => setTimeout(r, 400)); const m = document.getElementById('modal');
+  const tu = await pg.evaluate(async () => { tutQ(null, 'dcap'); await new Promise(r => setTimeout(r, 400)); const m = document.getElementById('modal');
     return { txt: (m.querySelector('.tuthwb') || m).textContent } });
-  ok('⑦ 📖 the DCA form\'s tutorial opens on the DCA+ tab (its idea · the ✏️ button explained)', /DCA\+ البيعي/.test(tu.txt) && /✏️ أوامر DCA\+/.test(tu.txt) && /أعمق أمر/.test(tu.txt), tu.txt.slice(0, 300));
+  ok('⑦ 📖 the DCA+ form\'s tutorial («📖 شرح DCA+») opens on the DCA+ البيعي tab (its idea · the ✏️ button explained)', /DCA\+ البيعي/.test(tu.txt) && /✏️ أوامر DCA\+/.test(tu.txt) && /أعمق أمر/.test(tu.txt), tu.txt.slice(0, 300));
   await pg.evaluate(() => hideModal());
   ok(`no page error on the computer (${errs.length})`, errs.length === 0, errs);
   await ctx.close();
