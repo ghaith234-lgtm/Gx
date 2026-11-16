@@ -17,9 +17,10 @@
 #       leaves his floor · the guard paused or the switch off open nothing
 #   H · the update day: a bot calling for its missed levels closes above all of them (they are kept — none bought) · the old automatic
 #       pause's records carry on as temporary closes and do not resume when the dollars come back
+#   🪜 J: two parts of a level covered, not the third ⇒ closes · a level is never split on opening · nothing lost (the exchange = the bot's slots)
 #   ⏳ v3.36.61 (I): the guard's estimate too small ⇒ OKX's own «Insufficient USDT» on the bot's buy closes it at the next round
 #   python3 devtests/t_temp_pause.py [Holy_Dashboard.pyw] [-q] [--kind=grid|grid_plus|grid_range|grid_step]
-import importlib.machinery, importlib.util, json, math, os, shutil, sys, tempfile, urllib.request, collections
+import collections, importlib.machinery, importlib.util, json, math, os, shutil, sys, tempfile, urllib.request, collections
 
 DASH = os.path.abspath(next((a for a in sys.argv[1:] if not a.startswith("-")), os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Holy_Dashboard.pyw")))
 Q = "-q" in sys.argv
@@ -402,6 +403,68 @@ for kind in [k for k in KINDS if k in ("grid_step", "grid_plus")]:
        f"({'%.0f s after the first refusal' % (fi['t'] - t_r0) if fi and t_r0 else 'never'}) · its need = the refused order's dollars "
        f"({(fi or {}).get('rec', {}).get('need') if fi else '—'}) · no refusal after it ({len(late)})",
        r0 and fi and fi["t"] - t_r0 <= 2 * 600 + 1 and not late and float(fi["rec"].get("need") or 0) > ix.need * 1.5, (r0[:3], fi, late[:3]))
+
+# ═══ J · 🪜 the owner (16-11): «المتدرج لان فيه شراء من نفس المكان واحتمال اوردرين شراء ياخذ والثالث ما ياخذ … حتى اطمئن»: the free
+#   dollars cover two parts of the next level, not the third · then a deposit for ONE part · then enough for the whole level ═══
+if "grid_step" in KINDS:
+    jx = Box("grid_step", "grid_step_j", 400.0, 6.0)
+    part = need_of(jx.cfg)                                                     # one part's dollars (the level's ÷ 3)
+    I_J, EJ = N_FLAT + 40, {}
+
+    def two_parts(b):
+        b.ex.bal[QC] = b.ex.frz[QC] + 2 * part * 1.01                         # free: two parts — the third has no dollars
+
+    def dep_one(b):
+        EJ["lv"] = m._tp_stored(b.bd[os.path.realpath(b.f)], b.st(), b.ex.p)
+        b.ex.bal[QC] += part * 1.2                                             # a deposit for ONE part
+        EJ["av1"] = b.ex.avail(QC)
+
+    def open_one(b):
+        EJ["i1"], EJ["t1"] = b.press("temp_info"), b.ex.now()
+        EJ["o1"] = b.press("temp_open")
+
+    def dep_lvl(b):
+        b.ex.bal[QC] += 3 * part * 1.2                                         # enough for a whole level (3 parts) and a bit
+        EJ["lv2"] = m._tp_stored(b.bd[os.path.realpath(b.f)], b.st(), b.ex.p)
+
+    def open_lvl(b):
+        EJ["i2"], EJ["t2"] = b.press("temp_info"), b.ex.now()
+        EJ["o2"] = b.press("temp_open")
+
+    jx.hooks.update({I_J: two_parts, I_LOW0 + 20: dep_one, I_LOW0 + 40: open_one, I_LOW0 + 80: dep_lvl, I_LOW0 + 100: open_lvl})
+    jx.run(PX[:I_LOW0 + 220])
+    fj = next((x for x in jx.snaps if x["rec"] and x["t"] >= tt(I_J)), None)
+    flj = fj["rec"]["temp"] if fj else 0
+    rej_late = jx.rej(fj["t"] + 600, None) if fj else ["never closed"]
+    under = [f for f in jx.buys(fj["t"] + 60, EJ.get("t1", tt(I_LOW0 + 40))) if f[2] < flj * (1 - 1e-9)] if fj else []
+    by_px = collections.Counter(round(f[2], 6) for f in jx.buys(None, EJ.get("t1")) if f[5])        # the limit buys (the levels) — the opening's market buys aside
+    ok(f"🪜 J · the dollars cover two parts of a level, not the third ⇒ it closes ({'at ' + format(fj['p'], '.2f') if fj else 'never'} · floor "
+       f"{flj:.4f}) · no refused order after it ({len(rej_late)}) · no buy under the floor ({len(under)}) · never more than 3 buys on one price",
+       fj and not rej_late and not under and max(by_px.values() or [0]) <= 3, (fj, rej_late[:3], under[:3], by_px.most_common(3)))
+    lv = EJ.get("lv") or []
+    g0 = [q for p_, q in lv if lv and abs(p_ - lv[0][0]) <= lv[0][0] * 1e-9]
+    i1, o1 = EJ.get("i1") or {}, EJ.get("o1") or {}
+    b1 = jx.buys(EJ.get("t1", 0), tt(I_LOW0 + 80))
+    k_exp, c_exp = m._tp_cover(lv, LOW, EJ.get("av1", 0)) if lv else (0, 0)
+    ok(f"🪜 J · a deposit for ONE part while the first kept level has {len(g0)} part(s): the window offers {i1.get('k')} of {i1.get('n')} (a level is never "
+       f"split) · «🔓 افتح» buys {sum(f[3] for f in b1):.4f} SOL — exactly {'nothing' if not k_exp else 'the covered levels'} · nothing refused",
+       lv and i1.get("k") == k_exp and (o1.get("ok") if k_exp else not b1) and not jx.rej(EJ.get("t1", 0), tt(I_LOW0 + 80))
+       and abs(sum(f[3] for f in b1) - sum(q for _, q in lv[:k_exp])) <= max(1e-6, sum(q for _, q in lv[:k_exp]) * 0.003), (lv[:6], i1, o1, b1[:6], k_exp))
+    lv2 = EJ.get("lv2") or []
+    i2, o2 = EJ.get("i2") or {}, EJ.get("o2") or {}
+    b2 = jx.buys(EJ.get("t2", 0), tt(I_LOW0 + 160))
+    kq2 = sum(q for _, q in lv2[:i2.get("k", 0)])
+    lvl_ok = all(collections.Counter(round(p_, 6) for p_, _ in lv2[:i2.get("k", 0)])[round(p_, 6)] == collections.Counter(round(x, 6) for x, _ in lv2)[round(p_, 6)]
+                 for p_, _ in lv2[:i2.get("k", 0)])
+    ok(f"🪜 J · then dollars for a whole level: it buys {i2.get('k')} kept part(s) = whole levels only ({sum(f[3] for f in b2):.4f} SOL = {kq2:.4f}) at the market · nothing refused",
+       o2.get("ok") and i2.get("k", 0) >= 1 and lvl_ok and abs(sum(f[3] for f in b2) - kq2) <= max(1e-6, kq2 * 0.003)
+       and not jx.rej(EJ.get("t2", 0), tt(I_LOW0 + 160)), (lv2[:6], i2, o2, b2[:6]))
+    stj = jx.st()
+    aud = m.step_audit(jx.bd[os.path.realpath(jx.f)], stj)
+    ex_live = {str(o_id) for o_id, o in jx.ex.orders.items() if o["state"] == "live"}
+    sl_live = {str((x.get("o") or {}).get("id")) for x in (stj.get("slots") or {}).values() if (x.get("o") or {}).get("id") and (x.get("o") or {}).get("st") == "live"}
+    ok(f"🪜 J · nothing lost or left behind: the bot's own audit «{aud.get('msg', '')[:70]}» · the exchange's live orders = exactly the bot's "
+       f"({len(ex_live)} = {len(sl_live)}) — no stray order, none forgotten", aud.get("ok") and ex_live == sl_live, (aud, sorted(ex_live - sl_live)[:3], sorted(sl_live - ex_live)[:3]))
 
 # ═══ the card chip — the page's own function, in node ═══
 import subprocess
