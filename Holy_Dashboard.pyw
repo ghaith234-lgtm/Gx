@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.59"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.60"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -1438,7 +1438,7 @@ def health_of(b, hist=None):
             "last_ok_ago": round((now - last_ok) / 60, 1) if last_ok else None,
             "last_err": round(last_err, 0) if last_err else None,
             "last_err_msg": last_err_msg,
-            "state": ("bad" if streak >= 3 or fails_1h >= 5 else
+            "state": ("bad" if (streak >= 3 and fails_1h >= 1) or fails_1h >= 5 else      # 🚨 v3.36.60: رفض قديم بلا جديد ⇒ ما يرجع «سيئ» كل ساعة
                       "warn" if fails_1h >= 1 else "ok")}
     _HEALTH_CACHE[ck] = {"t": now, "n": len(hist), "h": (str(hist[0])[:60] if hist else ""), "v": _res}
     if len(_HEALTH_CACHE) > 60: _HEALTH_CACHE.clear()
@@ -19002,20 +19002,49 @@ def backup_states():
     except Exception:
         pass
 
+_REJ_WHY = (("51008", ("insufficient",), "الرصيد لا يكفي"), ("51020", ("minimum",), "الكمية أقل من حد المنصة"),
+            ("51006", ("price limit", "out of range"), "السعر خارج حدود المنصة"), ("50011", ("too many",), "طلبات كثيرة — المنصة طلبت التمهّل"),
+            ("51000", ("parameter",), "قيمة غير مقبولة في الأمر"))
+
+
+def _rej_why(msg):
+    """🚨 v3.36.60: سبب الرفض بالعربي من رمز OKX أو رسالتها الإنجليزية ⇒ (السبب، الرمز) أو ("", "")"""
+    m = str(msg or "")
+    low = m.lower()
+    for code, keys, why in _REJ_WHY:
+        if code in m or any(k in low for k in keys):
+            return why, code
+    return "", ""
+
+
+def _rej_short(msg):
+    """🚨 v3.36.60: «⚠️ [رفض أمر شراء] … (المستوى -13 · الجزء 1) — الرصيد لا يكفي (51008)» بدل الإنجليزي المقطوع"""
+    m = str(msg or "").strip()
+    why, code = _rej_why(m)
+    head = m.split("): ", 1)[0] + ")" if "): " in m else m
+    return (head[:120] + (f" — {why} ({code})" if why else (" — " + m.split("): ", 1)[1][:90] if "): " in m else "")))[:220]
+
+
+def _rej_cash(msg):
+    """🚨 v3.36.60: أمر شراء رُفض لأن الدولار نفد — له إشعاراته الخاصة (⏳ المؤقت · 💵 توفر دولار · 🛡️ نفد الدولار الحر)"""
+    m = str(msg or "")
+    return ("شراء" in m) and _rej_why(m)[1] == "51008"
+
+
 def health_alert_tick():
-    """🚨 تنبيه تليجرام عند فشل أوامر متكرر (مرة كل ساعة لكل بوت)"""
+    """🚨 تنبيه تليجرام عند فشل أوامر متكرر (مرة كل ساعة لكل بوت) · v3.36.60: الرفض الحديث فقط · نفاد الدولار له إشعاراته · السبب بالعربي"""
     now = time.time()
     for b in bot_dirs().values():
         try:
             if b["cfg"].get("is_demo"): continue
             h = health_of(b)
-            if h["state"] != "bad": 
+            if h["state"] != "bad" or _rej_cash(h.get("last_err_msg")):
                 _ALERT_SENT.pop(b["dir"], None); continue
             if now - _ALERT_SENT.get(b["dir"], 0) < 3600: continue
             _ALERT_SENT[b["dir"]] = now
             tg_send(f"🚨 *[فشل أوامر متكرر]* `{b['symbol']}`\n"
                     f"مرفوضة آخر ساعة: `{h['fails_1h']}` · متتالية: `{h['streak']}`\n"
-                    f"آخر خطأ: `{h['last_err_msg'][:100]}`")
+                    f"آخر خطأ: `{_rej_short(h['last_err_msg'])}`")
         except Exception:
             pass
 
