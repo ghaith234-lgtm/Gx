@@ -69,6 +69,13 @@ E = cat["e"]
 P(f"catalog: {len(E)} entries from {len(cat['coins'])} coins · sizes " + " ".join(f"{k}:{sum(1 for e in E if len(e['k']) == k)}" for k in range(1, 7))
   + f" · rare {sum(1 for e in E if e['rare'])} · weeks of test {cat['wk']} · built in {cat.get('secs')}s")
 P("random:", json.dumps(cat["base"]))
+for fr in ("4H", "1D"):                                   # 🧠 v3.36.69: the proven agreeing groups (beat random in all 4 periods)
+    for side in (1, -1):
+        pv = [e for e in E if e["f"] == fr and e["s"] == side and e.get("c4")]
+        P(f"🧠 {m.SG_HZW[fr]} {'BUY ' if side > 0 else 'SELL'} proven: {len(pv)} (singles {sum(1 for e in pv if len(e['k']) == 1)}) · random {cat['base'][f'{fr}|{side}']['ht']}%")
+        for e in sorted(pv, key=lambda e: -m._sg_wlb(e["wt"], e["nt"]))[:8]:
+            P(f"   {e['wt']}/{e['nt']} ({e['wt'] / e['nt'] * 100:.0f}%) · {e['nd']} separate · periods " + " ".join(f"{x[1]}/{x[0]}" for x in e["pp"])
+              + " · " + " + ".join(m._sg_name(k, side) for k in e["k"]))
 for fr in ("4H", "1D"):
     for side in (1, -1):
         b = cat["base"][f"{fr}|{side}"]
