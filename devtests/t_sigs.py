@@ -349,6 +349,16 @@ _ticks.clear()
 m.sg_set({"coins": ["XRP-USDT"]})
 time.sleep(0.3)
 ok("⑧ 🪙 removing one starts nothing (no fetch needed)", not _ticks, _ticks)
+_ci0 = m._SG.get("cidx")
+m._SG["cidx"] = {"c4": {"SOL-USDT": 900}, "c": {"SOL-USDT": 400}}
+r_sol = m.sg_set({"coins": ["XRP-USDT", "SOL-USDT"]})
+time.sleep(0.3)
+_t_sol = list(_ticks)
+r_tk = m.sg_set({"coins": None})
+time.sleep(0.3)
+m._SG["cidx"] = _ci0
+ok("⑧ 🪙 a coin whose data is already here: «🪙 أُضيفت SOL لإشعاراتك» (nothing to fetch, no round) · «↩️ مثل الشريط» says so",
+   r_sol["msg"] == "🪙 أُضيفت SOL لإشعاراتك" and r_tk["msg"] == "↩️ عملات إشعارات الإشارات الآن نفس عملات الشريط" and not _t_sol, (r_sol["msg"], r_tk["msg"], _t_sol))
 m.sg_set({"coins": None})
 time.sleep(0.3)
 real_cfg.update(ticker_coins=list(cat["coins"]), sg_thr=50, sg_min=3, sg_rnd=False, sg_cap=0)

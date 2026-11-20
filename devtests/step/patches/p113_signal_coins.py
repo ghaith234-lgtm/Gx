@@ -18,12 +18,18 @@ R = [
     save_app_cfg(c)
     p = sg_cfg()
     new = [s for s in sg_coins(p) if s not in old]
-    if new and not _SG["busy"]:
+    _ci = _safe(_sg_cidx, default=None) or {"c4": {}, "c": {}}
+    fetch = [s for s in new if s not in _ci["c4"] or s not in _ci["c"]]
+    if fetch and not _SG["busy"]:
         threading.Thread(target=_safe, args=(sg_tick,), daemon=True).start()     # 🪙 v3.36.67: تاريخ العملة الجديدة يُجلب الآن بالخلفية
     msg = (("🎯 إشعارات الإشارات مفعّلة — " + f"{p['thr']}% فأكثر · {_sg_ar(p['min'], 'time')} فأكثر · " + SG_CH[p["ch"]]) if p["on"]
            else "🔕 إشعارات الإشارات متوقفة")
-    if new:
-        msg = "🪙 أُضيفت " + " · ".join(s.split("-")[0] for s in new) + " — تُجلب بياناتها بالخلفية وتظهر إشاراتها بعد إغلاق الشمعة القادمة"
+    if "coins" in v and v["coins"] is None:
+        msg = "↩️ عملات إشعارات الإشارات الآن نفس عملات الشريط"
+    elif fetch:
+        msg = "🪙 أُضيفت " + " · ".join(s.split("-")[0] for s in fetch) + " — تُجلب بياناتها بالخلفية وتظهر إشاراتها بعد إغلاق الشمعة القادمة"
+    elif new:
+        msg = "🪙 أُضيفت " + " · ".join(s.split("-")[0] for s in new) + " لإشعاراتك"
     return {"ok": True, "msg": msg, "cfg": p, "est": sg_estimate(p)}"""),
     # server: which of your coins the exchange lacks · which have a short history
     ("""         "on": indic_cfg()["on"] or cfg["on"], "log": (st.get("log") or [])[:60]}""",
