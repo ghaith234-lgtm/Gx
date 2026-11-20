@@ -131,6 +131,8 @@ ok("② BUY and SELL, both frames · every entry has its learn and test record �
 ok("② random for comparison per frame and side · weeks of the test period · the compass history (up · flat · down)",
    all(k in cat["base"] for k in ("4H|1", "4H|-1", "1D|1", "1D|-1")) and cat["wk"]["4H"] > 1 and cat["wk"]["1D"] > 1
    and set((cat.get("compass") or {}).keys()) <= {"up", "flat", "down"} and cat.get("compass"), (cat["base"], cat["wk"], cat.get("compass")))
+ok("② every entry knows on how many different days its test cases fell (a market-wide reading hits every coin the same day)",
+   all(0 <= e["nd"] <= e["nt"] and (e["nd"] >= 1 or e["nt"] == 0) for e in E), [e for e in E if not (0 <= e.get("nd", -1) <= e["nt"])][:2])
 e1 = next(e for e in E if len(e["k"]) == 1 and e["k"][0] == "W-crash" and e["f"] == "4H" and e["s"] == 1)
 ok(f"② 🌊 the market-wide crash alone has its record ({e1['nl']} + {e1['nt']} cases) and its test events for the weekly estimate",
    e1["nl"] + e1["nt"] >= 3 and (e1["ev"] is None or len(e1["ev"]) == e1["nt"]), e1)
@@ -154,13 +156,13 @@ ok(f"④ 🌊 the planted crash on the last 4-hour candle is seen ({sc['crash'][
 
 # ⑤ firing — a small catalog and planted scans (deterministic)
 CAT = {"e": [
-    {"id": "4H|1|18+43+W-crash", "f": "4H", "s": 1, "k": ["18", "43", "W-crash"], "ty": "buy", "nl": 60, "wl": 48, "ml": 0.03, "nt": 24, "wt": 20, "mt": 0.04, "rare": False, "ev": []},
+    {"id": "4H|1|18+43+W-crash", "f": "4H", "s": 1, "k": ["18", "43", "W-crash"], "ty": "buy", "nl": 60, "wl": 48, "ml": 0.03, "nt": 24, "wt": 20, "mt": 0.04, "rare": False, "nd": 6, "ev": []},
     {"id": "4H|1|18", "f": "4H", "s": 1, "k": ["18"], "ty": "buy", "nl": 900, "wl": 400, "ml": 0.001, "nt": 500, "wt": 230, "mt": 0.0, "rare": False, "ev": None},
     {"id": "1D|1|12+35", "f": "1D", "s": 1, "k": ["12", "35"], "ty": "up", "nl": 40, "wl": 28, "ml": 0.05, "nt": 22, "wt": 15, "mt": 0.06, "rare": False, "ev": []},
     {"id": "1D|1|20+37+O-rsi", "f": "1D", "s": 1, "k": ["20", "37", "O-rsi"], "ty": "buy", "nl": 9, "wl": 8, "ml": 0.1, "nt": 4, "wt": 3, "mt": 0.12, "rare": True, "ev": []},
     {"id": "1D|-1|X-ad", "f": "1D", "s": -1, "k": ["X-ad"], "ty": "dist", "nl": 120, "wl": 50, "ml": -0.01, "nt": 60, "wt": 31, "mt": -0.01, "rare": False, "ev": []},
     {"id": "1D|1|M-fng", "f": "1D", "s": 1, "k": ["M-fng"], "ty": "fng", "nl": 300, "wl": 120, "ml": -0.01, "nt": 100, "wt": 30, "mt": -0.02, "rare": False, "ev": []},
-    {"id": "4H|1|W-crash", "f": "4H", "s": 1, "k": ["W-crash"], "ty": "crash", "nl": 50, "wl": 30, "ml": 0.01, "nt": 25, "wt": 14, "mt": 0.012, "rare": False, "ev": []}],
+    {"id": "4H|1|W-crash", "f": "4H", "s": 1, "k": ["W-crash"], "ty": "crash", "nl": 50, "wl": 30, "ml": 0.01, "nt": 25, "wt": 14, "mt": 0.012, "rare": False, "nd": 9, "ev": []}],
     "base": {"4H|1": {"ht": 43.0, "mt": 0.0}, "1D|1": {"ht": 43.0, "mt": 0.0}, "1D|-1": {"ht": 56.0, "mt": 0.0}, "4H|-1": {"ht": 54.0, "mt": 0.0}},
     "wk": {"4H": 40, "1D": 40}, "coins": ["XRP-USDT", "SOL-USDT", "ADA-USDT"]}
 CAT["idx"] = {e["id"]: e for e in CAT["e"]}
@@ -195,10 +197,11 @@ bx = next(b for b in b1 if b["sym"] == "XRP-USDT" and b["ty"] == "buy")
 txt = bx["t"] + "\n" + bx["b"]
 ok("⑤ the text: «🟢 شراء — XRP-USDT · 4 ساعات» · the signals by name · «📊 السجل: صدقت 20 من 24 مرة (83%) · الشراء العشوائي 43% · المتوسط بعد 3 أيام» · "
    "price + where it fails · ⚠️ not a guarantee", bx["t"] == "🟢 شراء — XRP-USDT · 4 ساعات" and "عودة من تحت حد بولنجر بقوة" in txt and "كسر قاعدة سعرية (QFL)" in txt
-   and "🌊 انهيار السوق كله" in txt and "📊 السجل: صدقت 20 من 24 مرة (83%) · الشراء العشوائي 43% · المتوسط بعد 3 أيام +4.0%" in txt
+   and "🌊 انهيار السوق كله" in txt and "📊 السجل: صدقت 20 من 24 مرة (83%) — اختبارها في 6 أيام مختلفة · الشراء العشوائي 43% · المتوسط بعد 3 أيام +4.0%" in txt
    and "💵 السعر الآن 2.45 · ❌ تبطل إذا أُغلقت شمعة 4 ساعات تحت 2.3" in txt and "⚠️ ليست ضماناً — القرار لك" in txt, txt)
 bc = next(b for b in b1 if b["ty"] == "crash")
-ok("⑤ 🌊 the market-wide crash: «11 من 28 عملة هبطت بقوة» + its record + your coins that fell most", "11 من 28 عملة" in bc["b"] and "📊 تاريخياً" in bc["b"]
+ok("⑤ 🌊 the market-wide crash: «11 من 28 عملة هبطت بقوة» + its record with the real number of days («في 9 أيام مختلفة · 25 حالة على العملات») + "
+   "your coins that fell most", "11 من 28 عملة" in bc["b"] and "📊 تاريخياً (في 9 أيام مختلفة · 25 حالة على العملات): الشراء بعده صدق 56%" in bc["b"]
    and "عملاتك الأكثر هبوطاً الآن" in bc["b"], bc)
 b2 = m._sg_process(sc1, ["4H", "1D"], st, cfg, CAT, CDB, NOW + 60)
 ok("⑤ the same candle again (a second scan) ⇒ nothing fires twice · nothing notified twice", not b2 and len(st["pend"]) == len(ids), (b2, len(st["pend"])))

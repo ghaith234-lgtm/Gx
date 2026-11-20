@@ -106,7 +106,7 @@ function sgRow(r,V){const T=sgTy(V,r.ty),hz=((V&&V.hzn)||{})[r.f]||'';
   return `<div class="sg-r${r.ok?' ok':''}${r.s<0?' sell':''}"><div class="sg-rh"><span class="sg-ty">${T[0]} ${gEsc(T[1])}</span><span class="sg-fr">${gEsc(((V&&V.fn)||{})[r.f]||r.f)}${r.k.length>1?' · '+r.k.length+' معاً':''}</span>
     ${r.rare?'<span class="sg-b rare">💎 نادرة</span>':''}${r.new?'<span class="sg-b new">🆕 الآن</span>':''}${r.ok?'<span class="sg-b ok">🔔 تصلك</span>':''}</div>
     <div class="sg-k">${r.nm.map(gEsc).join(' <b>+</b> ')}</div>
-    <div class="sg-rec">صدقت <b>${r.w}</b> من <b>${sgAr(r.n,'time')}</b> (<b>${(+r.h).toFixed(0)}%</b>) · العشوائي ${(+r.rh).toFixed(0)}% · المتوسط بعد ${gEsc(hz)} ${sgPct(r.m)}${r.ln?` · منها حيّة ${r.lw} من ${r.ln}`:''}${r.better?'':' · <span style="color:var(--amber)">⚠️ ليست أفضل من العشوائي</span>'}</div></div>`}
+    <div class="sg-rec">صدقت <b>${r.w}</b> من <b>${sgAr(r.n,'time')}</b> (<b>${(+r.h).toFixed(0)}%</b>)${r.nd&&r.nd<r.nt?` <small>— اختبارها في ${sgAr(r.nd,'day')} مختلفة</small>`:''} · العشوائي ${(+r.rh).toFixed(0)}% · المتوسط بعد ${gEsc(hz)} ${sgPct(r.m)}${r.ln?` · منها حيّة ${r.lw} من ${r.ln}`:''}${r.better?'':' · <span style="color:var(--amber)">⚠️ ليست أفضل من العشوائي</span>'}</div></div>`}
 function sgHead(V){const C=V.comp,B=V.busy||{};let h='';
   if(C&&SGCOMP[C.s]){const nm=SGCOMP[C.s];
     h+=`<div class="sg-comp ${nm[2]}"><div><b>🧭 السوق الآن: ${nm[1]} ${nm[0]}</b> <small>منذ ${sgAr(C.days,'day')}</small></div>

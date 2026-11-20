@@ -425,7 +425,7 @@ def _sg_search(COIN, prog=None):
         return {"id": f"{fr}|{side}|{'+'.join(ks)}", "f": fr, "s": side, "k": ks, "ty": _sg_type(ks, side),
                 "nl": len(l), "wl": sum(1 for x in l if x > 0), "ml": round(_sg_mean(l), 5),
                 "nt": len(t), "wt": sum(1 for x in t if x > 0), "mt": round(_sg_mean(t), 5), "rare": bool(rare),
-                "ev": ev if len(ev) <= 300 else None}
+                "nd": len({int(ts) // 86400 for ci, ts in ev}), "ev": ev if len(ev) <= 300 else None}
 
     out, BASE, WK, step = {}, {}, {}, 0
     for fr in SG_FR:
@@ -872,7 +872,7 @@ def sg_set(v):
 
 # ───────────── 📨 النصوص ─────────────
 _SG_AR = {"day": ("يوم واحد", "يومين", "أيام", "يوماً"), "time": ("مرة واحدة", "مرتين", "مرات", "مرة"), "coin": ("عملة واحدة", "عملتين", "عملات", "عملة"),
-          "sig": ("إشارة واحدة", "إشارتان", "إشارات", "إشارة")}
+          "sig": ("إشارة واحدة", "إشارتان", "إشارات", "إشارة"), "case": ("حالة واحدة", "حالتين", "حالات", "حالة")}
 
 
 def _sg_ar(n, kind):
@@ -891,13 +891,23 @@ def _sg_keys_txt(keys, side, mx=6):
     return " · ".join(nm[:mx]) + (f" · و{len(nm) - mx} غيرها" if len(nm) > mx else "")
 
 
+def _sg_mktwide(e):
+    """فيها قراءة للسوق كله (🌊 · 😨 · 🗞️) ⇒ حالاتها على العملات تقع في الأيام نفسها — نذكر عدد الأيام الحقيقي"""
+    return any(k == "W-crash" or k.startswith("M-") for k in e["k"])
+
+
+def _sg_days(e):
+    nd = int(e.get("nd") or 0)
+    return f" — اختبارها في {_sg_ar(nd, 'day')} مختلفة" if _sg_mktwide(e) and 0 < nd < e["nt"] else ""
+
+
 def _sg_rec_line(e, r, cat, rare=False):
     b = (cat.get("base") or {}).get(f"{e['f']}|{e['s']}") or {}
     rnd = f"{'الشراء' if e['s'] > 0 else 'البيع'} العشوائي {float(b.get('ht') or 0):.0f}%"
     mv = f"المتوسط بعد {SG_HZN[e['f']]} {_sg_pct(r['m'] if e['s'] > 0 else -r['m'])}"
     if rare:
-        return f"📊 ظهرت {_sg_ar(r['n'], 'time')} فقط، صدقت {r['w']} ({r['h']:.0f}%) · {rnd} · {mv}"
-    return f"📊 السجل: صدقت {r['w']} من {_sg_ar(r['n'], 'time')} ({r['h']:.0f}%) · {rnd} · {mv}"
+        return f"📊 ظهرت {_sg_ar(r['n'], 'time')} فقط، صدقت {r['w']} ({r['h']:.0f}%){_sg_days(e)} · {rnd} · {mv}"
+    return f"📊 السجل: صدقت {r['w']} من {_sg_ar(r['n'], 'time')} ({r['h']:.0f}%){_sg_days(e)} · {rnd} · {mv}"
 
 
 def _sg_block(sym, ty, fr, ents, st, cat, scan, comp):
@@ -1225,7 +1235,10 @@ def _sg_process(scan, frs, st, cfg, cat, cdb, now, send=True):
 def _sg_mkt_block(ty, code, side, e, st, cat, scan):
     r = _sg_rec(e, st)
     b = (cat.get("base") or {}).get(f"{e['f']}|{e['s']}") or {}
-    rec = f"📊 تاريخياً: {'الشراء' if side > 0 else 'البيع'} بعده صدق {r['h']:.0f}% من {_sg_ar(r['n'], 'time')} (العشوائي {float(b.get('ht') or 0):.0f}%) · المتوسط بعد {SG_HZN[e['f']]} {_sg_pct(r['m'] if side > 0 else -r['m'])}"
+    nd = int(e.get("nd") or 0)
+    days = f" (في {_sg_ar(nd, 'day')} مختلفة · {_sg_ar(r['n'], 'case')} على العملات)" if nd else ""
+    rec = (f"📊 تاريخياً{days}: "
+           f"{'الشراء' if side > 0 else 'البيع'} بعده صدق {r['h']:.0f}% (العشوائي {float(b.get('ht') or 0):.0f}%) · المتوسط بعد {SG_HZN[e['f']]} {_sg_pct(r['m'] if side > 0 else -r['m'])}")
     if ty == "crash":
         cr = scan.get("crash") or {}
         L = [f"🌊 انهيار في السوق كله · 4 ساعات", f"{cr.get('k', 0)} من {_sg_ar(cr.get('n', 0) or 0, 'coin')} هبطت بقوة في الساعات الأربع الأخيرة", rec]
@@ -1240,6 +1253,8 @@ def _sg_mkt_block(ty, code, side, e, st, cat, scan):
         L = ["🗞️ " + _sg_name(code, side).split(" ", 1)[-1], "قراءة اقتصادية عامة تؤثر في الكريبتو كله", rec]
     if r["h"] <= float(b.get("ht") or 0):
         L.append("⚠️ تاريخياً لم تكن وحدها إشارة — انتظر إشارة ثانية معها")
+    elif 0 < nd < 6:
+        L.append("⚠️ أيام قليلة — قد تكون صدفة")
     return {"sym": "السوق", "ty": ty, "f": e["f"], "t": L[0], "b": "\n".join(L[1:]), "h": r["h"]}
 
 
@@ -1372,7 +1387,7 @@ def _sg_row(e, st, cat, cfg):
             "n": r["n"], "w": r["w"], "h": round(r["h"], 1), "m": round(r["m"] if e["s"] > 0 else -r["m"], 5), "ln": r["ln"], "lw": r["lw"],
             "nt": e["nt"], "ht": round(e["wt"] / e["nt"] * 100.0, 1) if e["nt"] else None, "nl": e["nl"],
             "hl": round(e["wl"] / e["nl"] * 100.0, 1) if e["nl"] else None, "rare": bool(e.get("rare")),
-            "rh": float(b.get("ht") or 0), "ok": _sg_pass(e, st, cfg, cat),
+            "rh": float(b.get("ht") or 0), "ok": _sg_pass(e, st, cfg, cat), "nd": int(e.get("nd") or 0) if _sg_mktwide(e) else 0,
             "better": r["h"] > float(b.get("ht") or 0) and r["m"] > float(b.get("mt") or 0)}
 
 
