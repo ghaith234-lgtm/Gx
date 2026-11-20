@@ -42,11 +42,11 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   let { ctx, pg } = await open();
   // ① the main bar: its own button · the two forms
   const nav = await pg.evaluate(() => { const bs = [...document.querySelectorAll('#navAct .grp button')].map(b => b.textContent.trim());
-    return { bs, i: bs.indexOf('⚡ DCA+'), j: bs.indexOf('📉 نشر DCA') } });
-  ok(`① the main bar: «⚡ DCA+» right after «📉 نشر DCA» (${nav.bs.slice(0, 4).join(' · ')})`, nav.i > 0 && nav.i === nav.j + 1, nav);
+    return { bs, i: bs.indexOf('⚡ DCA+'), j: bs.indexOf('📉 DCA') } });
+  ok(`① the main bar: «⚡ DCA+» right after «📉 DCA» (${nav.bs.slice(0, 4).join(' · ')})`, nav.i > 0 && nav.i === nav.j + 1, nav);
   await pg.evaluate(() => openDeployDca()); await sleep(500);
   const cls = await pg.evaluate(() => ({ h2: document.querySelector('#modal h2').textContent, o: [...document.querySelectorAll('#dn_type option')].map(o => o.value) }));
-  ok(`① «📉 نشر DCA» keeps the sell and the buy DCA only (${cls.o.join(' · ')}) — DCA+ moved to its own button`,
+  ok(`① «📉 DCA» keeps the sell and the buy DCA only (${cls.o.join(' · ')}) — DCA+ moved to its own button`,
     JSON.stringify(cls.o) === '["dca","dca_buy"]' && /نشر بوت DCA/.test(cls.h2) && !/DCA\+/.test(cls.h2), cls);
   await pg.evaluate(() => hideModal()); await sleep(300);
   await pg.evaluate(() => document.getElementById('bDcap').click()); await sleep(700);

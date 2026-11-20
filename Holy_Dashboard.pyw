@@ -25703,7 +25703,7 @@ html.abg header{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgb
   <nav class="actions" id="navAct">
     <div class="grp" aria-label="البوتات">
       <button class="primary" onclick="openDeploy()">➕ شبكة</button>
-      <button class="primary" onclick="openDeployDca()" style="background:linear-gradient(94deg,rgb(var(--amber-rgb)/.9),rgb(var(--amber3-rgb)/.9))">📉 نشر DCA</button>
+      <button class="primary" onclick="openDeployDca()" style="background:linear-gradient(94deg,rgb(var(--amber-rgb)/.9),rgb(var(--amber3-rgb)/.9))">📉 DCA</button>
       <button class="primary" id="bDcap" onclick="openDeployDca('plus')" title="DCA+: كل أمر بمسافته وكميته ونسبة خروجه — بيعي أو شرائي — بالجدول والرسم" style="background:linear-gradient(94deg,rgb(var(--green-rgb)/.9),rgb(var(--amber-rgb)/.9))">⚡ DCA+</button>
       <button class="primary" onclick="openDeployRec()" title="بوت دوري: يشتري (أو يبيع) بمبلغ ثابت كل ساعات/أيام/أشهر ويخرج بالربح" style="background:linear-gradient(94deg,rgb(var(--cyan-rgb)/.9),rgb(var(--vio-rgb)/.9))">🔁 دوري</button>
       <button class="primary" onclick="openDeployVa()" title="مسار القيمة: تحدد قيمة العملة المطلوبة، وعند كل خطوة يشتري الفرق أو يبيع الزائد — بلا أسعار تحددها" style="background:linear-gradient(94deg,rgb(var(--vio-rgb)/.9),rgb(var(--cyan-rgb)/.9))">💹 مسار القيمة</button>
