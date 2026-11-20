@@ -283,6 +283,14 @@ m._sg_deliver(blocks[1:2], {}, m.sg_cfg(), NOW + 99)
 ok("⑦ 🔕 mute ⇒ nothing goes out · the channel «التطبيق فقط» ⇒ the app only (opens 🎯 · the indicators' channel)",
    SENT == [("app", "🟢 شراء — C1-USDT · 4 ساعات\nx", "sig", "ind")], SENT)
 _CFG.pop("sg_ch", None)
+SENT.clear()
+_CFG.update(sg_cap=0)
+long_ = [{"sym": f"C{i}-USDT", "ty": "buy", "f": "4H", "t": f"🟢 شراء — C{i}-USDT · 4 ساعات", "b": "اتفقت 4 إشارات: " + "س" * 380} for i in range(30)]
+m._sg_deliver(long_, {}, m.sg_cfg(), NOW + 120)
+tg_ = [x[1] for x in SENT if x[0] == "tg"]
+ok(f"⑦ a long round (30 notifications ≈ {sum(len(b['t']) + len(b['b']) for b in long_)} letters) reaches Telegram in {len(tg_)} parts, each under its "
+   "4096-letter limit, nothing lost", len(tg_) >= 3 and all(len(t) <= 3800 for t in tg_) and all(f"C{i}-USDT" in "".join(tg_) for i in range(30)),
+   [len(t) for t in tg_])
 m.ina_cfg = lambda: {"on": True}
 b10 = m._sg_process(scan(T4E + 40 * 14400, TDE, {}, {}, {}, {}, crash=False) | {"c": {"XRP-USDT": {"4H": {"t": T4E + 40 * 14400, "px": 2.4,
                     "a1": ["W-crash:1"], "a0": [], "lo": 2.3, "hi": 2.5, "ch": -0.1}}}}, ["4H"], {}, m.sg_cfg(), CAT, CDB, NOW + 40 * 14400)

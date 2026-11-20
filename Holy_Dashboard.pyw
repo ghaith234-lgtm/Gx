@@ -19551,13 +19551,28 @@ def _sg_block(sym, ty, fr, ents, st, cat, scan, comp):
     return {"sym": sym, "ty": ty, "f": fr, "t": L[0], "b": "\n".join(L[1:]), "ids": [e["id"] for e in ents], "h": round(r["h"], 1)}
 
 
+def _sg_chunks(text, lim=3800):
+    """✂️ تيليغرام يرفض الرسالة فوق 4096 حرفاً ⇒ أجزاء عند حدود الإشعارات (سطر فارغ)"""
+    parts, cur = [], ""
+    for blk in str(text).split("\n\n"):
+        if cur and len(cur) + 2 + len(blk) > lim:
+            parts.append(cur)
+            cur = blk
+        else:
+            cur = (cur + "\n\n" + blk) if cur else blk
+    if cur:
+        parts.append(cur)
+    return [p[:lim] for p in parts]
+
+
 def _sg_tg(text, cfg, go="sig"):
     if TG_MUTED["v"]:
         journal("notify", "🔕 لم يُرسَل إشعار إشارات (الكتم مفعّل): " + text[:300], "info")
         return False
     ok = True
     if cfg["ch"] in ("both", "tg"):
-        ok = bool(tg_send(text, plain=True)) and ok
+        for part in _sg_chunks(text):
+            ok = bool(tg_send(part, plain=True)) and ok
     if cfg["ch"] in ("both", "app"):
         _safe(app_feed_push, text, go, "ind", default=None)     # 📱 قناة «📊 تنبيهات المؤشرات» · الضغط يفتح 🎯
     return ok
