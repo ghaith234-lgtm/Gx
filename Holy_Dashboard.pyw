@@ -25999,8 +25999,10 @@ function cmpToggle(el){const M=el._cmM,src=el._cmS;if(!M)return;
   else{el._cmC=1;el.classList.remove('cmpo');h1=el.getBoundingClientRect().height;el.classList.add('cmpo')}   // نفس الإطار — بلا رسم بينهما
   el.classList.add('cmpa');
   const a=el.animate([{height:h0+'px'},{height:h1+'px'}],{duration:340,easing:'cubic-bezier(.2,.8,.2,1)'});el._cmA=a;
-  a.onfinish=()=>{if(el._cmA!==a)return;el._cmA=null;el.classList.remove('cmpa');if(!open){el._cmC=0;el._cmO=0;cmpApply(el,el._cmM,el._cmS)}};
-  a.oncancel=()=>{if(!el._cmA)el.classList.remove('cmpa')}}
+  const fin=()=>{if(el._cmA!==a)return;el._cmA=null;clearTimeout(el._cmT);el.classList.remove('cmpa');if(!open){el._cmC=0;el._cmO=0;cmpApply(el,el._cmM,el._cmS)}};
+  a.onfinish=fin;
+  a.oncancel=()=>{if(el._cmA===a)fin();else if(!el._cmA)el.classList.remove('cmpa')};   // 📏 v3.36.64: ألغاها غيرنا (الصفحة نقلت البطاقة) ⇒ النهاية نفسها
+  clearTimeout(el._cmT);el._cmT=setTimeout(fin,340+400)}             // ولو ما وصل حدث أصلاً ⇒ النهاية بعد مدتها
 function uiMbar(){return _ls('dash_mbar')!=='off'}                  // 📌 v3.36.38: الشريط المصغّر اختياري (لهذا الجهاز)
 function uiMbarToggle(){const on=!uiMbar();_ls('dash_mbar',on?null:'off');document.documentElement.classList.toggle('nombar',!on);openSettings();
   toast(on?'📌 الشريط المصغّر يظهر حين تنزل للأسفل':'📌 الشريط المصغّر مخفي',true)}

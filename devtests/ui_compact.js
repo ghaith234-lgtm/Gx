@@ -8,6 +8,7 @@
 //   ⑤ the same in every look (القديم · ج · ب · OKX) · a look added later (a new layer inside the card) is hidden in the row and shown open
 //   ⑥ the page's refresh keeps an open card open (one row per card, still first) · ⚡ lite ⇒ no animation · off ⇒ every card full again
 //   ⑦ at phone width: nothing spills out of a row · the page has no sideways scroll · no page error
+//   ⑨ v3.36.64: the motion always ends — a dropped animation · the page moving the card meanwhile · no end event (found under load)
 //   ⑧ v3.36.64 (the owner: «مشكلة في قفل الكرت ما يفتح اذا مقفول ، خليه يفتح الكرت بس ما يفتح القفل»): a locked card opens from its row · the lock stays
 const { chromium } = require('playwright');
 const URL = process.argv[2], Q = process.argv.includes('-q');
@@ -249,6 +250,24 @@ const STATE = () => {
   ok('⑧ … a button inside the opened locked card still does nothing until 🔒 is pressed (as before)', lk.r2.hit === 0 && lk.r2.locked && !lk.r2.timer, lk.r2);
   ok('⑧ … another tap closes it · still locked', !lk.r3.o && lk.r3.locked && !lk.r3.timer, lk.r3);
   ok('⑧ … an unlocked card (🔓 its minute) opens from the row too · the row does not stretch its minute · a locked 🏦 opens too', lk.r4.o && lk.r4.open && lk.r4.same && lk.r5.o && lk.r5.locked, lk);
+
+  // ⑨ v3.36.64 — the motion always ends (found under load: the page re-sorted the cards while one shrank ⇒ it stayed open, clipped)
+  const en = await pg.evaluate(async () => {
+    const W = ms => new Promise(r => setTimeout(r, ms));
+    const el = [...document.querySelectorAll('#grid .card[data-dir]')][5], st = () => ({ o: el.classList.contains('cmpo'), a: el.classList.contains('cmpa'), c: el._cmC || 0, n: el.getAnimations().length });
+    const open = async () => { if (!el.classList.contains('cmpo')) { el._cmr.click(); await W(700) } };
+    await open(); el._cmr.click(); await W(60); el.getAnimations().forEach(x => x.cancel()); await W(150); const cancel = st();
+    await open(); el._cmr.click(); await W(60); { const p = el.parentNode, nx = el.nextSibling; p.appendChild(el); p.insertBefore(el, nx) } await W(900); const moved = st();
+    await open(); el._cmr.click(); el._cmA.onfinish = null; el._cmA.oncancel = null; await W(900); const silent = st();
+    el._cmr.click(); await W(60); el.getAnimations().forEach(x => x.cancel()); await W(150); const openCancel = st();
+    el._cmr.click(); await W(700);
+    return { cancel, moved, silent, openCancel, end: st() };
+  });
+  const shut = x => !x.o && !x.a && !x.c && !x.n;
+  ok(`⑨ closing, the animation dropped from outside ⇒ the card still ends as a row (${JSON.stringify(en.cancel)})`, shut(en.cancel), en);
+  ok(`⑨ closing, the page moves the card meanwhile (a re-sort) ⇒ it ends as a row (${JSON.stringify(en.moved)})`, shut(en.moved), en);
+  ok(`⑨ closing, no end event at all ⇒ it ends as a row after the animation's time (${JSON.stringify(en.silent)})`, shut(en.silent), en);
+  ok(`⑨ opening, the animation dropped ⇒ it stays open, not clipped (${JSON.stringify(en.openCancel)}) · and closes again`, en.openCancel.o && !en.openCancel.a && !en.openCancel.c && shut(en.end), en);
 
   await ctx.close();
 
