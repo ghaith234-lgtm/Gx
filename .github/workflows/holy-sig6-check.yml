@@ -1,0 +1,24 @@
+# 🔬 Holy signals check, sixth pass (the owner 20-11 sent gunbot.com/features — «اني اريد اتضيف كل الاشارات واتسوي فحص واتشوف
+#    واتسويه اشارة وحده»): 36 signal systems from their public descriptions · 28 coins · 1H (~1 year) · 4H (~2 years) · 1D (~3 years) ·
+#    buy and sell · net after fees · the last 40% of time apart · and ONE combined signal (weights learned on the first 60% only).
+#    Results: lines HOLYSIG6. Public market data only — no keys, no orders, no notifications.
+name: Holy signals check 6
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/sig_check6.py', 'ci/RUN_SIG6', '.github/workflows/holy-sig6-check.yml']
+permissions:
+  contents: read
+jobs:
+  real-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 36 signal systems on real OKX prices (public data · no keys · no orders · no notifications)
+        run: |
+          pip install -q requests
+          python3 ci/sig_check6.py Holy_Dashboard.pyw
