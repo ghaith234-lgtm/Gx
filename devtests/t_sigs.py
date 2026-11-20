@@ -3,7 +3,8 @@
 #   احدد النسبة الاشعارات اخاف يطلع مزعج … افحص وضيف وكذلك التوقعات لا تنسها».
 #   A closed folder (no network · no keys · synthetic candles for 12 coins · synthetic macro series):
 #   ① the 36 systems in the dashboard ARE ci/sig_check6.py's block (byte for byte) · the names · the types
-#   ② the catalog: every signal alone + combinations 2 … 6 + 💎 rare · learn/test · random · weeks · the compass history
+#   ② the catalog (🧠 v3.36.69): every signal alone + agreeing combinations 2 … 6 proven in all 4 periods · random per period · the
+#     compass history · ②b the rule on planted signals · the target/stop judge · the horizons (غداً · الشهر القادم)
 #   ③ the macro readings move later by their publication delay (the GPR 8 days)
 #   ④ the scan: the last closed candle · 🌊 a planted crash on the last 4-hour candle is seen
 #   ⑤ firing: a combination fires once when it starts (not again on the next candle) · every fire goes to the live record · only coins and
@@ -120,27 +121,86 @@ E = cat["e"] if cat else []
 sizes = {k: sum(1 for e in E if len(e["k"]) == k) for k in range(1, 7)}
 codes = set(k for e in E for k in e["k"])
 ok(f"② the catalog is built ({out.get('n')} signals and combinations from {out.get('coins')} coins in {time.time() - t0:.0f}s) · sizes {sizes}",
-   out.get("ok") and cat and sizes[1] > 100 and sizes[2] > 0 and sizes[3] > 0 and sizes[4] > 0, out)
+   out.get("ok") and cat and sizes[1] > 100, out)
 ok(f"② every kind of signal is in it ({len(codes)} codes): the 36 systems · 📊 the old readings · 🔮 · 🧲 · 💪 · 🌊 · 😨 · 🗞️",
    sum(1 for c in L.SYS if c in codes) >= 30 and any(c.startswith("O-") for c in codes) and any(c.startswith("F-") for c in codes)
    and "W-crash" in codes and "M-fng" in codes and any(c in codes for c in ("M-vix", "M-dxy", "M-us10", "M-epu", "M-gpr")), sorted(codes))
-ok("② BUY and SELL, both frames · every entry has its learn and test record · the 💎 rare are flagged (6–30 learn cases · ≥ 75%)",
-   {e["s"] for e in E} == {1, -1} and {e["f"] for e in E} == {"4H", "1D"} and all(e["nl"] + e["nt"] >= 3 for e in E)
-   and any(e["rare"] for e in E) and all(6 <= e["nl"] <= 30 and e["wl"] / e["nl"] >= 0.75 for e in E if e["rare"] and len(e["k"]) > 1),
-   [e for e in E if e["rare"]][:2])
-ok("② random for comparison per frame and side · weeks of the test period · the compass history (up · flat · down)",
-   all(k in cat["base"] for k in ("4H|1", "4H|-1", "1D|1", "1D|-1")) and cat["wk"]["4H"] > 1 and cat["wk"]["1D"] > 1
-   and set((cat.get("compass") or {}).keys()) <= {"up", "flat", "down"} and cat.get("compass"), (cat["base"], cat["wk"], cat.get("compass")))
+ok("② 🧠 v3.36.69: BUY and SELL, both frames · every entry has its record in the 4 periods (cases · wins · average · separate windows) and a "
+   "«proven» flag · no 💎 rare any more · every COMBINATION in the catalog is proven (beat random in all four periods)",
+   {e["s"] for e in E} == {1, -1} and {e["f"] for e in E} == {"4H", "1D"} and all(e["nt"] >= 3 and len(e["pp"]) == 4 and "c4" in e for e in E)
+   and not any(e["rare"] for e in E) and all(e["c4"] for e in E if len(e["k"]) > 1) and cat.get("rule") == "c4"
+   and all(sum(x[0] for x in e["pp"]) == e["nt"] and sum(x[1] for x in e["pp"]) == e["wt"] for e in E), [e for e in E if len(e["k"]) > 1][:2])
+ok("② random for comparison per frame and side (and per period) · weeks of history · the compass history (up · flat · down) with a month",
+   all(k in cat["base"] and len(cat["base"][k]["pp"]) == 4 for k in ("4H|1", "4H|-1", "1D|1", "1D|-1")) and cat["wk"]["4H"] > 1 and cat["wk"]["1D"] > 1
+   and set((cat.get("compass") or {}).keys()) <= {"up", "flat", "down"} and cat.get("compass")
+   and all("m30" in v for v in cat["compass"].values()), (cat["base"], cat["wk"], cat.get("compass")))
 _bk = {}
 for e in E:
-    _bk.setdefault((e["f"], e["s"], e["nl"], e["wl"], e["nt"], e["wt"]), []).append(set(e["k"]))
+    _bk.setdefault((e["f"], e["s"], e["nt"], e["wt"], tuple(tuple(x) for x in e["pp"])), []).append(set(e["k"]))
 ok(f"② no combination repeats a smaller one with the very same cases (the extra signal added nothing — {cat.get('dup')} removed)",
    cat.get("dup") is not None and not any(a < b for g in _bk.values() for a in g for b in g), cat.get("dup"))
-ok("② every entry knows on how many different days its test cases fell (a market-wide reading hits every coin the same day)",
-   all(0 <= e["nd"] <= e["nt"] and (e["nd"] >= 1 or e["nt"] == 0) for e in E), [e for e in E if not (0 <= e.get("nd", -1) <= e["nt"])][:2])
+ok("② every entry knows in how many separate windows its cases fell (a day for «tomorrow» · 30 days for the month — a market-wide reading hits "
+   "every coin the same day)", all(0 <= e["nd"] <= e["nt"] and (e["nd"] >= 1 or e["nt"] == 0) for e in E),
+   [e for e in E if not (0 <= e.get("nd", -1) <= e["nt"])][:2])
 e1 = next(e for e in E if len(e["k"]) == 1 and e["k"][0] == "W-crash" and e["f"] == "4H" and e["s"] == 1)
-ok(f"② 🌊 the market-wide crash alone has its record ({e1['nl']} + {e1['nt']} cases) and its test events for the weekly estimate",
-   e1["nl"] + e1["nt"] >= 3 and (e1["ev"] is None or len(e1["ev"]) == e1["nt"]), e1)
+ok(f"② 🌊 the market-wide crash alone has its record ({e1['nt']} cases — its own other side is not «against» it) and its events for the "
+   "weekly estimate", e1["nt"] >= 3 and (e1["ev"] is None or len(e1["ev"]) == e1["nt"]), e1)
+
+# ②b the owner's rule on planted signals (deterministic): agreeing groups that beat random in EVERY period are proven · one that fails
+#     in the last period is not · an opposite signal on at the same time removes the case
+prnd = random.Random(5)
+
+
+def planted(n, daily, plant):
+    rows, p = [], 100.0
+    up = {}
+    for i0, kind in plant:
+        for j in range(1, 7):
+            up[i0 + j] = 0.012 if kind == "win" else -0.012
+    for i in range(n):
+        r = up.get(i, prnd.gauss(0, 0.004))
+        o, c = p, p * math.exp(r)
+        rows.append([1600000000 + i * (86400 if daily else 14400), o, max(o, c) * 1.001, min(o, c) * 0.999, c, 1000.0])
+        p = c
+    return m._sg_D(rows, daily)
+
+
+PC = {}
+for j in range(6):
+    idx = list(range(230 + j * 3, 1180, 26))
+    q4 = 230 + (1190 - 230) * 3 // 4
+    plant = [(i, "win") for i in idx]
+    plant_c = [(i + 13, "win" if i + 13 < q4 else "loss") for i in idx]
+    D4 = planted(1200, False, plant + plant_c)
+    E4 = {("08", 1): sorted(idx + [i + 7 for i in idx]), ("09", 1): sorted(idx + [i + 20 for i in idx]),
+          ("10", 1): [i + 13 for i in idx], ("11", 1): [i + 13 for i in idx],
+          ("12", 1): list(idx[::2]), ("13", -1): list(idx[::2])}
+    Dd = planted(400, True, [])
+    PC[f"C{j}-USDT"] = (D4, E4, Dd, {}, D4["T"][700])
+cp = m._sg_search(PC)
+ix = {e["id"]: e for e in cp["e"]}
+g1, g2 = ix.get("4H|1|08+09"), ix.get("4H|1|10+11")
+ok("②b «08 + 09» always together before a rise ⇒ proven (all 4 periods beat random) · accuracy shown over the whole history",
+   g1 and g1["c4"] and g1["wt"] / g1["nt"] > 0.9 and all(x[0] >= m.SG_PMIN["4H"] and x[3] >= 3 for x in g1["pp"]), g1)
+ok("②b «10 + 11» rose in periods 1–3 but fell in period 4 ⇒ NOT proven (it is listed with its %, never notified)",
+   g2 is not None and not g2["c4"] and g2["pp"][3][1] == 0 and not m._sg_pass(g2, {}, m.sg_cfg(), cp) if g2 else
+   not any(e["c4"] and set(e["k"]) == {"10", "11"} for e in cp["e"]), g2)
+e12 = ix.get("4H|1|12")
+ok("②b «12» fires only together with «13» on the other side (a SELL on at the same time) ⇒ no case is counted for it (the owner: «لازم متفقين»)",
+   e12 is None or e12["nt"] == 0, e12)
+H_, L_, C_ = [1, 1.01, 1.06, 1, 1], [1, 0.99, 1.0, 1, 1], [1, 1.0, 1.05, 1, 1.02]
+ok("②b the judge (history and live record alike): target +5% touched first ⇒ +5% − fee · the stop first ⇒ −5% − fee · both in one candle ⇒ "
+   "the stop (careful) · neither ⇒ the move at the end", abs(m._sg_out(H_, L_, C_, 0, 4, 1, 0.05) - (0.05 - m.SG_FEE)) < 1e-9
+   and abs(m._sg_out([1, 1.01, 1, 1, 1], [1, 0.94, 1, 1, 1], C_, 0, 4, 1, 0.05) - (-0.05 - m.SG_FEE)) < 1e-9
+   and abs(m._sg_out([1, 1.06, 1, 1, 1], [1, 0.94, 1, 1, 1], C_, 0, 4, 1, 0.05) - (-0.05 - m.SG_FEE)) < 1e-9
+   and abs(m._sg_out([1, 1.01, 1.01, 1.01, 1.02], [1, 0.99, 0.99, 0.99, 0.99], C_, 0, 4, 1, 0.05) - (0.02 - m.SG_FEE)) < 1e-9
+   and abs(m._sg_out([1, 1.01, 1, 1, 1], [1, 0.94, 1, 1, 1], C_, 0, 4, -1, 0.05) - (0.05 - m.SG_FEE)) < 1e-9
+   and m._sg_out(H_, L_, C_, 2, 4, 1, 0.05) is None, [m._sg_out(H_, L_, C_, 0, 4, 1, 0.05)])
+sg_ = m._sg_sig([100 * math.exp(0.01 * ((-1) ** i)) for i in range(300)], 6)
+ok("②b the target/stop distance comes from the coin's own moves before the entry (×√horizon) — bounded 0.4% … 40%",
+   sg_[100] == 0.0 and 0.004 <= sg_[200] <= 0.4 and abs(sg_[200] - 0.02 * math.sqrt(6)) < 0.005, sg_[200])
+ok("②b the horizons: the 4-hour frame is judged after a day («غداً») · the daily after 30 days («الشهر القادم») · the daily history ~7 years",
+   m.SG_HZ == {"4H": 6, "1D": 30} and m.SG_HZW == {"4H": "غداً", "1D": "الشهر القادم"} and m.SG_N["1D"] >= 2500, (m.SG_HZ, m.SG_N))
 
 # ③ the publication delay
 pdb, fdb = m._pro_db(), m._fc_db()
@@ -161,13 +221,13 @@ ok(f"④ 🌊 the planted crash on the last 4-hour candle is seen ({sc['crash'][
 
 # ⑤ firing — a small catalog and planted scans (deterministic)
 CAT = {"e": [
-    {"id": "4H|1|18+43+W-crash", "f": "4H", "s": 1, "k": ["18", "43", "W-crash"], "ty": "buy", "nl": 60, "wl": 48, "ml": 0.03, "nt": 24, "wt": 20, "mt": 0.04, "rare": False, "nd": 16, "ev": []},
+    {"id": "4H|1|18+43+W-crash", "f": "4H", "s": 1, "k": ["18", "43", "W-crash"], "ty": "buy", "nl": 60, "wl": 48, "ml": 0.03, "nt": 24, "wt": 20, "mt": 0.04, "rare": False, "nd": 16, "ev": [], "c4": True},
     {"id": "4H|1|18", "f": "4H", "s": 1, "k": ["18"], "ty": "buy", "nl": 900, "wl": 400, "ml": 0.001, "nt": 500, "wt": 230, "mt": 0.0, "rare": False, "ev": None},
-    {"id": "1D|1|12+35", "f": "1D", "s": 1, "k": ["12", "35"], "ty": "up", "nl": 40, "wl": 28, "ml": 0.05, "nt": 22, "wt": 15, "mt": 0.06, "rare": False, "ev": []},
-    {"id": "1D|1|20+37+O-rsi", "f": "1D", "s": 1, "k": ["20", "37", "O-rsi"], "ty": "buy", "nl": 9, "wl": 8, "ml": 0.1, "nt": 4, "wt": 3, "mt": 0.12, "rare": True, "ev": []},
-    {"id": "1D|-1|X-ad", "f": "1D", "s": -1, "k": ["X-ad"], "ty": "dist", "nl": 120, "wl": 50, "ml": -0.01, "nt": 60, "wt": 31, "mt": -0.01, "rare": False, "ev": []},
-    {"id": "1D|1|M-fng", "f": "1D", "s": 1, "k": ["M-fng"], "ty": "fng", "nl": 300, "wl": 120, "ml": -0.01, "nt": 100, "wt": 30, "mt": -0.02, "rare": False, "ev": []},
-    {"id": "4H|1|W-crash", "f": "4H", "s": 1, "k": ["W-crash"], "ty": "crash", "nl": 50, "wl": 30, "ml": 0.01, "nt": 25, "wt": 14, "mt": 0.012, "rare": False, "nd": 9, "ev": []}],
+    {"id": "1D|1|12+35", "f": "1D", "s": 1, "k": ["12", "35"], "ty": "up", "nl": 40, "wl": 28, "ml": 0.05, "nt": 22, "wt": 15, "mt": 0.06, "rare": False, "ev": [], "c4": True},
+    {"id": "1D|1|20+37+O-rsi", "f": "1D", "s": 1, "k": ["20", "37", "O-rsi"], "ty": "buy", "nl": 9, "wl": 8, "ml": 0.1, "nt": 13, "wt": 11, "mt": 0.12, "rare": False, "ev": [], "c4": False},
+    {"id": "1D|-1|X-ad", "f": "1D", "s": -1, "k": ["X-ad"], "ty": "dist", "nl": 120, "wl": 50, "ml": -0.01, "nt": 60, "wt": 31, "mt": -0.01, "rare": False, "ev": [], "c4": True},
+    {"id": "1D|1|M-fng", "f": "1D", "s": 1, "k": ["M-fng"], "ty": "fng", "nl": 300, "wl": 120, "ml": -0.01, "nt": 100, "wt": 30, "mt": -0.02, "rare": False, "ev": [], "c4": True},
+    {"id": "4H|1|W-crash", "f": "4H", "s": 1, "k": ["W-crash"], "ty": "crash", "nl": 50, "wl": 30, "ml": 0.01, "nt": 25, "wt": 14, "mt": 0.012, "rare": False, "nd": 9, "ev": [], "c4": True}],
     "base": {"4H|1": {"ht": 43.0, "mt": 0.0}, "1D|1": {"ht": 43.0, "mt": 0.0}, "1D|-1": {"ht": 56.0, "mt": 0.0}, "4H|-1": {"ht": 54.0, "mt": 0.0}},
     "wk": {"4H": 40, "1D": 40}, "coins": ["XRP-USDT", "SOL-USDT", "ADA-USDT"]}
 CAT["idx"] = {e["id"]: e for e in CAT["e"]}
@@ -199,9 +259,9 @@ ok("⑤ notified: one message per coin and type, only your coins (XRP · SOL —
    tys == sorted([("XRP-USDT", "buy", "4H"), ("SOL-USDT", "buy", "4H"), ("XRP-USDT", "up", "1D"), ("السوق", "fng", "1D"), ("السوق", "crash", "4H")]), tys)
 bx = next(b for b in b1 if b["sym"] == "XRP-USDT" and b["ty"] == "buy")
 txt = bx["t"] + "\n" + bx["b"]
-ok("⑤ the text: «🟢 شراء — XRP-USDT · 4 ساعات» · the signals by name · «📊 السجل: صدقت 20 من 24 مرة (83%) · الشراء العشوائي 43% · المتوسط بعد 3 أيام» · "
+ok("⑤ the text: «🟢 شراء — XRP-USDT · 4 ساعات» · the signals by name · «📊 السجل: صدقت 20 من 24 مرة (83%) · الشراء العشوائي 43% · المتوسط بعد يوم» · "
    "price + where it fails · ⚠️ not a guarantee", bx["t"] == "🟢 شراء — XRP-USDT · 4 ساعات" and "عودة من تحت حد بولنجر بقوة" in txt and "كسر قاعدة سعرية (QFL)" in txt
-   and "🌊 انهيار السوق كله" in txt and "📊 السجل: صدقت 20 من 24 مرة (83%) — اختبارها في 16 يوماً مختلفاً · الشراء العشوائي 43% · المتوسط بعد 3 أيام +4.0%" in txt
+   and "🌊 انهيار السوق كله" in txt and "📊 السجل: صدقت 20 من 24 مرة (83%) — اختبارها في 16 يوماً مختلفاً · الشراء العشوائي 43% · المتوسط بعد يوم +4.0%" in txt
    and "💵 السعر الآن 2.45 · ❌ تبطل إذا أُغلقت شمعة 4 ساعات تحت 2.3" in txt and "⚠️ ليست ضماناً — القرار لك" in txt, txt)
 bc = next(b for b in b1 if b["ty"] == "crash")
 ok("⑤ 🌊 the market-wide crash: «11 من 28 عملة هبطت بقوة» + its record with the real number of days («في 9 أيام مختلفة · 25 حالة على العملات») + "
@@ -223,13 +283,9 @@ ok("⑤ after a day ⇒ the message comes again", [b["sym"] for b in b5 if b["ty
 _CFG.update(sg_rare=True, sg_rmin=6)
 sc6 = scan(T4E, TDE + 86400, {}, {}, {"SOL-USDT": ["20:1", "37:1", "O-rsi:1"]}, {"SOL-USDT": ["20:1"]})
 b6 = m._sg_process(sc6, ["1D"], st, m.sg_cfg(), CAT, CDB, NOW + 86400)
-ok("⑤ 💎 a rare combination: «💎 تركيبة نادرة — شراء — SOL-USDT · يومي» · «ظهرت 13 مرة فقط، صدقت 11 (85%)» · ⚠️ few cases",
-   len(b6) == 1 and b6[0]["t"] == "💎 تركيبة نادرة — شراء — SOL-USDT · يومي" and "📊 ظهرت 13 مرة فقط، صدقت 11 (85%)" in b6[0]["b"]
-   and "⚠️ عدد المرات قليل — قد تكون صدفة" in b6[0]["b"], b6)
+ok("⑤ 🧠 a combination that did NOT hold in all four periods (13 cases · 85%) is recorded for the live record but never notified — even with "
+   "the old «💎» switch on", not b6 and any(p[0] == "1D|1|20+37+O-rsi" and p[4] == 0 for p in st["pend"]), (b6, st["pend"][-2:]))
 _CFG.update(sg_rare=False)
-st_r = {}
-b6b = m._sg_process(scan(T4E, TDE + 86400, {}, {}, {"SOL-USDT": ["20:1", "37:1", "O-rsi:1"]}, {}), ["1D"], st_r, m.sg_cfg(), CAT, CDB, NOW)
-ok("⑤ 💎 off ⇒ the rare one is recorded but not notified", not b6b and st_r["pend"][0][4] == 0, (b6b, st_r.get("pend")))
 _CFG.update(sg_rnd=False, sg_thr=50, sg_min=10, sg_types={"dist": True})
 st_d = {}
 b7 = m._sg_process(scan(T4E, TDE, {}, {}, {"XRP-USDT": ["X-ad:-1"]}, {}), ["1D"], st_d, m.sg_cfg(), CAT, CDB, NOW)
@@ -249,17 +305,22 @@ ok("⑤ the days in words: يوم واحد · يومين مختلفين · 6 أ�
    ["كلها في يوم واحد", "في يومين مختلفين", "في 6 أيام مختلفة", "في 16 يوماً مختلفاً"], [m._sg_dtxt(x) for x in (1, 2, 6, 16)])
 
 # ⑥ the live record grades itself
-cd2 = {"c4": {"XRP-USDT": {"d": [[T4E + i * 14400, 1, 1, 1, 2.45 * (1.05 if i == 18 else 1), 1] for i in range(0, 30)]}}, "c": {}}
+cd2 = {"c4": {"XRP-USDT": {"d": [[T4E + i * 14400, 1, 1, 1, 2.45 * (1.05 if i == 6 else 1), 1] for i in range(0, 30)]}}, "c": {}}
 st6 = {"pend": [["4H|1|18+43+W-crash", "XRP-USDT", T4E, 2.45, 1], ["4H|1|18", "XRP-USDT", T4E + 14400, 2.45, 0]]}
 res6 = m._sg_grade(st6, cd2, CAT, NOW + 30 * 14400)
 r6 = m._sg_rec(CAT["idx"]["4H|1|18+43+W-crash"], st6)
-ok("⑥ after 3 days (18 candles) the fire is graded by itself: +5% − 0.2% fees ⇒ a win · the record grows to 21 of 25 (its day kept for the "
+ok("⑥ after a day (6 candles) the fire is graded by itself: +5% − 0.2% fees ⇒ a win · the record grows to 21 of 25 (its day kept for the "
    "independent count) · the one 4 hours later too (its candle is there, a loss)", st6["rec"]["4H|1|18+43+W-crash"][:2] == [1, 1]
    and st6["rec"]["4H|1|18+43+W-crash"][3] == [T4E // 86400] and abs(st6["rec"]["4H|1|18+43+W-crash"][2] - 0.048) < 1e-6
    and r6["n"] == 25 and r6["w"] == 21 and st6["rec"]["4H|1|18"][:2] == [1, 0] and len(res6) == 1 and not st6["pend"], (st6, res6))
+cd3 = {"c4": {"SOL-USDT": {"d": [[T4E + i * 14400, 2.45, 2.46, 2.45 * (0.96 if i == 2 else 0.999), 2.45 * (1.05 if i == 6 else 1), 1] for i in range(0, 30)]}}, "c": {}}
+st6b = {"pend": [["4H|1|18", "SOL-USDT", T4E, 2.45, 0, 0.03]]}
+m._sg_grade(st6b, cd3, CAT, NOW + 30 * 14400)
+ok("⑥ 🎯 a fire saved with its target/stop distance (3%) is judged like the history: the stop was touched on the 2nd candle ⇒ ❌ −3% − fee, "
+   "even though the price ended the day +5%", st6b["rec"]["4H|1|18"][:2] == [1, 0] and abs(st6b["rec"]["4H|1|18"][2] - (-0.03 - m.SG_FEE)) < 1e-6, st6b)
 rb = m._sg_res_block(res6, st6, CAT)
-ok("⑥ the result of what you were told: «✅ نتيجة إشارة شراء XRP قبل 3 أيام: +4.8%» · «السجل الآن: 21 من 25 مرة (84%)»",
-   rb and rb["t"] == "✅ نتيجة إشارة شراء XRP قبل 3 أيام: +4.8%" and rb["b"] == "السجل الآن: 21 من 25 مرة (84%)", rb)
+ok("⑥ the result of what you were told: «✅ نتيجة إشارة شراء XRP قبل يوم: +4.8%» · «السجل الآن: 21 من 25 مرة (84%)»",
+   rb and rb["t"] == "✅ نتيجة إشارة شراء XRP قبل يوم: +4.8%" and rb["b"] == "السجل الآن: 21 من 25 مرة (84%)", rb)
 
 # ⑦ delivery
 SENT.clear()
@@ -364,6 +425,9 @@ ok("⑧ 🪙 a coin whose data is already here: «🪙 أُضيفت SOL لإشع
 m.sg_set({"coins": None})
 time.sleep(0.3)
 real_cfg.update(ticker_coins=list(cat["coins"]), sg_thr=50, sg_min=3, sg_rnd=False, sg_cap=0)
+_c4 = {e["id"]: e.get("c4") for e in m._sg_cat()["e"]}
+for e in m._sg_cat()["e"]:
+    e["c4"] = True                                       # (the random synthetic history proves nothing — as if every entry held in the 4 periods)
 e50 = m.sg_estimate()
 e70 = m.sg_estimate(m._sg_cfg_merge(m.sg_cfg(), {"thr": 70, "min": 20}))
 ok(f"⑧ the weekly estimate falls when the threshold rises: 50% ≈ {e50['wk']} a week ({e50['n']} pass) · 70% & 20 cases ≈ {e70['wk']} ({e70['n']})",
@@ -371,6 +435,8 @@ ok(f"⑧ the weekly estimate falls when the threshold rises: 50% ≈ {e50['wk']}
 real_cfg.update(sg_cap=5)
 e5 = m.sg_estimate()
 ok("⑧ … and after the daily cap 5 it is at most 35 a week", e5["cut"] <= 35 and (e5["capped"] or e5["wk"] <= 35), e5)
+for e in m._sg_cat()["e"]:
+    e["c4"] = _c4.get(e["id"])
 
 m.sg_tick = _RT
 

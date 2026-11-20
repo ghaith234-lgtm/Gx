@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.68"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.69"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -18637,15 +18637,18 @@ SG_FR = ("4H", "1D")
 SG_SEC = {"4H": 14400, "1D": 86400}
 SG_BAR = {"4H": ("c4", "4H", "4h"), "1D": ("c", "1Dutc", "1d")}
 SG_LK = {"4H": 3, "1D": 2}                 # «معاً» = أُطلقت خلال هذا العدد من الشموع (مثل القياس)
-SG_HZ = {"4H": 18, "1D": 7}                # الحكم بعد: 4 ساعات ← 3 أيام · اليومي ← أسبوع
-SG_HZN = {"4H": "3 أيام", "1D": "أسبوع"}
+SG_HZ = {"4H": 6, "1D": 30}                # 🧠 v3.36.69: الحكم بعد: إطار 4 ساعات ← يوم (غداً) · اليومي ← 30 يوماً (الشهر القادم)
+SG_HZN = {"4H": "يوم", "1D": "شهر"}
+SG_HZW = {"4H": "غداً", "1D": "الشهر القادم"}
+SG_PMIN = {"4H": 6, "1D": 4}               # أقل عدد حالات في كل فترة من الأربع (مع ≥ 3 نوافذ مستقلة)
+SG_W = 120                                 # 📏 شموع التذبذب قبل الدخول (بُعد الهدف والوقف)
 SG_FN = {"4H": "4 ساعات", "1D": "يومي"}
-SG_N = {"4H": 4400, "1D": 1100}            # تاريخ القياس (~سنتان · ~3 سنوات)
+SG_N = {"4H": 4400, "1D": 2600}            # تاريخ القياس (~سنتان · ~7 سنوات — للشهر القادم)
 SG_MIN = {"4H": 700, "1D": 300}
 SG_UNI = 34                                # عملات القياس: عملاتك + أكبر 28 عملة (حالات أكثر = سجل أوثق)
 SG_EVERY = 300
 SG_CAT_AGE = 7 * 86400                     # يُعاد البحث عن التركيبات كل أسبوع (على التاريخ الأحدث)
-SG_CAT_VER = 2                             # 🔄 v3.36.68: نسخة الدليل — دليل بُني بكود أقدم (بلا إشارة جديدة) يُعاد بناؤه وحده
+SG_CAT_VER = 3                             # 🔄 نسخة الدليل — دليل بُني بكود أقدم يُعاد بناؤه وحده (v3: المجموعات المتفقة بالفترات الأربعة)
 SG_FEE = 0.002
 SG_BEAM, SG_TOPS, SG_KEEP, SG_RAREK = 40, 40, 25, 40
 SG_MLAG = {"fng": 0, "vix": 1, "dxy": 1, "us10": 1, "epu": 2, "gpr": 8, "tone": 1}
@@ -18981,37 +18984,97 @@ def _sg_hit(v):
     return sum(1 for x in v if x > 0) / len(v) * 100.0 if v else 0.0
 
 
+def _sg_sig(C, h, w=SG_W):
+    """📏 تذبذب العملة قبل كل شمعة: انحراف عوائد الشمعة الواحدة (آخر w شمعة) × √المدة ⇒ بُعد الهدف والوقف (محصور 0.4% … 40%)"""
+    n = len(C)
+    out = [0.0] * n
+    lr = [0.0] + [math.log(C[i] / C[i - 1]) if C[i] > 0 and C[i - 1] > 0 else 0.0 for i in range(1, n)]
+    s1 = s2 = 0.0
+    for i in range(1, n):
+        s1 += lr[i]
+        s2 += lr[i] * lr[i]
+        if i > w:
+            s1 -= lr[i - w]
+            s2 -= lr[i - w] * lr[i - w]
+        if i >= w:
+            var = max(0.0, (s2 - s1 * s1 / w) / (w - 1))
+            out[i] = min(0.4, max(0.004, math.sqrt(var) * math.sqrt(h)))
+    return out
+
+
+def _sg_out(H, L, C, i, h, side, s, p=None):
+    """🎯 الحكم (التاريخ والسجل الحي بقاعدة واحدة): الهدف قبل الوقف ⇒ ربح بُعده · الوقف أولاً (أو كلاهما بالشمعة نفسها) ⇒ خسارة بُعده ·
+    لا هذا ولا ذاك حتى نهاية المدة ⇒ حركة السعر · كله بعد العمولة"""
+    if i + h >= len(C):
+        return None
+    p = p or C[i]
+    if p <= 0 or C[i + h] <= 0:
+        return None
+    if s and s > 0:
+        up, dn = p * (1 + s), p * (1 - s)
+        for j in range(i + 1, i + h + 1):
+            if side > 0:
+                if L[j] <= dn:
+                    return -s - SG_FEE
+                if H[j] >= up:
+                    return s - SG_FEE
+            else:
+                if H[j] >= up:
+                    return -s - SG_FEE
+                if L[j] <= dn:
+                    return s - SG_FEE
+    r = C[i + h] / p - 1.0 if side > 0 else p / C[i + h] - 1.0
+    return r - SG_FEE
+
+
 def _sg_search(COIN, prog=None):
-    """🔎 كل إشارة وحدها + التركيبات (2 … 6 معاً) — البحث على أول 60% من الوقت فقط · الحكم على آخر 40% (نفس ci/sig_check9.py)"""
-    L = _sg_lib()
+    """🔎 (v3.36.69 · المحلل) كل إشارة وحدها + التركيبات (2 … 6 معاً · كلها بالجهة نفسها ولا إشارة من الجهة المعاكسة) — التاريخ 4 فترات
+    متساوية · «مثبتة» (c4) فقط إذا غلبت العشوائي (النسبة والمتوسط) في كل فترة بحالات كافية و≥ 3 نوافذ مستقلة (نفس ci/sig_check11.py) ·
+    الحكم بالهدف والوقف (_sg_out) · الدقة = نسبة الصح على كل التاريخ"""
     names = list(COIN)
-    PRE = {}
-    for sym, (D4, E4, Dd, Ed, st) in COIN.items():
-        for fr, D, E in (("4H", D4, E4), ("1D", Dd, Ed)):
+    PRE, BND = {}, {}
+    for fr in SG_FR:
+        k0 = 0 if fr == "4H" else 2
+        vs = [v[k0] for v in COIN.values() if v[k0]["n"] > 260]
+        t0 = min(D["T"][210] for D in vs)
+        t1 = max(D["T"][-1] for D in vs)
+        BND[fr] = [t0 + (t1 - t0) * q / 4.0 for q in (1, 2, 3)]
+    for sym, v in COIN.items():
+        for fr, D, E in (("4H", v[0], v[1]), ("1D", v[2], v[3])):
             h, lk = SG_HZ[fr], SG_LK[fr]
             act = {k: set(j for i in lst for j in range(i, min(D["n"], i + lk))) for k, lst in E.items() if lst}
-            rl = {i: L.fwd(D["C"], i, h, 1) for i in range(210, D["n"])}
-            rs = {i: L.fwd(D["C"], i, h, -1) for i in range(210, D["n"])}
-            cut = bisect.bisect_left(D["T"], st)
-            PRE[(sym, fr)] = (act, rl, rs, cut, D["T"])
+            opp = {1: set(), -1: set()}
+            for (code, sd), st_ in act.items():
+                if code != "W-crash":                 # 🌊 الانهيار قراءة بالجهتين (ارتداد أو استمرار) — ليس «ضد» نفسه
+                    opp[sd] |= st_
+            sg = _sg_sig(D["C"], h)
+            rl, rs = {}, {}
+            for i in range(210, D["n"] - h):
+                rl[i] = _sg_out(D["H"], D["L"], D["C"], i, h, 1, sg[i])
+                rs[i] = _sg_out(D["H"], D["L"], D["C"], i, h, -1, sg[i])
+            pr = [bisect.bisect_right(BND[fr], t) for t in D["T"]]
+            PRE[(sym, fr)] = (act, opp, rl, rs, pr, D["T"], max(86400, h * SG_SEC[fr]))
+        time.sleep(0.001)
 
     def base(fr, side):
-        l, t = [], []
+        P = [[] for _ in range(4)]
         for sym in names:
-            act, rl, rs, cut, T = PRE[(sym, fr)]
+            act, opp, rl, rs, pr, T, win = PRE[(sym, fr)]
             for i, x in (rl if side > 0 else rs).items():
                 if x is not None:
-                    (l if i < cut else t).append(x)
-        return l, t
+                    P[pr[i]].append(x)
+        return P
 
     def evalc(fr, keys, side, want=False):
-        l, t, ev, ld = [], [], [], set()
+        P, W, ev = [[] for _ in range(4)], [set() for _ in range(4)], []
         for ci, sym in enumerate(names):
-            act, rl, rs, cut, T = PRE[(sym, fr)]
+            act, opp, rl, rs, pr, T, win = PRE[(sym, fr)]
             sets = [act.get(k) for k in keys]
             if any(s is None for s in sets):
                 continue
             inter = set.intersection(*sorted(sets, key=len))
+            if not (len(keys) == 1 and keys[0][0].startswith(("W-", "M-"))):  # قراءة السوق وحدها تصف السوق — ليست اتفاق مؤشرات عملة
+                inter -= opp[-side]                                            # 🤝 كلها متفقة ولا إشارة معاكسة شغّالة
             r = rl if side > 0 else rs
             last = -10 ** 9
             for i in sorted(inter):
@@ -19021,53 +19084,55 @@ def _sg_search(COIN, prog=None):
                 x = r.get(i)
                 if x is None:
                     continue
-                if i < cut:
-                    l.append(x)
-                    if want:
-                        ld.add(T[i] // 86400)
-                else:
-                    t.append(x)
-                    if want:
-                        ev.append([ci, T[i]])
-        return l, t, ev, ld
+                q = pr[i]
+                P[q].append(x)
+                W[q].add(T[i] // win)
+                if want:
+                    ev.append([ci, T[i]])
+        return P, W, ev
 
-    def score(v, b):
-        return (_sg_mean(v) - _sg_mean(b)) * math.sqrt(len(v)) if v else -9.0
+    def c4(fr, P, W, B):
+        return all(len(P[q]) >= SG_PMIN[fr] and len(W[q]) >= 3 and _sg_hit(P[q]) > _sg_hit(B[q]) and _sg_mean(P[q]) > _sg_mean(B[q])
+                   for q in range(4))
 
-    def mk(fr, side, keys, l, t, ev, ld, rare=False):
+    def score(P, B):
+        return min(((_sg_mean(P[q]) - _sg_mean(B[q])) * math.sqrt(len(P[q])) if P[q] else -9.0) for q in range(4))
+
+    def mk(fr, side, keys, P, W, ev, ok):
         ks = [k[0] for k in keys]
+        allv = [x for p in P for x in p]
         return {"id": f"{fr}|{side}|{'+'.join(ks)}", "f": fr, "s": side, "k": ks, "ty": _sg_type(ks, side),
-                "nl": len(l), "wl": sum(1 for x in l if x > 0), "ml": round(_sg_mean(l), 5),
-                "nt": len(t), "wt": sum(1 for x in t if x > 0), "mt": round(_sg_mean(t), 5), "rare": bool(rare),
-                "nd": len({int(ts) // 86400 for ci, ts in ev}), "ndl": len(ld), "ev": ev if len(ev) <= 300 else None}
+                "nt": len(allv), "wt": sum(1 for x in allv if x > 0), "mt": round(_sg_mean(allv), 5),
+                "nl": 0, "wl": 0, "ml": 0.0, "rare": False, "c4": bool(ok),
+                "pp": [[len(p), sum(1 for x in p if x > 0), round(_sg_mean(p), 5), len(w)] for p, w in zip(P, W)],
+                "nd": len(set().union(*W)), "ndl": 0, "ev": ev if len(ev) <= 300 else None}
 
     out, BASE, WK, step = {}, {}, {}, 0
     for fr in SG_FR:
-        wk = []
-        for sym in names:
-            act, rl, rs, cut, T = PRE[(sym, fr)]
-            if cut < len(T):
-                wk.append((T[-1] - T[cut]) / 604800.0)
-        WK[fr] = round(_sg_mean(wk), 2) if wk else 0.0
+        k0 = 0 if fr == "4H" else 2
+        WK[fr] = round(_sg_mean([(v[k0]["T"][-1] - v[k0]["T"][210]) / 604800.0 for v in COIN.values() if v[k0]["n"] > 260]), 2)
         for side in (1, -1):
             step += 1
             if prog:
-                prog(78 + 5 * step, f"البحث عن التركيبات: {SG_FN[fr]} · {'شراء' if side > 0 else 'بيع'}")
-            bl, bt = base(fr, side)
-            BASE[f"{fr}|{side}"] = {"hl": round(_sg_hit(bl), 1), "ml": round(_sg_mean(bl), 5), "ht": round(_sg_hit(bt), 1),
-                                    "mt": round(_sg_mean(bt), 5), "nl": len(bl), "nt": len(bt)}
+                prog(78 + 5 * step, f"البحث عن المجموعات المتفقة: {SG_HZN[fr]} · {'شراء' if side > 0 else 'بيع'}")
+            B = base(fr, side)
+            allb = [x for p in B for x in p]
+            BASE[f"{fr}|{side}"] = {"ht": round(_sg_hit(allb), 1), "mt": round(_sg_mean(allb), 5), "hl": round(_sg_hit(allb), 1),
+                                    "ml": round(_sg_mean(allb), 5), "nt": len(allb), "nl": 0,
+                                    "pp": [[len(p), round(_sg_hit(p), 1), round(_sg_mean(p), 5)] for p in B]}
             singles = []
             keys = sorted(set(k for sym in names for k in PRE[(sym, fr)][0] if k[1] == side))
             for k in keys:
-                l, t, ev, ld = evalc(fr, [k], side, True)
-                if len(l) + len(t) >= 3:
-                    e = mk(fr, side, [k], l, t, ev, ld)
+                P, W, ev = evalc(fr, [k], side, True)
+                n = sum(len(p) for p in P)
+                if n >= 3:
+                    e = mk(fr, side, [k], P, W, ev, c4(fr, P, W, B))
                     out[e["id"]] = e
-                if len(l) >= 6:
-                    singles.append((score(l, bl), k))
+                if n >= 3 * SG_PMIN[fr] and all(P[q] for q in range(4)):
+                    singles.append((score(P, B), k))
             singles.sort(reverse=True)
-            top1 = [k for s, k in singles[:SG_TOPS] if s > 0]
-            seen, cur, allc = set(), [(k,) for k in top1], []
+            top1 = [k for s, k in singles[:SG_TOPS]]
+            seen, cur = set(), [(k,) for k in top1]
             for size in range(2, 7):
                 cand = {}
                 for c in cur:
@@ -19078,31 +19143,26 @@ def _sg_search(COIN, prog=None):
                         if nc in seen:
                             continue
                         seen.add(nc)
-                        l, t, _, _ = evalc(fr, list(nc), side)
-                        if len(l) >= 6 and _sg_mean(l) > _sg_mean(bl):
-                            cand[nc] = (score(l, bl), l, t)
+                        P, W, _ = evalc(fr, list(nc), side)
+                        if sum(len(p) for p in P) >= 4 * SG_PMIN[fr]:
+                            cand[nc] = (score(P, B), P, W)
                 best = sorted(cand.items(), key=lambda x: -x[1][0])[:SG_BEAM]
                 if not best:
                     break
                 cur = [c for c, _ in best]
-                for c, (s, l, t) in best[:SG_KEEP]:
-                    l, t, ev, ld = evalc(fr, list(c), side, True)
-                    e = mk(fr, side, c, l, t, ev, ld)
-                    out[e["id"]] = e
-                allc += [(c, l, t) for c, (s, l, t) in cand.items()]
-            rare = [(_sg_hit(l), len(l), c) for c, l, t in allc if 6 <= len(l) <= 30 and _sg_hit(l) >= 75]
-            rare.sort(key=lambda x: (-x[0], -x[1]))
-            for hh, nn, c in rare[:SG_RAREK]:
-                l, t, ev, ld = evalc(fr, list(c), side, True)
-                e = mk(fr, side, c, l, t, ev, ld, rare=True)
-                if e["id"] in out:
-                    out[e["id"]]["rare"] = True
-                else:
-                    out[e["id"]] = e
+                kept = 0
+                for c, (s, P, W) in best:
+                    if kept >= SG_KEEP:
+                        break
+                    if c4(fr, P, W, B):
+                        P, W, ev = evalc(fr, list(c), side, True)
+                        e = mk(fr, side, c, P, W, ev, True)
+                        out[e["id"]] = e
+                        kept += 1
     # ✂️ تركيبة بنفس حالات تركيبة أصغر منها (الإشارة الزايدة ما أضافت شي) ⇒ تُحذف — الأصغر تكفي
     bk = {}
     for e in out.values():
-        bk.setdefault((e["f"], e["s"], e["nl"], e["wl"], e["nt"], e["wt"]), []).append(e)
+        bk.setdefault((e["f"], e["s"], e["nt"], e["wt"], tuple(tuple(x) for x in e["pp"])), []).append(e)
     drop = set()
     for grp in bk.values():
         if len(grp) < 2:
@@ -19111,7 +19171,8 @@ def _sg_search(COIN, prog=None):
             ks = set(e["k"])
             if any(o is not e and set(o["k"]) < ks for o in grp):
                 drop.add(e["id"])
-    return {"e": [e for e in out.values() if e["id"] not in drop], "base": BASE, "wk": WK, "dup": len(drop)}
+    return {"e": [e for e in out.values() if e["id"] not in drop], "base": BASE, "wk": WK, "dup": len(drop), "rule": "c4",
+            "bnd": {fr: [int(x) for x in BND[fr]] for fr in SG_FR}}
 
 
 def _sg_compass_states(Dd_btc, dailies):
@@ -19158,7 +19219,7 @@ def _sg_compass_hist(COIN):
     seq = _sg_compass_states(btc[2], [v[2] for v in COIN.values()])
     S = {t: s for t, raw, s, *_ in seq}
     res = {}
-    for h in (7, 14):
+    for h in (7, 14, 30):
         acc = {"up": [], "flat": [], "down": []}
         for sym, (D4, E4, Dd, Ed, st) in COIN.items():
             for i in range(210, Dd["n"]):
@@ -19258,7 +19319,8 @@ def sg_scan_calc(jd, job):
             i, lk = D["n"] - 1, SG_LK[fr]
             a1 = sorted(f"{c}:{s}" for (c, s), lst in E.items() if any(i - lk < j <= i for j in lst))
             a0 = sorted(f"{c}:{s}" for (c, s), lst in E.items() if any(i - 1 - lk < j <= i - 1 for j in lst))
-            res.setdefault(sym, {})[fr] = {"t": D["T"][i], "px": D["C"][i], "a1": a1, "a0": a0, "lo": min(D["L"][i - lk + 1:i + 1]),
+            res.setdefault(sym, {})[fr] = {"t": D["T"][i], "px": D["C"][i], "s": round(_sg_sig(D["C"][-(SG_W + 2):], SG_HZ[fr])[-1], 5),
+                                           "a1": a1, "a0": a0, "lo": min(D["L"][i - lk + 1:i + 1]),
                                            "hi": max(D["H"][i - lk + 1:i + 1]), "ch": D["C"][i] / D["C"][i - 1] - 1.0 if D["C"][i - 1] else 0.0}
     return {"ok": True, "c": res, "crash": crash, "ts": time.time()}
 
@@ -19408,6 +19470,8 @@ def _sg_rec(e, st):
 def _sg_pass(e, st, cfg, cat):
     """هل تصل إشعاراتها؟ النسبة · العدد · أفضل من العشوائي · 💎 بحدها الخاص"""
     if not cfg["types"].get(e.get("ty") or "buy", True) or not cfg["fr"].get(e["f"], True):
+        return False
+    if not e.get("c4"):                                   # 🧠 v3.36.69: فقط المجموعات المتفقة التي صدقت في الفترات الأربعة كلها
         return False
     r = _sg_rec(e, st)
     b = (cat.get("base") or {}).get(f"{e['f']}|{e['s']}") or {}
@@ -19735,7 +19799,8 @@ def _sg_compass(cdb, cat=None):
     t, raw, s, since, sh, ab, n, k = seq[-1]
     H = ((cat or {}).get("compass") or {}).get(s) or {}
     return {"s": s, "raw": raw, "since": since, "days": int((t - since) // 86400) + 1, "share": sh, "btc": ab, "n": n, "k": k, "t": t,
-            "m14": H.get("m14"), "h14": H.get("h14"), "run": H.get("run"), "hist": [[x[0], x[1], x[2]] for x in seq[-60:]]}
+            "m14": H.get("m14"), "h14": H.get("h14"), "m30": H.get("m30"), "h30": H.get("h30"), "run": H.get("run"),
+            "hist": [[x[0], x[1], x[2]] for x in seq[-60:]]}
 
 
 def _sg_comp_block(c):
@@ -19748,6 +19813,25 @@ def _sg_comp_block(c):
 
 
 # ───────────── 🔄 الجولة ─────────────
+def _sg_backfill(sym, e, bar, maxn, pages=40):
+    """📅 v3.36.69: تاريخ أقدم لعملة محفوظة بتاريخ أقصر (اليومي من ~3 سنوات إلى ~7 للشهر القادم) — صفحة صفحة حتى الحد أو بداية تاريخها"""
+    rows = [list(x) for x in e.get("d") or []]
+    for _ in range(pages):
+        if not rows:
+            return
+        oldest = rows[0][0]
+        pg = _fc_okx_rows(sym, bar, after=oldest * 1000, hist=True, limit=100) or []
+        pg = sorted(list(c[:6]) for c in pg if len(c) > 6 and c[6] and c[0] < oldest)
+        if not pg:
+            e["full"] = True
+            break
+        rows = pg + rows
+        if len(rows) >= maxn:
+            break
+        time.sleep(0.25)
+    e["d"] = rows[-maxn:]
+
+
 def _sg_refresh(coins, frs, cdb, prog=None):
     """🕯️ الشموع المسكّرة لكل عملة (التاريخ كله أول مرة صفحة صفحة · بعدها الجديد فقط) — قراءة عامة"""
     bad = []
@@ -19759,6 +19843,10 @@ def _sg_refresh(coins, frs, cdb, prog=None):
             r = _safe(_fc_cache, sym, cdb, sec, bar, ib, SG_N[fr], default=None)
             if not r or not r[0]:
                 bad.append(sym)
+            else:
+                e_ = (cdb.get(sec) or {}).get(sym) or {}
+                if e_.get("d") and len(e_["d"]) < SG_N[fr] - 5 and not e_.get("full"):
+                    _safe(_sg_backfill, sym, e_, bar, SG_N[fr], default=None)     # 📅 v3.36.69: تاريخ أقدم مرة واحدة
             time.sleep(0.15)
     keep = set(coins)
     for sec in ("c", "c4"):
@@ -19778,19 +19866,24 @@ def _sg_grade(st, cdb, cat, now):
     for it in st.get("pend") or []:
         try:
             eid, sym, ts, px, flag = it[0], it[1], int(it[2]), float(it[3]), int(it[4])
+            s_ = float(it[5]) if len(it) > 5 and it[5] else 0.0
         except Exception:
             continue
         fr, side = eid.split("|")[0], int(eid.split("|")[1])
         sec = SG_BAR[fr][0]
         if (sym, sec) not in T:
             rows = ((cdb.get(sec) or {}).get(sym) or {}).get("d") or []
-            T[(sym, sec)] = ([int(r[0]) for r in rows], [float(r[4]) for r in rows])
-        ts_, cs = T[(sym, sec)]
+            T[(sym, sec)] = ([int(r[0]) for r in rows], [float(r[4]) for r in rows], [float(r[2]) for r in rows], [float(r[3]) for r in rows])
+        ts_, cs, hs, ls = T[(sym, sec)]
         tgt = ts + SG_HZ[fr] * SG_SEC[fr]
         j = bisect.bisect_left(ts_, tgt)
         if j < len(ts_) and ts_[j] == tgt and px > 0:
-            c1 = cs[j]
-            x = (c1 / px - 1.0 if side > 0 else px / c1 - 1.0) - SG_FEE
+            j0 = bisect.bisect_left(ts_, ts)
+            if j0 < len(ts_) and ts_[j0] == ts and j0 + SG_HZ[fr] == j:
+                x = _sg_out(hs, ls, cs, j0, SG_HZ[fr], side, s_, px)          # 🎯 v3.36.69: الهدف قبل الوقف (نفس قاعدة التاريخ)
+            else:
+                c1 = cs[j]
+                x = (c1 / px - 1.0 if side > 0 else px / c1 - 1.0) - SG_FEE
             r = rec.setdefault(eid, [0, 0, 0.0, []])
             if len(r) < 4:
                 r.append([])
@@ -19861,7 +19954,7 @@ def _sg_process(scan, frs, st, cfg, cat, cdb, now, send=True):
             nowv.setdefault(sym, {})[fr] = {"t": x["t"], "px": x["px"], "alive": alive, "fired": [e["id"] for e in fired], "lo": x.get("lo"), "hi": x.get("hi")}
             for e in fired:
                 ok = sym in mine and _sg_pass(e, st, cfg, cat)
-                pend.append([e["id"], sym, x["t"], x["px"], 1 if ok else 0])
+                pend.append([e["id"], sym, x["t"], x["px"], 1 if ok else 0, x.get("s") or 0])
                 if e["ty"] in ("crash", "fng", "eco"):
                     if e["ty"] != "crash" or fr == "4H":
                         mk_fired.setdefault((e["ty"], e["k"][0], e["s"]), e)
