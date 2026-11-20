@@ -1,0 +1,24 @@
+# 🔬 Holy signals check, seventh pass (the owner 20-11: «اريد كل اشارات · مستوى ثاني تحقق · والمستوى الثالث النهائي · فريم 4 ساعات واليومي · والتوقعات اريدها مضبوطه»):
+#    the 36 systems (read from ci/sig_check6.py) as the three levels — 1 every system · 2 families agree on one frame · 3 the same on 4H AND daily —
+#    28 coins · 4H (~2 years) · daily (~3 years) · weights learned on the first 60% · judged on the last 40% · the promised hit rate vs the test.
+#    Results: lines HOLYSIG7. Public market data only — no keys, no orders, no notifications.
+name: Holy signals check 7
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/sig_check7.py', 'ci/sig_check6.py', 'ci/RUN_SIG7', '.github/workflows/holy-sig7-check.yml']
+permissions:
+  contents: read
+jobs:
+  real-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: the three signal levels on real OKX prices (public data · no keys · no orders · no notifications)
+        run: |
+          pip install -q requests
+          python3 ci/sig_check7.py Holy_Dashboard.pyw
