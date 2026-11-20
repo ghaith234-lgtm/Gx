@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.66"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.67"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -19493,10 +19493,17 @@ def sg_set(v):
         c["sg_sum"] = (int(v["sum"]) % 24) if isinstance(v["sum"], (int, float)) and not isinstance(v["sum"], bool) else None
     if v.get("ch") in SG_CH:
         c["sg_ch"] = v["ch"]
+    old = sg_coins()
     save_app_cfg(c)
     p = sg_cfg()
-    return {"ok": True, "msg": ("🎯 إشعارات الإشارات مفعّلة — " + f"{p['thr']}% فأكثر · {_sg_ar(p['min'], 'time')} فأكثر · " + SG_CH[p["ch"]]) if p["on"]
-            else "🔕 إشعارات الإشارات متوقفة", "cfg": p, "est": sg_estimate(p)}
+    new = [s for s in sg_coins(p) if s not in old]
+    if new and not _SG["busy"]:
+        threading.Thread(target=_safe, args=(sg_tick,), daemon=True).start()     # 🪙 v3.36.67: تاريخ العملة الجديدة يُجلب الآن بالخلفية
+    msg = (("🎯 إشعارات الإشارات مفعّلة — " + f"{p['thr']}% فأكثر · {_sg_ar(p['min'], 'time')} فأكثر · " + SG_CH[p["ch"]]) if p["on"]
+           else "🔕 إشعارات الإشارات متوقفة")
+    if new:
+        msg = "🪙 أُضيفت " + " · ".join(s.split("-")[0] for s in new) + " — تُجلب بياناتها بالخلفية وتظهر إشاراتها بعد إغلاق الشمعة القادمة"
+    return {"ok": True, "msg": msg, "cfg": p, "est": sg_estimate(p)}
 
 
 # ───────────── 📨 النصوص ─────────────
@@ -20055,6 +20062,9 @@ def sg_view():
                   "msg": (bp.get("msg") or "🏗️ بناء دليل الإشارات") if bj else _SG.get("msg") or ""},
          "err": _SG.get("err") or "", "comp": st.get("comp"), "crash": st.get("crash"), "scan_ts": st.get("scan_ts"),
          "on": indic_cfg()["on"] or cfg["on"], "log": (st.get("log") or [])[:60]}
+    _ci = _safe(_sg_cidx, default=None) or {"c4": {}, "c": {}}
+    v["bad"] = [s for s in v["mine"] if s in (st.get("bad") or [])]                          # 🪙 v3.36.67: المنصة لا تعرفها
+    v["short"] = [s for s in v["mine"] if s not in v["bad"] and s in _ci["c4"] and (_ci["c4"].get(s, 0) < 300 or _ci["c"].get(s, 0) < 220)]
     if not cat:
         v.update(cat=None, now=[], est=None)
         return v
@@ -27579,6 +27589,8 @@ i.fb{font-style:normal;font-weight:600;margin:0 7px;font-size:11px;direction:ltr
 .sg-lg{border-bottom:1px dashed var(--line2);padding:6px 0;font-size:12px}
 .sg-set{margin:10px 0;padding-top:8px;border-top:1px dashed var(--line2)}.sg-sh{font-size:12.5px;margin-bottom:4px}
 .sg-set input[type=range]{width:100%;accent-color:var(--vio)}.sg-set select{font-size:12px;padding:4px 6px;border-radius:8px;background:var(--bg1);color:var(--tx);border:1px solid var(--line2)}
+.sg-add{display:flex;gap:6px;margin:6px 0}.sg-add input{flex:1;min-width:0;font-size:12.5px;padding:7px 10px;border-radius:10px;border:1px solid var(--line2);background:var(--bg1);color:var(--tx)}
+.sg-add button{font-size:12px;padding:6px 14px;border-radius:10px}.sg-cn b{font-size:10px;opacity:.7;margin-inline-start:2px}
 .sg-go{display:block;width:100%;text-align:start;margin:0 0 8px;padding:8px 11px;border-radius:12px;font-size:12.5px;border-color:rgb(var(--vio-rgb)/.45)}
 .sg-fc{font-size:11.5px;color:var(--mut);margin:6px 0 2px;padding:5px 8px;border-radius:9px;background:rgb(var(--vio-rgb)/.07);cursor:pointer;line-height:1.7}
 .fc-tabs{display:flex;gap:5px;flex-wrap:wrap;margin:2px 0 8px}
@@ -31051,6 +31063,12 @@ function sgEst(v){Object.assign(SGP,v);const lb=$('#sg_thr_v');if(lb&&v.thr!=nul
   clearTimeout(SGET);SGET=setTimeout(async()=>{try{const r=await api('/api/control',{action:'sg_est',value:SGP});const el=$('#sg_est');if(el)el.innerHTML=sgEstTxt(r&&r.est)}catch(e){}},250)}
 async function sgSet(v){try{const r=await api('/api/control',{action:'sg_set',value:v});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok));
     if(r&&r.cfg&&SGV){SGV.cfg=r.cfg;SGV.est=r.est;SGV.mine=r.cfg.coins||SGV.tick;SGP={}}}catch(e){toast('تعذر الاتصال',false)}if(SGTAB==='cfg')sgRender()}
+function sgCoinAdd(){const el=$('#sg_cadd');if(!el||!SGV)return;let v=(el.value||'').trim().toUpperCase().replace(/[\/\s]/g,'');if(!v)return;   // 🪙 v3.36.67
+  if(!v.includes('-'))v+='-USDT';
+  if(!/^[A-Z0-9]{1,15}-[A-Z0-9]{2,8}$/.test(v)){toast('اكتب اسم العملة فقط — مثل BTC أو PEPE',false);return}
+  const cur=(SGV.cfg.coins||SGV.tick||[]).slice();if(cur.includes(v)){toast('موجودة في إشعاراتك',true);return}
+  if(cur.length>=40){toast('الحد 40 عملة',false);return}
+  cur.push(v);el.value='';sgSet({coins:cur})}
 function sgCoinTog(s){const c=SGV.cfg,cur=(c.coins||SGV.tick||[]).slice(),i=cur.indexOf(s);if(i>=0)cur.splice(i,1);else cur.push(s);sgSet({coins:cur})}
 function sgCfg(V){const c=V.cfg||{},T=c.types||{},ty=V.types||{},hrs=[...Array(24).keys()];
   const tg=(on,fn,a,b)=>`<button class="${on?'on':''}" onclick="${fn}">${on?a:b}</button>`;
@@ -31068,8 +31086,14 @@ function sgCfg(V){const c=V.cfg||{},T=c.types||{},ty=V.types||{},hrs=[...Array(2
     <div class="sg-set"><div class="sg-sh">✅ الأنواع</div><div class="sg-flt">${Object.entries(ty).map(([k,t])=>`<button class="${T[k]!==false?'on':''}" onclick="sgSet({types:{${k}:${T[k]===false}}})">${t[0]} ${gEsc(t[1])}</button>`).join('')}</div>
       <div class="ind-sub">🧭 السوق: حين يثبت وضع جديد · 🌊 يصلك من «📊 تنبيهات المؤشرات» حين تكون مفعّلة (لا يتكرر) · ✅ النتائج: بعد وقت كل إشارة وصلتك</div></div>
     <div class="sg-set"><div class="sg-sh">🕯️ الفريم</div><div class="sg-flt">${['1D','4H'].map(f=>`<button class="${(c.fr||{})[f]!==false?'on':''}" onclick="sgSet({fr:{'${f}':${(c.fr||{})[f]===false}}})">${gEsc((V.fn||{})[f]||f)}</button>`).join('')}</div></div>
-    <div class="sg-set"><div class="sg-sh">🪙 العملات <small>(${mine.length})</small> ${c.coins?`<button onclick="sgSet({coins:null})">↩️ مثل الشريط</button>`:'<small>· مثل الشريط (📊)</small>'}</div>
-      <div class="sg-flt">${(V.uni||[]).map(s=>`<button class="${mine.includes(s)?'on':''}" onclick="sgCoinTog('${gEsc(s)}')">${gEsc(s.split('-')[0])}</button>`).join('')}</div></div>
+    <div class="sg-set" id="sg_coins"><div class="sg-sh">🪙 عملات إشعاراتك <small>(${mine.length})</small> ${c.coins?`<button onclick="sgSet({coins:null})">↩️ مثل الشريط</button>`:'<small>· الآن نفس عملات الشريط (📊) — أي تغيير هنا للإشارات فقط</small>'}</div>
+      <div class="sg-flt">${mine.map(s=>`<button class="on sg-cn" data-c="${gEsc(s)}" onclick="sgCoinTog('${gEsc(s)}')" title="اضغط لتشيلها من إشعاراتك">${gEsc(s.split('-')[0])}${(V.bad||[]).includes(s)?' ⚠️':(V.short||[]).includes(s)?' ⏳':''} <b>✕</b></button>`).join('')||'<span class="ind-sub">لا توجد عملات — أضف عملة تحت</span>'}</div>
+      <div class="sg-add"><input id="sg_cadd" placeholder="أضف عملة — مثل BTC أو DOGE أو PEPE" autocomplete="off" onkeydown="if(event.key==='Enter')sgCoinAdd()"><button onclick="sgCoinAdd()">➕ أضف</button></div>
+      ${(V.bad||[]).length?`<div class="ind-sub" style="color:var(--amber)">⚠️ لم تُعثر على بيانات من المنصة لـ ${(V.bad||[]).map(s=>gEsc(s.split('-')[0])).join(' · ')} — تأكد من الاسم</div>`:''}
+      ${(V.short||[]).length?`<div class="ind-sub">⏳ تاريخ قصير: ${(V.short||[]).map(s=>gEsc(s.split('-')[0])).join(' · ')} — تظهر إشاراتها حين يصبح لها نحو 50 يوماً من الشموع</div>`:''}
+      ${(()=>{const oth=(V.uni||[]).filter(s=>!mine.includes(s));return oth.length?`<details class="sg-more"><summary>عملات يقيسها النظام لبناء السجل (${oth.length}) — اضغط عملة لتضيفها لإشعاراتك</summary>
+        <div class="sg-flt">${oth.map(s=>`<button data-c="${gEsc(s)}" onclick="sgCoinTog('${gEsc(s)}')">${gEsc(s.split('-')[0])} ➕</button>`).join('')}</div>
+        <div class="ind-sub">تُفحص هذه العملات لتقوية السجل فقط (تاريخ أكثر = نسبة أصدق)، ولا تصلك إشعاراتها إلا إذا أضفتها.</div></details>`:''})()}</div>
     <div class="sg-set"><div class="sg-sh">📮 الحد اليومي <small>(الزائد يبقى في اللوحة بلا رنّة)</small></div><div class="sg-flt">${[3,5,8,12,20,0].map(n=>`<button class="${c.cap===n?'on':''}" onclick="sgSet({cap:${n}})">${n||'بلا حد'}</button>`).join('')}</div></div>
     <div class="sg-set"><div class="sg-sh">🌙 ساعات الهدوء <small>(تنتظر ثم تصلك برسالة واحدة)</small></div>
       ${tg(!!q,q?'sgSet({quiet:null})':'sgSet({quiet:[0,8]})','مفعّلة','متوقفة')} ${q?`من ${hsel('sg_q0',q[0],`sgSet({quiet:[+this.value,${q[1]}]})`)} إلى ${hsel('sg_q1',q[1],`sgSet({quiet:[${q[0]},+this.value]})`)}`:''}</div>

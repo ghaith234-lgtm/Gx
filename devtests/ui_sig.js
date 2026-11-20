@@ -87,6 +87,31 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   await sleep(900);
   const s1 = await pg.evaluate(() => ({ thr: SGV.cfg.thr, sell: SGV.cfg.types.sell, cap: SGV.cfg.cap, on: (document.getElementById('sg_on') || {}).textContent }));
   ok('④ saved: 90% · 🔴 بيع off · the daily cap 5 (the page shows what the server holds)', s1.thr === 90 && s1.sell === false && s1.cap === 5, s1);
+  // ④ 🪙 your coins (v3.36.67): the owner «انا اريد انا احدد العملات»
+  const k0 = await pg.evaluate(() => ({ mine: [...document.querySelectorAll('#sg_coins .sg-cn')].map(b => b.dataset.c), add: !!document.getElementById('sg_cadd'),
+    oth: document.querySelectorAll('#sg_coins details .sg-flt button').length, head: (document.querySelector('#sg_coins .sg-sh') || {}).textContent || '' }));
+  ok(`④ 🪙 «${k0.head.replace(/\s+/g, ' ').trim().slice(0, 60)}» · your coins first with ✕ (${k0.mine.join(' · ')}) · «➕ أضف» · the measured ones folded (${k0.oth})`,
+     k0.mine.join(',') === 'XRP-USDT,SOL-USDT' && k0.add && k0.oth >= 5 && k0.head.includes('عملات إشعاراتك'), k0);
+  await pg.evaluate(() => { const i = document.getElementById('sg_cadd'); i.value = ' pepe '; sgCoinAdd() });
+  await sleep(900);
+  const k1 = await pg.evaluate(() => ({ coins: SGV.cfg.coins, chips: [...document.querySelectorAll('#sg_coins .sg-cn')].map(b => b.dataset.c), t: (document.querySelector('.toast') || {}).textContent || '' }));
+  ok('④ «➕ أضف» any coin by name («pepe» ⇒ PEPE-USDT) — saved and shown first with your coins', JSON.stringify(k1.coins) === JSON.stringify(['XRP-USDT', 'SOL-USDT', 'PEPE-USDT'])
+     && k1.chips.includes('PEPE-USDT'), k1);
+  await pg.evaluate(() => document.querySelector('#sg_coins .sg-cn[data-c="SOL-USDT"]').click());
+  await sleep(900);
+  const k2 = await pg.evaluate(() => SGV.cfg.coins);
+  ok('④ ✕ on SOL removes it from your notifications (the rest stays)', JSON.stringify(k2) === JSON.stringify(['XRP-USDT', 'PEPE-USDT']), k2);
+  await pg.evaluate(() => { const b = [...document.querySelectorAll('#sg_coins details .sg-flt button')].find(x => x.dataset.c === 'LINK-USDT'); b.click() });
+  await sleep(900);
+  const k3 = await pg.evaluate(() => SGV.cfg.coins);
+  ok('④ a measured coin from the folded list (LINK) is added with one tap', JSON.stringify(k3) === JSON.stringify(['XRP-USDT', 'PEPE-USDT', 'LINK-USDT']), k3);
+  await pg.evaluate(() => { const i = document.getElementById('sg_cadd'); i.value = 'BAD COIN!'; sgCoinAdd() });
+  await sleep(500);
+  ok('④ a wrong name is refused with a clear message (nothing saved)', JSON.stringify(await pg.evaluate(() => SGV.cfg.coins)) === JSON.stringify(k3), '');
+  await pg.evaluate(() => { const b = [...document.querySelectorAll('#sg_coins button')].find(x => x.textContent.includes('مثل الشريط')); b.click() });
+  await sleep(900);
+  const k4 = await pg.evaluate(() => ({ c: SGV.cfg.coins, chips: [...document.querySelectorAll('#sg_coins .sg-cn')].map(b => b.dataset.c) }));
+  ok('④ «↩️ مثل الشريط» ⇒ your coins follow the ticker again (XRP · SOL)', k4.c === null && k4.chips.join(',') === 'XRP-USDT,SOL-USDT', k4);
   await shot('sig_settings');
   // ⑤ 🔮 · 📊 · ⚙️ · the ticker · a notification tap
   await pg.evaluate(() => openFc());

@@ -325,7 +325,10 @@ ok(f"⑦ 🧭 the compass is smoothed: the raw state changed {raw_ch} times, the
    seq and sm_ch < raw_ch and all(any(seq[j][1] == seq[i][2] for j in range(max(0, i - 2), i + 1)) for i in range(len(seq)) if i and seq[i][2] != seq[i - 1][2]),
    (raw_ch, sm_ch))
 
-# ⑧ settings
+# ⑧ settings (a coin added starts a round in the background — the real round is stubbed here; ⑩ runs it for real)
+_RT = m.sg_tick
+_ticks = []
+m.sg_tick = lambda *a, **k: _ticks.append(1)
 real_cfg = {}
 m.app_cfg = lambda: dict(real_cfg)
 m.save_app_cfg = lambda c: real_cfg.clear() or real_cfg.update(c) or c
@@ -337,6 +340,17 @@ ok("⑧ settings are bounded and cleaned: 95% · 3 · 50 · cap 0 · coins XRP-U
    and c["quiet"] == [23, 7] and c["sum"] == 1 and c["ch"] == "tg" and c["types"]["sell"] is False and "nope" not in c["types"] and c["fr"]["4H"] is False, c)
 m.sg_set({"coins": None})
 ok("⑧ «↩️ مثل الشريط» ⇒ your coins follow the ticker again", m.sg_cfg()["coins"] is None and "sg_coins" not in real_cfg, real_cfg)
+_ticks.clear()
+r_add = m.sg_set({"coins": ["XRP-USDT", "NEWC-USDT"]})
+time.sleep(0.5)
+ok("⑧ 🪙 adding a coin of your own («NEWC») starts a round at once (its history in the background) and says so", _ticks and
+   r_add["msg"].startswith("🪙 أُضيفت NEWC — تُجلب بياناتها بالخلفية") and r_add["cfg"]["coins"] == ["XRP-USDT", "NEWC-USDT"], (r_add["msg"], _ticks))
+_ticks.clear()
+m.sg_set({"coins": ["XRP-USDT"]})
+time.sleep(0.3)
+ok("⑧ 🪙 removing one starts nothing (no fetch needed)", not _ticks, _ticks)
+m.sg_set({"coins": None})
+time.sleep(0.3)
 real_cfg.update(ticker_coins=list(cat["coins"]), sg_thr=50, sg_min=3, sg_rnd=False, sg_cap=0)
 e50 = m.sg_estimate()
 e70 = m.sg_estimate(m._sg_cfg_merge(m.sg_cfg(), {"thr": 70, "min": 20}))
@@ -345,6 +359,8 @@ ok(f"⑧ the weekly estimate falls when the threshold rises: 50% ≈ {e50['wk']}
 real_cfg.update(sg_cap=5)
 e5 = m.sg_estimate()
 ok("⑧ … and after the daily cap 5 it is at most 35 a week", e5["cut"] <= 35 and (e5["capped"] or e5["wk"] <= 35), e5)
+
+m.sg_tick = _RT
 
 # ⑨ the worker
 os.environ.pop("HOLY_SIG_THREAD", None)
@@ -419,6 +435,13 @@ ok("⑩ a tick before the next close fetches nothing and scans nothing (no load 
 sent_tg = [x for x in SENT if x[0] == "tg"]
 ok(f"⑩ notifications of that scan reached Telegram ({len(sent_tg)} message) — only XRP · SOL and the market", sent_tg and all(
    ("ADA-USDT" not in x[1] and "ETH-USDT" not in x[1] and "BNB-USDT" not in x[1]) for x in sent_tg), sent_tg[:1])
+st_bad = m._sg_st()
+st_bad["bad"] = ["ZZZ-USDT"]
+m._sg_save(st_bad)
+real_cfg.update(sg_coins=["XRP-USDT", "SOL-USDT", "ZZZ-USDT"])
+vb = m.sg_view()
+ok("⑩ 🪙 a coin of yours the exchange does not have is marked ⚠️ (bad) · XRP and SOL are not", vb["bad"] == ["ZZZ-USDT"] and vb["short"] == [], (vb["bad"], vb["short"]))
+real_cfg.pop("sg_coins", None)
 v = m.sg_view()
 ok("⑩ the 🎯 window's data: the catalog · now per coin (your coins first) · the estimate · the log · the compass",
    v["cat"] and v["now"] and v["now"][0]["mine"] and v["est"] and v["comp"] and isinstance(v["log"], list), {k: bool(v.get(k)) for k in ("cat", "now", "est", "comp")})
