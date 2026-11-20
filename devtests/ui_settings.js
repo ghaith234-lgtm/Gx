@@ -35,7 +35,7 @@ const vis = 'el => !!el && el.offsetHeight > 0';
   const G = t => (gr.find(g => g.t.startsWith(t)) || { rows: [] }).rows;
   ok('🔔 the notifications together: Telegram + the price ticker (its alerts)', G('🔔').join('|') === 'تنبيهات تيليغرام|شريط الأسعار وإشعاراته', G('🔔'));
   ok('🔊 the sounds together: the profit sound + the unlock sound (+ the continuous tone, v3.36.37)', G('🔊').join('|') === 'صوت الربح|صوت فتح القفل|النغمة المستمرة', G('🔊'));
-  ok('🖌️ the look: الألوان · الخلفية · البطاقات · الخط · الحركة · حركات البطاقات · الشريط المصغّر وعناصره · رجل العصا', G('🖌️').join('|') === 'الألوان|الخلفية|شكل البطاقات|خط الكتابة|حركة فتح النوافذ|حركات البطاقات|الشريط المصغّر|عناصر الشريط المصغّر|رجل العصا', G('🖌️'));
+  ok('🖌️ the look: الألوان · الخلفية · البطاقات · 📏 المختصرة (v3.36.63) · الخط · الحركة · حركات البطاقات · الشريط المصغّر وعناصره · رجل العصا', G('🖌️').join('|') === 'الألوان|الخلفية|شكل البطاقات|الكروت المختصرة|خط الكتابة|حركة فتح النوافذ|حركات البطاقات|الشريط المصغّر|عناصر الشريط المصغّر|رجل العصا', G('🖌️'));
   ok('⚡ the performance: الوضع الخفيف · تحديث الأرقام · الفريمات', G('⚡').join('|') === 'الوضع الخفيف|تحديث الأرقام|الفريمات', G('⚡'));
   // ── every row with choices: closed, shows its value
   const sx = await pg.evaluate(() => [...document.querySelectorAll('#modal .sx')].map(r => ({ k: r.dataset.k, open: r.classList.contains('open'),

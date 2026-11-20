@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.62"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.63"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -24565,6 +24565,35 @@ body.btopen{overflow:hidden}
 .lkwrap .pill{margin-inline-start:0}
 /* 🃏 v3.36.8: أشكال البطاقات ج و ب — طبقة عرض فوق البطاقة نفسها */
 .card.sk:not(.skfull)>:not(.skin){display:none!important}
+/* 📏 v3.36.63: الكروت المختصرة — طبقة فوق أي شكل */
+.card>.cmini{display:none}
+.card.cmp.cmp>.cmini.cmini{display:grid!important}
+.card.cmp:not(.cmpo)>:not(.cmini){display:none!important}
+.card.cmp.cmpa{overflow:hidden}
+.card.cmp{content-visibility:visible}          /* السطر خفيف: يُرسم دائماً (لا طول محفوظ قديم وهو بعيد عن الشاشة) · والمفتوحة تُقاس فوراً للحركة */
+.card.cmp:not(.cmpo){align-self:start}          /* عدة أعمدة: جيران البطاقة المفتوحة يبقون سطراً */
+.cmini{grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:2px 10px;width:100%;margin:0;padding:6px 10px 6px 4px;border:0;background:transparent;
+  color:inherit;font:inherit;text-align:start;cursor:pointer;position:relative;border-radius:12px;min-height:46px}
+.cmini::before{content:"";position:absolute;inset-block:6px;inset-inline-start:-6px;width:4px;border-radius:4px;background:rgb(var(--cm-rgb,var(--vio-rgb)))}
+.cmini:hover{background:rgb(var(--ov-rgb)/.04)}
+.cmini:focus-visible{outline:2px solid rgb(var(--cm-rgb,var(--vio-rgb))/.7);outline-offset:2px}
+.card.cmp.cmpo>.cmini{margin-bottom:10px;border-bottom:1px solid rgb(var(--ov-rgb)/.08);border-radius:12px 12px 0 0}
+.cm-ic{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:rgb(var(--cm-rgb,var(--vio-rgb))/.18);overflow:hidden;flex:none}
+.cm-ic img{width:100%;height:100%;object-fit:cover}.cm-ic b{font-size:13px}
+.cm-mid{min-width:0;display:flex;flex-direction:column;gap:2px}
+.cm-sym{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cm-ln{display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px;font-size:11.5px;color:var(--mut)}
+.cm-st::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;margin-inline-end:5px;vertical-align:middle;background:var(--mut2)}
+.cm-st.on{color:var(--green)}.cm-st.on::before{background:var(--green);box-shadow:0 0 6px var(--green)}
+.cm-st.tp{color:var(--amber)}.cm-st.tp::before{background:var(--amber)}
+.cm-st.bad{color:var(--red)}.cm-st.bad::before{background:var(--red)}
+.cm-end{display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:end;min-width:0}
+.cm-pf{white-space:nowrap;color:var(--mut)}.cm-pf small{font-size:11px;margin-inline-end:3px}.cm-pf b{font-size:14.5px;font-weight:800;unicode-bidi:isolate}
+.cm-pf.up b{color:var(--green)}.cm-pf.dn b{color:var(--red)}.cm-pf.z b{color:var(--mut)}
+.cm-px{font-size:11.5px;color:var(--mut);white-space:nowrap}.cm-px .num{color:var(--tx)}
+.cm-ch{font-size:12px;color:var(--mut2);transition:transform .3s}
+.card.cmp.cmpo>.cmini .cm-ch{transform:rotate(180deg)}
+@media (max-width:380px){.cmini{gap:2px 7px}.cm-sym{font-size:13px}.cm-pf b{font-size:13.5px}}
 .card.sk.skfull>.skin{margin-bottom:8px}.sk-back{width:100%;height:32px;font-size:12px;border-radius:10px}
 .card.sk{--k-rgb:var(--vio-rgb)}
 .card.sk.k-plus{--k-rgb:244 114 182}.card.sk.k-step{--k-rgb:var(--cyan-rgb)}
@@ -25903,6 +25932,74 @@ function navOk(){try{return IN_APP&&typeof HolyApp.setNavBar==='function'}catch(
 function uiNavOn(){try{return !!HolyApp.navBar()}catch(e){return false}}
 function uiNavToggle(){if(!navOk())return openAppPanel();const on=!uiNavOn();try{HolyApp.setNavBar(on)}catch(e){}setTimeout(openSettings,250);
   toast(on?'📲 أزرار الهاتف ظاهرة أسفل الشاشة':'📲 أزرار الهاتف مخفية — تظهر لحظة بالسحب من أسفل الشاشة',true)}
+/* 📏 v3.36.63: الكروت المختصرة (لهذا الجهاز) — طبقة فوق أي شكل للبطاقة (القديم · ج · ب · OKX · وأي شكل يُضاف): سطر بعرض البطاقة فيه
+   نوع البوت · حالته · سعر العملة · ربح اليوم — الضغط عليه يمدّ البطاقة كاملة بحركة ويدفع اللي تحتها، ومرة ثانية يرجّعها سطراً
+   (بطاقات البوتات والديمو والمُراكِم كلها) */
+function uiCmp(){return _ls('dash_cmp')==='on'}
+function cmpAll(){if(typeof CARDS!=='undefined')for(const [d,el] of CARDS){const b=botOf(d);if(b)cmpApply(el,cmpBot(b),b)}
+  const L=(typeof DATA!=='undefined'&&DATA&&DATA.accum)||[];if(typeof ACARDS!=='undefined')for(const [id,el] of ACARDS){const a=L.find(x=>x.id===id);if(a)cmpApply(el,cmpAcc(a),a)}}
+function uiCmpToggle(){const on=!uiCmp();_ls('dash_cmp',on?'on':null);
+  document.querySelectorAll('#grid .card').forEach(el=>{el._cmO=0});cmpAll();openSettings();
+  toast(on?'📏 الكروت مختصرة — اضغط سطر أي بوت لفتح بطاقته':'📏 الكروت كاملة',true)}
+const CMP_T={grid:'♾️ شبكة',grid_range:'🎚️ مدى',grid_plus:'➕ بلس',grid_step:'🪜 متدرج',dca:'📉 DCA بيعي',dca_buy:'📈 DCA شرائي',rec_buy:'🔁 دوري شرائي',
+  rec_sell:'🔂 دوري بيعي',rec_va:'💹 مسار القيمة'};
+const CMP_RGB={grid:'var(--vio-rgb)',grid_range:'var(--blue-rgb)',grid_plus:'244 114 182',grid_step:'var(--cyan-rgb)',dca:'var(--amber-rgb)',dca_buy:'var(--amber-rgb)',
+  rec_buy:'var(--cyan-rgb)',rec_sell:'var(--cyan-rgb)',rec_va:'var(--green-rgb)',acc:'var(--green-rgb)'};
+function cmpType(b){const t=b.bot_type||'grid';if(b.dca&&b.dca.plus)return t==='dca_buy'?'⚡ DCA+ شرائي':'⚡ DCA+ بيعي';return CMP_T[t]||gEsc(t)}
+function cmpState(b){const d=b.dca||{},r=b.rec||{};
+  if(!b.alive)return ['متوقف','off'];
+  if(b.cashw&&b.cashw.tp)return ['⏳ مؤقت','tp'];
+  if((b.health||{}).state==='bad')return ['🚨 أوامر مرفوضة','bad'];
+  if(b.pause_buy||d.paused||r.paused)return ['⏸ موقوف الشراء','tp'];
+  return ['نشط','on']}
+function cmpToday(b){const t=b.bot_type||'grid',v=+b.today||0,a=Math.abs(v),sg=v>0?'+':v<0?'−':'';
+  const coin=t==='dca'?((b.dca||{}).base_coin||b.symbol.split('-')[0]):t==='rec_sell'?((b.rec||{}).base||b.symbol.split('-')[0]):'';
+  return {v,s:coin?`${sg}${a?+a.toPrecision(4):0} ${coin}`:`${sg}${a?a.toFixed(a>=1?2:4):'0.00'}$`}}
+function cmpBot(b){const [st,sc]=cmpState(b),td=cmpToday(b);
+  return {sym:b.symbol+(b.demo?' 🧪':''),typ:cmpType(b),st,sc,pl:'اليوم',pv:td.v,ps:td.s,cp:(window.JPX&&JPX[b.symbol])||b.cp||(b.rec||{}).cp||(b.dca||{}).cp,
+    rgb:CMP_RGB[b.bot_type||'grid']||'var(--vio-rgb)',base:b.symbol.split('-')[0]}}
+function cmpAcc(a){const B=a.base||(a.symbol||'').split('-')[0];                     // 🏦 المُراكِم: لا ربح يومي له — ربحه/خسارته الآن (مثل بطاقته)
+  const st=a.buy_err&&a.enabled?['🚨 فشل الشراء','bad']:!a.enabled?['موقوف','off']:a.in_range===false?['⏸ خارج النطاق','tp']:['يجمع','on'];
+  let pv=0,ps,pl='الربح';
+  if(a.pl!=null){pv=+a.pl;ps=(pv>0?'+':pv<0?'−':'')+Math.abs(pv).toFixed(2)+'$'+(a.pl_pct!=null?` (${a.pl_pct>=0?'+':''}${a.pl_pct}%)`:'')}
+  else{pl='المخزون';ps=`${(+a.coin||0)?fmtQ(+a.coin):0} ${B}`}
+  return {sym:(a.name||a.symbol||B),typ:'🏦 مُراكِم',st:st[0],sc:st[1],pl,pv,ps,cp:(window.JPX&&JPX[a.symbol])||a.cp,rgb:CMP_RGB.acc,base:B}}
+function cmpApply(el,M,src){if(!el||!M)return;const on=uiCmp();el._cmM=M;el._cmS=src;
+  if(el.classList.contains('cmp')!==on)el.classList.toggle('cmp',on);
+  if(!on){if(el.classList.contains('cmpo'))el.classList.remove('cmpo');return}
+  let row=el._cmr;
+  if(!row){row=document.createElement('button');row.type='button';row.className='cmini';
+    const im=el.querySelector('img.coin');
+    row.innerHTML=`<span class="cm-ic">${im?'':`<b>${gEsc(M.base.slice(0,1))}</b>`}</span><span class="cm-mid"><b class="cm-sym"></b><span class="cm-ln"><span class="cm-typ"></span><span class="cm-st"></span></span></span>
+      <span class="cm-end"><span class="cm-pf"><small></small> <b class="num" dir="ltr"></b></span><small class="cm-px"><span>السعر</span> <span class="num"></span></small></span><span class="cm-ch" aria-hidden="true">▾</span>`;
+    if(im){const c=im.cloneNode(true);c.removeAttribute('id');row.querySelector('.cm-ic').appendChild(c)}
+    row.onclick=ev=>{ev.stopPropagation();cmpToggle(el)};
+    el._cmr=row;el._cmq={sym:row.querySelector('.cm-sym'),typ:row.querySelector('.cm-typ'),st:row.querySelector('.cm-st'),pw:row.querySelector('.cm-pf'),
+      pl:row.querySelector('.cm-pf small'),pf:row.querySelector('.cm-pf b'),px:row.querySelector('.cm-px .num')}}
+  if(el.firstElementChild!==row)el.prepend(row);                   // أول ابن دائماً — أي شكل يضيف طبقته بعده
+  const Q=el._cmq,set=(n,t)=>{if(n.textContent!==t)n.textContent=t};
+  set(Q.sym,M.sym);set(Q.typ,M.typ);set(Q.st,M.st);if(Q.st.dataset.c!==M.sc){Q.st.dataset.c=M.sc;Q.st.className='cm-st '+M.sc}
+  set(Q.pl,M.pl);set(Q.pf,M.ps);const pc=M.pv>1e-12?'up':M.pv<-1e-12?'dn':'z';if(Q.pw.dataset.c!==pc){Q.pw.dataset.c=pc;Q.pw.className='cm-pf '+pc}
+  set(Q.px,M.cp?f4(+M.cp):'—');
+  if(el._cmrgb!==M.rgb){el._cmrgb=M.rgb;el.style.setProperty('--cm-rgb',M.rgb)}
+  const o=!!el._cmO;if(el.classList.contains('cmpo')!==o)el.classList.toggle('cmpo',o);
+  row.setAttribute('aria-expanded',String(o));row.title=o?'اضغط لإرجاع البطاقة سطراً':'اضغط لفتح البطاقة كاملة'}
+function cmpMotion(){try{if(document.documentElement.classList.contains('lite'))return false;   // ⚡ الوضع الخفيف · «تقليل الحركة» بالجهاز (إلا لو اختار تشغيلها)
+  if(hwDevRm()&&!hwForce())return false}catch(e){}return true}
+function cmpToggle(el){const M=el._cmM,src=el._cmS;if(!M)return;
+  const motion=cmpMotion(),h0=el.getBoundingClientRect().height;
+  const open=!el._cmO||!!el._cmC;                                  // ضغطة أثناء الإغلاق ⇒ ترجع تفتح
+  if(el._cmA){const a0=el._cmA;el._cmA=null;try{a0.cancel()}catch(e){}}
+  el._cmC=0;
+  if(open){el._cmO=1;cmpApply(el,M,src);try{if(src)skinUpd(el,src)}catch(e){}}
+  if(!motion){if(!open){el._cmO=0;cmpApply(el,M,src)}el.classList.remove('cmpa');return}
+  let h1;
+  if(open)h1=el.getBoundingClientRect().height;
+  else{el._cmC=1;el.classList.remove('cmpo');h1=el.getBoundingClientRect().height;el.classList.add('cmpo')}   // نفس الإطار — بلا رسم بينهما
+  el.classList.add('cmpa');
+  const a=el.animate([{height:h0+'px'},{height:h1+'px'}],{duration:340,easing:'cubic-bezier(.2,.8,.2,1)'});el._cmA=a;
+  a.onfinish=()=>{if(el._cmA!==a)return;el._cmA=null;el.classList.remove('cmpa');if(!open){el._cmC=0;el._cmO=0;cmpApply(el,el._cmM,el._cmS)}};
+  a.oncancel=()=>{if(!el._cmA)el.classList.remove('cmpa')}}
 function uiMbar(){return _ls('dash_mbar')!=='off'}                  // 📌 v3.36.38: الشريط المصغّر اختياري (لهذا الجهاز)
 function uiMbarToggle(){const on=!uiMbar();_ls('dash_mbar',on?null:'off');document.documentElement.classList.toggle('nombar',!on);openSettings();
   toast(on?'📌 الشريط المصغّر يظهر حين تنزل للأسفل':'📌 الشريط المصغّر مخفي',true)}
@@ -26481,7 +26578,7 @@ function syncCards(allBots){
     let el=CARDS.get(b.dir);
     if(!el){el=buildCard(b,0);CARDS.set(b.dir,el);cardLockDeco(el);el._caNew=1}
     el.style.display='';
-    updCard(el,b,b.demo?benchD:bench);skinUpd(el,b);caNumChk(el,b);demoMark(el,b)});
+    updCard(el,b,b.demo?benchD:bench);skinUpd(el,b);caNumChk(el,b);demoMark(el,b);cmpApply(el,cmpBot(b),b)});   // 📏 v3.36.63: المختصر
   // رتّب الـ DOM حسب الترتيب الجديد — فقط إذا الترتيب تغيّر فعلاً
   // (نقل عنصر فيه iframe يعيد تحميل الشارت! فلا ننقل إلا عند الحاجة)
   const grid=$('#grid');
@@ -28273,6 +28370,7 @@ function openSettings(){
         `${rmRow()}<div class="snote">تتلوّن بـ«🎨 الألوان» المختارة · تتوقف وحدها خلف النوافذ وفي «⚡ الوضع الخفيف» · «الأصلية» كما كانت.</div><div class="bgrid" id="bgRow">${HBG.map(x=>
         `<button class="bgb ${uiBg()===x[0]?'on':''}" data-bg="${x[0]}" title="${x[2]}" onclick="setBg('${x[0]}')"><canvas data-bg="${x[0]}" width="132" height="80"></canvas><span>${x[1]}${uiBg()===x[0]?' ✓':''}</span></button>`).join('')}</div>`)
      +X('skin','🃏','شكل البطاقات',(SKS.find(x=>x[0]===sk)||SKS[0])[1],`<div class="snote">الأرقام والأزرار نفسها في كل الأشكال.</div><div class="pollrow" id="skinRow">${SB}</div>`)
+     +T('📏','الكروت المختصرة','uiCmpToggle()','bCmp',uiCmp(),'مختصرة — كل بوت بسطر (نوعه · حالته · السعر · ربح اليوم) · اضغطه ليفتح كاملاً','كاملة')
      +X('font','🔤','خط الكتابة',`<span style="font-family:${ff}">${fnT[2]}</span>`,`<div class="snote">كل زر مكتوب بخطّه · الكلمات والأرقام كلها تأخذه («IBM Plex» = الأرقام بخطّها الثابت القديم).</div><div class="pollrow" id="fontRow">${FN}</div>
        <div class="snote" style="margin-top:10px">➕ خطوطك: ملف ‎.ttf · .otf‎ من جهازك (أو ضعه في مجلد «fonts» بجانب اللوحة على الخادم) — يظهر هنا في كل أجهزتك.</div>
        <div class="pollrow" id="ufRow"><button type="button" id="ufAdd" onclick="ufontPick()">➕ أضف خطاً من جهازك</button>${HFONTS.filter(x=>x[5]).map(x=>`<button type="button" class="ufDel" data-uf="${x[0]}" title="حذف الخط" onclick="ufontDel('${x[0]}')">🗑 ${gEsc(x[2])}</button>`).join('')}</div>
@@ -30891,7 +30989,7 @@ function renderAccum(list){
       const why = a.last_move? a.last_move.why : (!a.enabled?'موقوف':out?'خارج النطاق':'محجوز');
       R.abuy.textContent=`⚡ المتراكم ${pend.toFixed(2)}$ — اشترِ الآن (${why})`;
     }
-    skinUpd(el,a);
+    skinUpd(el,a);cmpApply(el,cmpAcc(a),a);                         // 📏 v3.36.63: المختصر للمُراكِم أيضاً
   });
   // 🔍 v3.26.1: البحث والترتيب يشملون بطاقات المُراكِم (تبقى ورا بطاقات البوتات)
   const q=FILTER.q,sh=list.filter(a=>!q||[a.symbol,a.base,a.name].some(v=>String(v||'').toUpperCase().includes(q)));
