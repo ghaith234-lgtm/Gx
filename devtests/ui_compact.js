@@ -8,6 +8,7 @@
 //   ⑤ the same in every look (القديم · ج · ب · OKX) · a look added later (a new layer inside the card) is hidden in the row and shown open
 //   ⑥ the page's refresh keeps an open card open (one row per card, still first) · ⚡ lite ⇒ no animation · off ⇒ every card full again
 //   ⑦ at phone width: nothing spills out of a row · the page has no sideways scroll · no page error
+//   ⑧ v3.36.64 (the owner: «مشكلة في قفل الكرت ما يفتح اذا مقفول ، خليه يفتح الكرت بس ما يفتح القفل»): a locked card opens from its row · the lock stays
 const { chromium } = require('playwright');
 const URL = process.argv[2], Q = process.argv.includes('-q');
 const res = [];
@@ -223,6 +224,31 @@ const STATE = () => {
     return { hid, shown, hid2 };
   });
   ok('⑤ a look added later (a new layer inside the card, not known to the compact code) is hidden in the row and shown when the card opens', fut.hid && fut.shown && fut.hid2, fut);
+
+  // ⑧ v3.36.64 — the card lock: «خليه يفتح الكرت بس ما يفتح القفل»
+  const lk = await pg.evaluate(async () => {
+    const W = ms => new Promise(r => setTimeout(r, ms));
+    localStorage.setItem('dash_clock', 'on'); CLK.open.clear(); cardLockAll(); await W(300);
+    const el = [...document.querySelectorAll('#grid .card[data-dir]')][4], k = cardKey(el), row = el._cmr;
+    const r0 = { locked: cardLocked(el), cls: el.classList.contains('lk'), op: getComputedStyle(row).opacity, mark: getComputedStyle(row.querySelector('.cm-sym'), '::after').content };
+    row.click(); await W(600);
+    const r1 = { o: el.classList.contains('cmpo'), locked: cardLocked(el), timer: CLK.open.has(k), btn: el._lk ? el._lk.textContent : '' };
+    let hit = 0; const t = document.createElement('button'); t.type = 'button'; t.textContent = 'x'; t.onclick = () => { hit++ }; el.appendChild(t);
+    t.click(); t.remove();
+    const r2 = { hit, locked: cardLocked(el), timer: CLK.open.has(k) };
+    row.click(); await W(600);
+    const r3 = { o: el.classList.contains('cmpo'), locked: cardLocked(el), timer: CLK.open.has(k) };
+    cardLockFlip(el); const until = CLK.open.get(k); await W(50); row.click(); await W(600);
+    const r4 = { o: el.classList.contains('cmpo'), open: !cardLocked(el), same: CLK.open.get(k) === until }; row.click(); await W(600);
+    const acc = [...ACARDS.values()][0]; acc._cmr.click(); await W(600); const r5 = { o: acc.classList.contains('cmpo'), locked: cardLocked(acc) }; acc._cmr.click(); await W(600);
+    localStorage.removeItem('dash_clock'); CLK.open.clear(); cardLockAll();
+    return { r0, r1, r2, r3, r4, r5 };
+  });
+  ok(`⑧ 🔒 a locked card: its row is not dimmed (opacity ${lk.r0.op}) and shows the lock («${lk.r0.mark}»)`, lk.r0.locked && lk.r0.cls && lk.r0.op === '1' && lk.r0.mark.includes('🔒'), lk.r0);
+  ok('⑧ … a tap on the row opens the locked card · the lock stays (still 🔒 · no open minute started)', lk.r1.o && lk.r1.locked && !lk.r1.timer && lk.r1.btn === '🔒', lk.r1);
+  ok('⑧ … a button inside the opened locked card still does nothing until 🔒 is pressed (as before)', lk.r2.hit === 0 && lk.r2.locked && !lk.r2.timer, lk.r2);
+  ok('⑧ … another tap closes it · still locked', !lk.r3.o && lk.r3.locked && !lk.r3.timer, lk.r3);
+  ok('⑧ … an unlocked card (🔓 its minute) opens from the row too · the row does not stretch its minute · a locked 🏦 opens too', lk.r4.o && lk.r4.open && lk.r4.same && lk.r5.o && lk.r5.locked, lk);
 
   await ctx.close();
 

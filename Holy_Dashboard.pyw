@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.63"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.64"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -24560,7 +24560,8 @@ body.btopen{overflow:hidden}
 .lkbtn{flex:0 0 auto;min-width:30px;height:28px;padding:0 6px;border-radius:9px;font-size:13px;line-height:1;cursor:pointer;
   background:rgb(var(--vio-rgb)/.10);border:1px solid var(--line);color:inherit}
 .card.lk .lkbtn{background:rgb(var(--amber-rgb)/.16);border-color:rgb(var(--amber-rgb)/.35)}
-.card.lk button:not(.lkbtn){opacity:.5;filter:saturate(.55)}
+.card.lk button:not(.lkbtn):not(.cmini){opacity:.5;filter:saturate(.55)}
+.card.lk>.cmini .cm-sym::after{content:" 🔒";font-size:11px;opacity:.85}              /* 📏 v3.36.64: السطر يفتح البطاقة المقفلة ويبيّن قفلها */
 .lkwrap{display:inline-flex;align-items:center;gap:6px;margin-inline-start:auto;flex:0 0 auto}
 .lkwrap .pill{margin-inline-start:0}
 /* 🃏 v3.36.8: أشكال البطاقات ج و ب — طبقة عرض فوق البطاقة نفسها */
@@ -32758,7 +32759,7 @@ function uiCardLockToggle(){const on=!uiCardLock();_ls('dash_clock',on?'on':null
   toast(on?'🔒 قفل البطاقات مفعّل — اضغط 🔒 في البطاقة لفتحها قبل أي زر':'🔓 قفل البطاقات غير مفعّل',true)}
 document.addEventListener('click',e=>{if(!uiCardLock())return;
   const el=e.target&&e.target.closest?e.target.closest('.card[data-dir],.card[data-acc]'):null;if(!el)return;
-  if(e.target.closest('.lkbtn'))return;
+  if(e.target.closest('.lkbtn,.cmini'))return;                     // 📏 v3.36.64: سطر المختصر يفتح البطاقة ويسدّها — بلا فتح القفل ولا تجديد دقيقته
   if(!cardLocked(el)){CLK.open.set(cardKey(el),Date.now()+CLK.ms);return}                 // مفتوحة ⇒ كل استعمال يجدّد الدقيقة
   e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
   toast('🔒 البطاقة مقفلة — اضغط 🔒 في أعلاها لفتحها',false)},true);
