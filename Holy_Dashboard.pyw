@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.64"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.65"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -20359,6 +20359,95 @@ def archive_view():
     return {"ok": True, "n": len(out), "items": out[:300]}
 
 
+_RD_FORM = {"grid": "grid", "grid_range": "grid", "grid_plus": "grid", "grid_step": "step", "dca": "dca", "dca_buy": "dca",
+            "rec_buy": "rec", "rec_sell": "rec", "rec_va": "va"}
+
+
+def redeploy_info(name):
+    """♻️ v3.36.65: نموذج نشر بوت محذوف — إعداداته (بلا مفاتيح) بأسماء حقول نموذج النشر نفسه (دوال النشر بالعكس) · قراءة فقط ·
+    المحفظة باسمها (يطابق مفتاحها هنا ولا يخرج) · الديمو بأرصدة بدايته"""
+    name = os.path.basename(str(name or "").strip())
+    d = os.path.join(ROOT, "_archive", name)
+    if not name or name.startswith(".") or not os.path.isdir(d):
+        return {"ok": False, "msg": "لم يُعثر على هذا البوت في الأرشيف"}
+    cfgs = sorted(glob.glob(os.path.join(d, "config_*.json")))
+    c = _safe(load_json, cfgs[0], default=None) if cfgs else None
+    if not isinstance(c, dict) or not str(c.get("symbol") or "").strip():
+        return {"ok": False, "msg": "إعدادات هذا البوت غير مقروءة"}
+    bt = str(c.get("bot_type") or "grid")
+    form = _RD_FORM.get(bt)
+    if not form:
+        return {"ok": False, "msg": "نوع هذا البوت لا يُنشر من جديد من هنا"}
+    sym = str(c.get("symbol")).strip().upper()
+
+    def n(k, dflt=0.0):
+        try:
+            v = float(c.get(k) if c.get(k) not in (None, "") else dflt)
+            return v if v == v and abs(v) != float("inf") else dflt
+        except Exception:
+            return dflt
+
+    pct = lambda k: round(n(k) * 100, 6)
+    P = {"symbol": sym, "auto": bool(c.get("auto_restart", True))}
+    if form == "grid":
+        P.update(bot_type=bt, grid_pct=pct("grid_percentage"), usd_value=n("usd_value"), min_price=n("min_price"),
+                 forced_base=n("forced_base_price"), lower_price=n("lower_price"), upper_price=n("upper_price"),
+                 buy_offset=pct("buy_offset"), guard=bool(c.get("knife_guard")), reinvest=bool(c.get("reinvest")),
+                 reinvest_pct=n("reinvest_pct", 100.0) if c.get("reinvest_pct") is not None else 100.0)
+    elif form == "step":
+        P.update(usd_value=n("usd_value"), step_parts=int(n("step_parts", 3)), step_sell_pct=pct("step_sell"),
+                 step_first_pct=round((n("step_first") or n("step_sell")) * 100, 6), grid_pct=pct("grid_percentage"),
+                 min_price=n("min_price"), up_groups=int(n("up_groups")), forced_base="", reinvest=bool(c.get("reinvest")),
+                 reinvest_pct=n("reinvest_pct", 100.0) if c.get("reinvest_pct") is not None else 100.0)
+    elif form == "dca":
+        if c.get("dca_plus"):
+            form = "dcap"
+            rows, _w = _plus_rows_ok(c.get("plus_rows"))
+            P.update(dca_type="dca_plus_buy" if bt == "dca_buy" else "dca_plus", plus_rows=rows or [])
+        else:
+            P.update(dca_type=bt, base_order_qty=n("base_order_qty"), avg_order_qty=n("avg_order_qty"), first_deviation=n("first_deviation"),
+                     step_multiplier=n("step_multiplier", 1.0), size_multiplier=n("size_multiplier", 1.0),
+                     max_safety_orders=int(n("max_safety_orders")), take_profit_pct=n("take_profit_pct"))
+        P.update(exchange_orders=int(n("exchange_orders", 3)), cycle_wait_sec=n("cycle_wait_sec", 30.0), trail_on=bool(c.get("trail_on")),
+                 trail_pct=n("trail_pct", 0.3))
+    elif form == "rec":
+        P.update(rec_type=bt, mode="avg" if str(c.get("mode")) == "avg" else "lots", amount=n("amount"), every=int(n("every", 1)),
+                 unit=str(c.get("unit") or "d"), at=str(c.get("at") or ""), start_now=bool(c.get("start_now", True)), tp_pct=n("tp_pct"),
+                 cap=n("cap"), ri_pct=n("ri_pct"), lo=n("lo"), hi=n("hi"))
+    else:                                                             # 💹 مسار القيمة
+        pm = str(c.get("trigger") or "time") == "price"
+        hg = bool(c.get("guard_on")) and (n("hg_pct") > 0 or n("hg_usd") > 0)
+        P.update(va_mode="grow" if n("step_usd") > 0 else "fixed", trigger="price" if pm else "time", start_usd=n("start_usd"),
+                 step_usd=n("step_usd"), every=int(n("every", 1)), unit=str(c.get("unit") or "d"), at=str(c.get("at") or ""),
+                 band_pct=n("band_pct", 4.0), max_order=n("max_order"), cap=n("cap"), brake_pct=n("brake_pct"),
+                 floor_on=bool(c.get("floor_on", True)), start_now=bool(c.get("start_now", True)), guard_on=hg,
+                 first_src="wallet" if str(c.get("first_src") or "") == "wallet" else "buy")
+        if pm:
+            P.update(drop_pct=n("drop_pct", 5.0), rise_pct=n("rise_pct", n("drop_pct", 5.0)))
+        if hg:
+            P.update(hg_pct=n("hg_pct"), hg_usd=n("hg_usd"), hg_ri=bool(c.get("hg_ri")), hg_ri_pct=n("hg_ri_pct", 100.0),
+                     hg_wallet=bool(c.get("hg_wallet")))
+    demo = bool(c.get("is_demo"))
+    wname, dusd, dcoin = "", "", ""
+    if demo:
+        st = ((_safe(load_json, os.path.join(d, DEMO_WALLET), default=None) or {}).get("start") or {})
+        base, quote = (sym.split("-") + ["USDT"])[:2]
+        try:
+            dusd = f"{float(st.get(quote)):.10g}" if st.get(quote) is not None else ""
+            dcoin = f"{float(st.get(base)):.10g}" if st.get(base) is not None else ""
+        except Exception:
+            dusd = dcoin = ""
+    else:
+        k = str(c.get("api_key") or "").strip()
+        if k:
+            for w in (app_cfg().get("wallets") or []):
+                if str(w.get("api") or "").strip() == k:
+                    wname = str(w.get("name") or "")
+                    break
+    return {"ok": True, "name": name, "form": form, "type": bt, "lbl": _PV_TYPE_ALL.get(bt, bt), "ico": _WD_E.get(bt, "🤖"), "sym": sym,
+            "pre": P, "wallet": wname, "demo": demo, "demo_usd": dusd, "demo_coin": dcoin}
+
+
 def delete_bot(b):
     with _demo_quiet(b):                                 # 🧪 v3.36.59: حذف الديمو بلا إشعار
         return _delete_bot_do(b)
@@ -20395,7 +20484,7 @@ def _delete_bot_do(b):
     except Exception:
         pass
     tg_send(f"🗑 *حذف (أرشفة)* — `{b['symbol']}` انتقل إلى `_archive`")
-    return {"ok": True, "msg": "⏹ حُذف بأمان — مجلده محفوظ داخل _archive إن احتجته"}
+    return {"ok": True, "msg": "⏹ حُذف بأمان — مجلده محفوظ داخل _archive إن احتجته", "arch": os.path.basename(dest), "sym": b["symbol"]}   # ♻️ v3.36.65
 
 def shutdown_all(noexit=False):
     led = load_json(LEDGER) or {}
@@ -23368,6 +23457,8 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
             return self._json(_safe(step_ladder_view, q.get("dir", [""])[0], default={"ok": False}))
         if u.path == "/api/archive":                      # 🗄️ v3.36.18: البوتات المحذوفة (للعرض)
             return self._json(_safe(archive_view, default={"ok": False, "items": []}))
+        if u.path == "/api/archive_redeploy":             # ♻️ v3.36.65: نموذج نشر بوت محذوف (قراءة فقط · بلا مفاتيح)
+            return self._json(_safe(redeploy_info, q.get("name", [""])[0], default={"ok": False, "msg": "تعذّر قراءة إعدادات البوت"}))
         if u.path == "/api/losses":                       # 📉 v3.25.4: سجل الخسائر (يحسب بس)
             try:
                 return self._json(loss_view(w=q.get("w", [""])[0] or None, src=q.get("src", [""])[0] or None,
@@ -24571,7 +24662,8 @@ body.btopen{overflow:hidden}
 .card.cmp.cmp>.cmini.cmini{display:grid!important}
 .card.cmp:not(.cmpo)>:not(.cmini){display:none!important}
 .card.cmp.cmpa{overflow:hidden}
-.card.cmp{content-visibility:visible}          /* السطر خفيف: يُرسم دائماً (لا طول محفوظ قديم وهو بعيد عن الشاشة) · والمفتوحة تُقاس فوراً للحركة */
+.card.cmp{content-visibility:visible}
+.rdnote{margin:0 0 10px;padding:9px 11px;border:1px solid rgb(var(--cyan-rgb)/.45);border-radius:10px;background:rgb(var(--cyan-rgb)/.08);font-size:12px;line-height:1.85;color:var(--tx)}   /* ♻️ v3.36.65 */          /* السطر خفيف: يُرسم دائماً (لا طول محفوظ قديم وهو بعيد عن الشاشة) · والمفتوحة تُقاس فوراً للحركة */
 .card.cmp:not(.cmpo){align-self:start}          /* عدة أعمدة: جيران البطاقة المفتوحة يبقون سطراً */
 .cmini{grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:2px 10px;width:100%;margin:0;padding:6px 10px 6px 4px;border:0;background:transparent;
   color:inherit;font:inherit;text-align:start;cursor:pointer;position:relative;border-radius:12px;min-height:46px}
@@ -25925,7 +26017,51 @@ async function api0(path,body){
       setTimeout(()=>location.reload(),600);}
     throw 0}
   return r.json()}
-async function ctl(dir,action,value){try{const r=await api('/api/control',{dir,action,value});toast(r.msg,r.ok);tick()}catch(e){toast('تعذر الاتصال','0')}}
+/* ♻️ v3.36.65: البوت المحذوف يرجع بنموذج نشره — معبّأ بإعداداته (من 🗄️ الأرشيف أو بعد الحذف مباشرة) · تعدّل ثم تنشره بوتاً جديداً */
+function rdSet(id,v){const e=$('#'+id);if(!e||v===undefined||v===null)return false;
+  if(e.type==='checkbox'){if(e.checked!==!!v){e.checked=!!v;e.dispatchEvent(new Event('change',{bubbles:true}))}return true}
+  if(e.tagName==='SELECT'&&![...e.options].some(o=>o.value===String(v)))return false;
+  e.value=String(v);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return true}
+function rdOffer(name,sym){
+  showModal(`<h2>♻️ حُذف البوت — هل تنشره من جديد؟</h2>
+    <p style="font-size:13px;color:var(--mut);line-height:1.9;margin:0 0 10px">مجلد <b dir="ltr">${gEsc(sym||'')}</b> محفوظ في 🗄️ الأرشيف. يمكنك فتح نموذج نشره معبّأً بإعداداته نفسها، فتعدّل ما تريد ثم تنشره بوتاً جديداً يبدأ من جديد — والخيار نفسه يبقى متاحاً لاحقاً من 🗄️ الأرشيف.</p>
+    <div class="mbtns"><button class="primary" onclick="rdOpen('${gEsc(name)}')">♻️ افتح نموذج النشر بإعداداته</button><button onclick="hideModal()">لا</button></div>`)}
+async function rdOpen(name){let r=null;try{r=await api('/api/archive_redeploy?name='+encodeURIComponent(name))}catch(e){r=null}
+  if(!r||!r.ok){toast((r&&r.msg)||'تعذّر قراءة إعدادات البوت',false);return null}
+  hideModal();await new Promise(z=>setTimeout(z,40));
+  const P=r.pre||{},F=r.form,X={grid:'n',step:'st',dca:'dn',dcap:'dn',rec:'rd',va:'vd'}[F];
+  if(F==='grid')await openDeploy(Object.assign({},P,{demo:r.demo}));
+  else if(F==='step')await openDeployStep(Object.assign({},P,{demo:r.demo}));
+  else if(F==='dca'||F==='dcap'){if(F==='dcap'){window._plxKeep=(P.plus_rows||[]).map(x=>({d:+x.d,q:+x.q,x:+x.x}));PLX=null}
+    await openDeployDca(F==='dcap'?'plus':undefined);
+    rdSet('dn_sym',r.sym);rdSet('dn_type',P.dca_type);dcaTypeSwitch();
+    if(F==='dca')[['dn_base','base_order_qty'],['dn_avg','avg_order_qty'],['dn_dev','first_deviation'],['dn_step','step_multiplier'],['dn_size','size_multiplier'],
+      ['dn_n','max_safety_orders'],['dn_tp','take_profit_pct']].forEach(([i,k])=>rdSet(i,P[k]));
+    rdSet('dn_ex',P.exchange_orders);rdSet('dn_wait',P.cycle_wait_sec);rdSet('dn_trail_pct',P.trail_pct);rdSet('dn_trail',P.trail_on);
+    window._plxKeep=null}
+  else if(F==='rec'){await openDeployRec();rdSet('rd_sym',r.sym);rdSet('rd_type',P.rec_type);recFormSync();recMode(P.mode);
+    [['rd_amt','amount'],['rd_every','every'],['rd_unit','unit'],['rd_tp','tp_pct'],['rd_cap','cap'],['rd_ri','ri_pct'],['rd_lo','lo'],['rd_hi','hi']].forEach(([i,k])=>rdSet(i,P[k]));
+    rdSet('rd_at',P.at||'');rdSet('rd_now',P.start_now);recFormSync()}   // الساعة كما كانت (فارغة = كما كانت)
+  else if(F==='va'){await openDeployVa();rdSet('vd_sym',r.sym);vaTrig(P.trigger);vaMode(P.va_mode);vaW0(P.first_src);
+    [['vd_start','start_usd'],['vd_step','step_usd'],['vd_drop','drop_pct'],['vd_rise','rise_pct'],['vd_every','every'],['vd_unit','unit'],['vd_band','band_pct'],
+     ['vd_mo','max_order'],['vd_cap','cap'],['vd_brake','brake_pct'],['vd_hgp','hg_pct'],['vd_hgu','hg_usd'],['vd_hgrp','hg_ri_pct']].forEach(([i,k])=>rdSet(i,P[k]));
+    rdSet('vd_at',P.at||'');rdSet('vd_floor',P.floor_on);rdSet('vd_now',P.start_now);rdSet('vd_hgr',P.hg_ri);rdSet('vd_hgw',P.hg_wallet);rdSet('vd_guard',P.guard_on);
+    vaGuardSync();vaSync()}
+  else return null;
+  rdSet(X+'_sym',r.sym);
+  let wOk=true;
+  if(r.demo){rdSet(X+'_demo',true);demoTgl(X);rdSet(X+'_dusd',r.demo_usd);rdSet(X+'_dcoin',r.demo_coin)}
+  else{wOk=!!r.wallet&&rdSet(X+'_wallet',r.wallet)}
+  rdSet(X+'_auto',P.auto);
+  const h=document.querySelector('#modal h2');
+  if(h){const n=document.createElement('div');n.className='rdnote';
+    n.innerHTML=`♻️ من الأرشيف: <b dir="ltr">${gEsc(r.sym)}</b> · ${gEsc(r.ico||'')} ${gEsc(r.lbl||r.type||'')}${r.demo?' · 🧪 ديمو':''} — إعداداته معبّأة كما كانت عند حذفه. عدّل ما تريد ثم «🚀 انشر وشغّل» فيُنشأ بوت جديد يبدأ من جديد.`
+      +(F==='step'?'<br>🎯 سعر البداية فارغ = سعر السوق الآن.':'')+(!r.demo&&!wOk?'<br>⚠️ محفظته غير محفوظة في 🔗 الارتباط — اختر المحفظة.':'');
+    h.insertAdjacentElement('afterend',n)}
+  toast('♻️ نموذج النشر معبّأ بإعدادات '+r.sym+' — عدّل ثم انشر',true);
+  return r}
+async function ctl(dir,action,value){try{const r=await api('/api/control',{dir,action,value});toast(r.msg,r.ok);tick();
+  if(r&&r.ok&&r.arch&&(action==='delete'||action==='delete_purge'))setTimeout(()=>rdOffer(r.arch,r.sym),450)}catch(e){toast('تعذر الاتصال','0')}}   // ♻️ v3.36.65
 function g(action,value){ctl('',action,value)}
 function goTop(){window.scrollTo({top:0,behavior:'smooth'})}
 /* 📱 الشريط المصغّر: يظهر بالموبايل لما يطلع الشريط الكبير من الشاشة */
@@ -29060,7 +29196,7 @@ async function openArchive(){
   const box='background:var(--bg1);border:1px solid var(--line2);border-radius:11px;padding:10px;margin-top:9px';
   const p=n=>String(n).padStart(2,'0'),dt=t=>{if(!t)return '—';const D=new Date(t*1000);return D.getFullYear()+'-'+p(D.getMonth()+1)+'-'+p(D.getDate())+' '+p(D.getHours())+':'+p(D.getMinutes())};
   const dur=s=>{const d=s/86400;return d>=30?(d/30).toFixed(1)+' شهر':d>=1?d.toFixed(1)+' يوم':s>=3600?Math.floor(s/3600)+' ساعة':Math.max(1,Math.floor(s/60))+' دقيقة'};
-  el.innerHTML=`<div style="${box};font-size:11.5px;color:var(--mut);line-height:1.8">🗄️ <b style="color:var(--tx)">${V.n}</b> بوت محذوف — مجلد كل واحد محفوظ بـ<b>_archive</b> (إعداداته وسجله) · للعرض فقط</div>`
+  el.innerHTML=`<div style="${box};font-size:11.5px;color:var(--mut);line-height:1.8">🗄️ <b style="color:var(--tx)">${V.n}</b> بوت محذوف — مجلد كل واحد محفوظ بـ<b>_archive</b> (إعداداته وسجله) · «♻️ انشره من جديد» يفتح نموذج نشره معبّأً بإعداداته لتعدّلها ثم تنشره بوتاً جديداً</div>`
    +V.items.map(x=>{const pr=[];
      if(x.trade!=null)pr.push(`🔄 ربح التداول <b class="bidi">${(+x.trade).toFixed(4)}$</b>`);
      if(+x.rel)pr.push(`💵 المحرر <b class="bidi">${(+x.rel).toFixed(4)}$</b>`);
@@ -29072,6 +29208,7 @@ async function openArchive(){
          <span style="font-size:11px;color:var(--mut2)">📁 ${gEsc(x.folder)}</span></div>
        <div style="font-size:11.5px;line-height:1.9;margin-top:4px">▶️ بدأ: <b class="bidi">${x.started?dt(x.started)+(x.approx?' (تقريبي)':''):'—'}</b> · ⏹ حُذف: <b class="bidi">${dt(x.deleted)}</b>${x.started?` · ⏱️ عمل <b>${dur(x.deleted-x.started)}</b>`:''}</div>
        <div style="font-size:11.5px;line-height:1.9">${pr.length?pr.join(' · '):'<span style="color:var(--mut2)">بلا ربح مسجّل</span>'}</div>
+       <button type="button" class="rdbtn" onclick="rdOpen('${gEsc(x.name)}')" style="margin-top:7px;width:100%;font-size:12px;padding:8px">♻️ انشره من جديد — نموذج النشر بإعداداته</button>
        <details style="margin-top:4px"><summary style="cursor:pointer;font-size:11.5px;color:var(--cyan)">⚙️ الإعدادات</summary>
          <div style="font-size:11px;color:var(--mut);margin:4px 0">${gEsc(x.cfg_txt||'')}</div>
          <pre style="font-size:10.5px;white-space:pre-wrap;direction:ltr;text-align:left;margin:0">${gEsc(JSON.stringify(x.cfg||{},null,1))}</pre></details></div>`}).join('');
@@ -31934,7 +32071,7 @@ async function openDeployStep(pre){pre=pre||{};
     <div class="fld"><label title="لا شراء تحت هذا السعر">🧱 سعر الأرضية</label><input id="st_floor" class="num" value="${v('min_price','')}" oninput="stPreview()"></div>
     <div class="fld"><label title="عدد المستويات فوق سعر البداية التي تبيع من عملاتك الحرة كأنها اشتُريت بسعر مستواها (0 = لا شيء · حتى 500)">⬆️ مستويات فوق السعر من عملاتك <small>(0–500)</small></label><input id="st_up" class="num" value="${v('up_groups',1)}" oninput="stPreview()"></div>
     <div class="fld"><label title="فارغ = سعر السوق لحظة النشر">🎯 سعر البداية (اختياري)</label><input id="st_p0" class="num" value="${+v('forced_base',0)||''}" oninput="stPreview()"></div>
-    <div class="fld"><label>المحفظة</label><select id="st_wallet">${ws.map(w=>`<option>${gEsc(w.name)}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>${demoFld('st',false)}
+    <div class="fld"><label>المحفظة</label><select id="st_wallet">${ws.map(w=>`<option>${gEsc(w.name)}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>${demoFld('st',!!pre.demo)}
   </div>
   <div class="cklist" style="margin-top:10px"><label class="ck"><input type="checkbox" id="st_auto" checked>🤖 يشمله الحارس</label>
     <label class="ck" title="من أول بيعة: نسبة من ربح كل بيعة تعود إلى خانتها فيكبر شراؤها (تُغيَّر لاحقاً من البطاقة) — والاختبار على مسار تجريبي يعمل بها كذلك"><input type="checkbox" id="st_ri" ${pre.reinvest?'checked':''} onchange="stRiSync()">💠 إعادة الاستثمار من البداية</label></div>
