@@ -393,7 +393,7 @@ def _sg_search(COIN, prog=None):
         return l, t
 
     def evalc(fr, keys, side, want=False):
-        l, t, ev = [], [], []
+        l, t, ev, ld = [], [], [], set()
         for ci, sym in enumerate(names):
             act, rl, rs, cut, T = PRE[(sym, fr)]
             sets = [act.get(k) for k in keys]
@@ -411,21 +411,23 @@ def _sg_search(COIN, prog=None):
                     continue
                 if i < cut:
                     l.append(x)
+                    if want:
+                        ld.add(T[i] // 86400)
                 else:
                     t.append(x)
                     if want:
                         ev.append([ci, T[i]])
-        return l, t, ev
+        return l, t, ev, ld
 
     def score(v, b):
         return (_sg_mean(v) - _sg_mean(b)) * math.sqrt(len(v)) if v else -9.0
 
-    def mk(fr, side, keys, l, t, ev, rare=False):
+    def mk(fr, side, keys, l, t, ev, ld, rare=False):
         ks = [k[0] for k in keys]
         return {"id": f"{fr}|{side}|{'+'.join(ks)}", "f": fr, "s": side, "k": ks, "ty": _sg_type(ks, side),
                 "nl": len(l), "wl": sum(1 for x in l if x > 0), "ml": round(_sg_mean(l), 5),
                 "nt": len(t), "wt": sum(1 for x in t if x > 0), "mt": round(_sg_mean(t), 5), "rare": bool(rare),
-                "nd": len({int(ts) // 86400 for ci, ts in ev}), "ev": ev if len(ev) <= 300 else None}
+                "nd": len({int(ts) // 86400 for ci, ts in ev}), "ndl": len(ld), "ev": ev if len(ev) <= 300 else None}
 
     out, BASE, WK, step = {}, {}, {}, 0
     for fr in SG_FR:
@@ -445,9 +447,9 @@ def _sg_search(COIN, prog=None):
             singles = []
             keys = sorted(set(k for sym in names for k in PRE[(sym, fr)][0] if k[1] == side))
             for k in keys:
-                l, t, ev = evalc(fr, [k], side, True)
+                l, t, ev, ld = evalc(fr, [k], side, True)
                 if len(l) + len(t) >= 3:
-                    e = mk(fr, side, [k], l, t, ev)
+                    e = mk(fr, side, [k], l, t, ev, ld)
                     out[e["id"]] = e
                 if len(l) >= 6:
                     singles.append((score(l, bl), k))
@@ -464,7 +466,7 @@ def _sg_search(COIN, prog=None):
                         if nc in seen:
                             continue
                         seen.add(nc)
-                        l, t, _ = evalc(fr, list(nc), side)
+                        l, t, _, _ = evalc(fr, list(nc), side)
                         if len(l) >= 6 and _sg_mean(l) > _sg_mean(bl):
                             cand[nc] = (score(l, bl), l, t)
                 best = sorted(cand.items(), key=lambda x: -x[1][0])[:SG_BEAM]
@@ -472,15 +474,15 @@ def _sg_search(COIN, prog=None):
                     break
                 cur = [c for c, _ in best]
                 for c, (s, l, t) in best[:SG_KEEP]:
-                    l, t, ev = evalc(fr, list(c), side, True)
-                    e = mk(fr, side, c, l, t, ev)
+                    l, t, ev, ld = evalc(fr, list(c), side, True)
+                    e = mk(fr, side, c, l, t, ev, ld)
                     out[e["id"]] = e
                 allc += [(c, l, t) for c, (s, l, t) in cand.items()]
             rare = [(_sg_hit(l), len(l), c) for c, l, t in allc if 6 <= len(l) <= 30 and _sg_hit(l) >= 75]
             rare.sort(key=lambda x: (-x[0], -x[1]))
             for hh, nn, c in rare[:SG_RAREK]:
-                l, t, ev = evalc(fr, list(c), side, True)
-                e = mk(fr, side, c, l, t, ev, rare=True)
+                l, t, ev, ld = evalc(fr, list(c), side, True)
+                e = mk(fr, side, c, l, t, ev, ld, rare=True)
                 if e["id"] in out:
                     out[e["id"]]["rare"] = True
                 else:
@@ -783,7 +785,12 @@ def _sg_rec(e, st):
     n, w, sm = e["nt"] + lv[0], e["wt"] + lv[1], e["mt"] * e["nt"] + lv[2]
     if e.get("rare"):
         n, w, sm = n + e["nl"], w + e["wl"], sm + e["ml"] * e["nl"]
-    return {"n": n, "w": w, "h": (w / n * 100.0) if n else 0.0, "m": (sm / n) if n else 0.0, "ln": lv[0], "lw": lv[1]}
+    d = n                                                    # 🔢 عدد الحالات المستقلة: قراءة للسوق كله ⇒ الأيام المختلفة لا العملات
+    if _sg_mktwide(e):
+        d = int(e.get("nd") if e.get("nd") is not None else e["nt"]) + (len(lv[3]) if len(lv) > 3 else lv[0])
+        if e.get("rare"):
+            d += int(e.get("ndl") if e.get("ndl") is not None else e["nl"])
+    return {"n": n, "w": w, "h": (w / n * 100.0) if n else 0.0, "m": (sm / n) if n else 0.0, "ln": lv[0], "lw": lv[1], "d": d}
 
 
 def _sg_pass(e, st, cfg, cat):
@@ -793,10 +800,10 @@ def _sg_pass(e, st, cfg, cat):
     r = _sg_rec(e, st)
     b = (cat.get("base") or {}).get(f"{e['f']}|{e['s']}") or {}
     if e.get("rare"):
-        if not cfg["rare"] or r["n"] < cfg["rmin"] or r["h"] < cfg["thr"]:
+        if not cfg["rare"] or r["d"] < cfg["rmin"] or r["h"] < cfg["thr"]:
             return False
         return e["nt"] < 2 or (e["wt"] / e["nt"] * 100.0 > float(b.get("ht") or 0) and e["mt"] > float(b.get("mt") or 0))
-    if r["n"] < cfg["min"] or r["h"] < cfg["thr"]:
+    if r["d"] < cfg["min"] or r["h"] < cfg["thr"]:
         return False
     return (not cfg["rnd"]) or (r["h"] > float(b.get("ht") or 0) and r["m"] > float(b.get("mt") or 0))
 
@@ -919,9 +926,16 @@ def _sg_mktwide(e):
     return any(k == "W-crash" or k.startswith("M-") for k in e["k"])
 
 
+def _sg_dtxt(nd):
+    """«كلها في يوم واحد» · «في يومين مختلفين» · «في 6 أيام مختلفة» · «في 16 يوماً مختلفاً»"""
+    nd = int(nd)
+    return ("كلها في يوم واحد" if nd == 1 else "في يومين مختلفين" if nd == 2 else f"في {nd} أيام مختلفة" if 3 <= nd % 100 <= 10
+            else f"في {nd} يوماً مختلفاً")
+
+
 def _sg_days(e):
     nd = int(e.get("nd") or 0)
-    return f" — اختبارها في {_sg_ar(nd, 'day')} مختلفة" if _sg_mktwide(e) and 0 < nd < e["nt"] else ""
+    return f" — اختبارها {_sg_dtxt(nd)}" if _sg_mktwide(e) and 0 < nd < e["nt"] else ""
 
 
 def _sg_rec_line(e, r, cat, rare=False):
@@ -935,7 +949,7 @@ def _sg_rec_line(e, r, cat, rare=False):
 
 def _sg_block(sym, ty, fr, ents, st, cat, scan, comp):
     """📨 إشعار عملة واحدة لنوع واحد — يجمع كل ما اتفق (أقواها أولاً)"""
-    ents = sorted(ents, key=lambda e: -_sg_wlb(_sg_rec(e, st)["w"], _sg_rec(e, st)["n"]))
+    ents = sorted(ents, key=lambda e: -_sg_wlb(_sg_rec(e, st)["h"] / 100.0 * _sg_rec(e, st)["d"], _sg_rec(e, st)["d"]))
     top = ents[0]
     side = top["s"]
     keys = list(dict.fromkeys(k for e in ents for k in e["k"]))
@@ -1153,10 +1167,15 @@ def _sg_grade(st, cdb, cat, now):
         if j < len(ts_) and ts_[j] == tgt and px > 0:
             c1 = cs[j]
             x = (c1 / px - 1.0 if side > 0 else px / c1 - 1.0) - SG_FEE
-            r = rec.setdefault(eid, [0, 0, 0.0])
+            r = rec.setdefault(eid, [0, 0, 0.0, []])
+            if len(r) < 4:
+                r.append([])
             r[0] += 1
             r[1] += 1 if x > 0 else 0
             r[2] = round(r[2] + x, 6)
+            if ts // 86400 not in r[3]:
+                r[3].append(ts // 86400)                    # الأيام المختلفة (لعدّ قراءات السوق كله مستقلةً)
+                del r[3][:-400]
             if flag:
                 res.append((eid, sym, x))
             hist = st.setdefault("done", [])
@@ -1259,7 +1278,7 @@ def _sg_mkt_block(ty, code, side, e, st, cat, scan):
     r = _sg_rec(e, st)
     b = (cat.get("base") or {}).get(f"{e['f']}|{e['s']}") or {}
     nd = int(e.get("nd") or 0)
-    days = f" (في {_sg_ar(nd, 'day')} مختلفة · {_sg_ar(r['n'], 'case')} على العملات)" if nd else ""
+    days = f" ({_sg_dtxt(nd)} · {_sg_ar(r['n'], 'case')} على العملات)" if nd else ""
     rec = (f"📊 تاريخياً{days}: "
            f"{'الشراء' if side > 0 else 'البيع'} بعده صدق {r['h']:.0f}% (العشوائي {float(b.get('ht') or 0):.0f}%) · المتوسط بعد {SG_HZN[e['f']]} {_sg_pct(r['m'] if side > 0 else -r['m'])}")
     if ty == "crash":
@@ -1410,7 +1429,7 @@ def _sg_row(e, st, cat, cfg):
             "n": r["n"], "w": r["w"], "h": round(r["h"], 1), "m": round(r["m"] if e["s"] > 0 else -r["m"], 5), "ln": r["ln"], "lw": r["lw"],
             "nt": e["nt"], "ht": round(e["wt"] / e["nt"] * 100.0, 1) if e["nt"] else None, "nl": e["nl"],
             "hl": round(e["wl"] / e["nl"] * 100.0, 1) if e["nl"] else None, "rare": bool(e.get("rare")),
-            "rh": float(b.get("ht") or 0), "ok": _sg_pass(e, st, cfg, cat), "lb": round(_sg_wlb(r["w"], r["n"]), 1), "nd": int(e.get("nd") or 0) if _sg_mktwide(e) else 0,
+            "rh": float(b.get("ht") or 0), "ok": _sg_pass(e, st, cfg, cat), "lb": round(_sg_wlb(r["h"] / 100.0 * r["d"], r["d"]), 1), "d": r["d"], "nd": int(e.get("nd") or 0) if _sg_mktwide(e) else 0,
             "better": r["h"] > float(b.get("ht") or 0) and r["m"] > float(b.get("mt") or 0)}
 
 

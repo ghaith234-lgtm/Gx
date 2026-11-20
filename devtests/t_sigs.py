@@ -161,7 +161,7 @@ ok(f"④ 🌊 the planted crash on the last 4-hour candle is seen ({sc['crash'][
 
 # ⑤ firing — a small catalog and planted scans (deterministic)
 CAT = {"e": [
-    {"id": "4H|1|18+43+W-crash", "f": "4H", "s": 1, "k": ["18", "43", "W-crash"], "ty": "buy", "nl": 60, "wl": 48, "ml": 0.03, "nt": 24, "wt": 20, "mt": 0.04, "rare": False, "nd": 6, "ev": []},
+    {"id": "4H|1|18+43+W-crash", "f": "4H", "s": 1, "k": ["18", "43", "W-crash"], "ty": "buy", "nl": 60, "wl": 48, "ml": 0.03, "nt": 24, "wt": 20, "mt": 0.04, "rare": False, "nd": 16, "ev": []},
     {"id": "4H|1|18", "f": "4H", "s": 1, "k": ["18"], "ty": "buy", "nl": 900, "wl": 400, "ml": 0.001, "nt": 500, "wt": 230, "mt": 0.0, "rare": False, "ev": None},
     {"id": "1D|1|12+35", "f": "1D", "s": 1, "k": ["12", "35"], "ty": "up", "nl": 40, "wl": 28, "ml": 0.05, "nt": 22, "wt": 15, "mt": 0.06, "rare": False, "ev": []},
     {"id": "1D|1|20+37+O-rsi", "f": "1D", "s": 1, "k": ["20", "37", "O-rsi"], "ty": "buy", "nl": 9, "wl": 8, "ml": 0.1, "nt": 4, "wt": 3, "mt": 0.12, "rare": True, "ev": []},
@@ -202,7 +202,7 @@ bx = next(b for b in b1 if b["sym"] == "XRP-USDT" and b["ty"] == "buy")
 txt = bx["t"] + "\n" + bx["b"]
 ok("⑤ the text: «🟢 شراء — XRP-USDT · 4 ساعات» · the signals by name · «📊 السجل: صدقت 20 من 24 مرة (83%) · الشراء العشوائي 43% · المتوسط بعد 3 أيام» · "
    "price + where it fails · ⚠️ not a guarantee", bx["t"] == "🟢 شراء — XRP-USDT · 4 ساعات" and "عودة من تحت حد بولنجر بقوة" in txt and "كسر قاعدة سعرية (QFL)" in txt
-   and "🌊 انهيار السوق كله" in txt and "📊 السجل: صدقت 20 من 24 مرة (83%) — اختبارها في 6 أيام مختلفة · الشراء العشوائي 43% · المتوسط بعد 3 أيام +4.0%" in txt
+   and "🌊 انهيار السوق كله" in txt and "📊 السجل: صدقت 20 من 24 مرة (83%) — اختبارها في 16 يوماً مختلفاً · الشراء العشوائي 43% · المتوسط بعد 3 أيام +4.0%" in txt
    and "💵 السعر الآن 2.45 · ❌ تبطل إذا أُغلقت شمعة 4 ساعات تحت 2.3" in txt and "⚠️ ليست ضماناً — القرار لك" in txt, txt)
 bc = next(b for b in b1 if b["ty"] == "crash")
 ok("⑤ 🌊 the market-wide crash: «11 من 28 عملة هبطت بقوة» + its record with the real number of days («في 9 أيام مختلفة · 25 حالة على العملات») + "
@@ -240,13 +240,23 @@ ok("⑤ 🔻 the distribution passes only without «better than random» — and
 _CFG.update(sg_rnd=True, sg_thr=60, sg_min=15)
 _CFG.pop("sg_types", None)
 
+# ⑤ a market-wide combination counts its DAYS, not its coins (the real check of 20-11: the best «panic bounce» had 22 cases on ONE day)
+e1d = dict(CAT["idx"]["4H|1|18+43+W-crash"], nd=1)
+r1d = m._sg_rec(e1d, {})
+ok("⑤ 19 of 22 coins on one single crash day = one case: «— اختبارها كلها في يوم واحد» · it does not pass 15 cases (it counts 1) · until the live "
+   "record adds 14 more different days", r1d["d"] == 1 and not m._sg_pass(e1d, {}, cfg, CAT) and "— اختبارها كلها في يوم واحد" in m._sg_rec_line(e1d, r1d, CAT)
+   and m._sg_pass(e1d, {"rec": {e1d["id"]: [14, 12, 0.3, list(range(14))]}}, cfg, CAT), (r1d, m._sg_rec_line(e1d, r1d, CAT)))
+ok("⑤ the days in words: يوم واحد · يومين مختلفين · 6 أيام مختلفة · 16 يوماً مختلفاً", [m._sg_dtxt(x) for x in (1, 2, 6, 16)] ==
+   ["كلها في يوم واحد", "في يومين مختلفين", "في 6 أيام مختلفة", "في 16 يوماً مختلفاً"], [m._sg_dtxt(x) for x in (1, 2, 6, 16)])
+
 # ⑥ the live record grades itself
 cd2 = {"c4": {"XRP-USDT": {"d": [[T4E + i * 14400, 1, 1, 1, 2.45 * (1.05 if i == 18 else 1), 1] for i in range(0, 30)]}}, "c": {}}
 st6 = {"pend": [["4H|1|18+43+W-crash", "XRP-USDT", T4E, 2.45, 1], ["4H|1|18", "XRP-USDT", T4E + 14400, 2.45, 0]]}
 res6 = m._sg_grade(st6, cd2, CAT, NOW + 30 * 14400)
 r6 = m._sg_rec(CAT["idx"]["4H|1|18+43+W-crash"], st6)
-ok("⑥ after 3 days (18 candles) the fire is graded by itself: +5% − 0.2% fees ⇒ a win · the record grows to 21 of 25 · the one 4 hours later "
-   "too (its candle is there, a loss)", st6["rec"]["4H|1|18+43+W-crash"][:2] == [1, 1] and abs(st6["rec"]["4H|1|18+43+W-crash"][2] - 0.048) < 1e-6
+ok("⑥ after 3 days (18 candles) the fire is graded by itself: +5% − 0.2% fees ⇒ a win · the record grows to 21 of 25 (its day kept for the "
+   "independent count) · the one 4 hours later too (its candle is there, a loss)", st6["rec"]["4H|1|18+43+W-crash"][:2] == [1, 1]
+   and st6["rec"]["4H|1|18+43+W-crash"][3] == [T4E // 86400] and abs(st6["rec"]["4H|1|18+43+W-crash"][2] - 0.048) < 1e-6
    and r6["n"] == 25 and r6["w"] == 21 and st6["rec"]["4H|1|18"][:2] == [1, 0] and len(res6) == 1 and not st6["pend"], (st6, res6))
 rb = m._sg_res_block(res6, st6, CAT)
 ok("⑥ the result of what you were told: «✅ نتيجة إشارة شراء XRP قبل 3 أيام: +4.8%» · «السجل الآن: 21 من 25 مرة (84%)»",

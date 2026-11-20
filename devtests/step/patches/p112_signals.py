@@ -100,13 +100,14 @@ async function sgLoad(){clearTimeout(SGT);try{SGV=await api('/api/signals')}catc
 function sgTab(t){SGTAB=t;sgRender();if(t==='cat')sgCat()}
 function sgAr(n,k){const W={day:['يوم واحد','يومين','أيام','يوماً'],time:['مرة واحدة','مرتين','مرات','مرة'],coin:['عملة واحدة','عملتين','عملات','عملة'],min:['دقيقة واحدة','دقيقتين','دقائق','دقيقة']}[k];n=+n||0;   // 55 يوماً · 13 مرة · 9 مرات
   return n===1?W[0]:n===2?W[1]:(n%100>=3&&n%100<=10)?`${n} ${W[2]}`:`${n} ${W[3]}`}
+function sgDt(n){n=+n||0;return n===1?'كلها في يوم واحد':n===2?'في يومين مختلفين':(n%100>=3&&n%100<=10)?`في ${n} أيام مختلفة`:`في ${n} يوماً مختلفاً`}
 function sgPct(x){x=+x||0;return `<b class="${x>=0?'up':'dn'}" dir="ltr">${x>=0?'+':''}${(x*100).toFixed(1)}%</b>`}
 function sgTy(V,t){return ((V&&V.types)||{})[t]||['•','']}
 function sgRow(r,V){const T=sgTy(V,r.ty),hz=((V&&V.hzn)||{})[r.f]||'';
   return `<div class="sg-r${r.ok?' ok':''}${r.s<0?' sell':''}"><div class="sg-rh"><span class="sg-ty">${T[0]} ${gEsc(T[1])}</span><span class="sg-fr">${gEsc(((V&&V.fn)||{})[r.f]||r.f)}${r.k.length>1?' · '+r.k.length+' معاً':''}</span>
     ${r.rare?'<span class="sg-b rare">💎 نادرة</span>':''}${r.new?'<span class="sg-b new">🆕 الآن</span>':''}${r.ok?'<span class="sg-b ok">🔔 تصلك</span>':''}</div>
     <div class="sg-k">${r.nm.map(gEsc).join(' <b>+</b> ')}</div>
-    <div class="sg-rec">صدقت <b>${r.w}</b> من <b>${sgAr(r.n,'time')}</b> (<b>${(+r.h).toFixed(0)}%</b>)${r.nd&&r.nd<r.nt?` <small>— اختبارها في ${sgAr(r.nd,'day')} مختلفة</small>`:''} · العشوائي ${(+r.rh).toFixed(0)}% · المتوسط بعد ${gEsc(hz)} ${sgPct(r.m)}${r.ln?` · منها حيّة ${r.lw} من ${r.ln}`:''}${r.better?'':' · <span style="color:var(--amber)">⚠️ ليست أفضل من العشوائي</span>'}</div></div>`}
+    <div class="sg-rec">صدقت <b>${r.w}</b> من <b>${sgAr(r.n,'time')}</b> (<b>${(+r.h).toFixed(0)}%</b>)${r.nd&&r.nd<r.nt?` <small>— اختبارها ${sgDt(r.nd)}</small>`:''} · العشوائي ${(+r.rh).toFixed(0)}% · المتوسط بعد ${gEsc(hz)} ${sgPct(r.m)}${r.ln?` · منها حيّة ${r.lw} من ${r.ln}`:''}${r.better?'':' · <span style="color:var(--amber)">⚠️ ليست أفضل من العشوائي</span>'}</div></div>`}
 function sgHead(V){const C=V.comp,B=V.busy||{};let h='';
   if(C&&SGCOMP[C.s]){const nm=SGCOMP[C.s];
     h+=`<div class="sg-comp ${nm[2]}"><div><b>🧭 السوق الآن: ${nm[1]} ${nm[0]}</b> <small>منذ ${sgAr(C.days,'day')}</small></div>
