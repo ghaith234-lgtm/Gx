@@ -3,7 +3,7 @@
 #   normal ones ⇒ 📜 the log window · 🔔 the notification centre · the card's last line · the detailed journals show none of them ·
 #   the file is not changed · the normal lines (and the profit line) are all there.
 #   python3 devtests/t_hide_cut.py [Holy_Dashboard.pyw] [-q]
-import importlib.machinery, importlib.util, json, os, shutil, sys, tempfile, urllib.request
+import importlib.machinery, importlib.util, json, os, shutil, sys, tempfile, time, urllib.request
 
 H = os.path.dirname(os.path.abspath(__file__))
 Q = "-q" in sys.argv
@@ -48,12 +48,13 @@ for msg in [CUT[0], NORMAL[0], CUT[1], CUT[2], NORMAL[1], CUT[3], CUT[4], NORMAL
 HP = os.path.join(BOT, "trade_history_SOL.json")
 json.dump(rows, open(HP, "w", encoding="utf-8"), ensure_ascii=False)
 raw0 = open(HP, "rb").read()
-# a journal line copied in by an older version (before v3.36.49)
+# a journal line copied in by an older version (before v3.36.49) — yesterday's file (the journals keep 7 days: a fixed date ran out on 20-11)
 os.makedirs(os.path.join(R, "Holy_Journal"), exist_ok=True)
-with open(os.path.join(R, "Holy_Journal", "2026-11-13.jsonl"), "w", encoding="utf-8") as f:
-    f.write(json.dumps({"t": 1763030000, "c": "trade", "lv": "info", "m": "🔌 انقطع الإنترنت — إيقاف الأوامر الجديدة مؤقتاً", "bot": "bot_sol",
+_yt = time.time() - 86400
+with open(os.path.join(R, "Holy_Journal", time.strftime("%Y-%m-%d", time.localtime(_yt)) + ".jsonl"), "w", encoding="utf-8") as f:
+    f.write(json.dumps({"t": int(_yt), "c": "trade", "lv": "info", "m": "🔌 انقطع الإنترنت — إيقاف الأوامر الجديدة مؤقتاً", "bot": "bot_sol",
                         "sym": "SOL-USDT"}, ensure_ascii=False) + "\n")
-    f.write(json.dumps({"t": 1763030001, "c": "trade", "lv": "info", "m": "🟢 شراء 0.04 SOL بسعر 81.9", "bot": "bot_sol", "sym": "SOL-USDT"},
+    f.write(json.dumps({"t": int(_yt) + 1, "c": "trade", "lv": "info", "m": "🟢 شراء 0.04 SOL بسعر 81.9", "bot": "bot_sol", "sym": "SOL-USDT"},
                        ensure_ascii=False) + "\n")
 
 ld = importlib.machinery.SourceFileLoader("hd_hidecut", os.path.join(R, "Holy_Dashboard.pyw"))
