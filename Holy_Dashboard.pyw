@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.67"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.68"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -15066,10 +15066,9 @@ def indic_loop():
     time.sleep(12)
     while True:
         try:
-            if (indic_cfg()["on"] or ina_cfg()["on"]) and indic_cfg()["coins"]:   # 📊 v3.31.0: تنبيهات المؤشرات تشتغل حتى لو الشريط مطفي
+            if indic_cfg()["on"] and indic_cfg()["coins"]:
                 indic_fetch()
                 _ind2_run()
-                _safe(ina_tick, default=None)          # 📊 تنبيهات المؤشرات — كل تحديث (5 دقائق)
                 if indic_cfg()["on"]:
                     _safe(mkt_tick, default=None)      # 🌐 v3.32.0: مؤشرات السوق كله (كل مصدر بوقته)
         except Exception:
@@ -18015,7 +18014,7 @@ def fc_loop():
     time.sleep(90)
     while True:
         try:
-            if (indic_cfg()["on"] or ina_cfg()["on"]) and ticker_cfg()["coins"]:      # 🟢 v3.36.27: مؤشر القاع للتنبيهات حتى لو الشريط مطفي
+            if indic_cfg()["on"] and ticker_cfg()["coins"]:
                 _fc_run()
         except Exception:
             pass
@@ -18701,6 +18700,7 @@ _SG_NM = {   # الأنظمة الـ36 — (للشراء · للبيع) بالع
 _SG_XNM = {   # (الأسرة · للشراء · للبيع)
     "O-verdict": ("trend", "📊 حكم المؤشرات العشرة: صعود", "📊 حكم المؤشرات العشرة: هبوط"),
     "O-bottom": ("volatility", "🟢 مؤشر القاع", "🟢 مؤشر القاع"),
+    "O-botv": ("volume", "🟢 القاع المؤكد بالحجم", "🟢 القاع المؤكد بالحجم"),
     "F-lc": ("pattern", "🧠 أقرب الحالات (Lorentzian) صاعدة", "🧠 أقرب الحالات (Lorentzian) هابطة"),
     "F-nw": ("trend", "〰️ الخط الناعم صاعد", "〰️ الخط الناعم هابط"),
     "F-vote": ("trend", "🔮 تصويت التوقعات: صعود", "🔮 تصويت التوقعات: هبوط"),
@@ -18815,6 +18815,7 @@ def _sg_old(D, daily, t0, ev):
         if daily:
             a = _bot_at(C, S2["rsi"], t)
             cur["O-bottom"] = 1 if a and a[0] >= 50 else 0
+            cur["O-botv"] = 1 if a and a[0] >= 50 and _bot_vx(V, t) >= BOT_VOL_X else 0     # 🟢 v3.36.68: القاع المؤكد بالحجم (كان «تنبيهات المؤشرات»)
         if t >= t0:
             for k, v in cur.items():
                 if v and v != prev.get(k, 0):
@@ -19430,10 +19431,9 @@ def sg_estimate(cfg=None, st=None):
     sel = {i for i, s in enumerate(coins) if s in mine}
     share = len(sel) / len(coins) if coins else 0.0
     grp, big, mk, ne = set(), 0.0, set(), 0
-    ina_on = bool((_safe(ina_cfg, default={}) or {}).get("on"))
     for e in cat["e"]:
         if e["ty"] in ("crash", "fng", "eco"):
-            if cfg["types"].get(e["ty"], True) and not (e["ty"] == "crash" and ina_on) and (e["ty"] != "crash" or e["f"] == "4H"):
+            if cfg["types"].get(e["ty"], True) and (e["ty"] != "crash" or e["f"] == "4H"):
                 for ci, t in (e.get("ev") or []):
                     mk.add((e["ty"], e["k"][0], e["s"], t // 86400))
             continue
@@ -19634,7 +19634,7 @@ def _sg_tg(text, cfg, go="sig"):
         for part in _sg_chunks(text):
             ok = bool(tg_send(part, plain=True)) and ok
     if cfg["ch"] in ("both", "app"):
-        _safe(app_feed_push, text, go, "ind", default=None)     # 📱 قناة «📊 تنبيهات المؤشرات» · الضغط يفتح 🎯
+        _safe(app_feed_push, text, go, "ind", default=None)     # 📱 قناة التطبيق «ind» · الضغط يفتح 🎯
     return ok
 
 
@@ -19885,8 +19885,6 @@ def _sg_process(scan, frs, st, cfg, cat, cdb, now, send=True):
     for (ty, code, side), e in mk_fired.items():
         if not cfg["types"].get(ty, True):
             continue
-        if ty == "crash" and _safe(ina_cfg, default={}).get("on"):
-            continue                                          # 🌊 يصلك أصلاً من «📊 تنبيهات المؤشرات»
         sk = f"mk|{code}|{side}"
         if now - float((sent.get(sk) or [0])[0]) < 86400:
             continue
@@ -20432,38 +20430,10 @@ def pxa_view():
             "sens_opts": {k: v["lbl"] for k, v in PXA_SENS.items()}, "ch_opts": PXA_CH}
 
 
-# ═══════════════ 📊 v3.31.0: تنبيهات المؤشرات — قبل الحركة · منفصلة عن إشعارات الأسعار (رسالة لحالها · إعداداتها · قناتها بالموبايل) ═════
-#   تتفاعل كل تحديث للمؤشرات (5 دقائق — حتى لو شريط المؤشرات مطفي): 🔄 المؤشرات انقلبت تميل للصعود/النزول · ⚡ السوق انضغط (هدوء قبل
-#   حركة كبيرة) أو خرج من الانضغاط · 🧱 السعر قرب دعم/مقاومة · كل تنبيه بيه صدق المؤشرات على نفس العملة (مقابل الصدفة ~50%).
-#   الحساسية (هادئة · متوسطة · حساسة) ووين توصل (تيليغرام · التطبيق) لحالها · حد يومي لحالها · الكتم 🔕 يكتمها. قراءة عامة بس — ولا أمر.
-INA_FILE = os.path.join(ROOT, "Holy_IndAlerts.json")
-INA_SENS = {   # 🟢 v3.36.27: «min» = أقل نقاط مؤشر القاع يُبلَّغ بها (هادئة 🟢 فقط · متوسطة 🟡 فأقوى · حساسة 👀 فأقوى) — turn/conf/near/sq_on
-    #   بقيت للقياس فقط (ci/sig_check.py): الانقلاب والانضغاط انقاسا على الأسعار الحقيقية بلا قيمة فانطفأت تنبيهاتهما
-    "low":  {"lbl": "هادئة",  "min": 60, "minv": 60, "mkt": 70, "turn": 45, "conf": 70, "near": 0.0,  "sq_on": False},   # 🔔 v3.36.31: «minv» القاع المؤكد
-    "mid":  {"lbl": "متوسطة", "min": 50, "minv": 50, "mkt": 50, "turn": 30, "conf": 60, "near": 0.35, "sq_on": False},   #   بالحجم · «mkt» % العملات المنهارة
-    "high": {"lbl": "حساسة",  "min": 30, "minv": 50, "mkt": 30, "turn": 15, "conf": 0,  "near": 0.7,  "sq_on": True},    #   معاً في شمعة 4 ساعات
-}
-_BOT_RK = {"none": 0, "watch": 1, "zone": 2, "strong": 3}
-INA_COOL_TURN = 3 * 3600          # نفس العملة ونفس الاتجاه ما ينعاد قبل 3 ساعات (حتى لو المعدل تذبذب حول العتبة)
-INA_COOL_SQ = 6 * 3600            # الانضغاط لنفس العملة مرة كل 6 ساعات
-INA_COOL_NEAR = 6 * 3600          # نفس المستوى لنفس العملة مرة كل 6 ساعات
+# ═══════════════ ⚡ الانضغاط على شموع الساعة (قراءة 📊) · 🪙 عملات القياس ═══════════════
+#   🗑️ v3.36.68: «📊 تنبيهات المؤشرات» القديمة أُزيلت (المالك 20-11: «زيل القديمة») — الإشعارات كلها من 🎯 الإشارات ·
+#   بقي هنا ما تستعمله أجزاء أخرى: الانضغاط (📊) · عملات القياس (🎯)
 INA_SQ_MIN = 6                    # الانضغاط يعتبر لو استمر 6 شموع ساعة مسكّرة
-_INA_LV = {"sw_hi": "قمة سابقة", "sw_lo": "قاع سابق", "vah": "أعلى منطقة القيمة", "val": "أسفل منطقة القيمة",
-           "poc": "نقطة التحكم", "avwap_hi": "VWAP القمة", "avwap_lo": "VWAP القاع"}
-
-
-def ina_cfg():
-    c = _safe(app_cfg, default={}) or {}
-    s = str(c.get("ina_sens") or "mid")
-    ch = str(c.get("ina_ch") or "both")
-    try:                                          # 📊 v3.36.3: بلا حد يومي افتراضياً (كان 20) — 0 = بلا حد
-        v = int(c.get("ina_cap") or 0)
-        cap = 0 if v <= 0 else max(3, min(100, v))
-    except Exception:
-        cap = 0
-    on = c.get("ina_on")
-    return {"on": bool(c.get("pxa_ind", True) if on is None else on),        # أول مرة: نفس خيار «📊 صعود/نزول قوي» القديم
-            "sens": s if s in INA_SENS else "mid", "ch": ch if ch in PXA_CH else "both", "cap": cap}
 
 
 def _ina_sq(D, S):
@@ -20480,268 +20450,9 @@ def _ina_sq(D, S):
     return {"on": bool(sq[tc]), "n": n_on, "rel": prev >= INA_SQ_MIN, "rel_n": prev, "d": "up" if C[tc] >= m20 else "dn", "t": D["t"][tc]}
 
 
-def _ina_rel(R):
-    """📏 صدق المعدل على نفس العملة: الحيّ (من لما شغّلت) لو ≥ 20 مرة · وإلا فحص آخر 12 يوم"""
-    a = R.get("acc_live") or {}
-    if a.get("pct") is not None and int(a.get("n") or 0) >= 20:
-        return f"📏 صدقها على {R.get('base')}: {a['pct']}% من {a['n']} مرة (الصدفة ~50%)"
-    b = R.get("acc_bt") or {}
-    if b.get("pct") is not None and int(b.get("n") or 0) >= 10:
-        return f"📏 صدقها على {R.get('base')} بآخر 12 يوم: {b['pct']}% من {b['n']} مرة (الصدفة ~50%)"
-    return "📏 صدقها: لم يُقَس بعد"
-
-
-def _ina_levels(R, px):
-    """🧱 أقرب مقاومة فوق وأقرب دعم تحت من مستويات 📊 (المتقاربة ≤ 0.25% وحدة)"""
-    up, dn = [], []
-    for k, nm in _INA_LV.items():
-        try:
-            v = float((R.get("levels") or {}).get(k) or 0)
-        except Exception:
-            continue
-        if v > px * 1.0005:
-            up.append((v, nm))
-        elif 0 < v < px * 0.9995:
-            dn.append((v, nm))
-    up.sort()
-    dn.sort(reverse=True)
-    return (up[0] if up else None), (dn[0] if dn else None)
-
-
-def _ina_lvtxt(px, lv):
-    return f"{_px_s(lv[0])} ({(lv[0] / px - 1) * 100:+.1f}% · {lv[1]})" if lv else "—"
-
-
-# ═══════════════ 🌊 v3.36.31: انهيار السوق كله في شمعة 4 ساعات (ci/sig_check5.py — 28 عملة · سنتان) ═══════════════
 MKT_COINS = ("BTC-USDT", "ETH-USDT", "SOL-USDT", "XRP-USDT", "DOGE-USDT", "ADA-USDT", "BNB-USDT", "LTC-USDT", "LINK-USDT", "TRX-USDT",
              "AVAX-USDT", "DOT-USDT", "BCH-USDT", "ETC-USDT", "XLM-USDT", "ATOM-USDT", "FIL-USDT", "UNI-USDT", "NEAR-USDT", "AAVE-USDT",
              "SUI-USDT", "APT-USDT", "ARB-USDT", "OP-USDT", "HBAR-USDT", "ICP-USDT", "INJ-USDT", "SHIB-USDT")
-MKT_REAL = {     # % أعلى بعد يوم / 3 أيام · «l40» = آخر 40% من الزمن · «p7_l40» = بعد أسبوع (الارتداد قصير)
-    "normal": {"p1": 48, "p3": 46, "p1_l40": 47, "p3_l40": 45, "p7_l40": 44},
-    30: {"n": 57, "p1": 57, "p3": 55, "p1_l40": 55, "p3_l40": 55, "m1": 0.6, "m3": 0.6, "p7_l40": 43},
-    50: {"n": 44, "p1": 62, "p3": 56, "p1_l40": 62, "p3_l40": 60, "m1": 1.0, "m3": 0.9, "p7_l40": 37},
-    70: {"n": 29, "p1": 68, "p3": 60, "p1_l40": 69, "p3_l40": 63, "m1": 1.5, "m3": 1.4, "p7_l40": 25},
-    "coin": {"p3": 65, "p3_l40": 63, "m3": 2.1, "p7_l40": 28},   # عملة تنهار ≥ 3× حركتها بحجم ≥ 3× والسوق ينهار معها (≥ 30%)
-}
-_MKT = {"rows": {}, "t": None, "res": None, "try": 0.0}
-
-
-def _mkt_rows(sym):
-    """شموع 4 ساعات مغلقة لعملة (الأقدم أول · بالذاكرة · 260 شمعة كحد أقصى) — قراءة عامة"""
-    d = _MKT["rows"].setdefault(sym, {})
-    for c in _fc_okx_rows(sym, "4H", hist=False, limit=100):
-        if c[6]:
-            d[int(c[0])] = c[:6]
-    if d and len(d) < 125:
-        for c in _fc_okx_rows(sym, "4H", after=min(d) * 1000, hist=True, limit=100):
-            if c[6]:
-                d[int(c[0])] = c[:6]
-    for k in sorted(d)[:-260]:
-        d.pop(k, None)
-    return [d[k] for k in sorted(d)]
-
-
-def _mkt_at(rows, T):
-    """شمعة 4 ساعات T: (نزولها ÷ حركة العملة المعتادة بآخر 120 شمعة · حجمها ÷ متوسط 30 شمعة · تغيّرها) — نفس ci/sig_check5.py"""
-    ts = [int(r[0]) for r in rows]
-    k = bisect.bisect_left(ts, int(T))
-    if k >= len(ts) or ts[k] != int(T) or k < 121:
-        return None
-    C = [float(r[4]) for r in rows]
-    V = [float(r[5]) for r in rows]
-    if any(c <= 0 for c in C[k - 121:k + 1]):
-        return None
-    lr = [math.log(C[i] / C[i - 1]) for i in range(k - 120, k + 1)]
-    rs = lr[:120]
-    rm = sum(rs) / 120.0
-    sd = math.sqrt(sum((x - rm) ** 2 for x in rs) / 119.0) or 1e-9
-    va = sum(V[k - 30:k]) / 30.0 or 1e-9
-    return lr[120] / sd, V[k] / va, C[k] / C[k - 1] - 1.0
-
-
-def mkt_scan(now=None, force=False):
-    """🌊 آخر شمعة 4 ساعات مغلقة لـ28 عملة ⇒ كم عملة انهارت معاً (≥ 2.5× حركتها المعتادة) + عملات الشريط التي انهارت بحجم ضخم"""
-    now = float(now if now is not None else time.time())
-    T = int(now // 14400) * 14400 - 14400
-    if not force and _MKT.get("t") == T:
-        return _MKT.get("res")
-    if not force and now - float(_MKT.get("try") or 0) < 300:
-        return None
-    _MKT["try"] = now
-    tick = list(ticker_cfg().get("coins") or [])
-    zs, cr, btc = [], [], None
-    for sym in list(dict.fromkeys(list(MKT_COINS) + tick)):
-        rows = _safe(_mkt_rows, sym, default=[]) or []
-        if rows:
-            time.sleep(0.12)                                  # حد OKX العام
-        x = _mkt_at(rows, T)
-        if not x:
-            continue
-        if sym in MKT_COINS:
-            zs.append(x[0])
-        if sym == "BTC-USDT":
-            btc = x[2]
-        if sym in tick and x[0] <= -3.0 and x[1] >= 3.0:
-            cr.append({"sym": sym, "z": round(x[0], 2), "vr": round(x[1], 2), "ch": round(x[2], 5)})
-    if len(zs) < 15:
-        return None
-    res = {"t": T, "n": len(zs), "k": sum(1 for z in zs if z <= -2.5), "crash": cr, "btc": btc}
-    _MKT.update(t=T, res=res)
-    return res
-
-
-def ina_tick(now=None, rows=None, send=True, mkt=None):
-    """📊 جولة تنبيهات المؤشرات (بعد كل تحديث للمؤشرات) — ترجع التنبيهات اللي طلعت"""
-    cfg = ina_cfg()
-    if not cfg["on"]:
-        return []
-    now = float(now if now is not None else time.time())
-    rows = rows if rows is not None else [IND2["coins"][s] for s in (IND2.get("order") or []) if s in (IND2.get("coins") or {})]
-    coins = set(ticker_cfg()["coins"])
-    S = INA_SENS[cfg["sens"]]
-    st = _safe(load_json, INA_FILE, default={}) or {}
-    if not isinstance(st, dict):
-        st = {}
-    st0 = json.dumps(st, sort_keys=True, ensure_ascii=False)
-    day = datetime.fromtimestamp(now).strftime("%Y-%m-%d")
-    if st.get("day") != day:
-        st.update(day=day, n=0, capped=False)
-    last = st.setdefault("last", {})
-    al = []
-    for R in rows:
-        sym = R.get("sym")
-        if sym not in coins or now - float(R.get("ts") or 0) > 1500:
-            continue                                     # 🕐 قراءة قديمة (اللوحة كانت طافية) ⇒ ما نبلّغ بيها
-        base, px, sc = R.get("base") or sym.split("-")[0], float(R.get("px") or 0), int(R.get("score") or 0)
-        if px <= 0:
-            continue
-        fresh = sym not in last                          # 🆕 أول مرة نشوف العملة (تشغيل أول · عملة جديدة) ⇒ نسجّل حالتها بصمت (بلا سيل تنبيهات)
-        L = last.setdefault(sym, {})
-        a = None
-        b = ((globals().get("FC") or {}).get("coins") or {}).get(sym, {}).get("bot") or {}   # 🟢 v3.36.27: تنبيهات مؤشر القاع فقط
-        if b.get("day"):
-            ep = int(b["day"]) - int(b.get("since") or 0) * 86400        # يوم بداية النوبة (الإشارة تتغير مرة باليوم: إغلاق يومي)
-            if L.get("bot_ep") != ep:
-                L["bot_ep"], L["bot_lv"] = ep, 0
-            rk = _BOT_RK.get(b.get("lv"), 0) if b.get("vol") else 0        # 🟢 v3.36.31: القاع المؤكد بالحجم فقط (بلا حجم: مثل الصدفة مؤخراً)
-            if rk and int(b.get("score") or 0) >= S["minv"] and rk > int(L.get("bot_lv") or 0):
-                L["bot_lv"] = rk
-                if fresh and int(b.get("since") or 0) <= 1:
-                    fresh = False                                         # نوبة جديدة ⇒ تنبيه حتى بعد التشغيل مباشرة (القديمة تبقى صامتة)
-                V_ = b.get("real_v") or BOT_REAL_V.get(b.get("lv")) or {}
-                own = (b.get("own_v") or {}).get(b.get("lv"))
-                a = {"k": "bot", "d": "up", "t": f"{b.get('lbl')} ✅ مؤكد بالحجم — {base}: مؤشر القاع {int(b.get('score') or 0)}/100 (لأيام إلى أسبوعين)",
-                     "b": " · ".join(p["txt"] for p in (b.get("parts") or []) if p.get("on")) + f" · السعر {_px_s(px)}$",
-                     "r": (f"🔬 تاريخياً (28 عملة · 2021–2026): القاع مع حجم ضخم ⇒ أعلى بعد 14 يوماً في {V_.get('p14')}% من المرات "
-                           f"(العادي {BOT_REAL_V['normal']['p14']}%) · في السنوات الأخيرة {V_.get('p14_l40')}% · الوسيط {float(V_.get('m14') or 0):+.1f}% · "
-                           f"النزول قبل الارتداد عادةً نحو {abs(float(V_.get('dd') or 0)):.0f}%"
-                           + (f" · على {base}: {own['p14']}% من {own['n']} مرة" if own else "")
-                           + f" · بلا حجم كان في السنوات الأخيرة مثل الصدفة ({BOT_REAL_V['novol']['p14_l40']}%) · قد ينزل أكثر قبل الارتداد — الشراء على دفعات أسلم")}
-        if a and not fresh:
-            a.update(sym=sym, px=px, sc=sc)
-            al.append(a)
-    mk = mkt if mkt is not None else (_safe(mkt_scan, now, default=None) if S.get("mkt") else None)    # 🌊 v3.36.31: انهيار السوق كله
-    if mk and S.get("mkt") and mk.get("n") and mk["k"] / mk["n"] >= S["mkt"] / 100.0 - 1e-9 \
-            and now - (float(mk["t"]) + 14400) < 7200 and st.get("mkt_t") != mk["t"] and now - float(st.get("mkt_at") or 0) >= 86400:
-        st["mkt_t"], st["mkt_at"] = mk["t"], now
-        sh = mk["k"] / mk["n"]
-        thr = max(x for x in (30, 50, 70) if sh >= x / 100.0 - 1e-9)
-        Q, N0, Cn = MKT_REAL[thr], MKT_REAL["normal"], MKT_REAL["coin"]
-        cr = mk.get("crash") or []
-        cb = (" · ".join(f"{c['sym'].split('-')[0]} {c['ch'] * 100:+.1f}% (حجم {c['vr']:.1f}× المعتاد)" for c in cr) if cr
-              else "لم تنهر عملة من عملات الشريط بحجم ضخم")
-        al.append({"k": "mkt", "d": "up", "sym": "السوق", "px": 0, "sc": 0,
-                   "t": f"🌊 انهيار في السوق كله — {mk['k']} من {mk['n']} عملة نزلت بقوة غير معتادة في شمعة 4 ساعات واحدة (لـ1–3 أيام)",
-                   "b": ("من عملاتك: " if cr else "") + cb + (f" · البيتكوين {float(mk['btc']) * 100:+.1f}%" if mk.get("btc") is not None else ""),
-                   "r": (f"🔬 تاريخياً (28 عملة · سنتان): حين انهار {thr}% من العملات فأكثر كان السعر أعلى بعد يوم في {Q['p1']}% من المرات "
-                         f"(العادي {N0['p1']}%) وبعد 3 أيام {Q['p3']}% (العادي {N0['p3']}%) · في السنوات الأخيرة {Q['p1_l40']}% و{Q['p3_l40']}% · "
-                         f"الوسيط بعد يوم {Q['m1']:+.1f}%"
-                         + (f" · العملة التي تنهار بحجم ضخم مع السوق: أعلى بعد 3 أيام {Cn['p3']}% (في السنوات الأخيرة {Cn['p3_l40']}%)" if cr else "")
-                         + f" · ارتداد قصير: بعد أسبوع كان أسوأ من العادي في السنوات الأخيرة ({Q['p7_l40']}% مقابل {N0['p7_l40']}%) · قد ينزل أكثر قبل الارتداد")})
-    cut = []
-    if cfg["cap"] > 0:                                      # 📊 v3.36.3: الحد بس لو انكتب رقم (الافتراضي بلا حد · مهلة كل تنبيه باقية)
-        room = cfg["cap"] - int(st.get("n") or 0)
-        if len(al) > max(0, room):
-            cut, al = al[max(0, room):], al[:max(0, room)]
-    st["n"] = int(st.get("n") or 0) + len(al)
-    note = ""
-    if cut and not st.get("capped"):
-        st["capped"] = True
-        note = f"🔕 وصلت حد تنبيهات المؤشرات اليوم ({cfg['cap']}) — باقي اليوم بلا تنبيهات مؤشرات"
-    log = st.setdefault("log", [])
-    for a in al:
-        log.insert(0, {"ts": round(now), "sym": a["sym"], "k": a["k"], "t": a["t"], "b": a["b"], "r": a["r"]})
-    del log[50:]
-    if json.dumps(st, sort_keys=True, ensure_ascii=False) != st0:
-        _safe(save_json_atomic, INA_FILE, st, default=None)
-    if send and (al or note):
-        _ina_send(al, note, cfg)
-    return al
-
-
-def _ina_send(al, note, cfg):
-    """📨 رسالة لحالها (مو ويّا الأسعار): تنبيه واحد ⇒ عنوانه هو التنبيه · أكثر ⇒ «📊 تنبيهات المؤشرات (N)» · بالموبايل قناة «📊 تنبيهات المؤشرات» والضغط يفتح 📊"""
-    if len(al) == 1:
-        text = al[0]["t"] + "\n" + al[0]["b"] + "\n" + al[0]["r"] + (("\n" + note) if note else "")
-    elif al:
-        text = f"🔔 تنبيهات المؤشرات ({len(al)})\n" + "\n".join(f"{a['t']} · {a['b'].split(' · ')[0]}" for a in al) + (("\n" + note) if note else "")
-    else:
-        text = note
-    for a in al:
-        bt = re.sub(r"\s" + re.escape(a["sym"].split("-")[0]) + r":?(?=\s)", "", a["t"], count=1)
-        _safe(_dash_event, a["sym"], bt + " · " + a["b"], default=None)
-    if TG_MUTED["v"]:
-        journal("notify", "🔕 لم يُرسَل تنبيه مؤشرات (الكتم مفعّل): " + text[:300], "info")
-        return False
-    ok = True
-    if cfg["ch"] in ("both", "tg"):
-        ok = bool(tg_send(text, plain=True)) and ok
-    if cfg["ch"] in ("both", "app"):
-        _safe(app_feed_push, text, "ind", "ind", default=None)    # 📱 التطبيق 1.8: قناة «📊 تنبيهات المؤشرات» · الضغط يفتح نافذة 📊
-    return ok
-
-
-def ina_set(v):
-    v = v or {}
-    c = app_cfg()
-    if v.get("on") is not None:
-        c["ina_on"] = bool(v["on"])
-    if v.get("sens") in INA_SENS:
-        c["ina_sens"] = v["sens"]
-    if v.get("ch") in PXA_CH:
-        c["ina_ch"] = v["ch"]
-    save_app_cfg(c)
-    p = ina_cfg()
-    return {"ok": True, "msg": ("📊 تنبيهات المؤشرات مفعّلة — " + INA_SENS[p["sens"]]["lbl"] + " · " + PXA_CH[p["ch"]]) if p["on"] else "🔕 تنبيهات المؤشرات متوقفة",
-            "ina": ina_view()}
-
-
-def ina_test():
-    """🧪 تنبيه تجربة بنفس الطريق (تيليغرام + قناة المؤشرات بالموبايل)"""
-    cfg = ina_cfg()
-    R = next(iter((IND2.get("coins") or {}).values()), None) or {"base": "BTC", "sym": "BTC-USDT", "px": 0}
-    a = {"sym": R.get("sym") or "BTC-USDT", "t": f"🧪 تجربة — 🟢 قاع قوي ✅ مؤكد بالحجم — {R.get('base') or 'BTC'}: مؤشر القاع 70/100 (لأيام إلى أسبوعين)",
-         "b": f"هكذا تصلك تنبيهات المؤشرات: 🟢 القاع المؤكد بالحجم و🌊 انهيار السوق ({INA_SENS[cfg['sens']]['lbl']} · {PXA_CH[cfg['ch']]})",
-         "r": "🔬 كل تنبيه معه سجله على الأسعار الحقيقية: كم مرة كان السعر أعلى بعدها مقابل الأيام العادية"}
-    if TG_MUTED["v"]:
-        return {"ok": False, "msg": "🔕 الكتم مفعّل (زر 🔔 في الأعلى) — لن يُرسَل شيء حتى تلغيه"}
-    sent = _ina_send([a], "", dict(cfg, on=True))
-    return {"ok": True, "msg": "🧪 أُرسلت التجربة" + ("" if sent or cfg["ch"] == "app" else " — لم يستلمها تيليغرام (تأكد من التوكن ومن Chat ID)")}
-
-
-def ina_view():
-    c = ina_cfg()
-    st = _safe(load_json, INA_FILE, default={}) or {}
-    today = datetime.now().strftime("%Y-%m-%d")
-    S = INA_SENS[c["sens"]]
-    rule = (f"🟢 قاع مؤكد بالحجم: مؤشر القاع {S['minv']} فأكثر مع حجم تداول ضخم ({BOT_VOL_X:g} ضعف المعتاد فأكثر بآخر 3 أيام) — مرة لكل مستوى في كل نوبة"
-            + f" · 🌊 انهيار السوق: {S['mkt']}% فأكثر من 28 عملة تنهار في شمعة 4 ساعات واحدة — مرة باليوم كحد أقصى، ومعه عملات الشريط التي انهارت بحجم ضخم"
-            + (f" · حد {c['cap']} باليوم" if c["cap"] else " · بلا حدّ يومي")
-            + " · متوقفة لأنها لم تثبت لها قيمة على الأسعار الحقيقية: القاع بلا حجم · الانقلاب · الانضغاط · الدعم/المقاومة · القمة")
-    return {**c, "sens_lbl": S["lbl"], "ch_lbl": PXA_CH[c["ch"]], "muted": bool(TG_MUTED["v"]),
-            "n_today": int(st.get("n") or 0) if st.get("day") == today else 0, "log": (st.get("log") or [])[:15], "rule": rule,
-            "sens_opts": {k: v["lbl"] for k, v in INA_SENS.items()}, "ch_opts": PXA_CH,
-            "fresh": round(time.time() - float(IND2.get("ts") or 0)) if IND2.get("ts") else None}
 
 
 # ═══════════════ 🪙 المُراكِم تحت الرقابة ═══════════════
@@ -25947,7 +25658,7 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
             if act == "pxa_test":
                 return self._json(pxa_test())
             if act == "pxa_get":                          # 🔔 v3.26.7: لوحة الإشعارات صارت بـ⚙️ «📈 شريط الأسعار» (قراءة بس) · v3.31.0: ويّا 📊 المؤشرات
-                return self._json({"ok": True, "pxa": pxa_view(), "ina": ina_view()})
+                return self._json({"ok": True, "pxa": pxa_view()})
             if act == "sg_set":                           # 🎯 v3.36.66: إشعارات الإشارات
                 return self._json(sg_set((data.get("value") if isinstance(data.get("value"), dict) else {})))
             if act == "sg_est":
@@ -25956,10 +25667,6 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                 return self._json(sg_test())
             if act == "sg_rebuild":
                 return self._json(sg_rebuild())
-            if act == "ina_set":                          # 📊 v3.31.0: تنبيهات المؤشرات — تشغيل/إطفاء · الحساسية · وين توصل
-                return self._json(ina_set((data.get("value") if isinstance(data.get("value"), dict) else {})))
-            if act == "ina_test":
-                return self._json(ina_test())
             if act == "guard_cfg":
                 v = (data.get("value") if isinstance(data.get("value"), dict) else {})
                 _by = "👤 اللوحة (" + str((self.client_address or ["?"])[0]) + ")"
@@ -30827,7 +30534,7 @@ function indBtnSync(d){const S=(((d||DATA||{}).indic)||{}).sum||{};             
   const h='📊 المؤشرات'+((S.up||S.down)?` <small><b style="color:var(--green)">⬆️${S.up||0}</b> <b style="color:var(--red)">⬇️${S.down||0}</b></small>`:'');
   if(b._h!==h){b.innerHTML=h;b._h=h}
   fcAlign()}
-let PXAO=false, PXAV=null, GLT=0, INAO=false, INAV=null;
+let PXAO=false, PXAV=null, GLT=0;
 /* ✨ v3.26.7: لمعة الشعار — شريط الضوء (SMIL على تدرّج الكتابة) + الخط الصاعد يضوي بنفس اللحظة · كل 7 ثواني · يوقف بالتبويب المخفي و«الوضع الخفيف» و«تقليل الحركة» */
 function glintOk(){try{return !matchMedia('(prefers-reduced-motion: reduce)').matches&&!document.documentElement.classList.contains('lite')}catch(e){return false}}
 function glintRun(){if(document.hidden||!glintOk())return;
@@ -30921,22 +30628,10 @@ function pxaPanel(P){if(!P||P.on==null)return '';                               
     ${P.muted?'<div class="ind-sub" style="color:var(--amber)">🔕 كتم الإشعارات مفعّل (زر 🔔 في الأعلى) — لن يصل شيء حتى تلغيه</div>':''}
     ${PXAO?`<div class="ind-al-o">الحساسية: ${o(P.sens_opts,'sens',P.sens)}</div><div class="ind-al-o">أين تصل: ${o(P.ch_opts,'ch',P.ch)}</div>
     <div class="ind-al-o"><button onclick="pxaTest()">🧪 جرّب إشعاراً</button></div>`:''}
-    <div class="ind-sub" style="margin-top:6px">حركة السعر فقط (المؤشرات وحدها في الأسفل) · لعملات الشريط نفسها · ${gEsc(P.rule||'')} · الحركة نفسها لا تتكرر · كل إشعارات الدقيقة الواحدة في رسالة واحدة · الضغط عليها في الهاتف يفتح التطبيق · اليوم ${P.n_today||0}</div>
+    <div class="ind-sub" style="margin-top:6px">حركة السعر فقط (الإشارات في 🎯 تحت) · لعملات الشريط نفسها · ${gEsc(P.rule||'')} · الحركة نفسها لا تتكرر · كل إشعارات الدقيقة الواحدة في رسالة واحدة · الضغط عليها في الهاتف يفتح التطبيق · اليوم ${P.n_today||0}</div>
     ${(P.log||[]).length?`<details><summary>آخر الإشعارات (${P.log.length})</summary>${P.log.map(x=>`<div class="ind-sub">${new Date(x.ts*1000).toLocaleString('ar',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})} · ${gEsc(x.t)} · ${gEsc(x.b)}</div>`).join('')}</details>`:''}</div>`}
-function inaPanel(P){if(!P||P.on==null)return '';                                    // 📊 v3.31.0: تنبيهات المؤشرات — لحالها (قبل الحركة)
-  const o=(m,k,cur)=>Object.entries(m||{}).map(([a,l])=>`<button class="${cur===a?'on':''}" onclick="inaSet({${k}:'${a}'})">${gEsc(l)}</button>`).join('');
-  return `<div class="ind-al${P.on?'':' off'}" style="margin-top:10px"><div class="ind-al-h"><b>🔔 تنبيهات المؤشرات — 🟢 القاع المؤكد بالحجم · 🌊 انهيار السوق <small style="color:var(--mut2);font-weight:400">${P.on?gEsc(P.sens_lbl)+' · '+gEsc(P.ch_lbl):'متوقفة'}</small></b>
-    <span style="display:flex;gap:6px"><button id="ina_on" class="${P.on?'on':''}" onclick="inaSet({on:${P.on?'false':'true'}})">${P.on?'✅ مفعّلة':'⏸️ متوقفة'}</button>
-    <button onclick="INAO=!INAO;pxaRender()">${INAO?'▲':'⚙️'} الخيارات</button></span></div>
-    ${P.muted?'<div class="ind-sub" style="color:var(--amber)">🔕 كتم الإشعارات مفعّل (زر 🔔 في الأعلى) — لن يصل شيء حتى تلغيه</div>':''}
-    ${INAO?`<div class="ind-al-o">الحساسية: ${o(P.sens_opts,'sens',P.sens)}</div><div class="ind-al-o">أين تصل: ${o(P.ch_opts,'ch',P.ch)}</div>
-    <div class="ind-al-o"><button onclick="inaTest()">🧪 جرّب تنبيهاً</button></div>`:''}
-    <div class="ind-sub" style="margin-top:6px">${gEsc(P.rule||'')} · كل تنبيه معه سجله على الأسعار الحقيقية وحالة البيتكوين · رسالة مستقلة عن تنبيهات الأسعار · في الهاتف قناة «📊 تنبيهات المؤشرات» · اليوم ${P.n_today||0}</div>
-    ${(P.log||[]).length?`<details><summary>آخر التنبيهات (${P.log.length})</summary>${P.log.map(x=>`<div class="ind-sub">${new Date(x.ts*1000).toLocaleString('ar',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})} · ${gEsc(x.t)} · ${gEsc(x.b)}</div>`).join('')}</details>`:''}</div>`}
-function pxaRender(){const el=$('#tk_pxa');if(el)el.innerHTML=(PXAV?pxaPanel(PXAV):'')+(INAV?inaPanel(INAV):'')+sgMini()}
-async function pxaLoad(){try{const r=await api('/api/control',{action:'pxa_get'});PXAV=r&&r.pxa||null;INAV=r&&r.ina||null}catch(e){PXAV=null;INAV=null}pxaRender()}
-async function inaSet(v){try{const r=await api('/api/control',{action:'ina_set',value:v});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok));if(r&&r.ina)INAV=r.ina}catch(e){toast('تعذر الاتصال',false)}pxaRender()}
-async function inaTest(){try{const r=await api('/api/control',{action:'ina_test'});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok))}catch(e){toast('تعذر الاتصال',false)}pxaLoad()}
+function pxaRender(){const el=$('#tk_pxa');if(el)el.innerHTML=(PXAV?pxaPanel(PXAV):'')+sgMini()}
+async function pxaLoad(){try{const r=await api('/api/control',{action:'pxa_get'});PXAV=r&&r.pxa||null}catch(e){PXAV=null}pxaRender()}
 async function pxaSet(v){try{const r=await api('/api/control',{action:'pxa_set',value:v});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok));if(r&&r.pxa)PXAV=r.pxa}catch(e){toast('تعذر الاتصال',false)}pxaRender()}
 async function pxaTest(){try{const r=await api('/api/control',{action:'pxa_test'});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok))}catch(e){toast('تعذر الاتصال',false)}pxaLoad()}
 async function openInd(){
@@ -31090,7 +30785,7 @@ function sgCfg(V){const c=V.cfg||{},T=c.types||{},ty=V.types||{},hrs=[...Array(2
     <div class="sg-set">${tg(c.rare,`sgSet({rare:${!c.rare}})`,'💎 النادرة: تصلك','💎 النادرة: لا تصلك')} <span class="sg-sh">أقل عدد لها: <b id="sg_rmin_v">${c.rmin}</b></span>
       <input type="range" min="3" max="30" step="1" value="${c.rmin}" oninput="sgEst({rmin:+this.value})" onchange="sgSet({rmin:+this.value})"><div class="ind-sub">تركيبات ظهرت مرات قليلة بصدق عالٍ وصمدت على الفترة الجديدة — تصلك بعلامة 💎 وتحذير.</div></div>
     <div class="sg-set"><div class="sg-sh">✅ الأنواع</div><div class="sg-flt">${Object.entries(ty).map(([k,t])=>`<button class="${T[k]!==false?'on':''}" onclick="sgSet({types:{${k}:${T[k]===false}}})">${t[0]} ${gEsc(t[1])}</button>`).join('')}</div>
-      <div class="ind-sub">🧭 السوق: حين يثبت وضع جديد · 🌊 يصلك من «📊 تنبيهات المؤشرات» حين تكون مفعّلة (لا يتكرر) · ✅ النتائج: بعد وقت كل إشارة وصلتك</div></div>
+      <div class="ind-sub">🧭 السوق: حين يثبت وضع جديد · 🌊 الانهيار: مرة واحدة في اليوم على الأكثر · ✅ النتائج: بعد وقت كل إشارة وصلتك</div></div>
     <div class="sg-set"><div class="sg-sh">🕯️ الفريم</div><div class="sg-flt">${['1D','4H'].map(f=>`<button class="${(c.fr||{})[f]!==false?'on':''}" onclick="sgSet({fr:{'${f}':${(c.fr||{})[f]===false}}})">${gEsc((V.fn||{})[f]||f)}</button>`).join('')}</div></div>
     <div class="sg-set" id="sg_coins"><div class="sg-sh">🪙 عملات إشعاراتك <small>(${mine.length})</small> ${c.coins?`<button onclick="sgSet({coins:null})">↩️ مثل الشريط</button>`:'<small>· الآن نفس عملات الشريط (📊) — أي تغيير هنا للإشارات فقط</small>'}</div>
       <div class="sg-flt">${mine.map(s=>`<button class="on sg-cn" data-c="${gEsc(s)}" onclick="sgCoinTog('${gEsc(s)}')" title="اضغط لتشيلها من إشعاراتك">${gEsc(s.split('-')[0])}${(V.bad||[]).includes(s)?' ⚠️':(V.short||[]).includes(s)?' ⏳':''} <b>✕</b></button>`).join('')||'<span class="ind-sub">لا توجد عملات — أضف عملة تحت</span>'}</div>

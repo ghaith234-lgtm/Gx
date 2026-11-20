@@ -69,7 +69,7 @@ try:
     f = [post("/api/control", {"action": "stop"}), post("/api/control", {"action": "stop", "dir": None}), post("/api/control", {"action": "stop", "dir": 5}),
          post("/api/control", {"action": "edit", "dir": ["x"], "value": "abc"})]
     ok("④ a control request without «dir» (or not text) ⇒ an answer, nothing done", all(x["st"] is not None and x["j"] is not None and x["j"].get("ok") is False for x in f), f)
-    g = [post("/api/control", {"action": a_, "value": v}) for a_ in ("guard_ack", "ticker_set", "pxa_set", "ina_set", "guard_cfg") for v in ("abc", 5, [1])]
+    g = [post("/api/control", {"action": a_, "value": v}) for a_ in ("guard_ack", "ticker_set", "pxa_set", "sg_set", "guard_cfg") for v in ("abc", 5, [1])]
     ok("⑤ the five settings actions with «value» not an object ⇒ an answer", all(x["st"] is not None and x["j"] is not None for x in g), [x for x in g if x["j"] is None][:3])
     h = post("/api/dca_preview", {**DCA, "dca_type": "dca", "take_profit_pct": 100})
     i = post("/api/grid_up_calc", {"symbol": "SOL-USDT", "grid_pct": 1e-15, "usd_value": 10, "forced_base": 100, "top": 200})

@@ -5,9 +5,7 @@
 #      47.8 · month ⇒ «not proven» · this coin's own count of the same lean (the backtest counts per lean · FC_VER 5)
 #   ② 🟢 the bottom score = ci/sig_check3.py's weighting B to the point (an independent copy of its formula on every day of a synthetic
 #      history) · its levels · its parts in words · its own record (episodes 10 days apart · 14 days later) · Bitcoin above/below 200 days
-#   ③ 🔔 the alerts: only the bottom (no turn · no squeeze · no near-level even when those fire) · quiet = 🟢 only · medium = 🟡+ ·
-#      sensitive = 👀+ · once per level per episode · a new episode alerts right after a start, an old one stays silent · the text
-#      carries the parts, the 28-coin record, Bitcoin's state, the coin's own record · the panel's rule and the test sample say so
+#   ③ 🔔 the old indicator alerts are gone since v3.36.68 (🎯 the signals send them — t_sigs · t_alerts)
 #   ④ 🎞️ the strip summary per coin: the average in words · «tomorrow» only with a measured edge · the bottom badge only in a zone
 #   ⑤ 📖 the guide has the bottom entry (the audit finds nothing missing)
 #   ⑥ a real browser: 🔮 — the bottom line on the card, «higher after» with the normal share, the details (parts · record · Bitcoin ·
@@ -36,7 +34,7 @@ ld = importlib.machinery.SourceFileLoader("hd_sig", os.path.join(R, "Holy_Dashbo
 m = importlib.util.module_from_spec(importlib.util.spec_from_loader("hd_sig", ld)); a0 = sys.argv; sys.argv = ["x"]; ld.exec_module(m); sys.argv = a0
 os.chdir(cwd0)
 m.ROOT = R
-for k in ("INA_FILE", "FC_FILE", "IND2_FILE"):
+for k in ("FC_FILE", "IND2_FILE"):
     if hasattr(m, k):
         setattr(m, k, os.path.join(R, os.path.basename(getattr(m, k))))
 SENT = []
@@ -114,8 +112,8 @@ ok(f"… ETH after a 7-day crash: {b.get('score')}/100 «{b.get('lbl')}» since 
    b.get("lv") in ("zone", "strong") and b.get("score") >= 50 and any(p["on"] for p in b.get("parts") or []) and "نزل" in (b["parts"][0]["txt"])
    and b.get("btc_up") in (True, False) and (b.get("real") or {}).get("p14") in (61, 64) and b.get("normal", {}).get("p14") == 46 and "2026" in b.get("years", ""), b)
 
-# ── ③ the alerts: only the bottom
-INDROWS = []
+# ── ③ the alerts: since v3.36.68 the old «📊 تنبيهات المؤشرات» are gone (the owner: «زيل القديمة») — 🎯 sends them (t_sigs · t_alerts check)
+INDROWS = []                                                  # (the indicator rows ④ and ⑥ read)
 for i, s in enumerate(D1):
     INDROWS.append({"sym": s, "base": s.split("-")[0], "px": D1[s][-1][4], "score": 60 if i == 1 else -60, "conf": 95, "ts": time.time(),
                     "parts": [{"k": "trend", "s": 1.0}, {"k": "st", "s": 1.0}, {"k": "rsi", "s": -0.2}], "levels": {"sw_hi": D1[s][-1][4] * 1.001},
@@ -123,62 +121,8 @@ for i, s in enumerate(D1):
 m.ticker_cfg = lambda: {"on": True, "coins": list(D1), "speed": 45}
 m.indic_cfg = lambda: {"on": True, "coins": list(D1)}
 m.TG_MUTED["v"] = False
-
-
-def run(sens, coins_bot, fresh_state=True, since=0):
-    for s, (lv, sc) in coins_bot.items():
-        bb = dict(FCR[s].get("bot") or {}, lv=lv, score=sc, lbl={"watch": "👀 راقب", "zone": "🟡 منطقة شراء", "strong": "🟢 قاع قوي", "none": "لا إشارة"}[lv], since=since,
-                  vol=True)                                   # (v3.36.31: only the bottom confirmed by volume alerts — t_alerts.py checks the rest)
-        FCR[s]["bot"] = bb
-    m.app_cfg = lambda: {"ina_on": True, "ina_sens": sens, "ina_ch": "both"}
-    if fresh_state and os.path.exists(m.INA_FILE):
-        os.remove(m.INA_FILE)
-    SENT.clear()
-    return m.ina_tick(now=time.time(), rows=INDROWS, send=True)
-
-
-day = FCR["ETH-USDT"]["bot"]["day"]
-run("mid", {s: ("none", 0) for s in D1})                                           # the first look: silent
-a1 = m.ina_tick(now=time.time(), rows=INDROWS, send=True)
-ok("③ 🔔 no turn, squeeze or near-level alert even with the average at ±60, a squeeze release and a level 0.1% away — nothing without a bottom reading",
-   a1 == [] and not SENT, (a1, SENT[:2]))
-al = {}
-for sens in ("low", "mid", "high"):
-    run(sens, {s: ("none", 0) for s in D1})
-    out = []
-    for lv, sc in (("watch", 30), ("zone", 50), ("strong", 70)):
-        for s in D1:
-            FCR[s]["bot"] = dict(FCR[s]["bot"], lv=lv, score=sc, lbl={"watch": "👀 راقب", "zone": "🟡 منطقة شراء", "strong": "🟢 قاع قوي"}[lv], since=1, day=day, vol=True)
-        out += [x["t"].split(" — ")[0] for x in m.ina_tick(now=time.time(), rows=INDROWS, send=True) if x["sym"] == "ETH-USDT"]
-    al[sens] = out
-ok(f"… by sensitivity, one alert per level as the episode deepens (confirmed by volume · v3.36.31): quiet {al['low']} · medium {al['mid']} · sensitive {al['high']}",
-   al["low"] == ["🟢 قاع قوي ✅ مؤكد بالحجم"] and al["mid"] == ["🟡 منطقة شراء ✅ مؤكد بالحجم", "🟢 قاع قوي ✅ مؤكد بالحجم"]
-   and al["high"] == ["🟡 منطقة شراء ✅ مؤكد بالحجم", "🟢 قاع قوي ✅ مؤكد بالحجم"], al)
-again = m.ina_tick(now=time.time(), rows=INDROWS, send=True)
-ok("… the same level in the same episode never again", not [x for x in again if x["sym"] == "ETH-USDT"], again)
-run("mid", {"ETH-USDT": ("strong", 70)}, since=1)
-new_ep = [x for x in m.ina_tick(now=time.time(), rows=INDROWS, send=True) if x["sym"] == "ETH-USDT"]
-os.remove(m.INA_FILE)
-for s in D1:
-    FCR[s]["bot"] = dict(FCR[s]["bot"], since=6)
-old_ep = [x for x in m.ina_tick(now=time.time(), rows=INDROWS, send=True) if x["sym"] == "ETH-USDT"]
-os.remove(m.INA_FILE)
-for s in D1:
-    FCR[s]["bot"] = dict(FCR[s]["bot"], since=1)
-m.ina_tick(now=time.time(), rows=INDROWS, send=True)
-first = [x for x in m.ina_tick(now=time.time(), rows=INDROWS, send=True) if x["sym"] == "ETH-USDT"]
-os.remove(m.INA_FILE)
-SENT.clear()
-fresh_new = [x for x in m.ina_tick(now=time.time(), rows=INDROWS, send=True) if x["sym"] == "ETH-USDT"]
-txt = fresh_new[0] if fresh_new else {}
-ok(f"… right after a start: a NEW episode (began ≤ 1 day ago) alerts ({len(fresh_new)}) · an old one (6 days) stays silent ({len(old_ep)})",
-   len(fresh_new) == 1 and not old_ep, (fresh_new, old_ep))
-ok("… the alert carries its parts, the 28-coin record with volume (14 days · normal 46% · lately), without volume like chance, and the limit · sent to Telegram and the app",
-   "مؤشر القاع" in txt.get("t", "") and "مؤكد بالحجم" in txt.get("t", "") and "نزل" in txt.get("b", "") and "أعلى بعد 14 يوماً" in txt.get("r", "") and "العادي 46%" in txt.get("r", "")
-   and "السنوات الأخيرة" in txt.get("r", "") and "مثل الصدفة" in txt.get("r", "") and "دفعات" in txt.get("r", "") and any(k == "tg" for k, _ in SENT) and any(k == "app" for k, _ in SENT), (txt, SENT[:1]))
-v = m.ina_view()
-ok("… the panel's rule says it (bottom only · the others off with the reason) · the test sample is a bottom alert",
-   "مؤشر القاع" in v["rule"] and "لم تثبت لها قيمة" in v["rule"] and "🔄" not in v["rule"], v["rule"])
+ok("③ 🔔 the old indicator alerts are gone (no ina_tick · no panel) — the bottom confirmed by volume is a 🎯 signal now",
+   not hasattr(m, "ina_tick") and not hasattr(m, "ina_view") and "O-botv" in m._sg_meta(), "")
 
 # ── ④ the strip summary
 m.IND2.update(coins={r["sym"]: dict(r, parts=[{"k": "trend", "s": 1.0}, {"k": "st", "s": 0.8}, {"k": "rsi", "s": -0.4}, {"k": "macd", "s": 0.0}]) for r in INDROWS},

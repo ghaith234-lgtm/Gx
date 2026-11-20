@@ -173,7 +173,6 @@ CAT = {"e": [
 CAT["idx"] = {e["id"]: e for e in CAT["e"]}
 m.app_cfg = lambda: dict(_CFG)
 _CFG = {"ticker_coins": ["XRP", "SOL"], "sg_thr": 60, "sg_min": 15}
-m.ina_cfg = lambda: {"on": False}
 cfg = m.sg_cfg()
 
 
@@ -309,11 +308,14 @@ tg_ = [x[1] for x in SENT if x[0] == "tg"]
 ok(f"⑦ a long round (30 notifications ≈ {sum(len(b['t']) + len(b['b']) for b in long_)} letters) reaches Telegram in {len(tg_)} parts, each under its "
    "4096-letter limit, nothing lost", len(tg_) >= 3 and all(len(t) <= 3800 for t in tg_) and all(f"C{i}-USDT" in "".join(tg_) for i in range(30)),
    [len(t) for t in tg_])
-m.ina_cfg = lambda: {"on": True}
-b10 = m._sg_process(scan(T4E + 40 * 14400, TDE, {}, {}, {}, {}, crash=False) | {"c": {"XRP-USDT": {"4H": {"t": T4E + 40 * 14400, "px": 2.4,
-                    "a1": ["W-crash:1"], "a0": [], "lo": 2.3, "hi": 2.5, "ch": -0.1}}}}, ["4H"], {}, m.sg_cfg(), CAT, CDB, NOW + 40 * 14400)
-ok("⑦ 🌊 not twice: «📊 تنبيهات المؤشرات» on (it already sends the crash) ⇒ 🎯 does not", not [b for b in b10 if b["ty"] == "crash"], b10)
-m.ina_cfg = lambda: {"on": False}
+_st10 = {}
+_crash = lambda t_: m._sg_process(scan(t_, TDE, {}, {}, {}, {}, crash=True) | {"c": {"XRP-USDT": {"4H": {"t": t_, "px": 2.4, "a1": ["W-crash:1"], "a0": [],
+                                  "lo": 2.3, "hi": 2.5, "ch": -0.1}}}}, ["4H"], _st10, m.sg_cfg(), CAT, CDB, NOW + (t_ - T4E))
+b10 = _crash(T4E + 40 * 14400)
+b11 = _crash(T4E + 42 * 14400)
+b12 = _crash(T4E + 47 * 14400)
+ok("⑦ 🌊 the market crash comes from 🎯 (the old alerts are gone) · at most once a day: a second crash 8 hours later is not sent · the next day it is",
+   [b["ty"] for b in b10] == ["crash"] and not b11 and [b["ty"] for b in b12] == ["crash"], (b10, b11, b12))
 comp = {"s": "up", "days": 4, "btc": True, "k": 19, "n": 28, "m14": 0.036}
 cb = m._sg_comp_block(comp)
 ok("⑦ 🧭 a new state of the market: «🧭 السوق الآن: صاعد 🟢 (منذ 4 أيام)» · BTC above its 200-day average · 19 of 28 · two weeks +3.6%",
