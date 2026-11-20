@@ -1,0 +1,24 @@
+# 🔬 Holy signals check, eighth pass (the owner 20-11: «حتى التجميع وينبهني اذا سوق راح يصعد · ممكن اشارتين او اكثر ممكن يعطن نتيجه افضل ·
+#    اقصد المستوى الثاني ، والثالث النهائي»): every signal of check 7 — the best PAIRS and TRIPLES chosen on the first 60% of time and judged
+#    on the last 40% (how many still beat random) · 🧲 accumulation over 1 · 2 · 4 weeks · 🧭 the compass (market state ⇒ buys after).
+#    Results: lines HOLYSIG8. Public market data only — no keys, no orders, no notifications.
+name: Holy signals check 8
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/sig_check8.py', 'ci/RUN_SIG8', '.github/workflows/holy-sig8-check.yml']
+permissions:
+  contents: read
+jobs:
+  real-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: pairs · triples · accumulation over weeks · the compass on real OKX prices (public data · no keys · no orders · no notifications)
+        run: |
+          pip install -q requests
+          python3 ci/sig_check8.py Holy_Dashboard.pyw
