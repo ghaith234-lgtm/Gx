@@ -18645,6 +18645,7 @@ SG_MIN = {"4H": 700, "1D": 300}
 SG_UNI = 34                                # عملات القياس: عملاتك + أكبر 28 عملة (حالات أكثر = سجل أوثق)
 SG_EVERY = 300
 SG_CAT_AGE = 7 * 86400                     # يُعاد البحث عن التركيبات كل أسبوع (على التاريخ الأحدث)
+SG_CAT_VER = 2                             # 🔄 v3.36.68: نسخة الدليل — دليل بُني بكود أقدم (بلا إشارة جديدة) يُعاد بناؤه وحده
 SG_FEE = 0.002
 SG_BEAM, SG_TOPS, SG_KEEP, SG_RAREK = 40, 40, 25, 40
 SG_MLAG = {"fng": 0, "vix": 1, "dxy": 1, "us10": 1, "epu": 2, "gpr": 8, "tone": 1}
@@ -19214,7 +19215,7 @@ def sg_build(jd, job):
     cat = _sg_search(COIN, lambda p, m: _sg_prog(jd, p, m))
     _sg_prog(jd, 98, "🧭 بوصلة السوق على التاريخ")
     cat["compass"] = _sg_compass_hist(COIN)
-    cat.update(v=1, ts=time.time(), coins=list(COIN), secs=round(time.time() - t0), lag=SG_MLAG,
+    cat.update(v=1, cv=SG_CAT_VER, ts=time.time(), coins=list(COIN), secs=round(time.time() - t0), lag=SG_MLAG,
                span={fr: [min(v[0 if fr == "4H" else 2]["T"][0] for v in COIN.values()), max(v[0 if fr == "4H" else 2]["T"][-1] for v in COIN.values())]
                      for fr in SG_FR})
     save_json_atomic(SG_CAT, cat)
@@ -19956,7 +19957,7 @@ def sg_tick(now=None, send=True):
         bad, bad_ok = set(st.get("bad") or []), now - float(st.get("bad_t") or 0) > 6 * 3600
         missing = [s for s in uni if (s not in ci["c4"] or s not in ci["c"]) and (s not in bad or bad_ok)]
         full = lambda s: ci["c4"].get(s, 0) >= SG_MIN["4H"] and ci["c"].get(s, 0) >= SG_MIN["1D"]
-        need_cat = (not cat or now - float(cat.get("ts") or 0) > SG_CAT_AGE or bool(st.get("cat_force"))
+        need_cat = (not cat or now - float(cat.get("ts") or 0) > SG_CAT_AGE or bool(st.get("cat_force")) or int(cat.get("cv") or 1) != SG_CAT_VER
                     or any(s not in (cat.get("coins") or []) and full(s) for s in sg_coins(cfg)))
         build_now = need_cat and not _SG.get("build") and now - float(st.get("cat_try") or 0) > (6 * 3600 if cat and not st.get("cat_force") else 600)
         cdb = None

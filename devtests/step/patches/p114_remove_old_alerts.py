@@ -81,6 +81,13 @@ R = [
      """🧭 السوق: حين يثبت وضع جديد · 🌊 الانهيار: مرة واحدة في اليوم على الأكثر · ✅ النتائج: بعد وقت كل إشارة وصلتك"""),
     ("""        _safe(app_feed_push, text, go, "ind", default=None)     # 📱 قناة «📊 تنبيهات المؤشرات» · الضغط يفتح 🎯""",
      """        _safe(app_feed_push, text, go, "ind", default=None)     # 📱 قناة التطبيق «ind» · الضغط يفتح 🎯"""),
+    # a catalog built by an older code (without O-botv) is rebuilt by itself — not after up to a week
+    ("""SG_CAT_AGE = 7 * 86400                     # يُعاد البحث عن التركيبات كل أسبوع (على التاريخ الأحدث)""",
+     """SG_CAT_AGE = 7 * 86400                     # يُعاد البحث عن التركيبات كل أسبوع (على التاريخ الأحدث)
+SG_CAT_VER = 2                             # 🔄 v3.36.68: نسخة الدليل — دليل بُني بكود أقدم (بلا إشارة جديدة) يُعاد بناؤه وحده"""),
+    ("""    cat.update(v=1, ts=time.time(), coins=list(COIN),""", """    cat.update(v=1, cv=SG_CAT_VER, ts=time.time(), coins=list(COIN),"""),
+    ("""        need_cat = (not cat or now - float(cat.get("ts") or 0) > SG_CAT_AGE or bool(st.get("cat_force"))""",
+     """        need_cat = (not cat or now - float(cat.get("ts") or 0) > SG_CAT_AGE or bool(st.get("cat_force")) or int(cat.get("cv") or 1) != SG_CAT_VER"""),
     ("""APP_VERSION = "3.36.67\"""", """APP_VERSION = "3.36.68\""""),
 ]
 

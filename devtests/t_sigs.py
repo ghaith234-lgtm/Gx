@@ -437,6 +437,8 @@ job["th"].join(600) if "th" in job else None
 m.sg_tick(now=t_a + 30)
 cat2 = m._sg_cat()
 ok("⑩ the catalog is ready on the next tick", cat2 and len(cat2["e"]) > 100 and m._SG.get("build") is None, m._SG.get("err"))
+ok("⑩ the catalog carries its code's version (cv) — one built by an older code (without a new signal) is rebuilt by itself",
+   cat2 and cat2.get("cv") == m.SG_CAT_VER, cat2 and cat2.get("cv"))
 st_b = m._sg_st()
 ok("⑩ … and the scan of the closed candles ran (both frames) · the live record started · 🧭 the compass is there",
    st_b.get("t_4H") == T4E and st_b.get("t_1D") == TDE and len(st_b.get("pend") or []) > 0 and (st_b.get("comp") or {}).get("s") in ("up", "flat", "down")
