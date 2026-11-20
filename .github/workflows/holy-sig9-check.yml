@@ -1,0 +1,24 @@
+# 🔬 Holy signals check, ninth pass (the owner 20-11: «سوي فحص جديد ابحث عن الثناىيات وفوق · انا ابحث على التركيبة النادرة هي»): every signal
+#    of check 7, BUY and SELL · combinations of 2 · 3 · 4 · 5 · 6 signals together (searched step by step from the best on the first 60%) ·
+#    judged on the last 40% · 💎 the rare ones (few cases, very high hit) and what they did on the test.
+#    Results: lines HOLYSIG9. Public market data only — no keys, no orders, no notifications.
+name: Holy signals check 9
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/sig_check9.py', 'ci/RUN_SIG9', '.github/workflows/holy-sig9-check.yml']
+permissions:
+  contents: read
+jobs:
+  real-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: combinations of 2 to 6 signals and the rare ones, buy and sell, on real OKX prices (public data · no keys · no orders · no notifications)
+        run: |
+          pip install -q requests
+          python3 ci/sig_check9.py Holy_Dashboard.pyw
