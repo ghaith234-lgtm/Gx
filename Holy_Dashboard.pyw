@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.65"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.66"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -18002,6 +18002,8 @@ def fc_view():
 def fc_api():
     """🔮 GET /api/forecast — لو لسه ما انحسب ⇒ يبدي بالخلفية والنافذة ترجع تسأل بعد ثواني"""
     v = fc_view()
+    v["rows"] = [dict(r) for r in v["rows"]]
+    v["sig"] = _safe(sg_fc, v["rows"], default=None)          # 🎯 v3.36.66: إشارات كل عملة الآن + البوصلة
     if not v["rows"] and v["on"] and ticker_cfg()["coins"] and not _FC_RUN["busy"]:
         threading.Thread(target=_safe, args=(_fc_run,), daemon=True).start()
     v["busy"] = _FC_RUN["busy"] or (not v["rows"] and v["on"] and bool(ticker_cfg()["coins"]))
@@ -18018,6 +18020,2109 @@ def fc_loop():
         except Exception:
             pass
         time.sleep(FC_EVERY)
+
+
+# ═══════════════ 🎯 v3.36.66: الإشارات — كل المؤشرات وتركيباتها بسجلها على الأسعار الحقيقية (عرض وإشعارات فقط · ولا أمر) ═══════════════
+#   (المالك 20-11: «اريد اتضيف كل الاشارات … الثناىية وفوق كذلك على حدى … بدون مستويات … انا احدد النسبة … افحص وضيف وكذلك التوقعات»)
+#   · الأنظمة الـ36 بنفس كود القياس حرفياً (_SG_LIB = كتلة ci/sig_check6.py · فحص يبقيهما متطابقين) + قراءات 📊 العشر وحكمها + 🟢 القاع +
+#     قراءات 🔮 + 🧲 + 💪 + 🌊 + 😨 + 🗞️ (كل قراءة اقتصادية مؤخّرة بتأخر نشرها — ci/sig_check10.py) + 🏦 — على شموع 4 ساعات واليومية · شراء وبيع
+#   · كل إشارة وحدها وكل تركيبة (2 … 6 معاً · بحث من الأفضل مثل ci/sig_check9.py) إشارة مستقلة بسجلها: آخر 40% من الوقت (لم تُختر عليه) +
+#     السجل الحي بعدها (يُحكم وحده بعد 3 أيام / أسبوع) · 💎 النادرة · 🧭 بوصلة السوق (منعّمة) · إشعارات حسب النوع بعتبة المالك
+#   · الحساب الثقيل (تاريخ ~34 عملة · البحث · كل فحص) بعملية منفصلة بأولوية منخفضة (خيط في برنامج ويندوز) وبلا شبكة — اللوحة تجلب
+#     الشموع العامة وتسلّمها بملف · لا أمر ولا إلغاء ولا لمس لأي بوت ولا قراءة مفتاح
+_SG_LIB = r'''# ───────────────────────── indicators (oldest → newest · None until enough candles) ─────────────────────────
+def sma(x, n):
+    out, s, q = [None] * len(x), 0.0, 0
+    for i, v in enumerate(x):
+        if v is None:
+            s, q = 0.0, 0; continue
+        s += v; q += 1
+        if q > n:
+            s -= x[i - n]; q = n
+        if q == n:
+            out[i] = s / n
+    return out
+
+
+def ema(x, n):
+    out, a, e, buf = [None] * len(x), 2.0 / (n + 1), None, []
+    for i, v in enumerate(x):
+        if v is None:
+            continue
+        if e is None:
+            buf.append(v)
+            if len(buf) == n:
+                e = sum(buf) / n; out[i] = e
+            continue
+        e = e + a * (v - e); out[i] = e
+    return out
+
+
+def rma(x, n):
+    out, e, buf = [None] * len(x), None, []
+    for i, v in enumerate(x):
+        if v is None:
+            continue
+        if e is None:
+            buf.append(v)
+            if len(buf) == n:
+                e = sum(buf) / n; out[i] = e
+            continue
+        e = (e * (n - 1) + v) / n; out[i] = e
+    return out
+
+
+def rsi(c, n=14):
+    up = [None] + [max(c[i] - c[i - 1], 0.0) if c[i] is not None and c[i - 1] is not None else None for i in range(1, len(c))]
+    dn = [None] + [max(c[i - 1] - c[i], 0.0) if c[i] is not None and c[i - 1] is not None else None for i in range(1, len(c))]
+    au, ad = rma(up, n), rma(dn, n)
+    return [None if a is None or b is None else (100.0 if b == 0 else 100.0 - 100.0 / (1.0 + a / b)) for a, b in zip(au, ad)]
+
+
+def macd(c, f=12, s=26, g=9):
+    ef, es = ema(c, f), ema(c, s)
+    ln = [None if a is None or b is None else a - b for a, b in zip(ef, es)]
+    sg = ema(ln, g)
+    return ln, sg, [None if a is None or b is None else a - b for a, b in zip(ln, sg)]
+
+
+def true_range(D):
+    H, L, C = D["H"], D["L"], D["C"]
+    return [H[0] - L[0]] + [max(H[i] - L[i], abs(H[i] - C[i - 1]), abs(L[i] - C[i - 1])) for i in range(1, len(C))]
+
+
+def adx(D, n=14):
+    H, L = D["H"], D["L"]
+    tr = true_range(D)
+    pdm = [0.0] + [(H[i] - H[i - 1]) if (H[i] - H[i - 1]) > (L[i - 1] - L[i]) and (H[i] - H[i - 1]) > 0 else 0.0 for i in range(1, len(H))]
+    ndm = [0.0] + [(L[i - 1] - L[i]) if (L[i - 1] - L[i]) > (H[i] - H[i - 1]) and (L[i - 1] - L[i]) > 0 else 0.0 for i in range(1, len(H))]
+    a, p, q = rma(tr, n), rma(pdm, n), rma(ndm, n)
+    pdi = [None if x is None or y is None or x == 0 else 100 * y / x for x, y in zip(a, p)]
+    ndi = [None if x is None or y is None or x == 0 else 100 * y / x for x, y in zip(a, q)]
+    dx = [None if x is None or y is None or x + y == 0 else 100 * abs(x - y) / (x + y) for x, y in zip(pdi, ndi)]
+    return rma(dx, n), pdi, ndi
+
+
+def supertrend(D, n=10, k=3.0):
+    H, L, C = D["H"], D["L"], D["C"]
+    at = rma(true_range(D), n)
+    d, line = [None] * len(C), [None] * len(C)
+    fu = fl = None; dr = 1
+    for i in range(len(C)):
+        if at[i] is None:
+            continue
+        hl = (H[i] + L[i]) / 2
+        bu, bl = hl + k * at[i], hl - k * at[i]
+        if fu is None:
+            fu, fl = bu, bl
+        else:
+            fu = bu if (bu < fu or C[i - 1] > fu) else fu
+            fl = bl if (bl > fl or C[i - 1] < fl) else fl
+        if dr == 1 and C[i] < fl:
+            dr = -1
+        elif dr == -1 and C[i] > fu:
+            dr = 1
+        d[i], line[i] = dr, (fl if dr == 1 else fu)
+    return d, line
+
+
+def boll(c, n=20, k=2.0):
+    mid = sma(c, n)
+    up, lo = [None] * len(c), [None] * len(c)
+    for i in range(len(c)):
+        if mid[i] is None:
+            continue
+        w = c[i - n + 1:i + 1]
+        sd = math.sqrt(sum((x - mid[i]) ** 2 for x in w) / n)
+        up[i], lo[i] = mid[i] + k * sd, mid[i] - k * sd
+    return mid, up, lo
+
+
+def keltner(D, n=20, k=2.0, an=10):
+    mid, at = ema(D["C"], n), rma(true_range(D), an)
+    return mid, [None if a is None or b is None else a + k * b for a, b in zip(mid, at)], [None if a is None or b is None else a - k * b for a, b in zip(mid, at)]
+
+
+def psar(D, st=0.02, mx=0.2):
+    H, L = D["H"], D["L"]
+    n = len(H)
+    sar, dr = [None] * n, [None] * n
+    if n < 3:
+        return sar, dr
+    up = H[1] >= H[0]; af = st; ep = H[1] if up else L[1]; s = L[0] if up else H[0]
+    for i in range(2, n):
+        s = s + af * (ep - s)
+        if up:
+            s = min(s, L[i - 1], L[i - 2])
+            if L[i] < s:
+                up, s, ep, af = False, ep, L[i], st
+            elif H[i] > ep:
+                ep, af = H[i], min(mx, af + st)
+        else:
+            s = max(s, H[i - 1], H[i - 2])
+            if H[i] > s:
+                up, s, ep, af = True, ep, H[i], st
+            elif L[i] < ep:
+                ep, af = L[i], min(mx, af + st)
+        sar[i], dr[i] = s, (1 if up else -1)
+    return sar, dr
+
+
+def cci(D, n=20):
+    tp = [(h + l + c) / 3 for h, l, c in zip(D["H"], D["L"], D["C"])]
+    ma = sma(tp, n)
+    out = [None] * len(tp)
+    for i in range(len(tp)):
+        if ma[i] is None:
+            continue
+        md = sum(abs(x - ma[i]) for x in tp[i - n + 1:i + 1]) / n
+        out[i] = 0.0 if md == 0 else (tp[i] - ma[i]) / (0.015 * md)
+    return out
+
+
+def stoch_raw(H, L, C, n):
+    out = [None] * len(C)
+    for i in range(n - 1, len(C)):
+        if any(v is None for v in (C[i],)) or any(x is None for x in H[i - n + 1:i + 1]) or any(x is None for x in L[i - n + 1:i + 1]):
+            continue
+        hh, ll = max(H[i - n + 1:i + 1]), min(L[i - n + 1:i + 1])
+        out[i] = 50.0 if hh == ll else 100 * (C[i] - ll) / (hh - ll)
+    return out
+
+
+def stoch(D, n=14, ks=3, ds=3):
+    k = sma(stoch_raw(D["H"], D["L"], D["C"], n), ks)
+    return k, sma(k, ds)
+
+
+def stochrsi(c, rn=14, sn=14, ks=3, ds=3):
+    r = rsi(c, rn)
+    k = sma(stoch_raw(r, r, r, sn), ks)
+    return k, sma(k, ds)
+
+
+def ao(D):
+    md = [(h + l) / 2 for h, l in zip(D["H"], D["L"])]
+    a, b = sma(md, 5), sma(md, 34)
+    return [None if x is None or y is None else x - y for x, y in zip(a, b)]
+
+
+def willr(D, n=14):
+    s = stoch_raw(D["H"], D["L"], D["C"], n)
+    return [None if v is None else v - 100.0 for v in s]
+
+
+def lsma(c, n=25):
+    out = [None] * len(c)
+    xs = list(range(n)); mx = (n - 1) / 2; vx = sum((x - mx) ** 2 for x in xs)
+    for i in range(n - 1, len(c)):
+        w = c[i - n + 1:i + 1]
+        my = sum(w) / n
+        b = sum((x - mx) * (y - my) for x, y in zip(xs, w)) / vx
+        out[i] = my + b * (n - 1 - mx)
+    return out
+
+
+def dss(D, n=13, e=8):
+    s1 = stoch_raw(D["H"], D["L"], D["C"], n)
+    e1 = ema(s1, e)
+    s2 = stoch_raw(e1, e1, e1, n)
+    return ema(s2, e)
+
+
+def fractals(H, L, k=2):
+    hi, lo = [False] * len(H), [False] * len(L)
+    for i in range(k, len(H) - k):
+        if all(H[i] > H[j] for j in range(i - k, i)) and all(H[i] >= H[j] for j in range(i + 1, i + k + 1)):   # a tie on the right side counts
+            hi[i] = True
+        if all(L[i] < L[j] for j in range(i - k, i)) and all(L[i] <= L[j] for j in range(i + 1, i + k + 1)):
+            lo[i] = True
+    return hi, lo       # a fractal at i is known only at i + k
+
+
+def pivots_prev(D, blk):
+    """classic pivot of the previous «day» (block of blk candles): P · R1 · S1 — known from the block's first candle"""
+    H, L, C = D["H"], D["L"], D["C"]
+    n = len(C)
+    P, R1, S1 = [None] * n, [None] * n, [None] * n
+    for i in range(blk * 2, n):
+        b0 = (i // blk) * blk
+        a = b0 - blk
+        if a < 0:
+            continue
+        hh, ll, cc = max(H[a:b0]), min(L[a:b0]), C[b0 - 1]
+        p = (hh + ll + cc) / 3
+        P[i], R1[i], S1[i] = p, 2 * p - ll, 2 * p - hh
+    return P, R1, S1
+
+
+def rising(x, i, k=1):
+    return i - k >= 0 and x[i] is not None and x[i - k] is not None and x[i] > x[i - k]
+
+
+def xup(a, b, i):
+    """a crosses above b at i (b may be a number)"""
+    if i < 1:
+        return False
+    a0, a1 = a[i - 1], a[i]
+    b0, b1 = (b, b) if isinstance(b, (int, float)) else (b[i - 1], b[i])
+    return None not in (a0, a1, b0, b1) and a0 <= b0 and a1 > b1
+
+
+def ok(*v):
+    return all(x is not None for x in v)
+
+
+# ───────────────────────── the systems (BUY events · the SELL = the same on the mirrored price) ─────────────────────────
+def build(D):
+    """every series the systems need — once per coin and time frame"""
+    C, H, L, O, V = D["C"], D["H"], D["L"], D["O"], D["V"]
+    S = {}
+    for n in (3, 5, 8, 9, 10, 12, 13, 15, 20, 21, 25, 30, 34, 35, 40, 45, 50, 60, 100, 150, 200):
+        S[f"e{n}"] = ema(C, n)
+    for n in (20, 50, 100):
+        S[f"s{n}"] = sma(C, n)
+    S["rsi"] = rsi(C, 14)
+    S["rsioma"] = rsi(ema(C, 14), 14); S["rsioma_ma"] = ema(S["rsioma"], 14)
+    S["ml"], S["ms"], S["mh"] = macd(C)
+    S["ml2"], S["ms2"], S["mh2"] = macd(C, 15, 26, 9)
+    S["adx"], S["pdi"], S["ndi"] = adx(D)
+    S["st"], S["stl"] = supertrend(D)
+    S["bm"], S["bu"], S["bl"] = boll(C, 20, 2.0)
+    S["bm25"], S["bu25"], S["bl25"] = boll(C, 20, 2.5)
+    S["km"], S["ku"], S["kl"] = keltner(D)
+    S["sar"], S["sard"] = psar(D)
+    S["cci14"], S["cci50"], S["cci20"] = cci(D, 14), cci(D, 50), cci(D, 20)
+    S["k"], S["d"] = stoch(D)
+    S["kma"] = sma(S["k"], 9)
+    S["srk"], S["srd"] = stochrsi(C)
+    S["ao"] = ao(D)
+    S["mom10"] = [None] + [None] * 9 + [C[i] - C[i - 10] for i in range(10, len(C))]
+    S["mom14"] = [None] * 14 + [C[i] - C[i - 14] for i in range(14, len(C))]
+    S["wr"] = willr(D)
+    S["ghh"], S["ghl"] = sma(H, 10), sma(L, 10)
+    S["lsma"] = lsma(C, 25)
+    S["dss"] = dss(D)
+    S["atr"] = rma(true_range(D), 14)
+    S["v20"] = sma(V, 20)
+    S["fh"], S["fl"] = fractals(H, L, 2)
+    S["fh3"], S["fl3"] = fractals(H, L, 3)
+    S["P"], S["R1"], S["S1"] = pivots_prev(D, D["blk"])
+    S["hh10"] = [None] * 10 + [max(H[i - 10:i]) for i in range(10, len(H))]
+    return S
+
+
+def gmma_up(S, i):
+    sh = [S[f"e{n}"][i] for n in (3, 5, 8, 10, 12, 15)]
+    lg = [S[f"e{n}"][i] for n in (30, 35, 40, 45, 50, 60)]
+    return None not in sh + lg and min(sh) > max(lg)
+
+
+def engulf_up(D, i):
+    O, C = D["O"], D["C"]
+    return i >= 1 and C[i - 1] < O[i - 1] and C[i] > O[i] and C[i] >= O[i - 1] and O[i] <= C[i - 1]
+
+
+def hammer(D, i):
+    O, H, L, C = D["O"][i], D["H"][i], D["L"][i], D["C"][i]
+    body = abs(C - O); rng = H - L
+    return rng > 0 and body <= rng * 0.35 and min(O, C) - L >= 2 * body and H - max(O, C) <= body
+
+
+def ev_first(cond, n):
+    """edge-triggered: the candle where the condition becomes true"""
+    out, prev = [], False
+    for i in range(n):
+        c = bool(cond(i))
+        if c and not prev:
+            out.append(i)
+        prev = c
+    return out
+
+
+SYS = {}   # code → (name, family, fn(D, S) → list of buy candles)
+
+
+def sysdef(code, name, fam):
+    def deco(fn):
+        SYS[code] = (name, fam, fn)
+        return fn
+    return deco
+
+
+@sysdef("08", "Double CCI + RSIOMA", "momentum")
+def s08(D, S):
+    return ev_first(lambda i: ok(S["cci14"][i], S["cci50"][i], S["rsioma"][i], S["rsioma_ma"][i]) and S["cci14"][i] > 0 and S["cci50"][i] > 0
+                    and S["rsioma"][i] > S["rsioma_ma"][i] and S["rsioma"][i] > 50, D["n"])
+
+
+@sysdef("09", "Scalp with EMA Predictive", "trend")
+def s09(D, S):
+    return [i for i in range(D["n"]) if xup(S["e5"], S["e13"], i) and rising(S["e34"], i, 3)]
+
+
+@sysdef("10", "Neptune (BB · EMA · AO)", "momentum")
+def s10(D, S):
+    C = D["C"]
+    return [i for i in range(D["n"]) if xup(C, S["bm"], i) and ok(S["e50"][i], S["ao"][i]) and C[i] > S["e50"][i] and S["ao"][i] > 0 and rising(S["ao"], i)]
+
+
+@sysdef("11", "Hybrid FX Framework", "momentum")
+def s11(D, S):
+    return [i for i in range(D["n"]) if xup(S["rsi"], 50, i) and ok(S["e21"][i], S["e50"][i], S["mom10"][i]) and S["e21"][i] > S["e50"][i] and S["mom10"][i] > 0]
+
+
+@sysdef("12", "SuperTrend + EMA 150", "trend")
+def s12(D, S):
+    C = D["C"]
+    return [i for i in range(1, D["n"]) if S["st"][i] == 1 and S["st"][i - 1] == -1 and ok(S["e150"][i]) and C[i] > S["e150"][i]]
+
+
+@sysdef("13", "EMA Bands / Guppy", "trend")
+def s13(D, S):
+    return ev_first(lambda i: gmma_up(S, i), D["n"])
+
+
+@sysdef("14", "Bollinger + RSI + ADX (reversion)", "volatility")
+def s14(D, S):
+    C = D["C"]
+    return [i for i in range(1, D["n"]) if ok(S["bl"][i - 1], S["adx"][i]) and C[i - 1] < S["bl"][i - 1] and xup(S["rsi"], 30, i) and S["adx"][i] < 25]
+
+
+@sysdef("15", "Keltner + EMA (breakout)", "volatility")
+def s15(D, S):
+    C = D["C"]
+    return [i for i in range(D["n"]) if xup(C, S["ku"], i) and ok(S["e50"][i]) and C[i] > S["e50"][i]]
+
+
+@sysdef("16", "Parabolic SAR + Fibonacci", "pattern")
+def s16(D, S):
+    H, L, C = D["H"], D["L"], D["C"]
+    out, n = [], D["n"]
+    for i in range(30, n):
+        if not (S["sard"][i] == 1 and S["sard"][i - 1] == -1):
+            continue
+        lo = min(L[i - 20:i + 1])
+        for j in range(i + 1, min(n, i + 11)):
+            hi = max(H[i:j + 1])
+            if hi <= lo:
+                break
+            f38, f62 = hi - 0.382 * (hi - lo), hi - 0.618 * (hi - lo)
+            if L[j] <= f38 and L[j] >= f62 and C[j] > D["O"][j]:
+                out.append(j); break
+            if L[j] < f62:
+                break
+    return sorted(set(out))
+
+
+@sysdef("17", "Levels + GMMA slow filter", "pattern")
+def s17(D, S):
+    C = D["C"]
+    return [i for i in range(D["n"]) if xup(C, S["R1"], i) and ok(S["e30"][i], S["e60"][i]) and S["e30"][i] > S["e60"][i] and rising(S["e30"], i)]
+
+
+@sysdef("18", "Bollinger Band extreme scalp", "volatility")
+def s18(D, S):
+    C = D["C"]
+    return [i for i in range(1, D["n"]) if ok(S["bl25"][i - 1], S["bl25"][i]) and C[i - 1] < S["bl25"][i - 1] and C[i] > S["bl25"][i]]
+
+
+@sysdef("19", "Keltner scalping (MACD · stoch)", "volatility")
+def s19(D, S):
+    C = D["C"]
+    return [i for i in range(D["n"]) if xup(C, S["km"], i) and ok(S["s50"][i], S["mh"][i], S["k"][i], S["d"][i]) and C[i] > S["s50"][i]
+            and S["mh"][i] > 0 and S["k"][i] > S["d"][i]]
+
+
+@sysdef("20", "Scalp pattern (engulfing)", "pattern")
+def s20(D, S):
+    return [i for i in range(D["n"]) if engulf_up(D, i)]
+
+
+@sysdef("21", "Anti (stochastic over its MA)", "momentum")
+def s21(D, S):
+    return [i for i in range(D["n"]) if xup(S["k"], S["kma"], i) and S["k"][i - 1] is not None and S["k"][i - 1] < 30]
+
+
+@sysdef("22", "Extreme scalping modified", "momentum")
+def s22(D, S):
+    C = D["C"]
+    def cnd(i):
+        return (i >= 1 and ok(S["ghh"][i - 1], S["dss"][i], S["dss"][i - 1], S["lsma"][i], S["mom10"][i]) and C[i] > S["ghh"][i - 1]
+                and S["dss"][i] > S["dss"][i - 1] and C[i] > S["lsma"][i] and S["mom10"][i] > 0)
+    return ev_first(cnd, D["n"])
+
+
+@sysdef("23", "Action trade (double CCI · ribbon)", "momentum")
+def s23(D, S):
+    return ev_first(lambda i: ok(S["cci14"][i], S["cci50"][i], S["e8"][i], S["e13"][i], S["e21"][i]) and S["cci14"][i] > 0 and S["cci50"][i] > 0
+                    and S["e8"][i] > S["e13"][i] > S["e21"][i], D["n"])
+
+
+@sysdef("24", "1-candle scalper (EMA · Stoch RSI)", "momentum")
+def s24(D, S):
+    C = D["C"]
+    return [i for i in range(D["n"]) if xup(S["srk"], S["srd"], i) and S["srk"][i - 1] is not None and S["srk"][i - 1] < 20
+            and ok(S["e50"][i]) and C[i] > S["e50"][i]]
+
+
+@sysdef("25", "Parabolic SAR trend scalper", "trend")
+def s25(D, S):
+    C = D["C"]
+    return ev_first(lambda i: S["sard"][i] == 1 and ok(S["e100"][i], S["mh"][i]) and C[i] > S["e100"][i] and S["mh"][i] > 0, D["n"])
+
+
+@sysdef("26", "EMA band scalp (EMA 50/100 · stoch)", "trend")
+def s26(D, S):
+    C, L = D["C"], D["L"]
+    return [i for i in range(D["n"]) if xup(S["k"], S["d"], i) and S["k"][i - 1] is not None and S["k"][i - 1] < 30
+            and ok(S["e50"][i], S["e100"][i]) and C[i] > S["e100"][i] and L[i] <= S["e50"][i] * 1.003 and C[i] > S["e50"][i]]
+
+
+@sysdef("27", "Parabolic SAR + CCI", "trend")
+def s27(D, S):
+    C = D["C"]
+    return [i for i in range(1, D["n"]) if S["sard"][i] == 1 and S["sard"][i - 1] == -1 and ok(S["s50"][i], S["cci20"][i])
+            and C[i] > S["s50"][i] and S["cci20"][i] > 0]
+
+
+@sysdef("28", "Intraday (EMA angle · pullback)", "trend")
+def s28(D, S):
+    C, L = D["C"], D["L"]
+    return [i for i in range(5, D["n"]) if ok(S["e21"][i], S["e21"][i - 5], S["s50"][i], S["s50"][i - 5]) and S["e21"][i] > S["e21"][i - 5] * 1.001
+            and S["s50"][i] > S["s50"][i - 5] and L[i] <= S["e21"][i] and C[i] > S["e21"][i]]
+
+
+@sysdef("29", "Simple scalper (EMA · pivot)", "pattern")
+def s29(D, S):
+    C = D["C"]
+    return [i for i in range(D["n"]) if xup(S["e8"], S["e21"], i) and ok(S["P"][i]) and C[i] > S["P"][i]]
+
+
+@sysdef("30", "Williams trade modified", "momentum")
+def s30(D, S):
+    return [i for i in range(D["n"]) if xup(S["wr"], -50, i) and ok(S["e13"][i], S["e34"][i]) and S["e13"][i] > S["e34"][i]]
+
+
+@sysdef("31", "Super scalping (fractal · pivot)", "pattern")
+def s31(D, S):
+    C = D["C"]
+    return [i for i in range(2, D["n"]) if S["fl"][i - 2] and ok(S["P"][i]) and C[i] > S["P"][i]]
+
+
+@sysdef("32", "Pocket rocket (momentum burst)", "volume")
+def s32(D, S):
+    C, V = D["C"], D["V"]
+    return [i for i in range(D["n"]) if ok(S["hh10"][i], S["v20"][i], S["rsi"][i]) and C[i] > S["hh10"][i] and V[i] > 1.5 * S["v20"][i] and S["rsi"][i] > 55]
+
+
+@sysdef("33", "Forex profit (EMA 10/25/50 · SAR)", "trend")
+def s33(D, S):
+    C = D["C"]
+    return [i for i in range(D["n"]) if xup(S["e10"], S["e25"], i) and ok(S["e50"][i]) and S["e10"][i] > S["e50"][i] and S["e25"][i] > S["e50"][i]
+            and S["sard"][i] == 1]
+
+
+@sysdef("34", "Cross EMA (full candle · RSI)", "trend")
+def s34(D, S):
+    C, O = D["C"], D["O"]
+    return [i for i in range(2, D["n"]) if xup(S["e9"], S["e21"], i - 1) and ok(S["e9"][i], S["rsi"][i]) and min(O[i], C[i]) > S["e9"][i]
+            and 50 < S["rsi"][i] < 70]
+
+
+@sysdef("35", "Simple MACD + EMA 20", "momentum")
+def s35(D, S):
+    C = D["C"]
+    return [i for i in range(D["n"]) if xup(S["ml"], S["ms"], i) and ok(S["e20"][i]) and C[i] > S["e20"][i]]
+
+
+@sysdef("36", "SMA 100 + MACD 15/26/9", "trend")
+def s36(D, S):
+    C, L = D["C"], D["L"]
+    return [i for i in range(D["n"]) if xup(S["ml2"], S["ms2"], i) and ok(S["s100"][i]) and C[i] > S["s100"][i] and min(L[max(0, i - 5):i + 1]) <= S["s100"][i] * 1.01]
+
+
+@sysdef("37", "EMA 10/21 fire zone (ADX)", "trend")
+def s37(D, S):
+    C, L = D["C"], D["L"]
+    return [i for i in range(5, D["n"]) if ok(S["e10"][i], S["e21"][i], S["s50"][i], S["s50"][i - 5], S["adx"][i]) and S["e10"][i] > S["e21"][i]
+            and S["s50"][i] > S["s50"][i - 5] and S["adx"][i] > 20 and S["e21"][i] <= L[i] <= S["e10"][i] and C[i] > S["e10"][i]]
+
+
+@sysdef("38", "Tom Demark (EMA · momentum · trendline)", "pattern")
+def s38(D, S):
+    H, C = D["H"], D["C"]
+    out, sw = [], []
+    for i in range(D["n"]):
+        if i >= 2 and S["fh"][i - 2]:
+            sw.append(i - 2); sw = sw[-2:]
+        if len(sw) == 2 and H[sw[1]] < H[sw[0]] and i > sw[1] + 2:
+            a, b = sw
+            line = H[a] + (H[b] - H[a]) * (i - a) / (b - a)
+            prev = H[a] + (H[b] - H[a]) * (i - 1 - a) / (b - a)
+            if C[i] > line and C[i - 1] <= prev and ok(S["e9"][i], S["e30"][i], S["mom14"][i]) and S["e9"][i] > S["e30"][i] and S["mom14"][i] > 0:
+                out.append(i); sw = []
+    return out
+
+
+@sysdef("39", "CI system (candles · stoch · EMA 5/13)", "pattern")
+def s39(D, S):
+    return [i for i in range(D["n"]) if (engulf_up(D, i) or hammer(D, i)) and ok(S["k"][i], S["d"][i], S["e5"][i], S["e13"][i])
+            and S["k"][i] > S["d"][i] and S["k"][i] < 40 and S["e5"][i] >= S["e13"][i] * 0.998]
+
+
+@sysdef("40", "Brahmos confluence", "momentum")
+def s40(D, S):
+    C = D["C"]
+    return ev_first(lambda i: ok(S["e20"][i], S["e50"][i], S["rsi"][i], S["mh"][i]) and C[i] > S["e20"][i] > S["e50"][i] and S["rsi"][i] > 55
+                    and S["mh"][i] > 0, D["n"])
+
+
+@sysdef("41", "CCI · stochastic · GMMA", "momentum")
+def s41(D, S):
+    return [i for i in range(D["n"]) if gmma_up(S, i) and xup(S["k"], S["d"], i) and S["k"][i - 1] is not None and S["k"][i - 1] < 40
+            and ok(S["cci20"][i]) and S["cci20"][i] > -100]
+
+
+@sysdef("42", "Supertrend breakout zone", "trend")
+def s42(D, S):
+    H, C = D["H"], D["C"]
+    out = []
+    for i in range(1, D["n"]):
+        if S["st"][i] == 1 and S["st"][i - 1] == -1:
+            z = H[i]
+            for j in range(i + 1, min(D["n"], i + 11)):
+                if S["st"][j] != 1:
+                    break
+                if C[j] > z:
+                    out.append(j); break
+    return out
+
+
+@sysdef("43", "QFL (base crack)", "pattern")
+def s43(D, S):
+    H, L, C = D["H"], D["L"], D["C"]
+    out, bases, used = [], [], set()
+    for i in range(D["n"]):
+        j = i - 3
+        if j >= 0 and S["fl3"][j]:
+            hi = max(H[j:i + 1])
+            if hi >= L[j] * 1.03:
+                bases.append(j)
+        bases = [b for b in bases if i - b <= 300]
+        for b in bases:
+            if b not in used and C[i] < L[b] * 0.96:
+                out.append(i); used.add(b); break
+    return out
+
+
+# ───────────────────────── measuring ─────────────────────────
+def mirror(D):
+    """1/price: every rise is a fall and back — the same system on it = its SELL"""
+    return {"O": [1 / x for x in D["O"]], "H": [1 / x for x in D["L"]], "L": [1 / x for x in D["H"]], "C": [1 / x for x in D["C"]],
+            "V": D["V"], "n": D["n"], "blk": D["blk"]}
+
+
+def fwd(C, i, h, side):
+    if i + h >= len(C):
+        return None
+    r = C[i + h] / C[i] - 1 if side > 0 else C[i] / C[i + h] - 1
+    return r - FEE
+'''   # ⬆️ كتلة ci/sig_check6.py حرفياً (devtests/t_sigs.py يتأكد)
+
+SG_DIR = os.path.join(ROOT, "_signals")
+SG_CFILE = os.path.join(SG_DIR, "candles.json")
+SG_CAT = os.path.join(SG_DIR, "catalog.json")
+SG_FILE = os.path.join(ROOT, "Holy_Signals.json")
+SG_FR = ("4H", "1D")
+SG_SEC = {"4H": 14400, "1D": 86400}
+SG_BAR = {"4H": ("c4", "4H", "4h"), "1D": ("c", "1Dutc", "1d")}
+SG_LK = {"4H": 3, "1D": 2}                 # «معاً» = أُطلقت خلال هذا العدد من الشموع (مثل القياس)
+SG_HZ = {"4H": 18, "1D": 7}                # الحكم بعد: 4 ساعات ← 3 أيام · اليومي ← أسبوع
+SG_HZN = {"4H": "3 أيام", "1D": "أسبوع"}
+SG_FN = {"4H": "4 ساعات", "1D": "يومي"}
+SG_N = {"4H": 4400, "1D": 1100}            # تاريخ القياس (~سنتان · ~3 سنوات)
+SG_MIN = {"4H": 700, "1D": 300}
+SG_UNI = 34                                # عملات القياس: عملاتك + أكبر 28 عملة (حالات أكثر = سجل أوثق)
+SG_EVERY = 300
+SG_CAT_AGE = 7 * 86400                     # يُعاد البحث عن التركيبات كل أسبوع (على التاريخ الأحدث)
+SG_FEE = 0.002
+SG_BEAM, SG_TOPS, SG_KEEP, SG_RAREK = 40, 40, 25, 40
+SG_MLAG = {"fng": 0, "vix": 1, "dxy": 1, "us10": 1, "epu": 2, "gpr": 8, "tone": 1}
+#   🗞️ أيام تأخر النشر (ci/sig_lagdates.py يوم 20-11 13:23 UTC: VIX والدولار والسندات وعدم اليقين آخرها 19-11 · المخاطر الجيوسياسية 16-11 (تُحدَّث
+#   أسبوعياً ⇒ حتى 8 أيام) · الخوف والطمع 20-11) — قيمة اليوم t لا تُستعمل قبل t + التأخير · ci/sig_check10.py: إشارات المخاطر الجيوسياسية للبيع
+#   صمدت بتأخير 1–3 أيام وضعفت بعد أسبوع ⇒ سجلها هنا هو سجلها الصادق بتأخيرها الحقيقي
+SG_TY = {"buy": ("🟢", "شراء"), "sell": ("🔴", "بيع"), "acc": ("🧲", "تجميع"), "dist": ("🔻", "تصريف"), "up": ("📈", "صعود"),
+         "down": ("📉", "نزول"), "mkt": ("🧭", "السوق"), "crash": ("🌊", "الانهيار"), "fng": ("😨", "الخوف والطمع"),
+         "eco": ("🗞️", "الاقتصاد"), "res": ("✅", "النتائج")}
+SG_COIN_TY = ("buy", "sell", "acc", "dist", "up", "down")
+SG_CH = {"both": "تيليغرام + التطبيق", "tg": "تيليغرام فقط", "app": "التطبيق فقط"}
+_SG = {"m": None, "cat": None, "cat_mt": 0, "busy": False, "build": None, "scan": None, "phase": "", "pct": 0, "msg": "", "err": "",
+       "lock": threading.Lock()}
+_SG_FAM_TREND = ("trend", "momentum")
+_SG_NM = {   # الأنظمة الـ36 — (للشراء · للبيع) بالعربية للإشعار والنافذة
+    "08": ("CCI المزدوج وRSIOMA فوق الصفر", "CCI المزدوج وRSIOMA تحت الصفر"),
+    "09": ("EMA 5 تقطع EMA 13 صعوداً", "EMA 5 تقطع EMA 13 هبوطاً"),
+    "10": ("عبور منتصف بولنجر صعوداً (نبتون)", "عبور منتصف بولنجر هبوطاً (نبتون)"),
+    "11": ("RSI يعبر 50 صعوداً مع الاتجاه", "RSI يعبر 50 هبوطاً مع الاتجاه"),
+    "12": ("Supertrend انقلب أخضر فوق EMA 150", "Supertrend انقلب أحمر تحت EMA 150"),
+    "13": ("شرائط Guppy صاعدة", "شرائط Guppy هابطة"),
+    "14": ("ارتداد من أسفل بولنجر (RSI 30)", "ارتداد من أعلى بولنجر (RSI 70)"),
+    "15": ("اختراق أعلى قناة Keltner", "كسر أسفل قناة Keltner"),
+    "16": ("SAR صاعد مع تصحيح فيبوناتشي", "SAR هابط مع ارتداد فيبوناتشي"),
+    "17": ("اختراق المقاومة R1 مع GMMA صاعد", "كسر الدعم S1 مع GMMA هابط"),
+    "18": ("عودة من تحت حد بولنجر بقوة", "عودة من فوق حد بولنجر بقوة"),
+    "19": ("عبور منتصف Keltner صعوداً (MACD · ستوكاستك)", "عبور منتصف Keltner هبوطاً (MACD · ستوكاستك)"),
+    "20": ("شمعة ابتلاعية صاعدة", "شمعة ابتلاعية هابطة"),
+    "21": ("الستوكاستك يرتد من القاع", "الستوكاستك ينقلب من القمة"),
+    "22": ("اختراق سريع بزخم", "كسر سريع بزخم"),
+    "23": ("CCI المزدوج مع المتوسطات صاعدة", "CCI المزدوج مع المتوسطات هابطة"),
+    "24": ("Stoch RSI يرتد من القاع فوق EMA 50", "Stoch RSI ينقلب من القمة تحت EMA 50"),
+    "25": ("SAR صاعد فوق EMA 100 مع MACD", "SAR هابط تحت EMA 100 مع MACD"),
+    "26": ("ارتداد من EMA 50 (ستوكاستك)", "رفض عند EMA 50 (ستوكاستك)"),
+    "27": ("SAR انقلب صاعداً مع CCI", "SAR انقلب هابطاً مع CCI"),
+    "28": ("تصحيح إلى EMA 21 في اتجاه صاعد", "ارتداد إلى EMA 21 في اتجاه هابط"),
+    "29": ("EMA 8 تقطع EMA 21 فوق المحور", "EMA 8 تقطع EMA 21 تحت المحور"),
+    "30": ("Williams %R يعبر المنتصف صعوداً", "Williams %R يعبر المنتصف هبوطاً"),
+    "31": ("قاع فركتل فوق المحور", "قمة فركتل تحت المحور"),
+    "32": ("اندفاع صاعد بحجم كبير", "هبوط حاد بحجم كبير"),
+    "33": ("تقاطع EMA 10/25 فوق EMA 50 مع SAR", "تقاطع EMA 10/25 تحت EMA 50 مع SAR"),
+    "34": ("تقاطع EMA 9/21 بشمعة كاملة فوقه", "تقاطع EMA 9/21 بشمعة كاملة تحته"),
+    "35": ("تقاطع MACD صاعد فوق EMA 20", "تقاطع MACD هابط تحت EMA 20"),
+    "36": ("تقاطع MACD صاعد قرب SMA 100", "تقاطع MACD هابط قرب SMA 100"),
+    "37": ("منطقة EMA 10/21 في اتجاه صاعد قوي", "منطقة EMA 10/21 في اتجاه هابط قوي"),
+    "38": ("كسر خط الاتجاه الهابط", "كسر خط الاتجاه الصاعد"),
+    "39": ("شمعة انعكاس صاعدة مع ستوكاستك منخفض", "شمعة انعكاس هابطة مع ستوكاستك مرتفع"),
+    "40": ("توافق المتوسطات وRSI وMACD صعوداً", "توافق المتوسطات وRSI وMACD هبوطاً"),
+    "41": ("ارتداد الستوكاستك مع GMMA صاعد", "انقلاب الستوكاستك مع GMMA هابط"),
+    "42": ("اختراق منطقة Supertrend", "كسر منطقة Supertrend"),
+    "43": ("كسر قاعدة سعرية (QFL)", "اختراق قمة سعرية (QFL معكوس)"),
+}
+_SG_XNM = {   # (الأسرة · للشراء · للبيع)
+    "O-verdict": ("trend", "📊 حكم المؤشرات العشرة: صعود", "📊 حكم المؤشرات العشرة: هبوط"),
+    "O-bottom": ("volatility", "🟢 مؤشر القاع", "🟢 مؤشر القاع"),
+    "F-lc": ("pattern", "🧠 أقرب الحالات (Lorentzian) صاعدة", "🧠 أقرب الحالات (Lorentzian) هابطة"),
+    "F-nw": ("trend", "〰️ الخط الناعم صاعد", "〰️ الخط الناعم هابط"),
+    "F-vote": ("trend", "🔮 تصويت التوقعات: صعود", "🔮 تصويت التوقعات: هبوط"),
+    "X-ad": ("volume", "🧲 السيولة تدخل والسعر لم يتحرك بعد (تجميع)", "🔻 السيولة تخرج والسعر لم ينزل بعد (تصريف)"),
+    "X-adt": ("volume", "🧲 صعود مدعوم بدخول السيولة", "🧲 نزول مدعوم بخروج السيولة"),
+    "X-rs": ("momentum", "💪 أقوى من البيتكوين", "💪 أضعف من البيتكوين"),
+    "W-crash": ("market", "🌊 انهيار السوق كله", "🌊 انهيار السوق كله"),
+    "M-fng": ("market", "😨 خوف في السوق", "🤑 طمع في السوق"),
+    "M-vix": ("market", "😱 VIX هادئ", "😱 VIX مرتفع"),
+    "M-dxy": ("market", "💱 الدولار يضعف", "💱 الدولار يقوى"),
+    "M-us10": ("market", "📜 عوائد السندات الأمريكية تنزل", "📜 عوائد السندات الأمريكية تصعد"),
+    "M-epu": ("market", "🏛️ عدم اليقين الاقتصادي منخفض", "🏛️ عدم اليقين الاقتصادي مرتفع"),
+    "M-gpr": ("market", "🌍 المخاطر الجيوسياسية منخفضة", "🌍 المخاطر الجيوسياسية مرتفعة"),
+    "M-tone": ("market", "📰 نبرة الأخبار إيجابية", "📰 نبرة الأخبار سلبية"),
+    "P-ls": ("market", "⚖️ ازدحام البيع في العقود (قراءة عكسية)", "⚖️ ازدحام الشراء في العقود (قراءة عكسية)"),
+    "P-tk": ("market", "🐂 الشراء العدواني في العقود", "🐻 البيع العدواني في العقود"),
+    "P-pc": ("market", "🎲 الخيارات تميل للصعود", "🎲 الخيارات تميل للهبوط"),
+    "P-mv": ("market", "🔗 MVRV منخفض", "🔗 MVRV مرتفع"),
+}
+_SG_OLDF = {"vp": "pattern", "avwap": "pattern", "pa": "pattern", "of": "volume", "cmf": "volume", "trend": "trend", "st": "trend", "adx": "trend",
+            "macd": "momentum", "rsi": "momentum"}
+_SG_FNG = lambda vs, j: (1.0 if vs[j] <= 20 else 0.4 if vs[j] <= 30 else -1.0 if vs[j] >= 80 else -0.4 if vs[j] >= 70 else 0.0)
+
+
+def _sg_lib():
+    """🎯 الأنظمة الـ36 والمؤشرات — كود القياس نفسه في مساحة أسماء خاصة (لا يختلط بأسماء اللوحة)"""
+    m = _SG.get("m")
+    if m is None:
+        import types as _ty
+        m = _ty.ModuleType("holy_signals")
+        m.__dict__.update(math=math, FEE=SG_FEE)
+        exec(compile(_SG_LIB, "holy_signals", "exec"), m.__dict__)
+        _SG["m"] = m
+    return m
+
+
+def _sg_meta():
+    """رمز ⇒ (الأسرة · اسم الشراء · اسم البيع) لكل إشارة"""
+    M = _SG.get("meta")
+    if M is None:
+        L = _sg_lib()
+        M = {c: (fam, _SG_NM.get(c, (nm, nm))[0], _SG_NM.get(c, (nm, nm))[1]) for c, (nm, fam, fn) in L.SYS.items()}
+        for k, nm, ic, _w, _d in _IND2_K:
+            M["O-" + k] = (_SG_OLDF.get(k, "trend"), f"{ic} {nm}: صاعد", f"{ic} {nm}: هابط")
+        M.update(_SG_XNM)
+        _SG["meta"] = M
+    return M
+
+
+def _sg_name(code, side):
+    m = _sg_meta().get(code)
+    return (m[1] if side > 0 else m[2]) if m else code
+
+
+def _sg_type(keys, side):
+    """نوع الإشارة: 🧲/🔻 فيها التجميع · 📈/📉 كلها اتجاه وزخم (بداية اتجاه) · 🟢/🔴 غير ذلك (ارتداد أو اختراق) · وحدها للسوق: 🌊 😨 🗞️"""
+    M = _sg_meta()
+    if len(keys) == 1:
+        k = keys[0]
+        if k == "W-crash":
+            return "crash"
+        if k == "M-fng":
+            return "fng"
+        if k.startswith("M-"):
+            return "eco"
+    if "X-ad" in keys:
+        return "acc" if side > 0 else "dist"
+    fams = [M.get(k, ("trend",))[0] for k in keys]
+    if all(f in _SG_FAM_TREND for f in fams) and "trend" in fams:
+        return "up" if side > 0 else "down"
+    return "buy" if side > 0 else "sell"
+
+
+def _sg_D(rows, daily):
+    return {"T": [int(r[0]) for r in rows], "O": [float(r[1]) for r in rows], "H": [float(r[2]) for r in rows], "L": [float(r[3]) for r in rows],
+            "C": [float(r[4]) for r in rows], "V": [float(r[5]) for r in rows], "n": len(rows), "blk": 5 if daily else 6}
+
+
+def _sg_series(D, dx, code, ks, vs, sigf, t0, ev, thr=0.4, stale=4 * 86400):
+    """سلسلة يومية منشورة قبل إغلاق الشمعة ⇒ شراء حين تصبح قراءتها ≥ thr · بيع ≤ −thr (نفس ci/sig_check7.py)"""
+    prev = 0
+    for t in range(max(210, t0 - 1), D["n"]):
+        tcl = D["T"][t] + dx
+        j = bisect.bisect_right(ks, tcl - 1) - 1
+        cur = 0
+        if j >= 0 and tcl - ks[j] <= stale:
+            try:
+                sv = sigf(vs, j)
+            except Exception:
+                sv = None
+            cur = 1 if sv is not None and sv >= thr else -1 if sv is not None and sv <= -thr else 0
+        if t >= t0 and cur and cur != prev:
+            ev.setdefault((code, cur), []).append(t)
+        prev = cur
+
+
+def _sg_old(D, daily, t0, ev):
+    """📊 قراءات اللوحة العشر وحكمها (و🟢 القاع على اليومي) ⇒ شراء حين تصبح ≥ +0.5 · بيع ≤ −0.5 (الحكم ±15 · القاع ≥ 50)"""
+    O, H, L, C, V = D["O"], D["H"], D["L"], D["C"], D["V"]
+    S2 = _i2_series(O, H, L, C, V)
+    DD = {"o": O, "h": H, "l": L, "c": C, "v": V, "t": D["T"]}
+    base = {k: w for k, _, _, w, _ in _IND2_K}
+    prev = {}
+    for t in range(max(210, t0 - 1), D["n"]):
+        try:
+            sg, _ = _i2_signals(DD, S2, t)
+        except Exception:
+            continue
+        cur = {("O-" + k): (1 if v >= 0.5 else -1 if v <= -0.5 else 0) for k, (v, _) in sg.items()}
+        sc = _i2_combine(sg, base) * 100
+        cur["O-verdict"] = 1 if sc >= 15 else -1 if sc <= -15 else 0
+        if daily:
+            a = _bot_at(C, S2["rsi"], t)
+            cur["O-bottom"] = 1 if a and a[0] >= 50 else 0
+        if t >= t0:
+            for k, v in cur.items():
+                if v and v != prev.get(k, 0):
+                    ev.setdefault((k, v), []).append(t)
+        prev = cur
+
+
+def _sg_extra(D, rows, daily, ctx, t0, ev):
+    """🔮 قراءات التوقعات · 🧲 · 💪 · 😨 🗞️ · 🏦 — كل واحدة بدالة اللوحة نفسها (نفس ci/sig_check7.py)"""
+    dx = 86400 if daily else 14400
+    try:
+        P = _fc_pack([list(r) for r in rows], [list(r) for r in ctx["drows"]], dx, 86400)
+        X = {"H": 7 if daily else 6, "hn": "—", "fng": ctx.get("fng")}
+        prev = {}
+        for t in range(max(210, t0 - 1), D["n"]):
+            sg, _ = _fc_read(P, t, "w" if daily else "d", X)
+            up, dn, n_, vk, vt = _fc_vote(sg)
+            cur = {"F-vote": 1 if vk in ("u", "su") else -1 if vk in ("d", "sd") else 0}
+            for kk in ("lc", "nw"):
+                v = sg.get(kk)
+                cur["F-" + kk] = 0 if not v else (1 if v[0] >= 0.5 else -1 if v[0] <= -0.5 else 0)
+            if t >= t0:
+                for k, v in cur.items():
+                    if v and v != prev.get(k, 0):
+                        ev.setdefault((k, v), []).append(t)
+            prev = cur
+    except Exception:
+        pass
+    if daily:
+        try:
+            S = _xc_ad(D["T"], D["H"], D["L"], D["C"], D["V"])
+            pa = pb = 0
+            for t in range(max(210, t0 - 1), D["n"]):
+                q = _xc_ad_at(t, S, D["C"])
+                a = (1 if q[0] == "acc" else -1 if q[0] == "dist" else 0) if q else 0
+                b = (1 if q[0] == "up" else -1 if q[0] == "down" else 0) if q else 0
+                if t >= t0:
+                    if a and a != pa:
+                        ev.setdefault(("X-ad", a), []).append(t)
+                    if b and b != pb:
+                        ev.setdefault(("X-adt", b), []).append(t)
+                pa, pb = a, b
+        except Exception:
+            pass
+        B = ctx.get("btc") or {}
+        if B and not ctx.get("sym", "").startswith("BTC-"):
+            R = [(D["C"][i] / B[D["T"][i]]) if B.get(D["T"][i]) else None for i in range(D["n"])]
+            E, e = [None] * D["n"], None
+            for i, x in enumerate(R):
+                if x is None:
+                    e = None
+                    continue
+                e = x if e is None else e + (x - e) * (2.0 / 21.0)
+                E[i] = e
+            pr = 0
+            for t in range(max(210, t0 - 1), D["n"]):
+                q = _xc_rs_at(t, R, E)
+                c = (1 if q[0] == "strong" else -1 if q[0] == "weak" else 0) if q else 0
+                if t >= t0 and c and c != pr:
+                    ev.setdefault(("X-rs", c), []).append(t)
+                pr = c
+    for k, (ks, vs) in (ctx.get("mkt") or {}).items():
+        sf = _SG_FNG if k == "fng" else (lambda vs_, j, k=k: _mac_sig(k, vs_, j)[0])
+        _sg_series(D, dx, "M-" + k, ks, vs, sf, t0, ev)
+    for k, (ks, vs) in (ctx.get("pro") or {}).items():
+        sf = {"ls": lambda vs_, j: _pro_ls_sig(vs_, j)[0], "tk": lambda vs_, j: _pro_tk_sig(vs_, j)[0],
+              "pc": lambda vs_, j: _pro_pc_sig(vs_, j)[0], "mv": lambda vs_, j: _pro_mv_sig(vs_[j])}[k]
+        _sg_series(D, dx, "P-" + k, ks, vs, sf, t0, ev)
+
+
+def _sg_events(rows, daily, ctx, t0=210):
+    """عملة واحدة · فريم واحد ⇒ (الشموع, {(الرمز, الجهة): [أرقام الشموع ≥ t0]}) — نفس كود القياس"""
+    L = _sg_lib()
+    D = _sg_D(rows, daily)
+    ev = {}
+    if D["n"] < 260:
+        return D, ev
+    S1, Dm = L.build(D), L.mirror(D)
+    Sm = L.build(Dm)
+    for code, (_nm, _fam, fn) in L.SYS.items():
+        for side, DD, SS in ((1, D, S1), (-1, Dm, Sm)):
+            try:
+                lst = sorted(i for i in fn(DD, SS) if i >= max(210, t0))
+            except Exception:
+                lst = []
+            if lst:
+                ev[(code, side)] = lst
+    try:
+        _sg_old(D, daily, t0, ev)
+    except Exception:
+        pass
+    _sg_extra(D, rows, daily, ctx, t0, ev)
+    return D, ev
+
+
+def _sg_mkt(pdb, fdb):
+    """😨 + 🗞️ السلاسل اليومية العامة من ملفات اللوحة (بلا شبكة) — كل واحدة مؤخّرة بتأخر نشرها"""
+    out = {}
+    for k in ("vix", "dxy", "us10", "epu", "gpr", "tone"):
+        ks, vs = _pro_sorted(pdb.get(k))
+        if len(vs) > 30:
+            out[k] = ([x + SG_MLAG.get(k, 0) * 86400 for x in ks], vs)
+    f = _sg_fng_raw(fdb)
+    if f:
+        out["fng"] = ([x + SG_MLAG.get("fng", 0) * 86400 for x in f[0]], f[1])
+    return out
+
+
+def _sg_fng_raw(fdb):
+    d = ((fdb or {}).get("fng") or {}).get("d") or {}
+    ks = sorted(int(x) for x in d)
+    return (ks, [d[str(x)] for x in ks]) if len(ks) > 30 else None
+
+
+def _sg_ctx(sym, drows, pdb, mkt, fng, btc):
+    ccy = sym.split("-")[0]
+    pro = {}
+    for k in ("ls", "tk", "pc", "mv"):
+        e_ = (pdb.get(k) or {}).get(ccy)
+        if isinstance(e_, dict) and e_.get("d"):
+            ks, vs = _pro_sorted(e_)
+            if len(vs) >= 30:
+                pro[k] = (ks, vs)
+    return {"sym": sym, "drows": drows, "fng": fng, "btc": btc, "mkt": mkt, "pro": pro}
+
+
+def _sg_z(D):
+    """🌊 تحرك كل شمعة 4 ساعات بمقياس تذبذب العملة (آخر 120 شمعة)"""
+    C = D["C"]
+    lr = [0.0] + [math.log(C[i] / C[i - 1]) if C[i] > 0 and C[i - 1] > 0 else 0.0 for i in range(1, D["n"])]
+    out = {}
+    for k in range(130, D["n"]):
+        w = lr[k - 120:k]
+        mu = sum(w) / 120
+        sd = math.sqrt(sum((x - mu) ** 2 for x in w) / 119) or 1e-9
+        out[k] = lr[k] / sd
+    return out
+
+
+def _sg_crash(F4, k0=210):
+    """🌊 شموع انهيار السوق كله: ≥ 30% من العملات (10 فأكثر) نزلت ≥ 2.5× حركتها المعتادة في الشمعة نفسها ⇒ تُضاف لكل عملة"""
+    Z, ZI = {}, {}
+    for sym, (D, E) in F4.items():
+        zz = _sg_z(D)
+        ZI[sym] = zz
+        for k, z in zz.items():
+            Z.setdefault(D["T"][k], []).append(z)
+    CR = {t for t, z in Z.items() if len(z) >= 10 and sum(1 for x in z if x <= -2.5) / len(z) >= 0.3}
+    for sym, (D, E) in F4.items():
+        idx = [i for i in range(max(210, k0), D["n"]) if D["T"][i] in CR]
+        if idx:
+            E[("W-crash", 1)] = idx
+            E[("W-crash", -1)] = list(idx)
+    return CR, Z
+
+
+def _sg_mean(v):
+    return sum(v) / len(v) if v else 0.0
+
+
+def _sg_hit(v):
+    return sum(1 for x in v if x > 0) / len(v) * 100.0 if v else 0.0
+
+
+def _sg_search(COIN, prog=None):
+    """🔎 كل إشارة وحدها + التركيبات (2 … 6 معاً) — البحث على أول 60% من الوقت فقط · الحكم على آخر 40% (نفس ci/sig_check9.py)"""
+    L = _sg_lib()
+    names = list(COIN)
+    PRE = {}
+    for sym, (D4, E4, Dd, Ed, st) in COIN.items():
+        for fr, D, E in (("4H", D4, E4), ("1D", Dd, Ed)):
+            h, lk = SG_HZ[fr], SG_LK[fr]
+            act = {k: set(j for i in lst for j in range(i, min(D["n"], i + lk))) for k, lst in E.items() if lst}
+            rl = {i: L.fwd(D["C"], i, h, 1) for i in range(210, D["n"])}
+            rs = {i: L.fwd(D["C"], i, h, -1) for i in range(210, D["n"])}
+            cut = bisect.bisect_left(D["T"], st)
+            PRE[(sym, fr)] = (act, rl, rs, cut, D["T"])
+
+    def base(fr, side):
+        l, t = [], []
+        for sym in names:
+            act, rl, rs, cut, T = PRE[(sym, fr)]
+            for i, x in (rl if side > 0 else rs).items():
+                if x is not None:
+                    (l if i < cut else t).append(x)
+        return l, t
+
+    def evalc(fr, keys, side, want=False):
+        l, t, ev = [], [], []
+        for ci, sym in enumerate(names):
+            act, rl, rs, cut, T = PRE[(sym, fr)]
+            sets = [act.get(k) for k in keys]
+            if any(s is None for s in sets):
+                continue
+            inter = set.intersection(*sorted(sets, key=len))
+            r = rl if side > 0 else rs
+            last = -10 ** 9
+            for i in sorted(inter):
+                if i - 1 in inter or i - last < SG_LK[fr]:
+                    continue
+                last = i
+                x = r.get(i)
+                if x is None:
+                    continue
+                if i < cut:
+                    l.append(x)
+                else:
+                    t.append(x)
+                    if want:
+                        ev.append([ci, T[i]])
+        return l, t, ev
+
+    def score(v, b):
+        return (_sg_mean(v) - _sg_mean(b)) * math.sqrt(len(v)) if v else -9.0
+
+    def mk(fr, side, keys, l, t, ev, rare=False):
+        ks = [k[0] for k in keys]
+        return {"id": f"{fr}|{side}|{'+'.join(ks)}", "f": fr, "s": side, "k": ks, "ty": _sg_type(ks, side),
+                "nl": len(l), "wl": sum(1 for x in l if x > 0), "ml": round(_sg_mean(l), 5),
+                "nt": len(t), "wt": sum(1 for x in t if x > 0), "mt": round(_sg_mean(t), 5), "rare": bool(rare),
+                "ev": ev if len(ev) <= 300 else None}
+
+    out, BASE, WK, step = {}, {}, {}, 0
+    for fr in SG_FR:
+        wk = []
+        for sym in names:
+            act, rl, rs, cut, T = PRE[(sym, fr)]
+            if cut < len(T):
+                wk.append((T[-1] - T[cut]) / 604800.0)
+        WK[fr] = round(_sg_mean(wk), 2) if wk else 0.0
+        for side in (1, -1):
+            step += 1
+            if prog:
+                prog(78 + 5 * step, f"البحث عن التركيبات: {SG_FN[fr]} · {'شراء' if side > 0 else 'بيع'}")
+            bl, bt = base(fr, side)
+            BASE[f"{fr}|{side}"] = {"hl": round(_sg_hit(bl), 1), "ml": round(_sg_mean(bl), 5), "ht": round(_sg_hit(bt), 1),
+                                    "mt": round(_sg_mean(bt), 5), "nl": len(bl), "nt": len(bt)}
+            singles = []
+            keys = sorted(set(k for sym in names for k in PRE[(sym, fr)][0] if k[1] == side))
+            for k in keys:
+                l, t, ev = evalc(fr, [k], side, True)
+                if len(l) + len(t) >= 3:
+                    e = mk(fr, side, [k], l, t, ev)
+                    out[e["id"]] = e
+                if len(l) >= 6:
+                    singles.append((score(l, bl), k))
+            singles.sort(reverse=True)
+            top1 = [k for s, k in singles[:SG_TOPS] if s > 0]
+            seen, cur, allc = set(), [(k,) for k in top1], []
+            for size in range(2, 7):
+                cand = {}
+                for c in cur:
+                    for k in top1:
+                        if k in c:
+                            continue
+                        nc = tuple(sorted(c + (k,)))
+                        if nc in seen:
+                            continue
+                        seen.add(nc)
+                        l, t, _ = evalc(fr, list(nc), side)
+                        if len(l) >= 6 and _sg_mean(l) > _sg_mean(bl):
+                            cand[nc] = (score(l, bl), l, t)
+                best = sorted(cand.items(), key=lambda x: -x[1][0])[:SG_BEAM]
+                if not best:
+                    break
+                cur = [c for c, _ in best]
+                for c, (s, l, t) in best[:SG_KEEP]:
+                    l, t, ev = evalc(fr, list(c), side, True)
+                    e = mk(fr, side, c, l, t, ev)
+                    out[e["id"]] = e
+                allc += [(c, l, t) for c, (s, l, t) in cand.items()]
+            rare = [(_sg_hit(l), len(l), c) for c, l, t in allc if 6 <= len(l) <= 30 and _sg_hit(l) >= 75]
+            rare.sort(key=lambda x: (-x[0], -x[1]))
+            for hh, nn, c in rare[:SG_RAREK]:
+                l, t, ev = evalc(fr, list(c), side, True)
+                e = mk(fr, side, c, l, t, ev, rare=True)
+                if e["id"] in out:
+                    out[e["id"]]["rare"] = True
+                else:
+                    out[e["id"]] = e
+    return {"e": list(out.values()), "base": BASE, "wk": WK}
+
+
+def _sg_compass_states(Dd_btc, dailies):
+    """🧭 حالة السوق لكل يوم: البيتكوين فوق/تحت متوسط 200 يوم + نصيب العملات فوق متوسط 50 يوماً ⇒ صاعد · مختلط · نازل —
+    منعّمة: لا تتغير إلا إذا ثبتت الحالة الجديدة 3 أيام متتالية (القياس: الحالة الخام تتقلب كل 2–3 أيام)"""
+    L = _sg_lib()
+    C = Dd_btc["C"]
+    b200 = L.sma(C, 200)
+    BT = {Dd_btc["T"][i]: (C[i] > b200[i]) for i in range(Dd_btc["n"]) if b200[i] is not None}
+    AB = {}
+    for D in dailies:
+        s50 = L.sma(D["C"], 50)
+        for i in range(D["n"]):
+            if s50[i] is not None:
+                AB.setdefault(D["T"][i], []).append(D["C"][i] > s50[i])
+    seq, cur, cand, cnt, since = [], None, None, 0, None
+    for t in sorted(BT):
+        a = AB.get(t) or []
+        if len(a) < 10:
+            continue
+        sh = sum(a) / len(a)
+        raw = "up" if BT[t] and sh >= 0.6 else "down" if (not BT[t]) and sh <= 0.4 else "flat"
+        if cur is None:
+            cur, since = raw, t
+        elif raw != cur:
+            if raw == cand:
+                cnt += 1
+            else:
+                cand, cnt = raw, 1
+            if cnt >= 3:
+                cur, since, cand, cnt = cand, t, None, 0
+        else:
+            cand, cnt = None, 0
+        seq.append((t, raw, cur, since, round(sh, 3), bool(BT[t]), len(a), sum(a)))
+    return seq
+
+
+def _sg_compass_hist(COIN):
+    """🧭 ماذا أعطى الشراء العشوائي لأي عملة بعد أسبوع وأسبوعين في كل حالة (منعّمة) + كم تدوم"""
+    btc = COIN.get("BTC-USDT")
+    if not btc:
+        return {}
+    L = _sg_lib()
+    seq = _sg_compass_states(btc[2], [v[2] for v in COIN.values()])
+    S = {t: s for t, raw, s, *_ in seq}
+    res = {}
+    for h in (7, 14):
+        acc = {"up": [], "flat": [], "down": []}
+        for sym, (D4, E4, Dd, Ed, st) in COIN.items():
+            for i in range(210, Dd["n"]):
+                s = S.get(Dd["T"][i])
+                x = L.fwd(Dd["C"], i, h, 1) if s else None
+                if x is not None:
+                    acc[s].append(x)
+        for s, v in acc.items():
+            res.setdefault(s, {})[f"m{h}"] = round(_sg_mean(v), 5)
+            res[s][f"h{h}"] = round(_sg_hit(v), 1)
+            res[s]["n"] = sum(1 for x in seq if x[2] == s)
+    runs, cur, n0 = [], None, 0
+    for x in seq:
+        if x[2] != cur:
+            if cur:
+                runs.append((cur, n0))
+            cur, n0 = x[2], 0
+        n0 += 1
+    for s in res:
+        r = sorted(n for k, n in runs if k == s)
+        res[s]["run"] = r[len(r) // 2] if r else 0
+    return res
+
+
+def _sg_prog(jd, p, msg):
+    _safe(save_json_atomic, os.path.join(jd, "prog.json"), {"pct": round(p), "msg": msg, "ts": time.time()}, default=None)
+
+
+def sg_build(jd, job):
+    """🏗️ (عملية منفصلة · بلا شبكة) دليل الإشارات: كل إشارة وتركيباتها على تاريخ عملات القياس ⇒ _signals/catalog.json"""
+    t0 = time.time()
+    coins = [c for c in (job.get("coins") or []) if isinstance(c, str)]
+    cdb = _safe(load_json, SG_CFILE, default={}) or {}
+    pdb, fdb = _pro_db(), _fc_db()
+    mkt, fng = _sg_mkt(pdb, fdb), _sg_fng_raw(fdb)
+    bd = ((cdb.get("c") or {}).get("BTC-USDT") or {}).get("d") or []
+    btc = {int(r[0]): float(r[4]) for r in bd}
+    COIN = {}
+    for k, sym in enumerate(coins):
+        _sg_prog(jd, 3 + 72.0 * k / max(1, len(coins)), f"{sym.split('-')[0]}: حساب كل الإشارات على تاريخها ({k + 1} من {len(coins)})")
+        r4 = ((cdb.get("c4") or {}).get(sym) or {}).get("d") or []
+        rd = ((cdb.get("c") or {}).get(sym) or {}).get("d") or []
+        if len(r4) < SG_MIN["4H"] or len(rd) < SG_MIN["1D"]:
+            continue
+        ctx = _sg_ctx(sym, rd, pdb, mkt, fng, btc)
+        D4, E4 = _sg_events(r4, False, ctx)
+        Dd, Ed = _sg_events(rd, True, ctx)
+        COIN[sym] = (D4, E4, Dd, Ed, D4["T"][int(D4["n"] * 0.6)])
+        time.sleep(0.002)
+    if len(COIN) < 3:
+        return {"ok": False, "err": "تاريخ العملات غير كافٍ بعد"}
+    _sg_prog(jd, 76, "🌊 انهيارات السوق كله على التاريخ")
+    _sg_crash({s: (v[0], v[1]) for s, v in COIN.items()})
+    cat = _sg_search(COIN, lambda p, m: _sg_prog(jd, p, m))
+    _sg_prog(jd, 98, "🧭 بوصلة السوق على التاريخ")
+    cat["compass"] = _sg_compass_hist(COIN)
+    cat.update(v=1, ts=time.time(), coins=list(COIN), secs=round(time.time() - t0), lag=SG_MLAG,
+               span={fr: [min(v[0 if fr == "4H" else 2]["T"][0] for v in COIN.values()), max(v[0 if fr == "4H" else 2]["T"][-1] for v in COIN.values())]
+                     for fr in SG_FR})
+    save_json_atomic(SG_CAT, cat)
+    return {"ok": True, "n": len(cat["e"]), "coins": len(COIN), "secs": cat["secs"]}
+
+
+def sg_scan_calc(jd, job):
+    """🔍 (عملية منفصلة · بلا شبكة) آخر شمعة مغلقة لكل عملة وفريم: الإشارات الشغّالة الآن والشمعة السابقة + 🌊 + 🗞️ اليوم"""
+    coins = [c for c in (job.get("coins") or []) if isinstance(c, str)]
+    frs = [f for f in (job.get("frs") or []) if f in SG_FR]
+    cdb = _safe(load_json, SG_CFILE, default={}) or {}
+    pdb, fdb = _pro_db(), _fc_db()
+    mkt, fng = _sg_mkt(pdb, fdb), _sg_fng_raw(fdb)
+    bd = ((cdb.get("c") or {}).get("BTC-USDT") or {}).get("d") or []
+    btc = {int(r[0]): float(r[4]) for r in bd}
+    out, F4 = {}, {}
+    for k, sym in enumerate(coins):
+        _sg_prog(jd, 90.0 * k / max(1, len(coins)), f"{sym.split('-')[0]} ({k + 1} من {len(coins)})")
+        rd = ((cdb.get("c") or {}).get(sym) or {}).get("d") or []
+        ctx = _sg_ctx(sym, rd, pdb, mkt, fng, btc)
+        for fr in frs:
+            sec, bar, ib = SG_BAR[fr]
+            rows = ((cdb.get(sec) or {}).get(sym) or {}).get("d") or []
+            if len(rows) < 300 or len(rd) < 220:
+                continue
+            D, E = _sg_events(rows, fr == "1D", ctx, t0=len(rows) - SG_LK[fr] - 3)
+            out.setdefault(sym, {})[fr] = (D, E)
+            if fr == "4H":
+                F4[sym] = (D, E)
+        time.sleep(0.002)
+    crash = None
+    if F4:
+        CR, Z = _sg_crash(F4, k0=min(D["n"] for D, E in F4.values()) - 8)
+        tl = max(D["T"][-1] for D, E in F4.values())
+        z = Z.get(tl) or []
+        crash = {"t": tl, "n": len(z), "k": sum(1 for x in z if x <= -2.5), "on": tl in CR}
+    res = {}
+    for sym, frs_ in out.items():
+        for fr, (D, E) in frs_.items():
+            i, lk = D["n"] - 1, SG_LK[fr]
+            a1 = sorted(f"{c}:{s}" for (c, s), lst in E.items() if any(i - lk < j <= i for j in lst))
+            a0 = sorted(f"{c}:{s}" for (c, s), lst in E.items() if any(i - 1 - lk < j <= i - 1 for j in lst))
+            res.setdefault(sym, {})[fr] = {"t": D["T"][i], "px": D["C"][i], "a1": a1, "a0": a0, "lo": min(D["L"][i - lk + 1:i + 1]),
+                                           "hi": max(D["H"][i - lk + 1:i + 1]), "ch": D["C"][i] / D["C"][i - 1] - 1.0 if D["C"][i - 1] else 0.0}
+    return {"ok": True, "c": res, "crash": crash, "ts": time.time()}
+
+
+def sg_child(jd, proc=False):
+    """🧪 العامل: يكتب out.json · بعملية منفصلة (proc): بلا شبكة (كل دوال الجلب معطّلة فيها) وبأولوية منخفضة"""
+    if proc:
+        try:
+            if hasattr(os, "nice"):
+                os.nice(10)
+        except Exception:
+            pass
+        for fn in ("_okx_pub", "_http_json", "_pro_text", "_pro_bytes", "_fc_okx_rows", "_fc_bin_rows", "tg_send", "app_feed_push"):
+            globals()[fn] = (lambda *a, **k: None)
+    job = _safe(load_json, os.path.join(jd, "job.json"), default={}) or {}
+    try:
+        out = sg_build(jd, job) if job.get("mode") == "build" else sg_scan_calc(jd, job)
+        rc = 0
+    except Exception as ex:
+        out, rc = {"ok": False, "err": f"{type(ex).__name__}: {ex}"}, 1
+    save_json_atomic(os.path.join(jd, "out.json"), out)
+    return rc
+
+
+def _sg_spawn(mode, job):
+    """عملية منفصلة بأولوية منخفضة (مثل الاختبار التجريبي) · في برنامج ويندوز المجمّع: خيط"""
+    os.makedirs(SG_DIR, exist_ok=True)
+    jd = os.path.join(SG_DIR, "job_" + mode)
+    shutil.rmtree(jd, ignore_errors=True)
+    os.makedirs(jd, exist_ok=True)
+    save_json_atomic(os.path.join(jd, "job.json"), dict(job, mode=mode, ts=time.time()))
+    if getattr(sys, "frozen", False) or os.environ.get("HOLY_SIG_THREAD") == "1":
+        th = threading.Thread(target=_safe, args=(sg_child, jd), daemon=True)
+        th.start()
+        return {"jd": jd, "th": th, "t0": time.time(), "mode": mode}
+    flags = (0x08000000 | 0x00004000) if os.name == "nt" else 0
+    lf = open(os.path.join(jd, "w.log"), "w", encoding="utf-8")
+    p = subprocess.Popen([PYTHON_EXE, "-u", os.path.abspath(__file__), "--holy-sig", jd], cwd=jd, stdout=lf, stderr=lf, creationflags=flags,
+                         env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    return {"jd": jd, "p": p, "lf": lf, "t0": time.time(), "mode": mode}
+
+
+def _sg_job_done(job):
+    if not job:
+        return True
+    if "p" in job:
+        if job["p"].poll() is None:
+            return False
+        try:
+            job["lf"].close()
+        except Exception:
+            pass
+        return True
+    return not job["th"].is_alive()
+
+
+def _sg_job_out(job):
+    return _safe(load_json, os.path.join(job["jd"], "out.json"), default=None)
+
+
+def _sg_job_prog(job):
+    return _safe(load_json, os.path.join(job["jd"], "prog.json"), default={}) or {}
+
+
+def _sg_job_stop(job):
+    try:
+        if job and "p" in job and job["p"].poll() is None:
+            job["p"].kill()
+    except Exception:
+        pass
+
+
+# ───────────── ⚙️ الإعدادات · الحالة ─────────────
+def sg_cfg():
+    c = _safe(app_cfg, default={}) or {}
+
+    def iv(k, d, lo, hi):
+        try:
+            return max(lo, min(hi, int(c.get(k) if c.get(k) is not None else d)))
+        except Exception:
+            return d
+    ty = c.get("sg_types") if isinstance(c.get("sg_types"), dict) else {}
+    fr = c.get("sg_fr") if isinstance(c.get("sg_fr"), dict) else {}
+    coins = c.get("sg_coins")
+    coins = [str(x).upper() for x in coins if isinstance(x, str)] if isinstance(coins, list) else None
+    qh = c.get("sg_quiet")
+    qh = [int(qh[0]) % 24, int(qh[1]) % 24] if isinstance(qh, list) and len(qh) == 2 and all(isinstance(x, (int, float)) for x in qh) else None
+    sm = c.get("sg_sum")
+    ch = str(c.get("sg_ch") or "both")
+    return {"on": bool(c.get("sg_on", True)), "thr": iv("sg_thr", 65, 50, 95), "min": iv("sg_min", 15, 3, 200),
+            "rnd": bool(c.get("sg_rnd", True)), "rare": bool(c.get("sg_rare", True)), "rmin": iv("sg_rmin", 6, 3, 50),
+            "types": {k: bool(ty.get(k, True)) for k in SG_TY}, "coins": coins, "cap": iv("sg_cap", 8, 0, 100),
+            "quiet": qh, "sum": (int(sm) % 24) if isinstance(sm, (int, float)) and not isinstance(sm, bool) else None,
+            "ch": ch if ch in SG_CH else "both", "fr": {f: bool(fr.get(f, True)) for f in SG_FR}}
+
+
+def sg_coins(cfg=None):
+    """🪙 عملات الإشعارات: اختيارك · وإلا عملات الشريط (📊)"""
+    cfg = cfg or sg_cfg()
+    return list(cfg["coins"]) if cfg["coins"] is not None else list(ticker_cfg()["coins"])
+
+
+def _sg_universe():
+    tick = list(ticker_cfg()["coins"])
+    mine = sg_coins()
+    u = list(dict.fromkeys(["BTC-USDT"] + mine + tick + list(MKT_COINS)))
+    return u[:max(SG_UNI, len(dict.fromkeys(["BTC-USDT"] + mine + tick)))]
+
+
+def _sg_st():
+    st = _safe(load_json, SG_FILE, default={}) or {}
+    return st if isinstance(st, dict) else {}
+
+
+def _sg_save(st):
+    _safe(save_json_atomic, SG_FILE, st, default=None)
+
+
+def _sg_cat():
+    """📒 الدليل من الملف (يُعاد تحميله حين يتغير)"""
+    try:
+        mt = os.path.getmtime(SG_CAT)
+    except Exception:
+        return None
+    if _SG["cat"] is None or _SG["cat_mt"] != mt:
+        c = _safe(load_json, SG_CAT, default=None)
+        if isinstance(c, dict) and isinstance(c.get("e"), list):
+            c["idx"] = {e["id"]: e for e in c["e"]}
+            _SG["cat"], _SG["cat_mt"] = c, mt
+    return _SG["cat"]
+
+
+def _sg_rec(e, st):
+    """📊 سجل الإشارة: آخر 40% من التاريخ (لم تُختر عليه) + السجل الحي بعده — 💎 النادرة: كل التاريخ + الحي (وسطر الاختبار وحده)"""
+    lv = (st.get("rec") or {}).get(e["id"]) or [0, 0, 0.0]
+    n, w, sm = e["nt"] + lv[0], e["wt"] + lv[1], e["mt"] * e["nt"] + lv[2]
+    if e.get("rare"):
+        n, w, sm = n + e["nl"], w + e["wl"], sm + e["ml"] * e["nl"]
+    return {"n": n, "w": w, "h": (w / n * 100.0) if n else 0.0, "m": (sm / n) if n else 0.0, "ln": lv[0], "lw": lv[1]}
+
+
+def _sg_pass(e, st, cfg, cat):
+    """هل تصل إشعاراتها؟ النسبة · العدد · أفضل من العشوائي · 💎 بحدها الخاص"""
+    if not cfg["types"].get(e.get("ty") or "buy", True) or not cfg["fr"].get(e["f"], True):
+        return False
+    r = _sg_rec(e, st)
+    b = (cat.get("base") or {}).get(f"{e['f']}|{e['s']}") or {}
+    if e.get("rare"):
+        if not cfg["rare"] or r["n"] < cfg["rmin"] or r["h"] < cfg["thr"]:
+            return False
+        return e["nt"] < 2 or (e["wt"] / e["nt"] * 100.0 > float(b.get("ht") or 0) and e["mt"] > float(b.get("mt") or 0))
+    if r["n"] < cfg["min"] or r["h"] < cfg["thr"]:
+        return False
+    return (not cfg["rnd"]) or (r["h"] > float(b.get("ht") or 0) and r["m"] > float(b.get("mt") or 0))
+
+
+def sg_estimate(cfg=None, st=None):
+    """🗓️ كم إشعاراً بالأسبوع لو كانت هذه الإعدادات أيام الاختبار (على عملاتك · إشعار واحد لكل عملة ونوع وشمعة · بعد الحد اليومي)"""
+    cat = _sg_cat()
+    if not cat:
+        return None
+    cfg = cfg or sg_cfg()
+    st = st if st is not None else _sg_st()
+    coins = cat.get("coins") or []
+    mine = set(sg_coins(cfg))
+    sel = {i for i, s in enumerate(coins) if s in mine}
+    share = len(sel) / len(coins) if coins else 0.0
+    grp, big, mk, ne = set(), 0.0, set(), 0
+    ina_on = bool((_safe(ina_cfg, default={}) or {}).get("on"))
+    for e in cat["e"]:
+        if e["ty"] in ("crash", "fng", "eco"):
+            if cfg["types"].get(e["ty"], True) and not (e["ty"] == "crash" and ina_on) and (e["ty"] != "crash" or e["f"] == "4H"):
+                for ci, t in (e.get("ev") or []):
+                    mk.add((e["ty"], e["k"][0], e["s"], t // 86400))
+            continue
+        if not _sg_pass(e, st, cfg, cat):
+            continue
+        ne += 1
+        wk = float((cat.get("wk") or {}).get(e["f"]) or 0) or 1.0
+        if e.get("ev") is None:
+            big += e["nt"] * share / wk
+            continue
+        for ci, t in e["ev"]:
+            if ci in sel:
+                grp.add((ci, e["ty"], e["f"], t))
+    w4 = float((cat.get("wk") or {}).get("4H") or 0) or 1.0
+    per = len([g for g in grp if g[2] == "4H"]) / w4 + len([g for g in grp if g[2] == "1D"]) / (float((cat.get("wk") or {}).get("1D") or 0) or 1.0)
+    per += big + len(mk) / w4
+    capw = cfg["cap"] * 7 if cfg["cap"] else None
+    return {"wk": round(per, 1), "cut": round(min(per, capw), 1) if capw else round(per, 1), "capped": bool(capw and per > capw), "n": ne}
+
+
+def sg_set(v):
+    v = v or {}
+    c = app_cfg()
+    for k, key in (("on", "sg_on"), ("rnd", "sg_rnd"), ("rare", "sg_rare")):
+        if v.get(k) is not None:
+            c[key] = bool(v[k])
+    for k, key, lo, hi in (("thr", "sg_thr", 50, 95), ("min", "sg_min", 3, 200), ("rmin", "sg_rmin", 3, 50), ("cap", "sg_cap", 0, 100)):
+        if v.get(k) is not None:
+            try:
+                c[key] = max(lo, min(hi, int(v[k])))
+            except Exception:
+                pass
+    if isinstance(v.get("types"), dict):
+        t = dict(c.get("sg_types") or {})
+        t.update({k: bool(x) for k, x in v["types"].items() if k in SG_TY})
+        c["sg_types"] = t
+    if isinstance(v.get("fr"), dict):
+        f = dict(c.get("sg_fr") or {})
+        f.update({k: bool(x) for k, x in v["fr"].items() if k in SG_FR})
+        c["sg_fr"] = f
+    if "coins" in v:
+        if v["coins"] is None:
+            c.pop("sg_coins", None)
+        elif isinstance(v["coins"], list):
+            out = []
+            for x in v["coins"][:40]:
+                s = str(x or "").strip().upper().replace("/", "-").replace(" ", "")
+                if s and re.fullmatch(r"[A-Z0-9]{1,15}(-[A-Z0-9]{2,8})?", s):
+                    s = s if "-" in s else s + "-USDT"
+                    if s not in out:
+                        out.append(s)
+            c["sg_coins"] = out
+    if "quiet" in v:
+        q = v["quiet"]
+        c["sg_quiet"] = [int(q[0]) % 24, int(q[1]) % 24] if isinstance(q, list) and len(q) == 2 else None
+    if "sum" in v:
+        c["sg_sum"] = (int(v["sum"]) % 24) if isinstance(v["sum"], (int, float)) and not isinstance(v["sum"], bool) else None
+    if v.get("ch") in SG_CH:
+        c["sg_ch"] = v["ch"]
+    save_app_cfg(c)
+    p = sg_cfg()
+    return {"ok": True, "msg": ("🎯 إشعارات الإشارات مفعّلة — " + f"{p['thr']}% فأكثر · {_sg_ar(p['min'], 'time')} فأكثر · " + SG_CH[p["ch"]]) if p["on"]
+            else "🔕 إشعارات الإشارات متوقفة", "cfg": p, "est": sg_estimate(p)}
+
+
+# ───────────── 📨 النصوص ─────────────
+_SG_AR = {"day": ("يوم واحد", "يومين", "أيام", "يوماً"), "time": ("مرة واحدة", "مرتين", "مرات", "مرة"), "coin": ("عملة واحدة", "عملتين", "عملات", "عملة"),
+          "sig": ("إشارة واحدة", "إشارتان", "إشارات", "إشارة")}
+
+
+def _sg_ar(n, kind):
+    """العدد ومعدوده بالعربية: 1 · 2 · من 3 إلى 10 جمع · 11 فأكثر مفرد (منذ 55 يوماً · ظهرت 13 مرة · 9 مرات)"""
+    w = _SG_AR[kind]
+    n = int(n)
+    return w[0] if n == 1 else w[1] if n == 2 else f"{n} {w[2]}" if 3 <= n % 100 <= 10 else f"{n} {w[3]}"
+
+
+def _sg_pct(x):
+    return f"{x * 100:+.1f}%"
+
+
+def _sg_keys_txt(keys, side, mx=6):
+    nm = [_sg_name(k, side) for k in keys]
+    return " · ".join(nm[:mx]) + (f" · و{len(nm) - mx} غيرها" if len(nm) > mx else "")
+
+
+def _sg_rec_line(e, r, cat, rare=False):
+    b = (cat.get("base") or {}).get(f"{e['f']}|{e['s']}") or {}
+    rnd = f"{'الشراء' if e['s'] > 0 else 'البيع'} العشوائي {float(b.get('ht') or 0):.0f}%"
+    mv = f"المتوسط بعد {SG_HZN[e['f']]} {_sg_pct(r['m'] if e['s'] > 0 else -r['m'])}"
+    if rare:
+        return f"📊 ظهرت {_sg_ar(r['n'], 'time')} فقط، صدقت {r['w']} ({r['h']:.0f}%) · {rnd} · {mv}"
+    return f"📊 السجل: صدقت {r['w']} من {_sg_ar(r['n'], 'time')} ({r['h']:.0f}%) · {rnd} · {mv}"
+
+
+def _sg_block(sym, ty, fr, ents, st, cat, scan, comp):
+    """📨 إشعار عملة واحدة لنوع واحد — يجمع كل ما اتفق (أقواها أولاً)"""
+    ents = sorted(ents, key=lambda e: (-_sg_rec(e, st)["h"], -_sg_rec(e, st)["n"]))
+    top = ents[0]
+    side = top["s"]
+    keys = list(dict.fromkeys(k for e in ents for k in e["k"]))
+    r = _sg_rec(top, st)
+    ico, nm = SG_TY[ty]
+    rare = bool(top.get("rare"))
+    x = scan or {}
+    px = float(x.get("px") or 0)
+    head = (f"💎 تركيبة نادرة — {nm} — {sym}" if rare else f"{ico} {nm} — {sym}") + f" · {SG_FN[fr]}"
+    if ty == "acc":
+        what = "السيولة تدخل والسعر لم يتحرك بعد"
+    elif ty == "dist":
+        what = "السيولة تخرج والسعر لم ينزل بعد"
+    else:
+        what = (f"اتفقت {_sg_ar(len(keys), 'sig')}: " if len(keys) > 1 else "") + _sg_keys_txt(keys, side)
+    L = [head, what]
+    if len(ents) > 1 and len(top["k"]) < len(keys):
+        L.append("أقواها: " + " + ".join(_sg_name(k, side) for k in top["k"]))
+    L.append(_sg_rec_line(top, r, cat, rare))
+    b = (cat.get("base") or {}).get(f"{top['f']}|{top['s']}") or {}
+    if r["h"] <= float(b.get("ht") or 0) or r["m"] <= float(b.get("mt") or 0):
+        L.append("⚠️ تاريخياً ليست أفضل من العشوائي")
+    if rare:
+        L.append("⚠️ عدد المرات قليل — قد تكون صدفة")
+    if px > 0:
+        inv = ""
+        if ty in ("buy", "up") and x.get("lo"):
+            inv = f" · ❌ تبطل إذا أُغلقت {'شمعة اليوم' if fr == '1D' else 'شمعة 4 ساعات'} تحت {_px_s(x['lo'])}"
+        elif ty in ("sell", "down") and x.get("hi"):
+            inv = f" · ❌ تبطل إذا أُغلقت {'شمعة اليوم' if fr == '1D' else 'شمعة 4 ساعات'} فوق {_px_s(x['hi'])}"
+        L.append(f"💵 السعر الآن {_px_s(px)}{inv}")
+    if comp and comp.get("s"):
+        L.append("🧭 السوق: " + {"up": "صاعد", "flat": "مختلط", "down": "نازل"}[comp["s"]])
+    if ty in ("buy", "sell", "up", "down"):
+        L.append("⚠️ ليست ضماناً — القرار لك")
+    return {"sym": sym, "ty": ty, "f": fr, "t": L[0], "b": "\n".join(L[1:]), "ids": [e["id"] for e in ents], "h": round(r["h"], 1)}
+
+
+def _sg_tg(text, cfg, go="sig"):
+    if TG_MUTED["v"]:
+        journal("notify", "🔕 لم يُرسَل إشعار إشارات (الكتم مفعّل): " + text[:300], "info")
+        return False
+    ok = True
+    if cfg["ch"] in ("both", "tg"):
+        ok = bool(tg_send(text, plain=True)) and ok
+    if cfg["ch"] in ("both", "app"):
+        _safe(app_feed_push, text, go, "ind", default=None)     # 📱 قناة «📊 تنبيهات المؤشرات» · الضغط يفتح 🎯
+    return ok
+
+
+def _sg_local_h(now):
+    return datetime.fromtimestamp(now).hour
+
+
+def _sg_quiet(cfg, now):
+    q = cfg.get("quiet")
+    if not q or q[0] == q[1]:
+        return False
+    h = _sg_local_h(now)
+    return (q[0] <= h < q[1]) if q[0] < q[1] else (h >= q[0] or h < q[1])
+
+
+def _sg_deliver(blocks, st, cfg, now, send=True):
+    """📨 كل ما طلع في الجولة برسالة وحدة · الحد اليومي (الزائد للوحة فقط) · ساعات الهدوء (تنتظر) · الملخص اليومي (يتجمّع)"""
+    if not blocks:
+        return []
+    day = datetime.fromtimestamp(now).strftime("%Y-%m-%d")
+    if st.get("day") != day:
+        st.update(day=day, n=0, capped=False)
+    log = st.setdefault("log", [])
+    for b in blocks:
+        log.insert(0, {"ts": round(now), "sym": b["sym"], "ty": b["ty"], "f": b.get("f", ""), "t": b["t"], "b": b["b"]})
+        _safe(_dash_event, b["sym"], b["t"] + " · " + b["b"].split("\n")[0], default=None)
+    del log[120:]
+    if cfg.get("sum") is not None:
+        st.setdefault("sumq", []).extend({"t": b["t"], "b": b["b"]} for b in blocks)
+        del st["sumq"][:-60]
+        return []
+    if _sg_quiet(cfg, now):
+        st.setdefault("qq", []).extend({"t": b["t"], "b": b["b"]} for b in blocks)
+        del st["qq"][:-60]
+        return []
+    out, note = blocks, ""
+    if cfg["cap"] > 0:
+        room = cfg["cap"] - int(st.get("n") or 0)
+        if len(blocks) > max(0, room):
+            out = blocks[:max(0, room)]
+            if not st.get("capped"):
+                st["capped"] = True
+                note = f"🔕 وصلت حد إشعارات الإشارات اليوم ({cfg['cap']}) — الباقي في اللوحة فقط (🎯)"
+    st["n"] = int(st.get("n") or 0) + len(out)
+    if not out and not note:
+        return []
+    if len(out) == 1:
+        text = out[0]["t"] + "\n" + out[0]["b"]
+    else:
+        text = f"🎯 إشارات جديدة ({len(out)})\n\n" + "\n\n".join(b["t"] + "\n" + b["b"] for b in out)
+    text += ("\n\n" + note) if note else ""
+    if send:
+        _sg_tg(text, cfg)
+    return out
+
+
+def _sg_flush(st, cfg, now, send=True):
+    """🌙 بعد ساعات الهدوء: ما انتظر برسالة وحدة · 🗓️ الملخص اليومي بساعته"""
+    sent = None
+    if st.get("qq") and not _sg_quiet(cfg, now):
+        q = st.pop("qq")
+        text = f"🌙 إشارات وصلت أثناء ساعات الهدوء ({len(q)})\n\n" + "\n\n".join(x["t"] + "\n" + x["b"] for x in q[:15]) + \
+            (f"\n\n… و{len(q) - 15} غيرها في اللوحة (🎯)" if len(q) > 15 else "")
+        if send:
+            _sg_tg(text, cfg)
+        sent = text
+    if cfg.get("sum") is not None:
+        day = datetime.fromtimestamp(now).strftime("%Y-%m-%d")
+        if _sg_local_h(now) >= cfg["sum"] and st.get("sum_day") != day:
+            st["sum_day"] = day
+            q = st.pop("sumq", [])
+            text = f"🗓️ ملخص الإشارات اليوم ({len(q)})" + ("\n\n" + "\n\n".join(x["t"] + "\n" + x["b"] for x in q[:20]) if q else "\nلا توجد إشارات جديدة اليوم بإعداداتك")
+            if len(q) > 20:
+                text += f"\n\n… و{len(q) - 20} غيرها في اللوحة (🎯)"
+            if send:
+                _sg_tg(text, cfg)
+            sent = text
+    elif st.get("sumq"):
+        st.pop("sumq", None)
+    return sent
+
+
+# ───────────── 🧭 البوصلة ─────────────
+def _sg_compass(cdb, cat=None):
+    """🧭 حالة السوق الآن من الشموع اليومية (منعّمة) + ماذا أعطى الشراء فيها تاريخياً"""
+    bd = ((cdb.get("c") or {}).get("BTC-USDT") or {}).get("d") or []
+    if len(bd) < 260:
+        return None
+    dailies = []
+    for sym, e in (cdb.get("c") or {}).items():
+        rows = (e or {}).get("d") or []
+        if len(rows) >= 60:
+            dailies.append(_sg_D(rows[-320:], True))
+    seq = _sg_compass_states(_sg_D(bd[-520:], True), dailies)
+    if not seq:
+        return None
+    t, raw, s, since, sh, ab, n, k = seq[-1]
+    H = ((cat or {}).get("compass") or {}).get(s) or {}
+    return {"s": s, "raw": raw, "since": since, "days": int((t - since) // 86400) + 1, "share": sh, "btc": ab, "n": n, "k": k, "t": t,
+            "m14": H.get("m14"), "h14": H.get("h14"), "run": H.get("run"), "hist": [[x[0], x[1], x[2]] for x in seq[-60:]]}
+
+
+def _sg_comp_block(c):
+    nm = {"up": "صاعد 🟢", "flat": "مختلط 🟡", "down": "نازل 🔴"}[c["s"]]
+    L = [f"🧭 السوق الآن: {nm} (منذ {_sg_ar(c['days'], 'day')})",
+         f"البيتكوين {'فوق' if c['btc'] else 'تحت'} متوسط 200 يوم · {c['k']} من {_sg_ar(c['n'], 'coin')} فوق متوسطها (50 يوماً)"]
+    if c.get("m14") is not None:
+        L.append(f"تاريخياً: متوسط الشراء بعد أسبوعين {_sg_pct(c['m14'])} في هذا الوضع" + (" — أسوأ وضع للشراء" if c["s"] == "flat" else ""))
+    return {"sym": "السوق", "ty": "mkt", "f": "1D", "t": L[0], "b": "\n".join(L[1:])}
+
+
+# ───────────── 🔄 الجولة ─────────────
+def _sg_refresh(coins, frs, cdb, prog=None):
+    """🕯️ الشموع المسكّرة لكل عملة (التاريخ كله أول مرة صفحة صفحة · بعدها الجديد فقط) — قراءة عامة"""
+    bad = []
+    for k, sym in enumerate(coins):
+        for fr in frs:
+            sec, bar, ib = SG_BAR[fr]
+            if prog:
+                prog(k, len(coins), sym, fr)
+            r = _safe(_fc_cache, sym, cdb, sec, bar, ib, SG_N[fr], default=None)
+            if not r or not r[0]:
+                bad.append(sym)
+            time.sleep(0.15)
+    keep = set(coins)
+    for sec in ("c", "c4"):
+        for s in list((cdb.get(sec) or {}).keys()):
+            if s not in keep:
+                cdb[sec].pop(s, None)
+    os.makedirs(SG_DIR, exist_ok=True)
+    save_json_atomic(SG_CFILE, cdb)
+    return bad
+
+
+def _sg_grade(st, cdb, cat, now):
+    """✅ السجل الحي: كل إشارة أُطلقت تُحكم وحدها بعد وقتها (صافي بعد العمولة) · نتائج ما وصلك إشعاره"""
+    rec = st.setdefault("rec", {})
+    keep, res = [], []
+    T = {}
+    for it in st.get("pend") or []:
+        try:
+            eid, sym, ts, px, flag = it[0], it[1], int(it[2]), float(it[3]), int(it[4])
+        except Exception:
+            continue
+        fr, side = eid.split("|")[0], int(eid.split("|")[1])
+        sec = SG_BAR[fr][0]
+        if (sym, sec) not in T:
+            rows = ((cdb.get(sec) or {}).get(sym) or {}).get("d") or []
+            T[(sym, sec)] = ([int(r[0]) for r in rows], [float(r[4]) for r in rows])
+        ts_, cs = T[(sym, sec)]
+        tgt = ts + SG_HZ[fr] * SG_SEC[fr]
+        j = bisect.bisect_left(ts_, tgt)
+        if j < len(ts_) and ts_[j] == tgt and px > 0:
+            c1 = cs[j]
+            x = (c1 / px - 1.0 if side > 0 else px / c1 - 1.0) - SG_FEE
+            r = rec.setdefault(eid, [0, 0, 0.0])
+            r[0] += 1
+            r[1] += 1 if x > 0 else 0
+            r[2] = round(r[2] + x, 6)
+            if flag:
+                res.append((eid, sym, x))
+            hist = st.setdefault("done", [])
+            hist.insert(0, [eid, sym, ts, round(x, 5), flag])
+            del hist[400:]
+        elif now - ts < SG_HZ[fr] * SG_SEC[fr] + 20 * 86400:
+            keep.append(it)
+    st["pend"] = keep
+    return res
+
+
+def _sg_res_block(res, st, cat):
+    L = []
+    for eid, sym, x in res[:12]:
+        e = (cat.get("idx") or {}).get(eid)
+        if not e:
+            continue
+        r = _sg_rec(e, st)
+        nm = SG_TY.get(e["ty"], ("", "إشارة"))[1]
+        ok = x > 0
+        L.append(f"{'✅' if ok else '❌'} نتيجة إشارة {nm} {sym.split('-')[0]} قبل {SG_HZN[e['f']]}: {_sg_pct(x)}\nالسجل الآن: {r['w']} من {_sg_ar(r['n'], 'time')} ({r['h']:.0f}%)")
+    if not L:
+        return None
+    return {"sym": "النتائج", "ty": "res", "f": "", "t": L[0].split("\n")[0] if len(L) == 1 else f"✅ نتائج إشارات سابقة ({len(L)})",
+            "b": L[0].split("\n", 1)[1] if len(L) == 1 else "\n".join(L)}
+
+
+def _sg_process(scan, frs, st, cfg, cat, cdb, now, send=True):
+    """🔍 ⇒ ما أُطلق الآن من الدليل لكل عملة (للسجل الحي كلها · وللإشعار ما يمر بإعداداتك) + 🌊 + 😨 + 🗞️ + 🧭"""
+    mine = set(sg_coins(cfg))
+    byf = {}
+    for e in cat["e"]:
+        byf.setdefault(e["f"], []).append(e)
+    lastf = st.setdefault("lastf", {})
+    pend = st.setdefault("pend", [])
+    nowv = st.setdefault("now", {})
+    comp = st.get("comp")
+    groups = {}
+    mk_fired = {}
+    for sym, F in (scan.get("c") or {}).items():
+        for fr in frs:
+            x = F.get(fr)
+            if not x:
+                continue
+            A1, A0 = set(x["a1"]), set(x["a0"])
+            fired, alive = [], []
+            for e in byf.get(fr, []):
+                ks = [f"{k}:{e['s']}" for k in e["k"]]
+                if not all(k in A1 for k in ks):
+                    continue
+                alive.append(e["id"])
+                if all(k in A0 for k in ks):
+                    continue
+                lk = f"{e['id']}@{sym}"
+                if x["t"] - int(lastf.get(lk) or 0) < SG_LK[fr] * SG_SEC[fr]:
+                    continue
+                lastf[lk] = x["t"]
+                fired.append(e)
+            nowv.setdefault(sym, {})[fr] = {"t": x["t"], "px": x["px"], "alive": alive, "fired": [e["id"] for e in fired], "lo": x.get("lo"), "hi": x.get("hi")}
+            for e in fired:
+                ok = sym in mine and _sg_pass(e, st, cfg, cat)
+                pend.append([e["id"], sym, x["t"], x["px"], 1 if ok else 0])
+                if e["ty"] in ("crash", "fng", "eco"):
+                    if e["ty"] != "crash" or fr == "4H":
+                        mk_fired.setdefault((e["ty"], e["k"][0], e["s"]), e)
+                    continue
+                if ok:
+                    groups.setdefault((sym, e["ty"], fr), []).append(e)
+    for k in [k for k, v in lastf.items() if now - float(v) > 30 * 86400]:
+        lastf.pop(k, None)
+    blocks = []
+    sent = st.setdefault("sent", {})
+    for (sym, ty, fr), ents in groups.items():
+        sk = f"{sym}|{ty}|{fr}"
+        h = max(_sg_rec(e, st)["h"] for e in ents)
+        prev = sent.get(sk) or [0, 0]
+        if now - float(prev[0]) < (86400 if fr == "4H" else 3 * 86400) and h < float(prev[1]) + 10:
+            continue                                          # نفس العملة ونفس النوع ما يتكرر (إلا لو طلعت أقوى بوضوح)
+        sent[sk] = [round(now), round(h, 1)]
+        blocks.append(_sg_block(sym, ty, fr, ents, st, cat, ((scan.get("c") or {}).get(sym) or {}).get(fr), comp))
+    for k in [k for k, v in sent.items() if now - float(v[0]) > 30 * 86400]:
+        sent.pop(k, None)
+    # 🌊 · 😨 · 🗞️ — مرة لكل حدث (من سجل الإشارة نفسها في الدليل)
+    for (ty, code, side), e in mk_fired.items():
+        if not cfg["types"].get(ty, True):
+            continue
+        if ty == "crash" and _safe(ina_cfg, default={}).get("on"):
+            continue                                          # 🌊 يصلك أصلاً من «📊 تنبيهات المؤشرات»
+        sk = f"mk|{code}|{side}"
+        if now - float((sent.get(sk) or [0])[0]) < 86400:
+            continue
+        sent[sk] = [round(now), 0]
+        blocks.append(_sg_mkt_block(ty, code, side, e, st, cat, scan))
+    blocks = [b for b in blocks if b]
+    blocks.sort(key=lambda b: (b["ty"] not in ("buy", "up", "sell", "down"), -float(b.get("h") or 0)))
+    return blocks
+
+
+def _sg_mkt_block(ty, code, side, e, st, cat, scan):
+    r = _sg_rec(e, st)
+    b = (cat.get("base") or {}).get(f"{e['f']}|{e['s']}") or {}
+    rec = f"📊 تاريخياً: {'الشراء' if side > 0 else 'البيع'} بعده صدق {r['h']:.0f}% من {_sg_ar(r['n'], 'time')} (العشوائي {float(b.get('ht') or 0):.0f}%) · المتوسط بعد {SG_HZN[e['f']]} {_sg_pct(r['m'] if side > 0 else -r['m'])}"
+    if ty == "crash":
+        cr = scan.get("crash") or {}
+        L = [f"🌊 انهيار في السوق كله · 4 ساعات", f"{cr.get('k', 0)} من {_sg_ar(cr.get('n', 0) or 0, 'coin')} هبطت بقوة في الساعات الأربع الأخيرة", rec]
+        mine = set(sg_coins())
+        dn = sorted(((F.get("4H") or {}).get("ch", 0), s) for s, F in (scan.get("c") or {}).items() if s in mine)
+        dn = [s.split("-")[0] for ch, s in dn[:3] if ch < 0]
+        if dn:
+            L.append("عملاتك الأكثر هبوطاً الآن: " + " · ".join(dn))
+    elif ty == "fng":
+        L = [("😨 خوف في السوق" if side > 0 else "🤑 طمع في السوق"), _sg_name(code, side), rec]
+    else:
+        L = ["🗞️ " + _sg_name(code, side).split(" ", 1)[-1], "قراءة اقتصادية عامة تؤثر في الكريبتو كله", rec]
+    if r["h"] <= float(b.get("ht") or 0):
+        L.append("⚠️ تاريخياً لم تكن وحدها إشارة — انتظر إشارة ثانية معها")
+    return {"sym": "السوق", "ty": ty, "f": e["f"], "t": L[0], "b": "\n".join(L[1:]), "h": r["h"]}
+
+
+def _sg_cidx(cdb=None):
+    """فهرس خفيف (كم شمعة لكل عملة) — ملف الشموع الكبير لا يبقى في الذاكرة"""
+    if cdb is None and _SG.get("cidx") is None:
+        cdb = _safe(load_json, SG_CFILE, default={}) or {}
+    if cdb is not None:
+        _SG["cidx"] = {sec: {s: len((e or {}).get("d") or []) for s, e in (cdb.get(sec) or {}).items()} for sec in ("c", "c4")}
+    return _SG["cidx"]
+
+
+def sg_tick(now=None, send=True):
+    """⏱️ كل 5 دقائق: 🕯️ الشموع حين تُغلق شمعة · 🏗️ الدليل (أول مرة ثم كل أسبوع أو عملة جديدة) · 🔍 الفحص · ✅ السجل · 📨 الإشعارات"""
+    now = float(now if now is not None else time.time())
+    if _SG["busy"]:
+        return None
+    _SG["busy"] = True
+    try:
+        cfg = sg_cfg()
+        st = _sg_st()
+        st0 = json.dumps(st, sort_keys=True, ensure_ascii=False)
+        uni = _sg_universe()
+        cat = _sg_cat()
+        bj = _SG.get("build")
+        if bj and _sg_job_done(bj):
+            o = _sg_job_out(bj) or {}
+            _SG["build"] = None
+            _SG["err"] = "" if o.get("ok") else ("🏗️ " + str(o.get("err") or "تعذّر بناء الدليل"))
+            cat = _sg_cat()
+        T = {fr: int(now // SG_SEC[fr]) * SG_SEC[fr] - SG_SEC[fr] for fr in SG_FR}
+        due = [fr for fr in SG_FR if st.get("t_" + fr) != T[fr] and now - (T[fr] + SG_SEC[fr]) >= 90]
+        if due and now - float(st.get("t_fail") or 0) < 1800:
+            due = []                                          # فحص فشل قبل قليل ⇒ محاولة بعد نصف ساعة (لا نُثقل المنصة)
+        ci = _sg_cidx()
+        bad, bad_ok = set(st.get("bad") or []), now - float(st.get("bad_t") or 0) > 6 * 3600
+        missing = [s for s in uni if (s not in ci["c4"] or s not in ci["c"]) and (s not in bad or bad_ok)]
+        full = lambda s: ci["c4"].get(s, 0) >= SG_MIN["4H"] and ci["c"].get(s, 0) >= SG_MIN["1D"]
+        need_cat = (not cat or now - float(cat.get("ts") or 0) > SG_CAT_AGE or bool(st.get("cat_force"))
+                    or any(s not in (cat.get("coins") or []) and full(s) for s in sg_coins(cfg)))
+        build_now = need_cat and not _SG.get("build") and now - float(st.get("cat_try") or 0) > (6 * 3600 if cat and not st.get("cat_force") else 600)
+        cdb = None
+        if missing or due or build_now:
+            cdb = _safe(load_json, SG_CFILE, default={}) or {}
+            _SG.update(phase="fetch", msg="📥 تجهيز تاريخ الشموع" if missing else "🕯️ الشموع الجديدة", pct=0)
+
+            def pg(k, n, sym, fr):
+                _SG.update(pct=round(100.0 * k / max(1, n)), msg=(f"📥 تاريخ {sym.split('-')[0]} ({k + 1} من {n}) — أول مرة فقط" if missing else
+                                                                  f"🕯️ {sym.split('-')[0]} ({k + 1} من {n})"))
+            bd_ = _sg_refresh(uni, list(SG_FR), cdb, pg)
+            ci = _sg_cidx(cdb)
+            st["bad"] = sorted(set(bd_))
+            if bd_:
+                st["bad_t"] = now
+        if build_now:
+            coins = [s for s in uni if full(s)]
+            if len(coins) >= 3:
+                st["cat_try"] = now
+                st.pop("cat_force", None)
+                _SG["build"] = _sg_spawn("build", {"coins": coins})
+        if cdb is not None:
+            comp = _safe(_sg_compass, cdb, cat, default=None)
+            prev_c = st.get("comp") or {}
+            if comp:
+                if prev_c.get("s") and comp["s"] != prev_c.get("s") and comp["since"] != prev_c.get("since"):
+                    st["comp_new"] = comp["s"]
+                st["comp"] = comp
+        blocks = []
+        if cat and due:
+            have = [s for s in uni if ci["c4"].get(s, 0) >= 300 and ci["c"].get(s, 0) >= 220]
+            _SG.update(phase="scan", msg="🔍 فحص الإشارات على آخر شمعة", pct=0)
+            sj = _sg_spawn("scan", {"coins": have, "frs": due})
+            t1 = time.time()
+            while not _sg_job_done(sj) and time.time() - t1 < 1500:
+                time.sleep(2)
+                _SG["pct"] = int(_sg_job_prog(sj).get("pct") or 0)
+            if not _sg_job_done(sj):
+                _sg_job_stop(sj)
+            sc = _sg_job_out(sj) or {}
+            if sc.get("ok"):
+                for fr in due:
+                    st["t_" + fr] = T[fr]
+                st["scan_ts"] = now
+                st["crash"] = sc.get("crash")
+                res = _sg_grade(st, cdb or {}, cat, now)
+                cf = cfg if cfg["on"] else dict(cfg, types={k: False for k in SG_TY})
+                blocks = _sg_process(sc, due, st, cf, cat, cdb, now)
+                comp = st.get("comp")
+                if st.pop("comp_new", None) and comp and cf["types"].get("mkt", True):
+                    blocks.insert(0, _sg_comp_block(comp))
+                if res and cf["types"].get("res", True):
+                    rb = _sg_res_block(res, st, cat)
+                    if rb:
+                        blocks.append(rb)
+                for s in [s for s in (st.get("now") or {}) if s not in uni]:
+                    st["now"].pop(s, None)
+                _SG["err"] = ""
+            else:
+                st["t_fail"] = now
+                _SG["err"] = "🔍 " + str(sc.get("err") or "تعذّر فحص الإشارات")
+        cdb = None
+        if cfg["on"]:
+            _sg_deliver(blocks, st, cfg, now, send=send)
+            _sg_flush(st, cfg, now, send=send)
+        if json.dumps(st, sort_keys=True, ensure_ascii=False) != st0:
+            _sg_save(st)
+        _SG.update(phase="", msg="", pct=0)
+        return blocks
+    finally:
+        _SG["busy"] = False
+
+
+def sg_loop():
+    """⏱️ حلقة مستقلة (كل 5 دقائق) — تعمل مع المؤشرات أو مع إشعارات الإشارات"""
+    time.sleep(150)
+    while True:
+        try:
+            if indic_cfg()["on"] or sg_cfg()["on"]:
+                sg_tick()
+        except Exception as ex:
+            _SG.update(busy=False, err=f"{type(ex).__name__}")
+        time.sleep(SG_EVERY)
+
+
+# ───────────── 🖥️ العرض ─────────────
+def _sg_row(e, st, cat, cfg):
+    r = _sg_rec(e, st)
+    b = (cat.get("base") or {}).get(f"{e['f']}|{e['s']}") or {}
+    return {"id": e["id"], "f": e["f"], "s": e["s"], "ty": e["ty"], "k": e["k"], "nm": [_sg_name(k, e["s"]) for k in e["k"]],
+            "n": r["n"], "w": r["w"], "h": round(r["h"], 1), "m": round(r["m"] if e["s"] > 0 else -r["m"], 5), "ln": r["ln"], "lw": r["lw"],
+            "nt": e["nt"], "ht": round(e["wt"] / e["nt"] * 100.0, 1) if e["nt"] else None, "nl": e["nl"],
+            "hl": round(e["wl"] / e["nl"] * 100.0, 1) if e["nl"] else None, "rare": bool(e.get("rare")),
+            "rh": float(b.get("ht") or 0), "ok": _sg_pass(e, st, cfg, cat),
+            "better": r["h"] > float(b.get("ht") or 0) and r["m"] > float(b.get("mt") or 0)}
+
+
+def sg_view():
+    cfg = sg_cfg()
+    st = _sg_st()
+    cat = _sg_cat()
+    bj = _SG.get("build")
+    bp = _sg_job_prog(bj) if bj else {}
+    v = {"ok": True, "cfg": cfg, "types": {k: list(x) for k, x in SG_TY.items()}, "ch": SG_CH, "fn": SG_FN, "hzn": SG_HZN,
+         "mine": sg_coins(cfg), "tick": ticker_cfg()["coins"], "uni": _sg_universe(),
+         "busy": {"phase": "build" if bj else _SG.get("phase") or "", "pct": int(bp.get("pct") or 0) if bj else int(_SG.get("pct") or 0),
+                  "msg": (bp.get("msg") or "🏗️ بناء دليل الإشارات") if bj else _SG.get("msg") or ""},
+         "err": _SG.get("err") or "", "comp": st.get("comp"), "crash": st.get("crash"), "scan_ts": st.get("scan_ts"),
+         "on": indic_cfg()["on"] or cfg["on"], "log": (st.get("log") or [])[:60]}
+    if not cat:
+        v.update(cat=None, now=[], est=None)
+        return v
+    idx = cat["idx"]
+    v["cat"] = {"ts": cat.get("ts"), "coins": cat.get("coins"), "n": len(cat["e"]), "secs": cat.get("secs"), "wk": cat.get("wk"),
+                "base": cat.get("base"), "comp": cat.get("compass"), "span": cat.get("span"),
+                "nrare": sum(1 for e in cat["e"] if e.get("rare")), "ncombo": sum(1 for e in cat["e"] if len(e["k"]) > 1)}
+    now_ = []
+    mine = sg_coins(cfg)
+    for sym, F in (st.get("now") or {}).items():
+        it = {"sym": sym, "base": sym.split("-")[0], "mine": sym in mine, "fr": {}}
+        for fr, x in F.items():
+            rows = [_sg_row(idx[i], st, cat, cfg) for i in x.get("alive") or [] if i in idx]
+            rows = [dict(r, new=r["id"] in (x.get("fired") or [])) for r in rows]
+            rows.sort(key=lambda r: (not r["ok"], -r["h"], -r["n"]))
+            it["fr"][fr] = {"t": x.get("t"), "px": x.get("px"), "rows": rows[:80], "nb": sum(1 for r in rows if r["s"] > 0 and r["ok"]),
+                            "ns": sum(1 for r in rows if r["s"] < 0 and r["ok"])}
+        now_.append(it)
+    now_.sort(key=lambda x: (not x["mine"], x["sym"]))
+    v["now"] = now_
+    v["est"] = sg_estimate(cfg, st)
+    v["live"] = {"pend": len(st.get("pend") or []), "done": len(st.get("done") or []),
+                 "recent": [{"id": d[0], "sym": d[1], "ts": d[2], "x": d[3], "nt": d[4], "ty": (idx.get(d[0]) or {}).get("ty"),
+                             "nm": " + ".join(_sg_name(k, (idx.get(d[0]) or {}).get("s", 1)) for k in (idx.get(d[0]) or {}).get("k", []))}
+                            for d in (st.get("done") or []) if d[4]][:40]}
+    return v
+
+
+def sg_catlist(q):
+    """📒 تصفّح الدليل: الفريم · الجهة · العدد · 💎 · بحث · الترتيب"""
+    cat = _sg_cat()
+    if not cat:
+        return {"ok": False, "rows": [], "msg": "الدليل لم يُبنَ بعد"}
+    cfg, st = sg_cfg(), _sg_st()
+    fr, side, sz, rare, txt, srt, ty = (q.get(k, [""])[0] for k in ("fr", "side", "size", "rare", "q", "sort", "ty"))
+    rows = []
+    for e in cat["e"]:
+        if fr in SG_FR and e["f"] != fr:
+            continue
+        if side in ("1", "-1") and e["s"] != int(side):
+            continue
+        if sz and sz.isdigit() and (len(e["k"]) != int(sz) if int(sz) < 4 else len(e["k"]) < 4):
+            continue
+        if rare == "1" and not e.get("rare"):
+            continue
+        if ty and e["ty"] != ty:
+            continue
+        r = _sg_row(e, st, cat, cfg)
+        if txt and txt.strip() and txt.strip().lower() not in (" ".join(r["nm"]) + " " + " ".join(e["k"])).lower():
+            continue
+        rows.append(r)
+    key = {"n": lambda r: -r["n"], "m": lambda r: -r["m"], "live": lambda r: -r["ln"]}.get(srt, lambda r: (-r["h"], -r["n"]))
+    rows.sort(key=key)
+    return {"ok": True, "rows": rows[:250], "total": len(rows), "base": cat.get("base")}
+
+
+def sg_test():
+    cfg = sg_cfg()
+    if TG_MUTED["v"]:
+        return {"ok": False, "msg": "🔕 الكتم مفعّل (زر 🔔 في الأعلى) — لن يُرسَل شيء حتى تلغيه"}
+    sym = (sg_coins(cfg) or ["BTC-USDT"])[0]
+    text = (f"🧪 تجربة — 🟢 شراء — {sym} · يومي\nاتفقت 3 إشارات: Supertrend انقلب أخضر فوق EMA 150 · تقاطع MACD صاعد فوق EMA 20 · 💧 تدفق السيولة (CMF): صاعد\n"
+            f"📊 هكذا يصلك السجل: كم مرة صدقت من كم مرة · والعشوائي للمقارنة · والمتوسط بعد المدة\n"
+            f"⚙️ إعداداتك: {cfg['thr']}% فأكثر · {_sg_ar(cfg['min'], 'time')} فأكثر · {SG_CH[cfg['ch']]}")
+    ok = _sg_tg(text, cfg)
+    return {"ok": True, "msg": "🧪 أُرسلت التجربة" + ("" if ok or cfg["ch"] == "app" else " — لم يستلمها تيليغرام (تأكد من التوكن ومن Chat ID)")}
+
+
+def sg_rebuild():
+    """🏗️ «أعد البحث الآن» — يُعاد بناء الدليل في الجولة التالية"""
+    if _SG.get("build"):
+        return {"ok": True, "msg": "🏗️ البناء جارٍ أصلاً — تتابعه هنا"}
+    st = _sg_st()
+    st["cat_try"] = 0
+    st["cat_force"] = True
+    _sg_save(st)
+    if not _SG["busy"]:
+        threading.Thread(target=_safe, args=(sg_tick,), daemon=True).start()
+    return {"ok": True, "msg": "🏗️ يُعاد بناء دليل الإشارات بالخلفية — دقائق (تتابعه هنا)"}
+
+
+def sg_api():
+    v = sg_view()
+    if v["on"] and not _SG["busy"] and (not v.get("cat") or not v.get("now")) and not _SG.get("build"):
+        threading.Thread(target=_safe, args=(sg_tick,), daemon=True).start()
+    return v
+
+
+
+
+def _sg_coin_rows(sym, st, cat, cfg, k=6):
+    F = (st.get("now") or {}).get(sym) or {}
+    out = {}
+    for fr, x in F.items():
+        rows = [_sg_row(cat["idx"][i], st, cat, cfg) for i in x.get("alive") or [] if i in cat["idx"]]
+        rows = [dict(r, new=r["id"] in (x.get("fired") or [])) for r in rows]
+        rows.sort(key=lambda r: (not r["ok"], -r["h"], -r["n"]))
+        out[fr] = {"t": x.get("t"), "rows": rows[:k], "nb": sum(1 for r in rows if r["s"] > 0 and r["ok"]),
+                   "ns": sum(1 for r in rows if r["s"] < 0 and r["ok"]), "n": len(rows)}
+    return out
+
+
+def sg_fc(rows):
+    """🔮 v3.36.66: لكل عملة في التوقعات إشاراتها الشغّالة الآن (يومي · 4 ساعات) + البوصلة — من آخر فحص (قراءة فقط)"""
+    st, cat = _sg_st(), _sg_cat()
+    if not cat:
+        return {"ready": False, "comp": st.get("comp")}
+    cfg = sg_cfg()
+    nb = ns = 0
+    for r in rows:
+        x = _sg_coin_rows(r.get("sym"), st, cat, cfg, 4)
+        r["sig"] = x
+        nb += sum(f["nb"] for f in x.values())
+        ns += sum(f["ns"] for f in x.values())
+    return {"ready": True, "comp": st.get("comp"), "nb": nb, "ns": ns}
+
+
+def _sg_cfg_merge(cfg, v):
+    """⚙️ إعدادات لم تُحفظ بعد (للتقدير الأسبوعي وأنت تحرّك المؤشر)"""
+    c = dict(cfg)
+    for k, lo, hi in (("thr", 50, 95), ("min", 3, 200), ("rmin", 3, 50), ("cap", 0, 100)):
+        if v.get(k) is not None:
+            try:
+                c[k] = max(lo, min(hi, int(v[k])))
+            except Exception:
+                pass
+    for k in ("rnd", "rare"):
+        if v.get(k) is not None:
+            c[k] = bool(v[k])
+    if isinstance(v.get("types"), dict):
+        c["types"] = dict(c["types"], **{k: bool(x) for k, x in v["types"].items() if k in SG_TY})
+    if isinstance(v.get("fr"), dict):
+        c["fr"] = dict(c["fr"], **{k: bool(x) for k, x in v["fr"].items() if k in SG_FR})
+    if isinstance(v.get("coins"), list):
+        c["coins"] = [str(x).upper() for x in v["coins"] if isinstance(x, str)][:40]
+    return c
+
+
+def sg_est(v):
+    return {"ok": True, "est": sg_estimate(_sg_cfg_merge(sg_cfg(), v or {}))}
 
 
 # ═══════════════ 🔔 v3.26.6: إشعارات الأسعار — مثل إشعارات البرامج (تيليغرام + التطبيق + 🔔 اللوحة) · مو مزعجة · تنطفي وتشتغل ═══════════════
@@ -23371,6 +25476,10 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                                "rel": _safe(released_log, default={})})
         if u.path == "/api/guard":
             return self._json(_safe(guard_view, default={"ok": False, "msg": "تعذّر تحميل الرقابة"}))
+        if u.path == "/api/signals":                      # 🎯 v3.36.66: الإشارات (من الملفات · لا تنتظر الحساب أبداً)
+            return self._json(_safe(sg_api, default={"ok": False, "msg": "تعذّر تحميل الإشارات"}))
+        if u.path == "/api/signals_cat":                  # 📒 دليل الإشارات للتصفّح
+            return self._json(_safe(sg_catlist, q, default={"ok": False, "rows": [], "msg": "تعذّر تحميل الدليل"}))
         if u.path == "/api/forecast":                     # 🔮 v3.29.0: التوقعات (نفس مؤشرات 📊 على شموع أطول · قراءة عامة · عرض بس · ولا إشعار)
             return self._json(_safe(fc_api, default={"ok": False, "rows": [], "msg": "تعذّر حساب التوقعات"}))
         if u.path == "/api/guide":                        # 📖 v3.33.0: دليل المؤشرات والتوقعات (نص ثابت + آخر موثوقية)
@@ -23751,6 +25860,14 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
                 return self._json(pxa_test())
             if act == "pxa_get":                          # 🔔 v3.26.7: لوحة الإشعارات صارت بـ⚙️ «📈 شريط الأسعار» (قراءة بس) · v3.31.0: ويّا 📊 المؤشرات
                 return self._json({"ok": True, "pxa": pxa_view(), "ina": ina_view()})
+            if act == "sg_set":                           # 🎯 v3.36.66: إشعارات الإشارات
+                return self._json(sg_set((data.get("value") if isinstance(data.get("value"), dict) else {})))
+            if act == "sg_est":
+                return self._json(_safe(sg_est, (data.get("value") if isinstance(data.get("value"), dict) else {}), default={"ok": False, "est": None}))
+            if act == "sg_test":
+                return self._json(sg_test())
+            if act == "sg_rebuild":
+                return self._json(sg_rebuild())
             if act == "ina_set":                          # 📊 v3.31.0: تنبيهات المؤشرات — تشغيل/إطفاء · الحساسية · وين توصل
                 return self._json(ina_set((data.get("value") if isinstance(data.get("value"), dict) else {})))
             if act == "ina_test":
@@ -25367,6 +27484,31 @@ button.warn{border-color:rgb(var(--amber-rgb)/.55);color:var(--amber);box-shadow
 .fc-r .fv.rk-up{color:var(--green)}.fc-r .fv.rk-dn{color:var(--red)}.fc-r .fv.rk-eq,.fc-r .fv.rk-na{color:var(--mut)}.fc-r .fv small{color:var(--mut2);font-weight:400}.fc-bot{margin-top:6px;font-size:12px;padding:4px 8px;border-radius:8px;background:rgb(var(--ov-rgb)/.03);color:var(--mut)}.fc-bot.lv-watch{color:var(--amber)}.fc-bot.lv-zone{color:var(--amber);background:rgb(var(--amber-rgb)/.08)}.fc-bot.lv-strong{color:var(--green);background:rgb(var(--green-rgb)/.10);font-weight:700}.fc-botd{margin:8px 0;padding:8px 10px;border:1px solid var(--line);border-radius:10px;font-size:12px;line-height:1.8}.fc-botd.lv-strong{border-color:rgb(var(--green-rgb)/.5)}.fc-botd.lv-zone{border-color:rgb(var(--amber-rgb)/.5)}.fc-botp{color:var(--mut2)}.fc-botp.on{color:var(--tx)}.fc-botw{color:var(--amber);font-size:11.5px;margin-top:4px}.fb.g{color:var(--green)}.fb.y{color:var(--amber)}.fb.n{color:var(--mut)}.fb.r{color:var(--red)}.fb.short{color:var(--mut2)}
 i.fb{font-style:normal;font-weight:600;margin:0 7px;font-size:11px;direction:ltr;unicode-bidi:isolate;display:inline-block}
 .fc-sq{font-size:12px;color:var(--amber)}
+.sg-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 8px}.sg-tabs button{flex:1;min-width:84px;padding:7px 8px;border-radius:10px;font-size:12.5px}
+.sg-tabs button.on,.sg-flt button.on{border-color:var(--vio);color:var(--vio);background:rgb(var(--vio-rgb)/.12)}
+.sg-flt{display:flex;gap:5px;flex-wrap:wrap;margin:4px 0}.sg-flt button{font-size:11.5px;padding:4px 10px;border-radius:999px}
+.sg-flt select,.sg-flt input{font-size:12px;padding:5px 8px;border-radius:9px;border:1px solid var(--line2);background:var(--bg1);color:var(--tx);min-width:0}
+.sg-flt input{flex:1;min-width:150px}
+.sg-r{border:1px solid var(--line);border-radius:11px;padding:7px 9px;margin:6px 0;background:rgb(var(--ov-rgb)/.025);font-size:12px;text-align:start}
+.sg-r.ok{border-color:rgb(var(--green-rgb)/.45)}.sg-r.ok.sell{border-color:rgb(var(--red-rgb)/.45)}
+.sg-rh{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.sg-ty{font-weight:700}.sg-fr{font-size:11px;color:var(--mut2)}
+.sg-b{font-size:10.5px;padding:0 7px;border-radius:999px;border:1px solid var(--line)}.sg-b.rare{color:var(--cyan);border-color:rgb(var(--cyan-rgb)/.5)}
+.sg-b.new{color:var(--amber);border-color:rgb(var(--amber-rgb)/.5)}.sg-b.ok{color:var(--green);border-color:rgb(var(--green-rgb)/.5)}
+.sg-k{margin:4px 0 2px;line-height:1.65;color:var(--tx)}.sg-k b{color:var(--vio)}
+.sg-rec{font-size:11px;color:var(--mut2);line-height:1.7}.sg-rec .up,.sg-lg .up{color:var(--green)}.sg-rec .dn,.sg-lg .dn{color:var(--red)}
+.sg-comp{border:1px solid var(--line2);border-radius:13px;padding:9px 12px;margin-bottom:8px;background:var(--bg1)}
+.sg-comp.p{border-color:rgb(var(--green-rgb)/.5)}.sg-comp.n{border-color:rgb(var(--red-rgb)/.5)}.sg-comp.z{border-color:rgb(var(--amber-rgb)/.5)}
+.sg-hist{display:flex;gap:2px;margin-top:6px;direction:ltr}.sg-hist i{flex:1;height:8px;border-radius:2px;background:var(--line2)}
+.sg-hist i.up{background:rgb(var(--green-rgb)/.75)}.sg-hist i.down{background:rgb(var(--red-rgb)/.75)}.sg-hist i.flat{background:rgb(var(--amber-rgb)/.7)}
+.sg-busy{font-size:12px;color:var(--mut);margin:6px 0}.sg-pb{height:5px;border-radius:9px;background:var(--line);margin-top:4px;overflow:hidden}
+.sg-pb i{display:block;height:100%;background:var(--vio);transition:width .6s}
+.sg-empty{font-size:12.5px;color:var(--mut);line-height:1.9;padding:10px 4px}
+.sg-frh{font-weight:700;margin:10px 0 2px;font-size:12.5px}.sg-more summary{cursor:pointer;font-size:12px;color:var(--mut);margin:8px 0}
+.sg-lg{border-bottom:1px dashed var(--line2);padding:6px 0;font-size:12px}
+.sg-set{margin:10px 0;padding-top:8px;border-top:1px dashed var(--line2)}.sg-sh{font-size:12.5px;margin-bottom:4px}
+.sg-set input[type=range]{width:100%;accent-color:var(--vio)}.sg-set select{font-size:12px;padding:4px 6px;border-radius:8px;background:var(--bg1);color:var(--tx);border:1px solid var(--line2)}
+.sg-go{display:block;width:100%;text-align:start;margin:0 0 8px;padding:8px 11px;border-radius:12px;font-size:12.5px;border-color:rgb(var(--vio-rgb)/.45)}
+.sg-fc{font-size:11.5px;color:var(--mut);margin:6px 0 2px;padding:5px 8px;border-radius:9px;background:rgb(var(--vio-rgb)/.07);cursor:pointer;line-height:1.7}
 .fc-tabs{display:flex;gap:5px;flex-wrap:wrap;margin:2px 0 8px}
 .fc-tabs button{font-size:12px;padding:4px 12px;border-radius:999px}
 .fc-tabs button.on{border-color:var(--vio);color:var(--vio);background:rgb(var(--vio-rgb)/.12)}
@@ -28525,7 +30667,8 @@ function openSettings(){
      +X('fps','🎞️','الفريمات',fp+' فريم',`<div class="snote">سلاسة الحركة — ${fpsNote()}</div><div class="pollrow" id="fpsRow">${FB}</div><div id="gpuNote" style="font-size:10.5px;color:var(--mut2);margin-top:8px;line-height:1.7">🎮 …</div>`))}
    ${G('🔔 الإشعارات',
       T('✈️','تنبيهات تيليغرام',"g('mute');setTimeout(openSettings,700)",'sMute',!d.muted,'تعمل — تصل إلى تيليغرام','مكتومة — لا تصل')
-     +L('📈','شريط الأسعار وإشعاراته','openTicker()','العملات في الشريط · إشعارات الأسعار'))}
+     +L('📈','شريط الأسعار وإشعاراته','openTicker()','العملات في الشريط · إشعارات الأسعار')
+     +L('🎯','الإشارات وإشعاراتها',"openSig('cfg')",'شراء · بيع · تجميع · صعود · نزول · السوق — بنسبتك'))}
    ${G('🔊 الأصوات — لهذا الجهاز',
       T('🎵','صوت الربح',"toggleSound();openSettings()",'sSound',soundOn(),'يعمل — نغمة مع كل ربح','متوقف')
      +T('🔊','صوت فتح القفل','uiUnlockToggle()','bUnl',uiUnlockOn(),'يعمل — نغمة عند فتح القفل','متوقف')
@@ -28700,7 +30843,7 @@ function inaPanel(P){if(!P||P.on==null)return '';                               
     <div class="ind-al-o"><button onclick="inaTest()">🧪 جرّب تنبيهاً</button></div>`:''}
     <div class="ind-sub" style="margin-top:6px">${gEsc(P.rule||'')} · كل تنبيه معه سجله على الأسعار الحقيقية وحالة البيتكوين · رسالة مستقلة عن تنبيهات الأسعار · في الهاتف قناة «📊 تنبيهات المؤشرات» · اليوم ${P.n_today||0}</div>
     ${(P.log||[]).length?`<details><summary>آخر التنبيهات (${P.log.length})</summary>${P.log.map(x=>`<div class="ind-sub">${new Date(x.ts*1000).toLocaleString('ar',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})} · ${gEsc(x.t)} · ${gEsc(x.b)}</div>`).join('')}</details>`:''}</div>`}
-function pxaRender(){const el=$('#tk_pxa');if(el)el.innerHTML=(PXAV?pxaPanel(PXAV):'')+(INAV?inaPanel(INAV):'')}
+function pxaRender(){const el=$('#tk_pxa');if(el)el.innerHTML=(PXAV?pxaPanel(PXAV):'')+(INAV?inaPanel(INAV):'')+sgMini()}
 async function pxaLoad(){try{const r=await api('/api/control',{action:'pxa_get'});PXAV=r&&r.pxa||null;INAV=r&&r.ina||null}catch(e){PXAV=null;INAV=null}pxaRender()}
 async function inaSet(v){try{const r=await api('/api/control',{action:'ina_set',value:v});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok));if(r&&r.ina)INAV=r.ina}catch(e){toast('تعذر الاتصال',false)}pxaRender()}
 async function inaTest(){try{const r=await api('/api/control',{action:'ina_test'});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok))}catch(e){toast('تعذر الاتصال',false)}pxaLoad()}
@@ -28708,7 +30851,7 @@ async function pxaSet(v){try{const r=await api('/api/control',{action:'pxa_set',
 async function pxaTest(){try{const r=await api('/api/control',{action:'pxa_test'});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok))}catch(e){toast('تعذر الاتصال',false)}pxaLoad()}
 async function openInd(){
   showModal(`<h2>📊 المؤشرات — هل تصعد العملة أم تهبط؟</h2><div id="ind_body" style="color:var(--mut);font-size:12.5px;padding:16px;text-align:center">${LDR('جاري الحساب…')}</div>
-    <div class="mbtns"><button onclick="openGuide('','ind')">📖 الدليل</button><button onclick="openTicker()">⚙️ العملات</button><button onclick="hideModal()">إغلاق</button></div>`);
+    <div class="mbtns"><button onclick="openSig()">🎯 الإشارات</button><button onclick="openGuide('','ind')">📖 الدليل</button><button onclick="openTicker()">⚙️ العملات</button><button onclick="hideModal()">إغلاق</button></div>`);
   await indLoad()}
 async function indLoad(){clearTimeout(INDT);try{INDV=await api('/api/indicators')}catch(e){INDV=null}indRender();
   if(INDV&&INDV.busy&&!(INDV.rows||[]).length&&$('#ind_body'))INDT=setTimeout(indLoad,3000)}
@@ -28756,6 +30899,127 @@ function indRender(){
     <button class="gd-go" onclick="openGuide('','ind')">📖 الدليل الكامل: الفكرة وطريقة الحساب وكيف تقرأ كل مؤشر وحدوده</button></details>`;
   el.innerHTML=h}
 
+/* 🎯 v3.36.66: الإشارات — كل المؤشرات وتركيباتها (2 … 6 معاً · 💎 النادرة) بسجلها على الأسعار الحقيقية · 🧭 البوصلة · إشعارات بنسبتك ·
+   عرض وإشعارات فقط: لا أمر ولا إلغاء ولا لمس لأي بوت */
+let SGV=null,SGT=null,SGTAB='now',SGC=null,SGP={},SGET=null;const SGO={},SGF={fr:'',side:'1',size:'',rare:'',ty:'',q:'',sort:''};
+const SGCOMP={up:['صاعد','🟢','p'],flat:['مختلط','🟡','z'],down:['نازل','🔴','n']};
+async function openSig(tab){if(tab)SGTAB=tab;
+  showModal(`<h2>🎯 الإشارات — كل المؤشرات وتركيباتها بسجلها</h2><div class="sg-tabs" id="sg_tabs"></div><div id="sg_body" style="color:var(--mut);font-size:12.5px;padding:16px;text-align:center">${LDR('جاري التحميل…')}</div>
+    <div class="mbtns"><button onclick="openFc()">🔮 التوقعات</button><button onclick="openInd()">📊 المؤشرات</button><button onclick="hideModal()">إغلاق</button></div>`);
+  await sgLoad()}
+async function sgLoad(){clearTimeout(SGT);try{SGV=await api('/api/signals')}catch(e){SGV=null}sgRender();if(SGTAB==='cat')sgCat();
+  if(SGV&&SGV.busy&&SGV.busy.phase&&$('#sg_body'))SGT=setTimeout(sgLoad,4000)}
+function sgTab(t){SGTAB=t;sgRender();if(t==='cat')sgCat()}
+function sgAr(n,k){const W={day:['يوم واحد','يومين','أيام','يوماً'],time:['مرة واحدة','مرتين','مرات','مرة'],coin:['عملة واحدة','عملتين','عملات','عملة']}[k];n=+n||0;   // 55 يوماً · 13 مرة · 9 مرات
+  return n===1?W[0]:n===2?W[1]:(n%100>=3&&n%100<=10)?`${n} ${W[2]}`:`${n} ${W[3]}`}
+function sgPct(x){x=+x||0;return `<b class="${x>=0?'up':'dn'}" dir="ltr">${x>=0?'+':''}${(x*100).toFixed(1)}%</b>`}
+function sgTy(V,t){return ((V&&V.types)||{})[t]||['•','']}
+function sgRow(r,V){const T=sgTy(V,r.ty),hz=((V&&V.hzn)||{})[r.f]||'';
+  return `<div class="sg-r${r.ok?' ok':''}${r.s<0?' sell':''}"><div class="sg-rh"><span class="sg-ty">${T[0]} ${gEsc(T[1])}</span><span class="sg-fr">${gEsc(((V&&V.fn)||{})[r.f]||r.f)}${r.k.length>1?' · '+r.k.length+' معاً':''}</span>
+    ${r.rare?'<span class="sg-b rare">💎 نادرة</span>':''}${r.new?'<span class="sg-b new">🆕 الآن</span>':''}${r.ok?'<span class="sg-b ok">🔔 تصلك</span>':''}</div>
+    <div class="sg-k">${r.nm.map(gEsc).join(' <b>+</b> ')}</div>
+    <div class="sg-rec">صدقت <b>${r.w}</b> من <b>${sgAr(r.n,'time')}</b> (<b>${(+r.h).toFixed(0)}%</b>) · العشوائي ${(+r.rh).toFixed(0)}% · المتوسط بعد ${gEsc(hz)} ${sgPct(r.m)}${r.ln?` · منها حيّة ${r.lw} من ${r.ln}`:''}${r.better?'':' · <span style="color:var(--amber)">⚠️ ليست أفضل من العشوائي</span>'}</div></div>`}
+function sgHead(V){const C=V.comp,B=V.busy||{};let h='';
+  if(C&&SGCOMP[C.s]){const nm=SGCOMP[C.s];
+    h+=`<div class="sg-comp ${nm[2]}"><div><b>🧭 السوق الآن: ${nm[1]} ${nm[0]}</b> <small>منذ ${sgAr(C.days,'day')}</small></div>
+      <div class="ind-sub">البيتكوين ${C.btc?'فوق':'تحت'} متوسط 200 يوم · ${C.k} من ${sgAr(C.n,'coin')} فوق متوسطها (50 يوماً)${C.m14!=null?` · تاريخياً متوسط الشراء بعد أسبوعين في هذا الوضع ${sgPct(C.m14)}`:''}${C.s==='flat'?' · تاريخياً أسوأ وضع للشراء':''}</div>
+      <div class="sg-hist" title="آخر 60 يوماً — 🟢 صاعد · 🟡 مختلط · 🔴 نازل (منعّمة: لا تتغير إلا إذا ثبتت 3 أيام)">${(C.hist||[]).map(x=>`<i class="${gEsc(x[2])}"></i>`).join('')}</div></div>`}
+  if(B.phase)h+=`<div class="sg-busy">${gEsc(B.msg||'…')}<div class="sg-pb"><i style="width:${Math.max(3,+B.pct||0)}%"></i></div></div>`;
+  if(V.err)h+=`<div class="ind-sub" style="color:var(--amber)">⚠️ ${gEsc(V.err)}</div>`;
+  return h}
+function sgCoin(x,V){const op=!!SGO[x.sym],F=x.fr||{};
+  const chips=['1D','4H'].filter(f=>F[f]).map(f=>{const z=F[f];return `<span class="ind-chip">${gEsc((V.fn||{})[f]||f)}: <b style="color:var(--green)">🟢 ${z.nb}</b> · <b style="color:var(--red)">🔴 ${z.ns}</b></span>`}).join('');
+  let det='';
+  if(op){det=`<div class="ind-det" onclick="event.stopPropagation()">${['1D','4H'].filter(f=>F[f]).map(f=>{const z=F[f],R=z.rows||[],ok=R.filter(r=>r.ok),rest=R.filter(r=>!r.ok);
+      return `<div class="sg-frh">${gEsc((V.fn||{})[f]||f)} <small>· آخر شمعة ${z.t?new Date(z.t*1000).toLocaleString('ar',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'—'} · الشغّالة الآن: ${R.length}</small></div>
+        ${ok.map(r=>sgRow(r,V)).join('')||'<div class="ind-sub">لا شيء يمر بإعداداتك الآن</div>'}
+        ${rest.length?`<details class="sg-more"><summary>الباقي (${rest.length}) — لا يمر بإعداداتك</summary>${rest.slice(0,30).map(r=>sgRow(r,V)).join('')}</details>`:''}`}).join('')||'<div class="ind-sub">لم تُفحص بعد</div>'}</div>`}
+  const px=(F['4H']||F['1D']||{}).px;
+  return `<div class="ind-c sg-c${op?' open':''}" onclick="SGO['${gEsc(x.sym)}']=!SGO['${gEsc(x.sym)}'];sgRender()"><div class="ind-h"><span class="cn">${gEsc(x.base)}</span>${px?`<span class="px">${fmtPx(px)}</span>`:''}
+    <span class="ind-sub" style="margin-inline-start:auto">${op?'':'اضغط للتفاصيل ←'}</span></div><div class="ind-dots">${chips}</div>${det}</div>`}
+function sgNow(V){let h=sgHead(V);
+  if(!V.cat)return h+`<div class="sg-empty">🏗️ <b>أول مرة:</b> تُجلب شموع ~${(V.uni||[]).length} عملة (سنتان على 4 ساعات و3 سنوات يومية) ثم تُحسب كل الإشارات وتُبحث تركيباتها — بعملية منفصلة لا تُثقل اللوحة. يأخذ ذلك من ربع ساعة إلى ساعة مرة واحدة، ثم يصبح خفيفاً (فحص عند إغلاق كل شمعة).${V.on?'':'<br>⚠️ المؤشرات وإشعارات الإشارات متوقفة — شغّل أحدهما'}</div>`;
+  const N=V.now||[];
+  if(!N.length)return h+'<div class="sg-empty">🔍 الدليل جاهز — أول فحص عند إغلاق شمعة 4 ساعات القادمة (3 · 7 · 11 صباحاً ومساءً بتوقيت بغداد) أو اليومية (3 فجراً)</div>';
+  const mine=N.filter(x=>x.mine),oth=N.filter(x=>!x.mine);
+  h+=`<div class="ind-top"><span class="ind-chip">🔄 آخر فحص ${V.scan_ts?gAgo(V.scan_ts):'—'}</span><span class="ind-chip">📒 ${V.cat.n} إشارة وتركيبة · 💎 ${V.cat.nrare} نادرة</span>${V.est?`<span class="ind-chip">🔔 أسبوعياً ≈ ${V.est.cut}</span>`:''}</div>`;
+  h+=`<div class="ind-list">${mine.map(x=>sgCoin(x,V)).join('')||'<div class="ind-sub">لا توجد عملات في إشعاراتك — اخترها من ⚙️ الإشعارات</div>'}</div>`;
+  if(oth.length)h+=`<details class="sg-more"><summary>عملات القياس الأخرى (${oth.length}) — تُفحص لتقوية السجل ولا تصلك إشعاراتها</summary><div class="ind-list">${oth.map(x=>sgCoin(x,V)).join('')}</div></details>`;
+  h+=`<details class="ind-help"><summary>كيف أقرأ هذه النافذة؟</summary>
+    <div>• كل <b>إشارة</b> وكل <b>تركيبة</b> (إشارتان أو أكثر أُطلقت خلال شموع قليلة على العملة نفسها) لها سجلها الخاص: <b>صدقت كم من كم مرة</b> بعد ${gEsc((V.hzn||{})['4H']||'')} (4 ساعات) أو ${gEsc((V.hzn||{})['1D']||'')} (يومي)، صافياً بعد العمولة.</div>
+    <div>• السجل من <b>آخر 40% من التاريخ</b> — فترة لم تُختر عليها التركيبة — ثم <b>السجل الحي</b> منذ تشغيل اللوحة (يُحكم وحده). 💎 النادرة: سجلها كل التاريخ لأن حالاتها قليلة.</div>
+    <div>• <b>العشوائي</b>: كم مرة كان السعر أعلى (أو أدنى للبيع) بعد المدة نفسها في أي شمعة — للمقارنة. الإشارة الجيدة أعلى منه بوضوح.</div>
+    <div>• 🧭 <b>البوصلة</b>: البيتكوين فوق متوسط 200 يوم وأغلب العملات فوق متوسطها = صاعد · العكس = نازل · غير ذلك = مختلط. لا تتغير إلا إذا ثبتت الحالة الجديدة 3 أيام.</div>
+    <div style="color:var(--amber);margin-top:6px">⚠️ احتمالات لا ضمانات · اللوحة تقرأ وتنبّه فقط: لا تفتح أمراً ولا تغلقه.</div></details>`;
+  return h}
+function sgCatUI(V){const b=(k,v,t)=>`<button class="${SGF[k]===v?'on':''}" onclick="SGF['${k}']='${v}';sgRender();sgCat()">${t}</button>`;
+  const C=V.cat;if(!C)return sgHead(V)+'<div class="sg-empty">🏗️ الدليل لم يُبنَ بعد — تتابعه في «الآن»</div>';
+  const tys=Object.entries(V.types||{}).filter(([k])=>!['mkt','res'].includes(k));
+  return `<div class="ind-sub" style="margin-bottom:6px">📒 <b>${C.n}</b> إشارة وتركيبة (منها ${C.ncombo} تركيبة · 💎 ${C.nrare} نادرة) · من تاريخ ${(C.coins||[]).length} عملة · بُني ${C.ts?gAgo(C.ts):'—'}${C.secs?` في ${Math.round(C.secs/60)} دقيقة`:''} · يُعاد كل أسبوع</div>
+    <div class="sg-flt">${b('fr','','الكل')}${b('fr','1D','يومي')}${b('fr','4H','4 ساعات')}</div>
+    <div class="sg-flt">${b('side','1','🟢 شراء وصعود')}${b('side','-1','🔴 بيع ونزول')}${b('side','','الكل')}</div>
+    <div class="sg-flt">${b('size','','كل الأحجام')}${b('size','1','وحدها')}${b('size','2','2 معاً')}${b('size','3','3 معاً')}${b('size','4','4 فأكثر')}${b('rare','1','💎 النادرة فقط')}${SGF.rare?b('rare','','✕ النادرة'):''}</div>
+    <div class="sg-flt"><select onchange="SGF.ty=this.value;sgCat()"><option value="">كل الأنواع</option>${tys.map(([k,t])=>`<option value="${k}"${SGF.ty===k?' selected':''}>${t[0]} ${gEsc(t[1])}</option>`).join('')}</select>
+      <select onchange="SGF.sort=this.value;sgCat()"><option value="">الأصدق أولاً</option><option value="n"${SGF.sort==='n'?' selected':''}>الأكثر حالات</option><option value="m"${SGF.sort==='m'?' selected':''}>الأكبر حركة</option><option value="live"${SGF.sort==='live'?' selected':''}>الأكثر سجلاً حياً</option></select>
+      <input type="search" placeholder="🔍 ابحث: MACD · بولنجر · Supertrend…" value="${gEsc(SGF.q)}" oninput="SGF.q=this.value;clearTimeout(SGET);SGET=setTimeout(sgCat,350)"></div>
+    <div id="sg_cat">${LDR('…')}</div>`}
+async function sgCat(){const el=$('#sg_cat');if(!el)return;try{SGC=await api('/api/signals_cat?'+new URLSearchParams(SGF).toString())}catch(e){SGC=null}
+  const e2=$('#sg_cat');if(!e2)return;if(!SGC||!SGC.ok){e2.innerHTML='<div class="ind-sub">⚠️ '+gEsc((SGC&&SGC.msg)||'تعذّر التحميل')+'</div>';return}
+  e2.innerHTML=`<div class="ind-sub">النتائج: ${SGC.total}${SGC.total>SGC.rows.length?` · تُعرض أول ${SGC.rows.length}`:''}</div>`+(SGC.rows.map(r=>sgRow(r,SGV)).join('')||'<div class="ind-sub">لا شيء بهذه الفلاتر</div>')}
+function sgLog(V){const L=V.log||[],R=((V.live||{}).recent)||[],lv=V.live||{};
+  const dt=t=>new Date(t*1000).toLocaleString('ar',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  return `<div class="ind-sub">📒 السجل الحي: حُكم عليها ${lv.done||0} · تنتظر وقتها ${lv.pend||0} (كل ما أُطلق على عملات القياس — لا ما وصلك فقط)</div>
+    <div class="sg-frh">✅ نتائج ما وصلك إشعاره</div>${R.map(x=>`<div class="sg-lg"><b class="${x.x>0?'up':'dn'}">${x.x>0?'✅':'❌'} ${(x.x*100).toFixed(1)}%</b> · ${gEsc(sgTy(V,x.ty)[0]+' '+sgTy(V,x.ty)[1])} ${gEsc((x.sym||'').split('-')[0])} · ${gEsc(x.nm||'')} <small>· ${dt(x.ts)}</small></div>`).join('')||'<div class="ind-sub">لا نتائج بعد — تُحكم كل إشارة بعد وقتها (3 أيام أو أسبوع)</div>'}
+    <div class="sg-frh">🔔 آخر الإشعارات (${L.length})</div>${L.map(x=>`<div class="sg-lg"><b>${gEsc(x.t)}</b> <small>· ${dt(x.ts)}</small><div class="ind-sub" style="white-space:pre-line">${gEsc(x.b)}</div></div>`).join('')||'<div class="ind-sub">لا إشعارات بعد</div>'}`}
+function sgEstTxt(E){if(!E)return 'التقدير يظهر بعد بناء الدليل';
+  return `بهذه الإعدادات كان سيصلك أسبوعياً نحو <b>${E.cut}</b> من الإشعارات على عملاتك${E.capped?` (بلا حدك اليومي ${E.wk})`:''} · الإشارات والتركيبات التي تمر: ${E.n}${E.cut>25?' · <span style="color:var(--amber)">⚠️ كثير — ارفع النسبة أو عدد المرات</span>':''}`}
+function sgEst(v){Object.assign(SGP,v);const lb=$('#sg_thr_v');if(lb&&v.thr!=null)lb.textContent=v.thr+'%';const lm=$('#sg_min_v');if(lm&&v.min!=null)lm.textContent=v.min;
+  const lr=$('#sg_rmin_v');if(lr&&v.rmin!=null)lr.textContent=v.rmin;
+  clearTimeout(SGET);SGET=setTimeout(async()=>{try{const r=await api('/api/control',{action:'sg_est',value:SGP});const el=$('#sg_est');if(el)el.innerHTML=sgEstTxt(r&&r.est)}catch(e){}},250)}
+async function sgSet(v){try{const r=await api('/api/control',{action:'sg_set',value:v});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok));
+    if(r&&r.cfg&&SGV){SGV.cfg=r.cfg;SGV.est=r.est;SGV.mine=r.cfg.coins||SGV.tick;SGP={}}}catch(e){toast('تعذر الاتصال',false)}if(SGTAB==='cfg')sgRender()}
+function sgCoinTog(s){const c=SGV.cfg,cur=(c.coins||SGV.tick||[]).slice(),i=cur.indexOf(s);if(i>=0)cur.splice(i,1);else cur.push(s);sgSet({coins:cur})}
+function sgCfg(V){const c=V.cfg||{},T=c.types||{},ty=V.types||{},hrs=[...Array(24).keys()];
+  const tg=(on,fn,a,b)=>`<button class="${on?'on':''}" onclick="${fn}">${on?a:b}</button>`;
+  const hsel=(id,val,fn,off)=>`<select id="${id}" onchange="${fn}">${off?`<option value="">${off}</option>`:''}${hrs.map(h=>`<option value="${h}"${val===h?' selected':''}>${String(h).padStart(2,'0')}:00</option>`).join('')}</select>`;
+  const q=c.quiet||null,mine=c.coins||V.tick||[];
+  return `<div class="ind-al${c.on?'':' off'}"><div class="ind-al-h"><b>🎯 إشعارات الإشارات <small style="color:var(--mut2);font-weight:400">${c.on?gEsc((V.ch||{})[c.ch]||''):'متوقفة'}</small></b>
+      <span style="display:flex;gap:6px"><button id="sg_on" class="${c.on?'on':''}" onclick="sgSet({on:${c.on?'false':'true'}})">${c.on?'✅ مفعّلة':'⏸️ متوقفة'}</button></span></div>
+    <div class="sg-set"><div class="sg-sh">🎚️ أقل نسبة صدق: <b id="sg_thr_v">${c.thr}%</b></div><input type="range" id="sg_thr" min="50" max="95" step="1" value="${c.thr}" oninput="sgEst({thr:+this.value})" onchange="sgSet({thr:+this.value})">
+      <div class="ind-sub" id="sg_est">${sgEstTxt(V.est)}</div></div>
+    <div class="sg-set"><div class="sg-sh">🔢 أقل عدد مرات حتى تُحسب نسبتها: <b id="sg_min_v">${c.min}</b></div><input type="range" id="sg_min" min="3" max="100" step="1" value="${c.min}" oninput="sgEst({min:+this.value})" onchange="sgSet({min:+this.value})">
+      <div class="ind-sub">إشارة ظهرت مرتين وصدقت مرتين = 100% — صدفة. الحد يمنع ذلك.</div></div>
+    <div class="sg-set">${tg(c.rnd,`sgSet({rnd:${!c.rnd}})`,'✅ أفضل من العشوائي فقط','⬜ أفضل من العشوائي فقط')}<div class="ind-sub">نسبة 55% في سوق نازل قد تكون مثل البيع العشوائي — هذا الشرط يشترط أن تكون أعلى منه بوضوح.</div></div>
+    <div class="sg-set">${tg(c.rare,`sgSet({rare:${!c.rare}})`,'💎 النادرة: تصلك','💎 النادرة: لا تصلك')} <span class="sg-sh">أقل عدد لها: <b id="sg_rmin_v">${c.rmin}</b></span>
+      <input type="range" min="3" max="30" step="1" value="${c.rmin}" oninput="sgEst({rmin:+this.value})" onchange="sgSet({rmin:+this.value})"><div class="ind-sub">تركيبات ظهرت مرات قليلة بصدق عالٍ وصمدت على الفترة الجديدة — تصلك بعلامة 💎 وتحذير.</div></div>
+    <div class="sg-set"><div class="sg-sh">✅ الأنواع</div><div class="sg-flt">${Object.entries(ty).map(([k,t])=>`<button class="${T[k]!==false?'on':''}" onclick="sgSet({types:{${k}:${T[k]===false}}})">${t[0]} ${gEsc(t[1])}</button>`).join('')}</div>
+      <div class="ind-sub">🧭 السوق: حين يثبت وضع جديد · 🌊 يصلك من «📊 تنبيهات المؤشرات» حين تكون مفعّلة (لا يتكرر) · ✅ النتائج: بعد وقت كل إشارة وصلتك</div></div>
+    <div class="sg-set"><div class="sg-sh">🕯️ الفريم</div><div class="sg-flt">${['1D','4H'].map(f=>`<button class="${(c.fr||{})[f]!==false?'on':''}" onclick="sgSet({fr:{'${f}':${(c.fr||{})[f]===false}}})">${gEsc((V.fn||{})[f]||f)}</button>`).join('')}</div></div>
+    <div class="sg-set"><div class="sg-sh">🪙 العملات <small>(${mine.length})</small> ${c.coins?`<button onclick="sgSet({coins:null})">↩️ مثل الشريط</button>`:'<small>· مثل الشريط (📊)</small>'}</div>
+      <div class="sg-flt">${(V.uni||[]).map(s=>`<button class="${mine.includes(s)?'on':''}" onclick="sgCoinTog('${gEsc(s)}')">${gEsc(s.split('-')[0])}</button>`).join('')}</div></div>
+    <div class="sg-set"><div class="sg-sh">📮 الحد اليومي <small>(الزائد يبقى في اللوحة بلا رنّة)</small></div><div class="sg-flt">${[3,5,8,12,20,0].map(n=>`<button class="${c.cap===n?'on':''}" onclick="sgSet({cap:${n}})">${n||'بلا حد'}</button>`).join('')}</div></div>
+    <div class="sg-set"><div class="sg-sh">🌙 ساعات الهدوء <small>(تنتظر ثم تصلك برسالة واحدة)</small></div>
+      ${tg(!!q,q?'sgSet({quiet:null})':'sgSet({quiet:[0,8]})','مفعّلة','متوقفة')} ${q?`من ${hsel('sg_q0',q[0],`sgSet({quiet:[+this.value,${q[1]}]})`)} إلى ${hsel('sg_q1',q[1],`sgSet({quiet:[${q[0]},+this.value]})`)}`:''}</div>
+    <div class="sg-set"><div class="sg-sh">🗓️ ملخص يومي بدل الإشعارات المتفرقة</div>${hsel('sg_sum',c.sum,`sgSet({sum:this.value===''?null:+this.value})`,'لا — كل إشعار بوقته')}</div>
+    <div class="sg-set"><div class="sg-sh">📨 أين تصل</div><div class="sg-flt">${Object.entries(V.ch||{}).map(([k,t])=>`<button class="${c.ch===k?'on':''}" onclick="sgSet({ch:'${k}'})">${gEsc(t)}</button>`).join('')}</div></div>
+    <div class="sg-set sg-flt"><button onclick="sgTest()">🧪 جرّب إشعاراً</button><button onclick="sgRebuild()">🏗️ أعد البحث عن التركيبات الآن</button></div>
+    <div class="ind-sub">إشعار واحد لكل عملة يجمع كل ما اتفق · نفس العملة ونفس النوع لا يتكرر (يوم على 4 ساعات · 3 أيام على اليومي) إلا إذا طلعت أقوى بوضوح · الضغط على الإشعار في الهاتف يفتح هذه النافذة.</div></div>`}
+async function sgTest(){try{const r=await api('/api/control',{action:'sg_test'});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok))}catch(e){toast('تعذر الاتصال',false)}}
+async function sgRebuild(){try{const r=await api('/api/control',{action:'sg_rebuild'});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok))}catch(e){toast('تعذر الاتصال',false)}SGTAB='now';setTimeout(sgLoad,1500)}
+function sgRender(){const el=$('#sg_body'),tb=$('#sg_tabs');if(!el)return;const V=SGV;
+  if(tb)tb.innerHTML=[['now','🎯 الآن'],['cat','📒 الدليل'],['log','🧾 السجل'],['cfg','⚙️ الإشعارات']].map(([k,t])=>`<button class="${SGTAB===k?'on':''}" onclick="sgTab('${k}')">${t}</button>`).join('');
+  if(!V||V.ok===false){el.innerHTML='⚠️ تعذّر تحميل الإشارات';return}
+  el.style.cssText='text-align:right';
+  el.innerHTML=SGTAB==='cat'?sgCatUI(V):SGTAB==='log'?sgLog(V):SGTAB==='cfg'?sgCfg(V):sgNow(V)}
+function sgFcTop(S){if(!S)return '';const C=S.comp,nm=C&&SGCOMP[C.s];               // 🔮 v3.36.66: الإشارات داخل التوقعات
+  return `<button class="sg-go" onclick="openSig('now')">🎯 <b>الإشارات الآن</b>${S.ready?` · <b style="color:var(--green)">🟢 ${S.nb}</b> · <b style="color:var(--red)">🔴 ${S.ns}</b> تمر بإعداداتك`:' · 🏗️ الدليل يُبنى'}${nm?` · 🧭 السوق ${nm[1]} ${nm[0]}`:''} ←</button>`}
+function sgFc(r){const S=r.sig;if(!S)return '';const fs=['1D','4H'].filter(f=>S[f]&&(S[f].rows||[]).length);if(!fs.length)return '';
+  const best=fs.map(f=>S[f].rows[0]).filter(Boolean).sort((a,b)=>(b.ok-a.ok)||(b.h-a.h))[0];
+  return `<div class="sg-fc" onclick="event.stopPropagation();SGO['${gEsc(r.sym)}']=true;openSig('now')">🎯 ${fs.map(f=>`${f==='1D'?'يومي':'4 ساعات'}: <b style="color:var(--green)">🟢 ${S[f].nb}</b> · <b style="color:var(--red)">🔴 ${S[f].ns}</b>`).join(' · ')}
+    ${best?`<small> — أقواها: ${gEsc(best.nm.join(' + '))} (صدقت ${best.w} من ${sgAr(best.n,'time')} · ${(+best.h).toFixed(0)}%)</small>`:''}</div>`}
+function sgMini(){return `<div class="ind-al" style="margin-top:10px"><div class="ind-al-h"><b>🎯 إشعارات الإشارات — شراء · بيع · تجميع · تصريف · صعود · نزول · السوق</b>
+  <span style="display:flex;gap:6px"><button onclick="openSig('cfg')">⚙️ الإعدادات</button><button onclick="openSig('now')">🎯 الآن</button></span></div>
+  <div class="ind-sub" style="margin-top:6px">كل إشارة وكل تركيبة (2 … 6 معاً) بسجلها على الأسعار الحقيقية · تصلك بالنسبة وعدد المرات اللي تختارهما · مع تقدير كم إشعاراً بالأسبوع قبل أن تختار</div></div>`}
 /* 🔮 v3.29.0: التوقعات — نفس مؤشرات 📊 على شموع أطول (يوم ← 4 ساعات · أسبوع ← يوم · شهر ← 3 أيام · 3 أشهر ← أسبوع) + 4 إضافات ·
    دائماً «شنو تكول المؤشرات» ويمها شارة صدقها على نفس العملة · النطاق 80% · الدعم والمقاومة · بلا إشعارات */
 let FCV=null,FCT=null;const FCO={},FCS={};
@@ -28768,7 +31032,7 @@ function fcAlign(){const a=$('#fcBtn'),b=$('#indBtn');if(!a||!b||!a.offsetParent
 addEventListener('resize',()=>{const a=$('#fcBtn');if(a){a._al='';fcAlign()}});
 async function openFc(){
   showModal(`<h2>🔮 التوقعات</h2><div id="fc_body" style="color:var(--mut);font-size:12.5px;padding:16px;text-align:center">${LDR('جاري الحساب…')}</div>
-    <div class="mbtns"><button onclick="openGuide('','fc')">📖 الدليل</button><button onclick="openTicker()">⚙️ العملات</button><button onclick="hideModal()">إغلاق</button></div>`);
+    <div class="mbtns"><button onclick="openSig()">🎯 الإشارات</button><button onclick="openGuide('','fc')">📖 الدليل</button><button onclick="openTicker()">⚙️ العملات</button><button onclick="hideModal()">إغلاق</button></div>`);
   await fcLoad()}
 async function fcLoad(){clearTimeout(FCT);try{FCV=await api('/api/forecast')}catch(e){FCV=null}fcRender();
   if(FCV&&FCV.busy&&$('#fc_body'))FCT=setTimeout(fcLoad,4000)}
@@ -28806,7 +31070,7 @@ function fcRender(){
   const R=V.rows||[],HZ=V.hz||[];
   if(!R.length){el.innerHTML=V.busy?LDR('⏳ أول حساب: يجلب تاريخ كل عملة ويفحص مؤشراتها على ماضيها — مرة واحدة فقط (بعدها يصبح خفيفاً)…'):('لا توجد عملات في الشريط — أضفها من ⚙️ ← 📈 شريط الأسعار'+(V.err?'<br><small>'+gEsc(V.err)+'</small>':''));return}
   el.style.cssText='text-align:right';
-  let h=`<div class="ind-top"><span class="ind-chip">📊 نفس مؤشرات «المؤشرات» + 4 إضافات</span><span class="ind-chip">🔄 ${V.ts?gAgo(V.ts):'—'} · كل ${Math.round((V.every||1800)/60)} د</span>
+  let h=sgFcTop(V.sig)+`<div class="ind-top"><span class="ind-chip">📊 نفس مؤشرات «المؤشرات» + 4 إضافات</span><span class="ind-chip">🔄 ${V.ts?gAgo(V.ts):'—'} · كل ${Math.round((V.every||1800)/60)} د</span>
     <span class="ind-chip">🔕 بلا إشعارات</span></div>${V.busy?`<div class="ind-sub">⏳ يُكمل حساب بقية العملات…</div>`:''}`;
   h+=`<div class="ind-list">${R.map(r=>{
     if(r.short)return `<div class="ind-c"><div class="ind-h"><span class="cn">${gEsc(r.base)}</span><span class="ind-v flat">⏳ تاريخها قصير (${r.days||0} يوم)</span></div>
@@ -28835,7 +31099,7 @@ function fcRender(){
     return `<div class="ind-c fc-c ${['su','u'].includes(v0)?'up':['sd','d'].includes(v0)?'down':''}${op?' open':''}" onclick="fcTog('${gEsc(r.sym)}')">
       <div class="ind-h"><span class="cn">${gEsc(r.base)}</span><span class="px">${fmtPx(r.px)}</span><span class="chg ${(+r.chg||0)>=0?'up':'dn'}">${(+r.chg||0)>=0?'▲':'▼'}${Math.abs(+r.chg||0).toFixed(2)}%</span>
         ${sq?`<span class="fc-sq" title="هدوء غير معتاد على مدى أو أكثر — لا يعني بالضرورة حركة كبيرة (انظر التفاصيل)">⚡</span>`:''}<span class="ind-sub" style="margin-inline-start:auto">${op?'':'اضغط للتفاصيل ←'}</span></div>
-      ${fcBot(r)}<div class="fc-rows"><div class="fc-r fc-hd"><span>المدى</span><span title="كم مرة كان السعر أعلى بعد المدة على الأسعار الحقيقية / العادي">أعلى بعدها</span><span>النطاق المتوقع</span><span>المؤشرات</span></div>${rows}</div>${det}</div>`}).join('')}</div>`;
+      ${fcBot(r)}${sgFc(r)}<div class="fc-rows"><div class="fc-r fc-hd"><span>المدى</span><span title="كم مرة كان السعر أعلى بعد المدة على الأسعار الحقيقية / العادي">أعلى بعدها</span><span>النطاق المتوقع</span><span>المؤشرات</span></div>${rows}</div>${det}</div>`}).join('')}</div>`;
   h+=`<details class="ind-help"><summary>كيف أقرأ هذه النافذة؟</summary>
     <div>• كل سطر مدى زمني: <b>ماذا تقول المؤشرات</b> (كم مؤشراً صاعداً أو هابطاً من العدد كله: المؤشرات العشرة نفسها وأربعة إضافية) · <b>النطاق المتوقع</b> (يقع السعر في نهاية المدة بين الرقمين بنسبة 80%) · <b>صدقها</b>.</div>
     <div>• تُحسب المؤشرات على شموع أطول بحسب المدى: اليوم على شموع 4 ساعات · الأسبوع على اليومية · الشهر على شموع 3 أيام · الأشهر الثلاثة على الأسبوعية.</div>
@@ -30284,6 +32548,7 @@ function holyGoNow(){const t=HGO;HGO=null;if(!t)return;
   if(k==='app')return openAppPanel();
   if(k==='win')return openWinPanel();
   if(k==='ind')return openInd();
+  if(k==='sig')return openSig('now');                            // 🎯 v3.36.66
   if(k==='set')return openSettings();                             // ⚙️ v3.26.8                                  // 🔔 v3.26.6: إشعار سعر انضغط ⇒ «📊 المؤشرات»
   if(k==='bot')return holyFlash(CARDS.get(v));
   if(k==='sym'){for(const [d,el] of CARDS){if((botOf(d)||{}).symbol===v)return holyFlash(el)}return}
@@ -38191,6 +40456,7 @@ def main():
         threading.Thread(target=indic_loop, daemon=True).start()    # 📊 شريط المؤشرات
         threading.Thread(target=fc_loop, daemon=True).start()       # 🔮 التوقعات (يوم · أسبوع · شهر · 3 أشهر)
         threading.Thread(target=pro_loop, daemon=True).start()      # 🏦🗞️ v3.33.0: المحترفون والاقتصاد (حلقة مستقلة)
+        threading.Thread(target=sg_loop, daemon=True).start()       # 🎯 v3.36.66: الإشارات (الحساب الثقيل بعملية منفصلة)
         threading.Thread(target=handoff_loop, daemon=True).start()  # 🪙 تسليم العملة خلال ثوانٍ
         srv = ThreadingHTTPServer(("0.0.0.0", port), Handler)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -38977,6 +41243,8 @@ APP_APK_B64 = "UEsDBBQAAAAIACEIIQJg4G/YBwgAALwbAAATAAAAQW5kcm9pZE1hbmlmZXN0Lnhtb
 if __name__ == "__main__":
     if len(sys.argv) >= 5 and sys.argv[1] == "--holy-bt":      # 🧪 v3.36.0: عامل الاختبار التجريبي (عملية منفصلة بلا شبكة)
         sys.exit(_bt_child(sys.argv[2], sys.argv[3], sys.argv[4]))
+    if len(sys.argv) >= 3 and sys.argv[1] == "--holy-sig":        # 🎯 v3.36.66: عامل الإشارات (عملية منفصلة بلا شبكة · أولوية منخفضة)
+        sys.exit(sg_child(sys.argv[2], proc=True))
     if len(sys.argv) >= 3 and sys.argv[1] == "--holy-demo-cfg":   # 🧪 v3.36.46: إعداد الديمو (دالة النشر نفسها · بلا شبكة)
         sys.exit(_demo_cfg_child(sys.argv[2]))
     # 🛟 شبكة أمان: أي فشل بالإقلاع يُكتب بملف ويُعرض بالشاشة بدل ما ينغلق بصمت
