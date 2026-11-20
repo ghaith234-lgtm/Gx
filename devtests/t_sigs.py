@@ -416,5 +416,5 @@ ok("⑪ the signals' code calls no order function (_okx_post · place · cancel)
    not any(w in src[a:b] for w in ("_okx_post", "place_order", "cancel_order", "verify=False", "CERT_NONE")), "")
 
 shutil.rmtree(R, ignore_errors=True)
-print(f"{'✅' if all(res) else '❌'} {sum(res)}/{len(res)} signals checks")
+print(f"{'✅' if all(res) else '❌'} t_sigs: {sum(res)}/{len(res)} (the signals)")
 sys.exit(0 if all(res) else 1)
