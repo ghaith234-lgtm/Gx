@@ -19791,14 +19791,14 @@ def _sg_deliver(blocks, st, cfg, now, send=True):
             out = blocks[:max(0, room)]
             if not st.get("capped"):
                 st["capped"] = True
-                note = f"🔕 وصلت حد إشعارات الإشارات اليوم ({cfg['cap']}) — الباقي في اللوحة فقط (🎯)"
+                note = f"🔕 وصلت حد إشعارات المحلل اليوم ({cfg['cap']}) — الباقي في نافذة 📊 المؤشرات"
     st["n"] = int(st.get("n") or 0) + len(out)
     if not out and not note:
         return []
     if len(out) == 1:
         text = out[0]["t"] + "\n" + out[0]["b"]
     else:
-        text = f"🎯 إشارات جديدة ({len(out)})\n\n" + "\n\n".join(b["t"] + "\n" + b["b"] for b in out)
+        text = f"🧠 المحلل — إشعارات جديدة ({len(out)})\n\n" + "\n\n".join(b["t"] + "\n" + b["b"] for b in out)
     text += ("\n\n" + note) if note else ""
     if send:
         _sg_tg(text, cfg)
@@ -19810,8 +19810,8 @@ def _sg_flush(st, cfg, now, send=True):
     sent = None
     if st.get("qq") and not _sg_quiet(cfg, now):
         q = st.pop("qq")
-        text = f"🌙 إشارات وصلت أثناء ساعات الهدوء ({len(q)})\n\n" + "\n\n".join(x["t"] + "\n" + x["b"] for x in q[:15]) + \
-            (f"\n\n… و{len(q) - 15} غيرها في اللوحة (🎯)" if len(q) > 15 else "")
+        text = f"🌙 إشعارات المحلل أثناء ساعات الهدوء ({len(q)})\n\n" + "\n\n".join(x["t"] + "\n" + x["b"] for x in q[:15]) + \
+            (f"\n\n… و{len(q) - 15} غيرها في نافذة 📊 المؤشرات" if len(q) > 15 else "")
         if send:
             _sg_tg(text, cfg)
         sent = text
@@ -19820,7 +19820,7 @@ def _sg_flush(st, cfg, now, send=True):
         if _sg_local_h(now) >= cfg["sum"] and st.get("sum_day") != day:
             st["sum_day"] = day
             q = st.pop("sumq", [])
-            text = f"🗓️ ملخص الإشارات اليوم ({len(q)})" + ("\n\n" + "\n\n".join(x["t"] + "\n" + x["b"] for x in q[:20]) if q else "\nلا توجد إشارات جديدة اليوم بإعداداتك")
+            text = f"🗓️ ملخص المحلل اليوم ({len(q)})" + ("\n\n" + "\n\n".join(x["t"] + "\n" + x["b"] for x in q[:20]) if q else "\nلا جديد اليوم بإعداداتك")
             if len(q) > 20:
                 text += f"\n\n… و{len(q) - 20} غيرها في اللوحة (🎯)"
             if send:
@@ -20007,7 +20007,7 @@ def _sg_process(scan, frs, st, cfg, cat, cdb, now, send=True):
                 for sd in (1, -1):
                     if f"{code}:{sd}" in A1:
                         nst[f"{fr}|{code}"] = [sd, x["t"]]
-                        if fr == "1D" and f"{code}:{sd}" not in A0 and sym in mine and cfg["types"].get("nst", True):
+                        if fr == "1D" and code in SG_NST_NOTE and f"{code}:{sd}" not in A0 and sym in mine and cfg["types"].get("nst", True):
                             nst_new.append((sym, code, sd))
             for e in fired:
                 ok = sym in mine and _sg_pass(e, st, cfg, cat)
@@ -20215,6 +20215,7 @@ def _sg_row(e, st, cat, cfg):
 
 SG_NST = ("X-ad", "X-adt", "P-tk", "P-ls", "X-rs")           # 🔎 «الآن في السوق» — وصف للحاضر
 SG_NST_AGE = {"4H": 3 * 86400, "1D": 14 * 86400}
+SG_NST_NOTE = ("X-ad", "P-tk")                              # 🔔 منها ما يُشعَر به: التجميع/التصريف · الشراء/البيع العدواني (الباقي بالنافذة)
 SG_WHY = {"trend": ("الاتجاه العام صاعد", "الاتجاه العام هابط"),
           "momentum": ("قوة الحركة تميل إلى الصعود", "قوة الحركة تميل إلى الهبوط"),
           "volatility": ("ارتداد من منطقة ضغط سعري", "تراجع من منطقة تشبّع"),
@@ -31052,7 +31053,7 @@ function sgCfg(V){const c=V.cfg||{},T=c.types||{},ty=V.types||{},hrs=[...Array(2
       <div class="ind-sub">إشارة ظهرت مرتين وصدقت مرتين = 100% — صدفة. الحد يمنع ذلك.</div></div>
     <div class="sg-set">${tg(c.rnd,`sgSet({rnd:${!c.rnd}})`,'✅ أفضل من العشوائي فقط','⬜ أفضل من العشوائي فقط')}<div class="ind-sub">نسبة 55% في سوق نازل قد تكون مثل البيع العشوائي — هذا الشرط يشترط أن تكون أعلى منه بوضوح.</div></div>
     <div class="sg-set"><div class="sg-sh">🪙 عملاتك</div><div class="sg-flt">${[['buy','🟢 دخول شراء'],['sell','🔴 دخول بيع'],['nst','🔎 الآن في السوق']].map(([k,t])=>`<button class="${T[k]!==false?'on':''}" onclick="sgSet({types:{${k}:${T[k]===false}}})">${t}</button>`).join('')}</div>
-      <div class="ind-sub">🟢 و🔴: حين تتفق مجموعة مؤشرات مثبتة (غداً أو الشهر القادم) — تحليل لا أسعار · 🔎: حالة جديدة (تجميع · تصريف · شراء أو بيع عدواني · ازدحام) — وصف لا توقع</div>
+      <div class="ind-sub">🟢 و🔴: حين تتفق مجموعة مؤشرات مثبتة (غداً أو الشهر القادم) — تحليل لا أسعار · 🔎: حالة جديدة (تجميع · تصريف · شراء أو بيع عدواني) — وصف لا توقع · مرة في اليوم على الأكثر لكل حالة</div>
       <div class="sg-sh" style="margin-top:8px">🌐 السوق كله</div><div class="sg-flt">${['mkt','crash','fng','eco','res'].filter(k=>ty[k]).map(k=>`<button class="${T[k]!==false?'on':''}" onclick="sgSet({types:{${k}:${T[k]===false}}})">${ty[k][0]} ${gEsc(ty[k][1])}</button>`).join('')}</div>
       <div class="ind-sub">🧭 السوق: حين يثبت وضع جديد · 🌊 الانهيار: مرة في اليوم على الأكثر · 😨 🗞️: فقط إذا صدقت القراءة نفسها في الفترات الأربع · ✅ النتائج: بعد وقت كل إشعار وصلك</div></div>
     <div class="sg-set"><div class="sg-sh">🕯️ الفريم</div><div class="sg-flt">${['1D','4H'].map(f=>`<button class="${(c.fr||{})[f]!==false?'on':''}" onclick="sgSet({fr:{'${f}':${(c.fr||{})[f]===false}}})">${gEsc((V.fn||{})[f]||f)}</button>`).join('')}</div></div>

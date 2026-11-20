@@ -305,6 +305,11 @@ ok("⑤ a SELL group passes only without «better than random» — and then it 
 ok("⑤ 🔎 a new state on a coin of yours: «🔎 XRP الآن: 🔻 السيولة تخرج والسعر لم ينزل بعد (تصريف)» · «وصف لما يحدث الآن على المنصة — ليس توقعاً» "
    "· once a day at most", b7n and b7n["t"] == "🔎 XRP الآن: 🔻 السيولة تخرج والسعر لم ينزل بعد (تصريف)" and "ليس توقعاً" in b7n["b"]
    and not [b for b in m._sg_process(scan(T4E, TDE + 86400, {}, {}, {"XRP-USDT": ["X-ad:-1"]}, {}), ["1D"], st_d, m.sg_cfg(), CAT, CDB, NOW + 3600) if b["ty"] == "nst"], b7)
+st_q = {}
+bq = m._sg_process(scan(T4E, TDE, {}, {}, {"XRP-USDT": ["X-adt:-1", "P-ls:-1", "X-rs:1"]}, {}), ["1D"], st_q, m.sg_cfg(), CAT, CDB, NOW)
+ok("⑤ 🔎 quiet: the trend with liquidity · the crowding · the strength vs BTC are shown in the window but not notified (only accumulation/"
+   "distribution and aggressive buying/selling are)", not [b for b in bq if b["ty"] == "nst"] and set((st_q.get("nst") or {}).get("XRP-USDT", {}))
+   == {"1D|X-adt", "1D|P-ls", "1D|X-rs"}, (bq, st_q.get("nst")))
 CAT["e"].append({"id": "1D|1|M-gpr", "f": "1D", "s": 1, "k": ["M-gpr"], "ty": "eco", "nl": 0, "wl": 0, "ml": 0.0, "nt": 392, "wt": 110, "mt": -0.11,
                  "rare": False, "nd": 9, "ev": [], "c4": False})
 CAT["idx"] = {e["id"]: e for e in CAT["e"]}
@@ -374,8 +379,8 @@ blocks = [{"sym": f"C{i}-USDT", "ty": "buy", "f": "4H", "t": f"🟢 شراء —
 st7 = {}
 _CFG.update(sg_cap=3)
 outd = m._sg_deliver(blocks, st7, m.sg_cfg(), NOW)
-ok("⑦ one Telegram message for the round · the daily cap 3 ⇒ 3 of 5 sent + «🔕 وصلت حد إشعارات الإشارات اليوم (3)» · all 5 in the page log",
-   len(outd) == 3 and len([x for x in SENT if x[0] == "tg"]) == 1 and "🎯 إشارات جديدة (3)" in SENT[0][1] and "🔕 وصلت حد إشعارات الإشارات اليوم (3)" in SENT[0][1]
+ok("⑦ one Telegram message for the round · the daily cap 3 ⇒ 3 of 5 sent + «🔕 وصلت حد إشعارات المحلل اليوم (3)» · all 5 in the page log",
+   len(outd) == 3 and len([x for x in SENT if x[0] == "tg"]) == 1 and "🧠 المحلل — إشعارات جديدة (3)" in SENT[0][1] and "🔕 وصلت حد إشعارات المحلل اليوم (3)" in SENT[0][1]
    and len(st7["log"]) == 5 and any(x[0] == "app" and x[2] == "sig" and x[3] == "ind" for x in SENT), SENT)
 SENT.clear()
 m._sg_deliver(blocks[:1], st7, m.sg_cfg(), NOW + 60)
@@ -387,7 +392,7 @@ st8 = {}
 m._sg_deliver(blocks[:2], st8, m.sg_cfg(), night)
 ok("⑦ 🌙 quiet hours (00–08): nothing sent at 03:00, the two wait", not SENT and len(st8.get("qq") or []) == 2, (SENT, st8))
 m._sg_flush(st8, m.sg_cfg(), night + 6 * 3600)
-ok("⑦ at 09:00 they come as one message «🌙 إشارات وصلت أثناء ساعات الهدوء (2)»", len(SENT) == 2 and "🌙 إشارات وصلت أثناء ساعات الهدوء (2)" in SENT[0][1]
+ok("⑦ at 09:00 they come as one message «🌙 إشعارات المحلل أثناء ساعات الهدوء (2)»", len(SENT) == 2 and "🌙 إشعارات المحلل أثناء ساعات الهدوء (2)" in SENT[0][1]
    and not st8.get("qq"), SENT)
 SENT.clear()
 _CFG.update(sg_quiet=None, sg_sum=20)
@@ -397,7 +402,7 @@ m._sg_flush(st9, m.sg_cfg(), night + 9 * 3600)
 ok("⑦ 🗓️ the daily summary at 20:00: nothing at noon …", not SENT and len(st9.get("sumq") or []) == 3, (SENT, st9.get("sumq")))
 m._sg_flush(st9, m.sg_cfg(), night + 17 * 3600 + 60)
 m._sg_flush(st9, m.sg_cfg(), night + 17 * 3600 + 120)
-ok("⑦ … at 20:00 one message «🗓️ ملخص الإشارات اليوم (3)» (once a day)", len([x for x in SENT if x[0] == "tg"]) == 1 and "🗓️ ملخص الإشارات اليوم (3)" in SENT[0][1], SENT)
+ok("⑦ … at 20:00 one message «🗓️ ملخص المحلل اليوم (3)» (once a day)", len([x for x in SENT if x[0] == "tg"]) == 1 and "🗓️ ملخص المحلل اليوم (3)" in SENT[0][1], SENT)
 SENT.clear()
 _CFG.update(sg_sum=None, sg_ch="app")
 m.TG_MUTED["v"] = True
