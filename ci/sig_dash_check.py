@@ -77,13 +77,13 @@ for fr in ("4H", "1D"):
         held = sum(1 for e in top if e["wt"] / e["nt"] * 100 > b["ht"] and e["mt"] > b["mt"])
         P(f"══ {fr} {'BUY ' if side > 0 else 'SELL'} combos with ≥15 test cases: {len(top)} · better than random on the test: {held} (random {b['ht']}%)")
         for e in top[:8]:
-            P(f"   {e['wt']}/{e['nt']} ({e['wt'] / e['nt'] * 100:.0f}%) mean {e['mt'] * 100:+.2f}% · learn {e['wl']}/{e['nl']} · {e['ty']} · "
+            P(f"   {e['wt']}/{e['nt']} ({e['wt'] / e['nt'] * 100:.0f}%) on {e.get('nd')} different days · mean {e['mt'] * 100:+.2f}% · learn {e['wl']}/{e['nl']} · {e['ty']} · "
               + " + ".join(m._sg_name(k, side) for k in e["k"]))
         rr = [e for e in E if e["f"] == fr and e["s"] == side and e["rare"]]
         rh = [e for e in rr if e["nt"] >= 2 and e["wt"] / e["nt"] * 100 > b["ht"] and e["mt"] > b["mt"]]
         P(f"   💎 rare: {len(rr)} · judged (≥2 test cases) {sum(1 for e in rr if e['nt'] >= 2)} · held {len(rh)}")
         for e in sorted(rh, key=lambda e: -e["wt"] / e["nt"])[:4]:
-            P(f"   💎 learn {e['wl']}/{e['nl']} · test {e['wt']}/{e['nt']} mean {e['mt'] * 100:+.2f}% · " + " + ".join(m._sg_name(k, side) for k in e["k"]))
+            P(f"   💎 learn {e['wl']}/{e['nl']} · test {e['wt']}/{e['nt']} ({e.get('nd')} days) mean {e['mt'] * 100:+.2f}% · " + " + ".join(m._sg_name(k, side) for k in e["k"]))
 c = st.get("comp") or {}
 P(f"🧭 compass now: {c.get('s')} since {c.get('days')} days · BTC above 200d {c.get('btc')} · {c.get('k')}/{c.get('n')} above 50d · history {json.dumps(cat.get('compass'))}")
 for thr, mn in ((55, 10), (60, 15), (65, 15), (70, 20), (75, 20)):
