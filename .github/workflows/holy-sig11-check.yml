@@ -1,0 +1,26 @@
+# 🔬 Holy signals check, eleventh pass (the owner 20-11: «لازم المؤشرات دائماً متفقين يعني مو الاختيار عشوائي»): when 2 or more
+#    indicators agree (same direction, none against) — is it more accurate, and does it hold in EVERY period of the history, not one lucky
+#    stretch? · specific combinations chosen on the first 3 periods, judged on the 4th · the market as a whole · the yardstick: the same
+#    checks on shuffled prices (what luck alone gives).
+#    Results: lines HOLYSIG11. Public market data only — no keys, no orders, no notifications.
+#
+name: Holy signals check 11
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/sig_check11.py', 'ci/RUN_SIG11', '.github/workflows/holy-sig11-check.yml']
+permissions:
+  contents: read
+jobs:
+  real-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: indicators agreeing, period by period, on real OKX prices vs shuffled prices (public data · no keys · no orders · no notifications)
+        run: |
+          pip install -q requests
+          python3 ci/sig_check11.py Holy_Dashboard.pyw
