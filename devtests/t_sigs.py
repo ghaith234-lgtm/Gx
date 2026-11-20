@@ -255,8 +255,8 @@ ok("⑤ a combination fires when it starts: 18 + 43 + 🌊 on XRP · SOL · ADA 
    and all(p[4] == 0 for p in st["pend"] if p[1] == "ADA-USDT"), ids)
 tys = sorted((b["sym"], b["ty"], b.get("f")) for b in b1)
 ok("⑤ notified: one message per coin and type, only your coins (XRP · SOL — not ADA) and what passes your settings "
-   "(60% · 15 cases · better than random): 🟢 XRP · 🟢 SOL (4H) · 📈 XRP (1D) · 😨 (market) — not the weak single «18» nor 🔻 the distribution",
-   tys == sorted([("XRP-USDT", "buy", "4H"), ("SOL-USDT", "buy", "4H"), ("XRP-USDT", "up", "1D"), ("السوق", "fng", "1D"), ("السوق", "crash", "4H")]), tys)
+   "(60% · 15 cases · better than random): 🟢 XRP · 🟢 SOL (tomorrow) · 🟢 XRP (next month — 🧠 v3.36.69: «📈 صعود» folds into 🟢 دخول شراء) · 😨 (market) — not the weak single «18» nor 🔻 the distribution",
+   tys == sorted([("XRP-USDT", "buy", "4H"), ("SOL-USDT", "buy", "4H"), ("XRP-USDT", "buy", "1D"), ("السوق", "fng", "1D"), ("السوق", "crash", "4H")]), tys)
 st_o = {}
 m._sg_process(scan(T4E, TDE, {}, {}, {"XRP-USDT": ["12:1", "35:1", "X-ad:-1"]}, {}), ["1D"], st_o, cfg, CAT, CDB, NOW)
 ok("⑤ 🤝 the owner's rule live too: «12 + 35» with a SELL signal on at the same time (🔻 X-ad) ⇒ not on, nothing fired for it · 🌊 the crash "
@@ -264,10 +264,13 @@ ok("⑤ 🤝 the owner's rule live too: «12 + 35» with a SELL signal on at the
    and "1D|1|12+35" not in ((st_o.get("now") or {}).get("XRP-USDT") or {}).get("1D", {}).get("alive", []), st_o.get("pend"))
 bx = next(b for b in b1 if b["sym"] == "XRP-USDT" and b["ty"] == "buy")
 txt = bx["t"] + "\n" + bx["b"]
-ok("⑤ the text: «🟢 شراء — XRP-USDT · 4 ساعات» · the signals by name · «📊 السجل: صدقت 20 من 24 مرة (83%) · الشراء العشوائي 43% · المتوسط بعد يوم» · "
-   "price + where it fails · ⚠️ not a guarantee", bx["t"] == "🟢 شراء — XRP-USDT · 4 ساعات" and "عودة من تحت حد بولنجر بقوة" in txt and "كسر قاعدة سعرية (QFL)" in txt
-   and "🌊 انهيار السوق كله" in txt and "📊 السجل: صدقت 20 من 24 مرة (83%) — اختبارها في 16 يوماً مختلفاً · الشراء العشوائي 43% · المتوسط بعد يوم +4.0%" in txt
-   and "💵 السعر الآن 2.45 · ❌ تبطل إذا أُغلقت شمعة 4 ساعات تحت 2.3" in txt and "⚠️ ليست ضماناً — القرار لك" in txt, txt)
+ok("⑤ 🧠 the text is analysis, not prices: «🟢 دخول شراء — XRP-USDT · غداً» · «اتفقت عليه مجموعة مؤشرات صدقت في الفترات الأربع» · its record "
+   "(«صدقت 20 من 24 مرة (83%) — اختبارها في 16 يوماً مختلفاً · الشراء العشوائي 43% · المتوسط بعد يوم») · why in plain words · no indicator names · "
+   "no price · «الدخول والهدف والوقف في نافذة المؤشرات» · ⚠️ not a guarantee", bx["t"] == "🟢 دخول شراء — XRP-USDT · غداً"
+   and "اتفقت عليه مجموعة مؤشرات صدقت في الفترات الأربع من التاريخ" in txt
+   and "📊 السجل: صدقت 20 من 24 مرة (83%) — اختبارها في 16 يوماً مختلفاً · الشراء العشوائي 43% · المتوسط بعد يوم +4.0%" in txt
+   and "لماذا: " in txt and "بولنجر" not in txt and "QFL" not in txt and "2.45" not in txt and "💵" not in txt
+   and "📊 الدخول والهدف والوقف في نافذة المؤشرات" in txt and "⚠️ ليست ضماناً — القرار لك" in txt, txt)
 bc = next(b for b in b1 if b["ty"] == "crash")
 ok("⑤ 🌊 the market-wide crash: «11 من 28 عملة هبطت بقوة» + its record with the real number of days («في 9 أيام مختلفة · 25 حالة على العملات») + "
    "your coins that fell most", "11 من 28 عملة" in bc["b"] and "📊 تاريخياً (في 9 أيام مختلفة · 25 حالة على العملات): الشراء بعده صدق 56%" in bc["b"]
@@ -294,9 +297,21 @@ _CFG.update(sg_rare=False)
 _CFG.update(sg_rnd=False, sg_thr=50, sg_min=10, sg_types={"dist": True})
 st_d = {}
 b7 = m._sg_process(scan(T4E, TDE, {}, {}, {"XRP-USDT": ["X-ad:-1"]}, {}), ["1D"], st_d, m.sg_cfg(), CAT, CDB, NOW)
-ok("⑤ 🔻 the distribution passes only without «better than random» — and then it says so: «⚠️ تاريخياً ليست أفضل من العشوائي»",
-   len(b7) == 1 and b7[0]["t"] == "🔻 تصريف — XRP-USDT · يومي" and "السيولة تخرج والسعر لم ينزل بعد" in b7[0]["b"]
-   and "⚠️ تاريخياً ليست أفضل من العشوائي" in b7[0]["b"], b7)
+b7s = next((b for b in b7 if b["ty"] == "sell"), None)
+b7n = next((b for b in b7 if b["ty"] == "nst"), None)
+ok("⑤ a SELL group passes only without «better than random» — and then it says so: «🔴 دخول بيع — XRP-USDT · الشهر القادم» · «⚠️ تاريخياً "
+   "ليست أفضل من العشوائي» · why «السيولة تخرج من العملة»", b7s and b7s["t"] == "🔴 دخول بيع — XRP-USDT · الشهر القادم"
+   and "⚠️ تاريخياً ليست أفضل من العشوائي" in b7s["b"] and "لماذا: السيولة تخرج من العملة" in b7s["b"], b7)
+ok("⑤ 🔎 a new state on a coin of yours: «🔎 XRP الآن: 🔻 السيولة تخرج والسعر لم ينزل بعد (تصريف)» · «وصف لما يحدث الآن على المنصة — ليس توقعاً» "
+   "· once a day at most", b7n and b7n["t"] == "🔎 XRP الآن: 🔻 السيولة تخرج والسعر لم ينزل بعد (تصريف)" and "ليس توقعاً" in b7n["b"]
+   and not [b for b in m._sg_process(scan(T4E, TDE + 86400, {}, {}, {"XRP-USDT": ["X-ad:-1"]}, {}), ["1D"], st_d, m.sg_cfg(), CAT, CDB, NOW + 3600) if b["ty"] == "nst"], b7)
+CAT["e"].append({"id": "1D|1|M-gpr", "f": "1D", "s": 1, "k": ["M-gpr"], "ty": "eco", "nl": 0, "wl": 0, "ml": 0.0, "nt": 392, "wt": 110, "mt": -0.11,
+                 "rare": False, "nd": 9, "ev": [], "c4": False})
+CAT["idx"] = {e["id"]: e for e in CAT["e"]}
+st_g = {}
+b8 = m._sg_process(scan(T4E, TDE, {}, {}, {"XRP-USDT": ["M-gpr:1"]}, {}), ["1D"], st_g, m.sg_cfg(), CAT, CDB, NOW)
+ok("⑤ 🗞️ a market reading that did NOT hold in the four periods is not sent (the real check of 20-11 sent «المخاطر الجيوسياسية منخفضة» at 28% "
+   "vs random 47%) — it still goes to the live record", not [b for b in b8 if b["ty"] == "eco"] and any(p[0] == "1D|1|M-gpr" for p in st_g.get("pend") or []), b8)
 _CFG.update(sg_rnd=True, sg_thr=60, sg_min=15)
 _CFG.pop("sg_types", None)
 
@@ -326,6 +341,10 @@ ok("⑥ 🎯 a fire saved with its target/stop distance (3%) is judged like the 
 rb = m._sg_res_block(res6, st6, CAT)
 ok("⑥ the result of what you were told: «✅ نتيجة إشارة شراء XRP قبل يوم: +4.8%» · «السجل الآن: 21 من 25 مرة (84%)»",
    rb and rb["t"] == "✅ نتيجة إشارة شراء XRP قبل يوم: +4.8%" and rb["b"] == "السجل الآن: 21 من 25 مرة (84%)", rb)
+
+mon6 = m._sg_mon(st6)
+ok("⑥ 📅 the accuracy of what reached you, month by month and per horizon: only the notified fire counts (1 of 1 tomorrow) · the record keeps "
+   "3,000 judged fires", mon6 == [[time.strftime("%Y-%m", time.gmtime(T4E)), {"4H": [1, 1]}]] and "del hist[3000:]" in open(DASH, encoding="utf-8").read(), mon6)
 
 # ⑥b 🧠 the analyst (v3.36.69) — one word · tomorrow and next month · why · entry/target/stop · the state now
 F_b = {"4H": {"t": T4E, "px": 2.0, "alive": ["4H|1|18+43+W-crash"], "s": 0.05},

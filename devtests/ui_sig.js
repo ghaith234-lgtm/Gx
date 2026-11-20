@@ -87,7 +87,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   await pg.evaluate(() => sgTab('log'));
   await sleep(300);
   const l1 = await pg.evaluate(() => (document.querySelector('#sg_body') || {}).textContent || '');
-  ok('③ 🧾 the log: the live record and the last notifications', l1.includes('السجل الحي') && l1.includes('آخر الإشعارات'), l1.slice(0, 200));
+  ok('③ 📜 the log: the live record · «📥 سحب السجل» · the accuracy of what reached you month by month · the last notifications', l1.includes('السجل الحي') && l1.includes('آخر الإشعارات')
+     && l1.includes('📥 سحب السجل') && l1.includes('دقة ما وصلك'), l1.slice(0, 200));
+  const dl = await pg.evaluate(async () => { let got = null; const keep = holySave; holySave = async (b, n) => { got = { n, t: await b.text() }; return true };
+    await sgRecDl(); holySave = keep; return got });
+  ok(`③ 📥 the record is saved as a file «${dl && dl.n}» (the header and ${dl ? dl.t.split('\n').length - 1 : 0} rows)`, dl && dl.n === 'holy_analyst_record.csv'
+     && dl.t.includes('التاريخ (UTC),العملة,الاتجاه,المدة,المجموعة,النتيجة,الربح %,وصلك إشعارها'), dl && dl.t.slice(0, 200));
   // ④ ⚙️ notifications
   await pg.evaluate(() => sgTab('cfg'));
   await sleep(300);
@@ -99,12 +104,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   ok(`④ the slider to 90% moves the weekly estimate live: «${e0.slice(0, 50)}…» ⇒ «${e1.est.slice(0, 50)}…»`, e1.v === '90%' && num(e1.est) <= num(e0) && e1.est !== e0, { e0, e1 });
   await pg.evaluate(() => { const s = document.getElementById('sg_thr'); s.dispatchEvent(new Event('change', { bubbles: true })) });
   await sleep(900);
-  await pg.evaluate(() => { const b = [...document.querySelectorAll('#sg_body .sg-flt button')].find(x => x.textContent.includes('🔴 بيع')); b.click() });
+  await pg.evaluate(() => { const b = [...document.querySelectorAll('#sg_body .sg-flt button')].find(x => x.textContent.includes('🔴 دخول بيع')); b.click() });
   await sleep(900);
   await pg.evaluate(() => { const b = [...document.querySelectorAll('#sg_body .sg-flt button')].find(x => x.textContent.trim() === '5'); b.click() });
   await sleep(900);
   const s1 = await pg.evaluate(() => ({ thr: SGV.cfg.thr, sell: SGV.cfg.types.sell, cap: SGV.cfg.cap, on: (document.getElementById('sg_on') || {}).textContent }));
-  ok('④ saved: 90% · 🔴 بيع off · the daily cap 5 (the page shows what the server holds)', s1.thr === 90 && s1.sell === false && s1.cap === 5, s1);
+  ok('④ saved: 90% · 🔴 دخول بيع off · the daily cap 5 (the page shows what the server holds)', s1.thr === 90 && s1.sell === false && s1.cap === 5, s1);
   // ④ 🪙 your coins (v3.36.67): the owner «انا اريد انا احدد العملات»
   const k0 = await pg.evaluate(() => ({ mine: [...document.querySelectorAll('#sg_coins .sg-cn')].map(b => b.dataset.c), add: !!document.getElementById('sg_cadd'),
     oth: document.querySelectorAll('#sg_coins details .sg-flt button').length, head: (document.querySelector('#sg_coins .sg-sh') || {}).textContent || '' }));
@@ -137,7 +142,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const f1 = await pg.evaluate(() => ({ top: (document.querySelector('#fc_body .sg-go') || {}).textContent || '', lines: [...document.querySelectorAll('#fc_body .sg-fc')].map(x => x.textContent.replace(/\s+/g, ' ').trim()),
     btn: [...document.querySelectorAll('#modal .mbtns button')].some(b => b.textContent.includes('🎯 الإشارات')) }));
   ok(`⑤ 🔮 «${f1.top.replace(/\s+/g, ' ').trim().slice(0, 80)}» on top · ${f1.lines.length} coins with their signals line · a 🎯 button`,
-     f1.top.includes('🎯 الإشارات الآن') && f1.top.includes('🧭') && f1.lines.length >= 1 && f1.lines[0].includes('🎯') && f1.btn, f1);
+     f1.top.includes('🎯 الإشارات الآن') && f1.top.includes('🧭') && f1.lines.length >= 1 && f1.lines.some(l => l.includes('🎯')) && f1.btn, f1);
+  ok(`⑤ 🔮 every coin of yours has «🧠 ملخص المحلل» (${f1.lines.filter(l => l.includes('🧠')).length}) — the word · tomorrow · next month`, f1.lines.filter(l => l.includes('🧠 ملخص المحلل') && l.includes('غداً') && l.includes('الشهر القادم')).length >= 2, f1.lines.filter(l => l.includes('🧠')));
   await shot('sig_forecast');
   await pg.evaluate(() => document.querySelector('#fc_body .sg-go').click());
   await sleep(500);
@@ -155,7 +161,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   ok('⑤ … it opens 🎯 on «⚙️ الإشعارات»', await pg.evaluate(() => !!document.getElementById('sg_thr') && SGTAB === 'cfg'), '');
   await pg.evaluate(() => openTicker());
   await sleep(1200);
-  ok('⑤ the ticker\'s settings: «🎯 إشعارات الإشارات» with its buttons', await pg.evaluate(() => ((document.getElementById('tk_pxa') || {}).textContent || '').includes('🎯 إشعارات الإشارات')), '');
+  ok('⑤ the ticker\'s settings: «🔔 إشعارات المحلل» with its buttons', await pg.evaluate(() => ((document.getElementById('tk_pxa') || {}).textContent || '').includes('🔔 إشعارات المحلل')), '');
   await pg.evaluate(() => { hideModal(); HGO = 'sig'; holyGoNow() });
   await sleep(600);
   ok('⑤ a notification tap («sig») opens 📊 the analyst', ((await pg.evaluate(() => (document.querySelector('#modal h2') || {}).textContent || ''))).startsWith('📊 المؤشرات — المحلل'), '');
