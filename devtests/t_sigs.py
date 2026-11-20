@@ -247,7 +247,7 @@ def scan(t4, td, a4, a4p, ad, adp, crash=False):
 full = ["18:1", "43:1", "W-crash:1"]
 st = {}
 sc1 = scan(T4E, TDE, {s: full for s in ("XRP-USDT", "SOL-USDT", "ADA-USDT")}, {s: ["43:1"] for s in ("XRP-USDT", "SOL-USDT", "ADA-USDT")},
-           {"XRP-USDT": ["12:1", "35:1", "X-ad:-1", "M-fng:1"]}, {}, crash=True)
+           {"XRP-USDT": ["12:1", "35:1", "M-fng:1"]}, {}, crash=True)
 b1 = m._sg_process(sc1, ["4H", "1D"], st, cfg, CAT, CDB, NOW)
 ids = sorted(p[0] + "@" + p[1] for p in st["pend"])
 ok("⑤ a combination fires when it starts: 18 + 43 + 🌊 on XRP · SOL · ADA (4H) · 12 + 35 on XRP (1D) — every fire goes to the live record "
@@ -257,6 +257,11 @@ tys = sorted((b["sym"], b["ty"], b.get("f")) for b in b1)
 ok("⑤ notified: one message per coin and type, only your coins (XRP · SOL — not ADA) and what passes your settings "
    "(60% · 15 cases · better than random): 🟢 XRP · 🟢 SOL (4H) · 📈 XRP (1D) · 😨 (market) — not the weak single «18» nor 🔻 the distribution",
    tys == sorted([("XRP-USDT", "buy", "4H"), ("SOL-USDT", "buy", "4H"), ("XRP-USDT", "up", "1D"), ("السوق", "fng", "1D"), ("السوق", "crash", "4H")]), tys)
+st_o = {}
+m._sg_process(scan(T4E, TDE, {}, {}, {"XRP-USDT": ["12:1", "35:1", "X-ad:-1"]}, {}), ["1D"], st_o, cfg, CAT, CDB, NOW)
+ok("⑤ 🤝 the owner's rule live too: «12 + 35» with a SELL signal on at the same time (🔻 X-ad) ⇒ not on, nothing fired for it · 🌊 the crash "
+   "does not count as «against» (18 + 43 + 🌊 fired above)", not any(p[0] == "1D|1|12+35" for p in st_o.get("pend") or [])
+   and "1D|1|12+35" not in ((st_o.get("now") or {}).get("XRP-USDT") or {}).get("1D", {}).get("alive", []), st_o.get("pend"))
 bx = next(b for b in b1 if b["sym"] == "XRP-USDT" and b["ty"] == "buy")
 txt = bx["t"] + "\n" + bx["b"]
 ok("⑤ the text: «🟢 شراء — XRP-USDT · 4 ساعات» · the signals by name · «📊 السجل: صدقت 20 من 24 مرة (83%) · الشراء العشوائي 43% · المتوسط بعد يوم» · "
@@ -321,6 +326,28 @@ ok("⑥ 🎯 a fire saved with its target/stop distance (3%) is judged like the 
 rb = m._sg_res_block(res6, st6, CAT)
 ok("⑥ the result of what you were told: «✅ نتيجة إشارة شراء XRP قبل يوم: +4.8%» · «السجل الآن: 21 من 25 مرة (84%)»",
    rb and rb["t"] == "✅ نتيجة إشارة شراء XRP قبل يوم: +4.8%" and rb["b"] == "السجل الآن: 21 من 25 مرة (84%)", rb)
+
+# ⑥b 🧠 the analyst (v3.36.69) — one word · tomorrow and next month · why · entry/target/stop · the state now
+F_b = {"4H": {"t": T4E, "px": 2.0, "alive": ["4H|1|18+43+W-crash"], "s": 0.05},
+       "1D": {"t": TDE, "px": 2.0, "alive": [], "s": 0.2, "m50": 1.8, "m200": 1.5}}
+st_a = {"nst": {"XRP-USDT": {"1D|X-ad": [-1, TDE - 3 * 86400], "1D|P-tk": [1, TDE - 40 * 86400], "4H|X-rs": [1, T4E]}}}
+an1 = m._sg_analyst("XRP-USDT", F_b, st_a, CAT, cfg)
+h4 = an1["hz"]["4H"]
+ok("⑥b 🧠 a proven BUY group on now (83%) and nothing against ⇒ «🟢 فرصة شراء» · غداً: صعود 83% · target 2.1 · stop 1.9 (its own 5%) · "
+   "why in plain words (no indicator names) · the month: no group ⇒ nothing invented",
+   an1["w"] == "buy" and an1["wt"] == "فرصة شراء" and h4["dir"] == 1 and h4["h"] == 83 and abs(h4["tgt"] - 2.1) < 1e-9
+   and abs(h4["stop"] - 1.9) < 1e-9 and h4["why"] and not any(c.isascii() and c.isalpha() for c in "".join(h4["why"]))
+   and an1["hz"]["1D"]["dir"] == 0, an1)
+ok("⑥b 🔎 the state now: 🔻 distribution 3 days ago and 💪 stronger than BTC are shown · aggressive buying 40 days ago is too old · the trend "
+   "«السعر فوق متوسطي 50 و200 يوم»", [n[0] for n in an1["nst"]] == ["💪 أقوى من البيتكوين", "🔻 السيولة تخرج والسعر لم ينزل بعد (تصريف)"]
+   and an1["tr"].startswith("📈 السعر فوق متوسطي 50 و200 يوم"), (an1["nst"], an1["tr"]))
+F_c = {"4H": dict(F_b["4H"]), "1D": dict(F_b["1D"], alive=["1D|-1|X-ad"])}
+an2 = m._sg_analyst("XRP-USDT", F_c, st_a, CAT, cfg)
+an3 = m._sg_analyst("XRP-USDT", {"4H": dict(F_b["4H"], alive=[]), "1D": F_c["1D"]}, st_a, CAT, cfg)
+an4 = m._sg_analyst("XRP-USDT", {"4H": dict(F_b["4H"], alive=["4H|1|18"]), "1D": dict(F_b["1D"])}, st_a, CAT, cfg)
+ok("⑥b the word: BUY 83% with a SELL 52% on too ⇒ «🟢 فرصة شراء بحذر» (the month shows the sell: هبوط 52%) · only the SELL 52% ⇒ «🟠 تجنّب "
+   "الشراء الآن» · only an unproven signal ⇒ «⏸️ انتظر»", an2["w"] == "buyc" and an2["hz"]["1D"]["dir"] == -1 and an2["hz"]["1D"]["h"] == 52
+   and an3["w"] == "avoid" and an4["w"] == "wait", (an2["w"], an3["w"], an4["w"]))
 
 # ⑦ delivery
 SENT.clear()

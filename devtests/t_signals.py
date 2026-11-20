@@ -206,7 +206,7 @@ const { chromium } = require('playwright');
   o.det = await pg.evaluate(() => { const c = [...document.querySelectorAll('#fc_body .fc-c')].find(e => e.innerText.includes('ETH')); return c ? c.innerText : '' });
   o.order = await pg.evaluate(() => { const c = [...document.querySelectorAll('#fc_body .fc-c')].find(e => e.innerText.includes('ETH'));
     return c ? [...c.querySelectorAll('.ind-row .fb')].map(x => x.className.replace('fb ', '')) : [] });
-  await pg.evaluate(() => { hideModal(); openInd() }); await pg.waitForTimeout(1200);
+  await pg.evaluate(() => { hideModal(); openInd('ind') }); await pg.waitForTimeout(1800);
   await pg.evaluate(() => indTog('ETH-USDT')); await pg.waitForTimeout(400);
   o.ind = await pg.evaluate(() => { const c = [...document.querySelectorAll('#ind_body .ind-c')].find(e => e.innerText.includes('ETH')); return c ? [...c.querySelectorAll('.ind-row')].map(r => { const s = r.querySelectorAll('small'); return s.length ? s[s.length - 1].innerText : '' }).filter(t => t.startsWith('سطر')) : [] });
   o.indh = await pg.evaluate(() => (document.querySelector('#modal h2') || {}).innerText || '');
@@ -234,8 +234,8 @@ ok("… the details: the bottom's parts, its 28-coin record (14 days · normal 4
 rk = {"g": 0, "y": 1, "n": 2, "short": 3, "r": 4}
 od = [rk.get(c.split()[0], 3) for c in U.get("order") or []]
 ok(f"… the indicators under the horizon truthful first ({U.get('order')})", od and od == sorted(od), U.get("order"))
-ok(f"⑥ 📊: the most accurate first ({[x.split('·')[-1].strip() for x in (U.get('ind') or [])]}) · the title in standard Arabic «{U.get('indh')}»",
-   len(U.get("ind") or []) == 4 and "61%" in U["ind"][0] and "55%" in U["ind"][1] and "48%" in U["ind"][2] and "هل تصعد العملة أم تهبط" in (U.get("indh") or ""),
+ok(f"⑥ 📊: the most accurate first ({[x.split('·')[-1].strip() for x in (U.get('ind') or [])]}) · inside the analyst's window (tab 📈) «{U.get('indh')}»",
+   len(U.get("ind") or []) == 4 and "61%" in U["ind"][0] and "55%" in U["ind"][1] and "48%" in U["ind"][2] and "📊 المؤشرات — المحلل" in (U.get("indh") or ""),
    {k: U.get(k) for k in ("ind", "indh")})
 tp = " | ".join(U.get("tape") or [])
 ok(f"⑥ 🎞️ the strip in words: «{tp[:160]}»", "صاعدة بقوة" in tp and "هابطة بقوة" in tp and "/4" in tp and "قاع قوي" in tp and "RSI" not in tp, U.get("tape"))

@@ -34,7 +34,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const w1 = await pg.evaluate(() => ({ h2: (document.querySelector('#modal h2') || {}).textContent || '', tabs: [...document.querySelectorAll('#sg_tabs button')].map(b => b.textContent),
     comp: (document.querySelector('.sg-comp') || {}).textContent || '', hist: document.querySelectorAll('.sg-hist i').length,
     coins: [...document.querySelectorAll('#sg_body > .ind-list > .sg-c .cn')].map(x => x.textContent), others: !!document.querySelector('#sg_body details.sg-more') }));
-  ok(`① 🎯 «${w1.h2}» · tabs ${w1.tabs.join(' | ')}`, w1.h2.startsWith('🎯 الإشارات') && w1.tabs.join('|') === '🎯 الآن|📒 الدليل|🧾 السجل|⚙️ الإشعارات', w1);
+  ok(`① 🧠 one window «${w1.h2}» (🎯 merged in) · tabs ${w1.tabs.join(' | ')}`, w1.h2.startsWith('📊 المؤشرات — المحلل')
+     && w1.tabs.join('|') === '🧠 المحلل|📈 المؤشرات العشرة|🎯 الإشارات الشغّالة|📚 المجموعات|📜 السجل|⚙️ الإشعارات', w1);
   ok(`① 🧭 the compass on top with its last ${w1.hist} days («${w1.comp.slice(0, 60)}…»)`, w1.comp.includes('🧭 السوق الآن') && w1.hist >= 30 && /صاعد|مختلط|نازل/.test(w1.comp), w1);
   ok(`① your coins first (${w1.coins.join(' · ')}) · the other measured coins folded below`, w1.coins.join(',') === 'SOL,XRP' && w1.others, w1);
   await pg.evaluate(() => { const c = [...document.querySelectorAll('#sg_body .sg-c')].find(x => x.querySelector('.cn').textContent === 'XRP'); c.click() });
@@ -44,12 +45,29 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   ok(`① XRP opens to its signals (${w2.n} rows · ${w2.fr.map(x => x.split('·')[0].trim()).join(' / ')}) — each «صدقت … من … مرة · العشوائي … · المتوسط بعد …»`,
      w2.n > 0 && w2.txt.every(t => /صدقت \d+ من \d+ مرة/.test(t) && t.includes('العشوائي') && t.includes('المتوسط بعد')) && w2.fr.length >= 1, w2);
   await shot('sig_now');
+  // ⓪ 🧠 the analyst (the first tab)
+  await pg.evaluate(() => openInd());
+  await pg.waitForFunction(() => document.querySelector('#sg_body .an-mkt'), null, { timeout: 20000 }).catch(() => {});
+  const a1 = await pg.evaluate(() => ({ tab: SGTAB, mkt: (document.querySelector('#sg_body .an-mkt') || {}).textContent || '',
+    cards: [...document.querySelectorAll('#sg_body .an-c')].map(c => ({ cn: c.querySelector('.cn').textContent, w: (c.querySelector('.an-w') || {}).textContent || '',
+      hz: [...c.querySelectorAll('.an-hz')].map(z => z.textContent.replace(/\s+/g, ' ').trim()), now: (c.querySelector('.an-now') || {}).textContent || '' })),
+    help: (document.querySelector('#sg_body details.ind-help') || {}).textContent || '' }));
+  ok(`⓪ 🧠 the analyst opens first · 🌐 «${a1.mkt.replace(/\s+/g, ' ').trim().slice(0, 70)}…»`, a1.tab === 'an' && a1.mkt.includes('🌐 السوق كله الآن') && a1.mkt.includes('🧭'), a1.mkt);
+  ok(`⓪ a card for each of your coins (${a1.cards.map(c => c.cn + ' ' + c.w.trim()).join(' · ')}) — one word · «غداً» · «الشهر القادم» · 🔎 the state now`,
+     a1.cards.map(c => c.cn).join(',') === 'SOL,XRP' && a1.cards.every(c => /فرصة شراء بحذر|فرصة شراء|انتظر|تجنّب الشراء الآن|خطر نزول/.test(c.w)
+       && c.hz.length === 2 && c.hz[0].startsWith('غداً') && c.hz[1].startsWith('الشهر القادم') && c.now.includes('🔎 الآن في السوق') && c.now.includes('ليس توقعاً')), a1.cards);
+  ok('⓪ «كيف يعمل المحلل؟» says it: agreeing groups proven in the four periods · no forecast for the next few hours · not a guarantee',
+     a1.help.includes('تتفق') && a1.help.includes('الفترات الأربع') && a1.help.includes('أضعف من الصدفة') && a1.help.includes('لا ضمانات'), a1.help.slice(0, 200));
+  await shot('sig_analyst');
+  await pg.evaluate(() => sgTab('ind'));
+  await pg.waitForFunction(() => document.querySelector('#ind_body') && !document.querySelector('#ind_body .ldr'), null, { timeout: 15000 }).catch(() => {});
+  ok('⓪ «📈 المؤشرات العشرة» shows the old reading inside the same window', await pg.evaluate(() => !!document.querySelector('#sg_body #ind_body') && SGTAB === 'ind'), '');
   // ② 📒 the catalog
   await pg.evaluate(() => sgTab('cat'));
   await pg.waitForFunction(() => document.querySelectorAll('#sg_cat .sg-r').length > 0, null, { timeout: 15000 }).catch(() => {});
   const c1 = await pg.evaluate(() => ({ n: document.querySelectorAll('#sg_cat .sg-r').length, head: (document.querySelector('#sg_body .ind-sub') || {}).textContent || '',
     flt: document.querySelectorAll('#sg_body .sg-flt button').length }));
-  ok(`② 📒 the catalog: «${c1.head.slice(0, 70)}…» · ${c1.flt} filter buttons · ${c1.n} rows`, c1.n > 0 && c1.flt >= 10 && c1.head.includes('إشارة وتركيبة'), c1);
+  ok(`② 📒 the catalog: «${c1.head.slice(0, 70)}…» · ${c1.flt} filter buttons · ${c1.n} rows`, c1.n > 0 && c1.flt >= 9 && c1.head.includes('إشارة وتركيبة'), c1);
   await pg.evaluate(() => { SGF.size = '2'; SGF.fr = '1D'; sgRender(); sgCat() });
   await sleep(700);
   const c2 = await pg.evaluate(() => [...document.querySelectorAll('#sg_cat .sg-r .sg-fr')].map(x => x.textContent));
@@ -123,10 +141,11 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   await shot('sig_forecast');
   await pg.evaluate(() => document.querySelector('#fc_body .sg-go').click());
   await sleep(500);
-  ok('⑤ a tap on it opens 🎯', ((await pg.evaluate(() => (document.querySelector('#modal h2') || {}).textContent || ''))).startsWith('🎯'), '');
+  ok('⑤ a tap on it opens 📊 the analyst', ((await pg.evaluate(() => (document.querySelector('#modal h2') || {}).textContent || ''))).startsWith('📊 المؤشرات — المحلل'), '');
   await pg.evaluate(() => openInd());
   await sleep(400);
-  ok('⑤ 📊 has «🎯 الإشارات»', await pg.evaluate(() => [...document.querySelectorAll('#modal .mbtns button')].some(b => b.textContent.includes('🎯 الإشارات'))), '');
+  ok('⑤ 📊 holds «🎯 الإشارات الشغّالة» as a tab (no separate 🎯 window) and has 🔮', await pg.evaluate(() => [...document.querySelectorAll('#sg_tabs button')].some(b => b.textContent.includes('🎯 الإشارات الشغّالة'))
+     && [...document.querySelectorAll('#modal .mbtns button')].some(b => b.textContent.includes('🔮'))), '');
   await pg.evaluate(() => { hideModal(); openSettings() });
   await sleep(500);
   const row = await pg.evaluate(() => { const b = [...document.querySelectorAll('.sitem')].find(x => x.textContent.includes('الإشارات وإشعاراتها')); return b ? b.textContent.replace(/\s+/g, ' ').trim() : '' });
@@ -139,10 +158,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   ok('⑤ the ticker\'s settings: «🎯 إشعارات الإشارات» with its buttons', await pg.evaluate(() => ((document.getElementById('tk_pxa') || {}).textContent || '').includes('🎯 إشعارات الإشارات')), '');
   await pg.evaluate(() => { hideModal(); HGO = 'sig'; holyGoNow() });
   await sleep(600);
-  ok('⑤ a notification tap («sig») opens 🎯', ((await pg.evaluate(() => (document.querySelector('#modal h2') || {}).textContent || ''))).startsWith('🎯'), '');
+  ok('⑤ a notification tap («sig») opens 📊 the analyst', ((await pg.evaluate(() => (document.querySelector('#modal h2') || {}).textContent || ''))).startsWith('📊 المؤشرات — المحلل'), '');
   // ⑥ a phone
   await pg.setViewportSize({ width: 390, height: 844 });
-  for (const t of ['now', 'cat', 'cfg']) {
+  for (const t of ['an', 'now', 'cat', 'cfg']) {
     await pg.evaluate(t => sgTab(t), t);
     await sleep(700);
     const ov = await pg.evaluate(() => { const b = document.getElementById('sg_body'); return { sw: b.scrollWidth, cw: b.clientWidth, doc: document.documentElement.scrollWidth, vw: innerWidth } });
