@@ -10,8 +10,12 @@
 #   · the OLD indicators too (the owner: «هل مشمول المؤشرات القديمة؟»): the 10 readings of 📊 (Volume Profile · VWAP · order flow · price
 #     action · EMA 50/200 · Supertrend · MACD · RSI · ADX · CMF) and the 📊 verdict — the dashboard's own _i2_signals / _i2_combine on the same
 #     candles (a reading becomes a signal when it turns ≥ +0.5 / ≤ −0.5 · the verdict at ±15) — and 🟢 the bottom (daily · its own _bot_at)
+#   · and the rest («حتى اتأكد يعني الكل مشمول»): 🔮 the forecast's own readings (Lorentzian nearest cases · the smooth NW line · its vote) ·
+#     🧲 accumulation/distribution · 💪 strength against Bitcoin · 🌊 the whole market crashing at once · 😨 fear & greed · 🗞️ VIX · the
+#     dollar · US 10-year yield · policy uncertainty · geopolitical risk · news tone · 🏦 long/short accounts · aggressive buying · put/call ·
+#     MVRV (where OKX/CoinMetrics keep a history) — each through the dashboard's own function · only the live order book stays out
 #   python3 ci/sig_check7.py Holy_Dashboard.pyw [--fake]  ⇒ lines starting with HOLYSIG7
-import bisect, os, sys, time
+import bisect, math, os, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 _src = open(os.path.join(HERE, "sig_check6.py"), encoding="utf-8").read().split("\nT0 = time.time()")[0]
@@ -34,7 +38,7 @@ F4, FD = "4H", "1Dutc"
 N4, ND = (900 if FAKE else 4400), (500 if FAKE else 1100)
 LOOK = {F4: 3, FD: 2}
 HZ = (6, 18, 42)                     # 1 day · 3 days · 7 days of 4-hour candles
-FAMS = ("trend", "momentum", "volatility", "pattern", "volume")
+FAMS = ("trend", "momentum", "volatility", "pattern", "volume", "market")
 T0 = time.time()
 P7("dashboard", m.APP_VERSION, "· coins", len(COINS), "· systems", len(SYS), "· fake" if FAKE else "· REAL OKX")
 
@@ -72,6 +76,134 @@ def old_events(D, daily):
     return ev
 
 
+for _c, _n, _f in (("F-lc", "OLD 🔮 nearest cases (Lorentzian)", "pattern"), ("F-nw", "OLD 🔮 the smooth line (NW)", "trend"),
+                   ("F-vote", "OLD 🔮 the forecast's vote", "trend"), ("X-ad", "OLD 🧲 accumulation / distribution", "volume"),
+                   ("X-adt", "OLD 🧲 move backed by money flow", "volume"), ("X-rs", "OLD 💪 stronger / weaker than Bitcoin", "momentum"),
+                   ("W-crash", "OLD 🌊 the whole market crashing", "market"), ("M-fng", "OLD 😨 fear & greed", "market"),
+                   ("M-vix", "OLD 😱 VIX", "market"), ("M-dxy", "OLD 💱 the dollar", "market"), ("M-us10", "OLD 📜 US 10-year yield", "market"),
+                   ("M-epu", "OLD 🏛️ policy uncertainty", "market"), ("M-gpr", "OLD 🌍 geopolitical risk", "market"),
+                   ("M-tone", "OLD 📰 news tone", "market"), ("P-ls", "OLD ⚖️ long/short accounts", "market"),
+                   ("P-tk", "OLD 🐂 aggressive buying (contracts)", "market"), ("P-pc", "OLD 🎲 put/call (BTC · ETH)", "market"),
+                   ("P-mv", "OLD 🔗 MVRV (BTC · ETH)", "market")):
+    SYS[_c] = (_n, _f, None)
+
+MDB, MKT, NOW = {}, {}, time.time()
+if not FAKE:
+    for _k, _fn in (("vix", "_pro_vix"), ("dxy", "_pro_dxy"), ("us10", "_pro_us10"), ("epu", "_pro_epu"), ("gpr", "_pro_gpr"), ("tone", "_pro_tone")):
+        try:
+            getattr(m, _fn)(MDB, NOW)
+            _ks, _vs = m._pro_sorted(MDB.get(_k))
+            if len(_vs) > 30:
+                MKT[_k] = (_ks, _vs)
+        except Exception as ex:
+            P7(f"{_k}: {type(ex).__name__} {ex}")
+    try:
+        _r = m._fc_fng(MDB)
+        if _r:
+            MKT["fng"] = _r
+    except Exception as ex:
+        P7(f"fng: {type(ex).__name__} {ex}")
+    _ccys = [c.split("-")[0] for c in COINS]
+    for _fn, _args in (("_pro_ls", (_ccys,)), ("_pro_tk", (_ccys,)), ("_pro_pc", ()), ("_pro_mv", ())):
+        try:
+            getattr(m, _fn)(MDB, NOW, *_args)
+        except Exception as ex:
+            P7(f"{_fn}: {type(ex).__name__} {ex}")
+P7("market-wide series: " + (" · ".join(f"{k} {len(v[1])} days" for k, v in MKT.items()) or "none") + " · per coin: "
+   + " · ".join(f"{k} {sum(1 for e in (MDB.get(k) or {}).values() if isinstance(e, dict) and e.get('d'))} coins" for k in ("ls", "tk", "pc", "mv")))
+_FNG = lambda vs, j: (1.0 if vs[j] <= 20 else 0.4 if vs[j] <= 30 else -1.0 if vs[j] >= 80 else -0.4 if vs[j] >= 70 else 0.0)
+
+
+def series_events(D, dx, code, ks, vs, sigf, thr=0.4, stale=4 * 86400):
+    """a daily series (published before the candle closed) ⇒ BUY when its reading turns ≥ thr · SELL ≤ −thr"""
+    out, prev = {}, 0
+    for t in range(210, D["n"]):
+        tcl = D["T"][t] + dx
+        j = bisect.bisect_right(ks, tcl - 1) - 1
+        cur = 0
+        if j >= 0 and tcl - ks[j] <= stale:
+            try:
+                sv = sigf(vs, j)
+            except Exception:
+                sv = None
+            cur = 1 if sv is not None and sv >= thr else -1 if sv is not None and sv <= -thr else 0
+        if cur and cur != prev:
+            out.setdefault((code, cur), []).append(t)
+        prev = cur
+    return out
+
+
+def extra_events(D, rows, trows, daily, sym):
+    dx = 86400 if daily else 14400
+    ev = {}
+    # 🔮 the forecast's own readings (k = day on 4-hour candles · week on daily)
+    try:
+        P = m._fc_pack([list(r) for r in rows], [list(r) for r in trows], dx, 86400)
+        X = {"H": 7 if daily else 6, "hn": "—", "fng": MKT.get("fng")}
+        prev = {}
+        for t in range(210, D["n"]):
+            sg, _ = m._fc_read(P, t, "w" if daily else "d", X)
+            up, dn, n_, vk, vt = m._fc_vote(sg)
+            cur = {"F-vote": 1 if vk in ("u", "su") else -1 if vk in ("d", "sd") else 0}
+            for kk in ("lc", "nw"):
+                v = sg.get(kk)
+                cur["F-" + kk] = 0 if not v else (1 if v[0] >= 0.5 else -1 if v[0] <= -0.5 else 0)
+            for k, v in cur.items():
+                if v and v != prev.get(k, 0):
+                    ev.setdefault((k, v), []).append(t)
+            prev = cur
+    except Exception as ex:
+        P7(f"{sym} forecast readings: {type(ex).__name__} {ex}")
+    # 🧲 · 💪 (daily, as on the page)
+    if daily:
+        try:
+            S = m._xc_ad(D["T"], D["H"], D["L"], D["C"], D["V"])
+            pa = pb = 0
+            for t in range(210, D["n"]):
+                q = m._xc_ad_at(t, S, D["C"])
+                a = (1 if q[0] == "acc" else -1 if q[0] == "dist" else 0) if q else 0
+                b = (1 if q[0] == "up" else -1 if q[0] == "down" else 0) if q else 0
+                if a and a != pa:
+                    ev.setdefault(("X-ad", a), []).append(t)
+                if b and b != pb:
+                    ev.setdefault(("X-adt", b), []).append(t)
+                pa, pb = a, b
+        except Exception as ex:
+            P7(f"{sym} accumulation: {type(ex).__name__} {ex}")
+        if BTCD and not sym.startswith("BTC-"):
+            R = [(D["C"][i] / BTCD[D["T"][i]]) if BTCD.get(D["T"][i]) else None for i in range(D["n"])]
+            E, e = [None] * D["n"], None
+            for i, x in enumerate(R):
+                if x is None:
+                    e = None; continue
+                e = x if e is None else e + (x - e) * (2.0 / 21.0)
+                E[i] = e
+            pr = 0
+            for t in range(210, D["n"]):
+                q = m._xc_rs_at(t, R, E)
+                c = (1 if q[0] == "strong" else -1 if q[0] == "weak" else 0) if q else 0
+                if c and c != pr:
+                    ev.setdefault(("X-rs", c), []).append(t)
+                pr = c
+    # 😨 · 🗞️ market-wide daily readings
+    for k, (ks, vs) in MKT.items():
+        sf = _FNG if k == "fng" else (lambda vs_, j, k=k: m._mac_sig(k, vs_, j)[0])
+        ev.update(series_events(D, dx, "M-" + k, ks, vs, sf))
+    # 🏦 per coin (where OKX / CoinMetrics keep a history)
+    ccy = sym.split("-")[0]
+    for k, sf in (("ls", lambda vs_, j: m._pro_ls_sig(vs_, j)[0]), ("tk", lambda vs_, j: m._pro_tk_sig(vs_, j)[0]),
+                  ("pc", lambda vs_, j: m._pro_pc_sig(vs_, j)[0]), ("mv", lambda vs_, j: m._pro_mv_sig(vs_[j]))):
+        e_ = (MDB.get(k) or {}).get(ccy)
+        if isinstance(e_, dict) and e_.get("d"):
+            ks, vs = m._pro_sorted(e_)
+            if len(vs) >= 30:
+                ev.update(series_events(D, dx, "P-" + k, ks, vs, sf))
+    return ev
+
+
+BTCD, TROWS = {}, {}
+
+
 def frame(rows, blk):
     D = {"T": [int(r[0]) for r in rows], "O": [float(r[1]) for r in rows], "H": [float(r[2]) for r in rows], "L": [float(r[3]) for r in rows],
          "C": [float(r[4]) for r in rows], "V": [float(r[5]) for r in rows], "n": len(rows), "blk": blk}
@@ -83,6 +215,7 @@ def frame(rows, blk):
             ev[k] = lst
     except Exception as ex:
         P7(f"old indicators error: {type(ex).__name__} {ex}")
+    ev.update(extra_events(D, rows, TROWS.get("cur") or rows, blk == 5, TROWS.get("sym", "")))
     for code, (name, fam, fn) in SYS.items():
         if fn is None:
             continue
@@ -102,11 +235,29 @@ for sym in COINS:
         P7(f"{sym}: fetch error {ex}"); continue
     if len(r4) < 700 or len(rd) < 300:
         continue
+    TROWS.update(cur=rd, sym=sym)
     D4, E4 = frame(r4, 6)
     Dd, Ed = frame(rd, 5)
+    if sym.startswith("BTC-"):
+        BTCD.update({int(r[0]): float(r[4]) for r in rd})
     split_t = D4["T"][int(D4["n"] * 0.6)]                      # one moment splits both frames: before = learn · after = test
     COIN[sym] = (D4, E4, Dd, Ed, split_t)
 P7(f"{len(COIN)} coins · {time.time() - T0:.0f}s")
+# 🌊 the whole market crashing at once: share of coins whose 4-hour candle fell ≥ 2.5× its usual move in the SAME candle (≥ 30%)
+_Z = {}
+for sym, (D4, E4, Dd, Ed, st) in COIN.items():
+    C = D4["C"]
+    lr = [0.0] + [math.log(C[i] / C[i - 1]) if C[i] > 0 and C[i - 1] > 0 else 0.0 for i in range(1, D4["n"])]
+    for k in range(130, D4["n"]):
+        w = lr[k - 120:k]; mu = sum(w) / 120; sd = math.sqrt(sum((x - mu) ** 2 for x in w) / 119) or 1e-9
+        _Z.setdefault(D4["T"][k], []).append(lr[k] / sd)
+_CR = {t for t, z in _Z.items() if len(z) >= 10 and sum(1 for x in z if x <= -2.5) / len(z) >= 0.3}
+for sym, (D4, E4, Dd, Ed, st) in COIN.items():
+    idx = [i for i in range(210, D4["n"]) if D4["T"][i] in _CR]
+    if idx:
+        E4[("W-crash", 1)] = idx
+        E4[("W-crash", -1)] = list(idx)
+P7(f"🌊 whole-market crash candles: {len(_CR)}")
 
 
 # ── the weights: each system's edge (per frame · per side) on the learning part only ──
