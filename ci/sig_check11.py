@@ -1,6 +1,6 @@
 # 🔬 eleventh pass — the owner (20-11): «سوي فحص للمؤشرات كم قلنا عندما يجتمع مؤشرين او اكثر ممكن يعطينا دقه اكبر ، بس لازم المؤشرات
 #   داىما متفقين يعني مو الاختيار عشواىي». Everything through the dashboard's OWN signal code (the same events the 🎯 catalog uses · the
-#   macro readings moved later by their publication delay), 28 coins, REAL OKX prices, judged after 4 hours · 1 day · 1 week (net of 0.2%):
+#   macro readings moved later by their publication delay), 28 coins, REAL OKX prices, judged after 4 hours · 1 day · 1 month (net of 0.2%):
 #   ① AGREEMENT: k signals (2 … 8) say the SAME direction at the same time and NONE says the opposite ⇒ what followed · the same with k
 #      different FAMILIES (trend · momentum · volatility · pattern · volume · market) ⇒ does more agreement give more accuracy?
 #   ② NOT CHANCE: the whole history cut into 4 equal periods · an agreement or a combination counts only if it beats random in EVERY
@@ -10,7 +10,11 @@
 #      · THE YARDSTICK: the same hunt run again on SHUFFLED prices (each coin's real candles in a random order — same sizes, same
 #        volatility, nothing to predict) ⇒ what «held» there is what luck alone gives · real only matters if it clearly beats that
 #   ④ THE MARKET AS A WHOLE: the compass · the market-wide crash · fear & greed · the macro readings ⇒ the market's average
-#      after 4 hours · 1 day · 1 week, period by period
+#      after 4 hours · 1 day · 1 month, period by period
+#   · the owner again (20-11): «مؤشرات ثلاثه او اكثر او اقل محددة دائما اذا اتفقت طلع توقعها صحيح · بدون اسبوع خلي الشهر التالي» ⇒ the
+#     horizons are 4 hours · tomorrow · NEXT MONTH (the week is gone) · the daily history goes back as far as the exchange has it (~7 years)
+#     so a month has enough separate cases · cases are counted as INDEPENDENT only once per window of the horizon (a month = one per 30 days)
+#     · ⑤ what is happening NOW on the exchange (accumulation · distribution · aggressive buying/selling · crowding) ⇒ what followed
 #   python3 ci/sig_check11.py Holy_Dashboard.pyw  ⇒ lines starting with HOLYSIG11
 import importlib.machinery, importlib.util, math, os, random, shutil, sys, tempfile, time
 
@@ -38,6 +42,7 @@ COINS = list(m.MKT_COINS)
 P("dashboard", m.APP_VERSION, "· coins", len(COINS), "· macro delays", m.SG_MLAG)
 # ── the data, through the dashboard's own fetchers ──
 cdb = {}
+m.SG_N["1D"] = 2600                      # 📅 the daily history as far back as the exchange has it (~7 years) — for the month
 m._sg_refresh(COINS, ["4H", "1D"], cdb)
 db, now = {}, time.time()
 for fn in ("_pro_vix", "_pro_dxy", "_pro_us10", "_pro_epu", "_pro_gpr", "_pro_tone"):
@@ -56,7 +61,13 @@ P(f"prices fetched · {time.time() - T0:.0f}s")
 META = m._sg_meta()
 FAM = lambda code: META.get(code, ("other",))[0]
 LK = {"4H": 3, "1D": 2}
-HZ = [("4H", 1, "4 hours"), ("4H", 6, "1 day"), ("1D", 1, "1 day (daily)"), ("4H", 42, "1 week"), ("1D", 7, "1 week (daily)")]
+HZ = [("4H", 1, "4 hours"), ("4H", 6, "1 day"), ("1D", 1, "1 day (daily)"), ("1D", 30, "1 month (daily)")]
+SEC = {"4H": 14400, "1D": 86400}
+
+
+def bk(fr, h, ts):
+    """independent cases: at most one per window of the horizon (a day for 4 hours and a day · 30 days for a month)"""
+    return ts // max(86400, h * SEC[fr])
 
 
 def fwd(C, i, h, side):
@@ -168,7 +179,7 @@ def judge(X, fr, h, side, cond):
                 if x is not None:
                     p = per(X, fr, D["T"][i])
                     out[p].append(x)
-                    days[p].add(D["T"][i] // 86400)
+                    days[p].add(bk(fr, h, D["T"][i]))
             prev = c
     return out, days
 
@@ -202,7 +213,7 @@ def evalc(X, fr, h, side, keys, strict=True):
                 if x is not None:
                     p = per(X, fr, D["T"][i])
                     out[p].append(x)
-                    days[p].add(D["T"][i] // 86400)
+                    days[p].add(bk(fr, h, D["T"][i]))
                     cases.append((sym, i))
     return out, days, frozenset(cases)
 
@@ -283,7 +294,7 @@ AG_REAL = agree(X, True)
 P(f"① done · {time.time() - T0:.0f}s")
 
 # ── ③ specific combinations on REAL prices: chosen on periods 1–3 · judged on period 4 ──
-H3 = (("4H", 1, "4 hours"), ("4H", 6, "1 day"), ("1D", 7, "1 week (daily)"))
+H3 = (("4H", 1, "4 hours"), ("4H", 6, "1 day"), ("1D", 1, "1 day (daily)"), ("1D", 30, "1 month (daily)"))
 REAL = {}
 for fr, h, nm in H3:
     for side in (1, -1):
@@ -291,14 +302,18 @@ for fr, h, nm in H3:
         found, judged, held = hunt(X, fr, h, side)
         REAL[(fr, h, side)] = (len(found), len(judged), len(held))
         bp = X["BASE"][(fr, h, side)]
-        P(f"══ ③ REAL {nm} · {sd} · combinations consistent in periods 1–3: {len(found)} · judged on period 4 (≥10 cases · ≥5 days): "
-          f"{len(judged)} · still better than random there: {len(held)} (random P4 {hit(bp[3]):.0f}%) ══")
-        for size, c, out, days in sorted(judged, key=lambda x: -hit(x[2][3]))[:10]:
+        bands = [sum(1 for x in held if lo <= hit(x[2][3]) < hi) for lo, hi in ((0, 55), (55, 60), (60, 70), (70, 101))]
+        P(f"══ ③ REAL {nm} · {sd} · combinations consistent in periods 1–3: {len(found)} · judged on period 4 (≥10 cases · ≥5 separate): "
+          f"{len(judged)} · still better than random there: {len(held)} (random P4 {hit(bp[3]):.0f}%) · their P4 accuracy: under 55% {bands[0]} · "
+          f"55–60% {bands[1]} · 60–70% {bands[2]} · 70%+ {bands[3]} ══")
+        for size, c, out, days in sorted(judged, key=lambda x: -hit(x[2][3]))[:12]:
             names = " + ".join(m._sg_name(k, side) for k in c)
             ok = hit(out[3]) > hit(bp[3]) and mean(out[3]) > mean(bp[3])
+            ev4 = all(len(out[k]) >= 5 and hit(out[k]) > hit(bp[k]) and mean(out[k]) > mean(bp[k]) for k in range(4))
+            allv = [x for v in out for x in v]
             P(f"{nm} {sd} {size}× P1-3 " + " · ".join(f"{hit(out[k]):.0f}%/{len(out[k])}" for k in range(3))
-              + f" → P4 {hit(out[3]):.0f}% n{len(out[3])} d{len(days[3])} (rand {hit(bp[3]):.0f}) edge {(mean(out[3]) - mean(bp[3])) * 100:+.2f}% "
-              + ("✅" if ok else "❌") + f" · {names}")
+              + f" → P4 {hit(out[3]):.0f}% n{len(out[3])} sep{len(days[3])} (rand {hit(bp[3]):.0f}) edge {(mean(out[3]) - mean(bp[3])) * 100:+.2f}% "
+              + ("✅" if ok else "❌") + f" · all periods {hit(allv):.0f}% n{len(allv)}" + (" 🟢 EVERY PERIOD" if ev4 else "") + f" · {names}")
 P(f"③ real done · {time.time() - T0:.0f}s")
 
 # ── ④ the market as a whole (real prices) ──
@@ -318,7 +333,7 @@ def mkt_avg(fr, ts, h):
 
 
 seq = m._sg_compass_states(X["F"][("BTC-USDT", "1D")][0], [X["F"][(s, "1D")][0] for s in X["SYMS"]])
-for h, nm in ((1, "1 day"), (7, "1 week")):
+for h, nm in ((1, "1 day"), (30, "1 month")):
     res = {}
     for t, raw, s, *_ in seq:
         x = mkt_avg("1D", t, h)
@@ -339,7 +354,7 @@ for code, fr in (("W-crash", "4H"), ("M-fng", "1D"), ("M-vix", "1D"), ("M-dxy", 
         if not ts_:
             continue
         segs = []
-        for h, nm in ((1 if fr == "1D" else 6, "1d"), (7 if fr == "1D" else 42, "1w")) + (((1, "4h"),) if fr == "4H" else ()):
+        for h, nm in ((1 if fr == "1D" else 6, "1d"), (30 if fr == "1D" else 180, "1m")) + (((1, "4h"),) if fr == "4H" else ()):
             per_v = [[] for _ in range(4)]
             for t in ts_:
                 x = mkt_avg(fr, t, h)
@@ -348,6 +363,16 @@ for code, fr in (("W-crash", "4H"), ("M-fng", "1D"), ("M-vix", "1D"), ("M-dxy", 
             segs.append(f"{nm}: " + " ".join(f"P{k + 1} {hit(per_v[k]):.0f}%/{len(per_v[k])}" for k in range(4)))
         P(f"④ {code} {'BUY ' if side > 0 else 'SELL'} ({len(ts_)} events) the market's average in its direction · " + " ‖ ".join(segs))
 P(f"④ done · {time.time() - T0:.0f}s")
+
+# ── ⑤ what is happening NOW on the exchange, per coin ⇒ what followed for that coin ──
+for code, fr in (("X-ad", "1D"), ("X-ad", "4H"), ("X-adt", "1D"), ("X-adt", "4H"), ("P-tk", "1D"), ("P-ls", "1D"), ("X-rs", "1D")):
+    for side in (1, -1):
+        for h, nm in (((1, "4 hours"), (6, "1 day")) if fr == "4H" else ((1, "1 day"), (30, "1 month"))):
+            out, days, _ = evalc(X, fr, h, side, [code], strict=False)
+            if sum(len(v) for v in out) < 5:
+                continue
+            P(f"⑤ {fr} {m._sg_name(code, side)} → after {nm}: " + line(X, fr, h, side, out, days)[0])
+P(f"⑤ done · {time.time() - T0:.0f}s")
 
 # ── the yardstick: everything again on shuffled prices (6 different orders) — what luck alone gives ──
 NULL = {k: [] for k in REAL}
