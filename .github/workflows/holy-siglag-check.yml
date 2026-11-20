@@ -1,0 +1,23 @@
+# 🔬 how late each macro reading is published (the newest day each public source gives now) — for the signals' publication delays.
+#    Results: lines HOLYLAG. Public data only — no keys, no orders, no notifications.
+#
+name: Holy signals publication delays
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/sig_lagdates.py', '.github/workflows/holy-siglag-check.yml']
+permissions:
+  contents: read
+jobs:
+  dates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: the newest day of every macro reading (public data · no keys · no orders · no notifications)
+        run: |
+          pip install -q requests
+          python3 ci/sig_lagdates.py Holy_Dashboard.pyw
