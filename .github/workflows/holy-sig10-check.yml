@@ -1,0 +1,24 @@
+# 🔬 Holy signals check, tenth pass (the owner 20-11: «افحص»): the geopolitical-risk and policy-uncertainty readings are published late —
+#    every macro reading moved later by 0 · 1 · 3 · 7 · 14 days and judged again, alone and in the pairs check 9 found.
+#    Results: lines HOLYSIG10. Public market data only — no keys, no orders, no notifications.
+#
+name: Holy signals check 10
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/sig_check10.py', 'ci/RUN_SIG10', '.github/workflows/holy-sig10-check.yml']
+permissions:
+  contents: read
+jobs:
+  real-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: the macro readings moved later by their publication delay, on real OKX prices (public data · no keys · no orders · no notifications)
+        run: |
+          pip install -q requests
+          python3 ci/sig_check10.py Holy_Dashboard.pyw
