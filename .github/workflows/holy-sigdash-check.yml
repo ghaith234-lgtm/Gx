@@ -1,0 +1,23 @@
+# 🎯 the dashboard's own signals (v3.36.66) end to end on REAL OKX prices: history → catalog worker → scan → the notifications it would send.
+#    Results: lines HOLYDASH. Public market data only — no keys, no orders, no notifications sent.
+#
+name: Holy signals in the dashboard
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/sig_dash_check.py', 'ci/RUN_SIGDASH', '.github/workflows/holy-sigdash-check.yml']
+permissions:
+  contents: read
+jobs:
+  real-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: the dashboard's signals on real OKX prices (public data · no keys · no orders · nothing sent)
+        run: |
+          pip install -q requests
+          python3 ci/sig_dash_check.py Holy_Dashboard.pyw
