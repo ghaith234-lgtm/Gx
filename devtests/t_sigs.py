@@ -131,6 +131,11 @@ ok("② BUY and SELL, both frames · every entry has its learn and test record �
 ok("② random for comparison per frame and side · weeks of the test period · the compass history (up · flat · down)",
    all(k in cat["base"] for k in ("4H|1", "4H|-1", "1D|1", "1D|-1")) and cat["wk"]["4H"] > 1 and cat["wk"]["1D"] > 1
    and set((cat.get("compass") or {}).keys()) <= {"up", "flat", "down"} and cat.get("compass"), (cat["base"], cat["wk"], cat.get("compass")))
+_bk = {}
+for e in E:
+    _bk.setdefault((e["f"], e["s"], e["nl"], e["wl"], e["nt"], e["wt"]), []).append(set(e["k"]))
+ok(f"② no combination repeats a smaller one with the very same cases (the extra signal added nothing — {cat.get('dup')} removed)",
+   cat.get("dup") is not None and not any(a < b for g in _bk.values() for a in g for b in g), cat.get("dup"))
 ok("② every entry knows on how many different days its test cases fell (a market-wide reading hits every coin the same day)",
    all(0 <= e["nd"] <= e["nt"] and (e["nd"] >= 1 or e["nt"] == 0) for e in E), [e for e in E if not (0 <= e.get("nd", -1) <= e["nt"])][:2])
 e1 = next(e for e in E if len(e["k"]) == 1 and e["k"][0] == "W-crash" and e["f"] == "4H" and e["s"] == 1)
@@ -407,6 +412,10 @@ ok(f"⑩ notifications of that scan reached Telegram ({len(sent_tg)} message) �
 v = m.sg_view()
 ok("⑩ the 🎯 window's data: the catalog · now per coin (your coins first) · the estimate · the log · the compass",
    v["cat"] and v["now"] and v["now"][0]["mine"] and v["est"] and v["comp"] and isinstance(v["log"], list), {k: bool(v.get(k)) for k in ("cat", "now", "est", "comp")})
+ok("⑩ «the truest first» counts how many times: 13 of 15 (87%) ranks above 2 of 2 (100%) (Wilson's 95% lower bound)",
+   m._sg_wlb(13, 15) > m._sg_wlb(2, 2) and m._sg_wlb(20, 24) > m._sg_wlb(3, 3) and abs(m._sg_wlb(0, 0)) < 1e-9, (m._sg_wlb(13, 15), m._sg_wlb(2, 2)))
+qa = m.sg_catlist({})
+ok("⑩ … and the catalog's default order is that bound, highest first", qa["rows"] == sorted(qa["rows"], key=lambda r: -r["lb"]), [r["lb"] for r in qa["rows"][:5]])
 q = m.sg_catlist({"fr": ["1D"], "side": ["1"], "size": ["2"]})
 ok(f"⑩ the catalog browser filters: daily · buy · 2 together ({q['total']})", q["ok"] and all(r["f"] == "1D" and r["s"] == 1 and len(r["k"]) == 2 for r in q["rows"]),
    q.get("rows", [])[:2])

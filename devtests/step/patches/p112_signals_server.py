@@ -485,7 +485,19 @@ def _sg_search(COIN, prog=None):
                     out[e["id"]]["rare"] = True
                 else:
                     out[e["id"]] = e
-    return {"e": list(out.values()), "base": BASE, "wk": WK}
+    # ✂️ تركيبة بنفس حالات تركيبة أصغر منها (الإشارة الزايدة ما أضافت شي) ⇒ تُحذف — الأصغر تكفي
+    bk = {}
+    for e in out.values():
+        bk.setdefault((e["f"], e["s"], e["nl"], e["wl"], e["nt"], e["wt"]), []).append(e)
+    drop = set()
+    for grp in bk.values():
+        if len(grp) < 2:
+            continue
+        for e in grp:
+            ks = set(e["k"])
+            if any(o is not e and set(o["k"]) < ks for o in grp):
+                drop.add(e["id"])
+    return {"e": [e for e in out.values() if e["id"] not in drop], "base": BASE, "wk": WK, "dup": len(drop)}
 
 
 def _sg_compass_states(Dd_btc, dailies):
@@ -891,6 +903,17 @@ def _sg_keys_txt(keys, side, mx=6):
     return " · ".join(nm[:mx]) + (f" · و{len(nm) - mx} غيرها" if len(nm) > mx else "")
 
 
+def _sg_wlb(w, n, z=1.96):
+    """الحد الأدنى المضمون للصدق (ويلسون 95%): 13 من 15 (87%) أوثق من 2 من 2 (100%) — للترتيب «الأصدق» وللأقوى"""
+    if n <= 0:
+        return 0.0
+    p = w / n
+    d = 1 + z * z / n
+    c = p + z * z / (2 * n)
+    r = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
+    return max(0.0, (c - r) / d * 100.0)
+
+
 def _sg_mktwide(e):
     """فيها قراءة للسوق كله (🌊 · 😨 · 🗞️) ⇒ حالاتها على العملات تقع في الأيام نفسها — نذكر عدد الأيام الحقيقي"""
     return any(k == "W-crash" or k.startswith("M-") for k in e["k"])
@@ -912,7 +935,7 @@ def _sg_rec_line(e, r, cat, rare=False):
 
 def _sg_block(sym, ty, fr, ents, st, cat, scan, comp):
     """📨 إشعار عملة واحدة لنوع واحد — يجمع كل ما اتفق (أقواها أولاً)"""
-    ents = sorted(ents, key=lambda e: (-_sg_rec(e, st)["h"], -_sg_rec(e, st)["n"]))
+    ents = sorted(ents, key=lambda e: -_sg_wlb(_sg_rec(e, st)["w"], _sg_rec(e, st)["n"]))
     top = ents[0]
     side = top["s"]
     keys = list(dict.fromkeys(k for e in ents for k in e["k"]))
@@ -1387,7 +1410,7 @@ def _sg_row(e, st, cat, cfg):
             "n": r["n"], "w": r["w"], "h": round(r["h"], 1), "m": round(r["m"] if e["s"] > 0 else -r["m"], 5), "ln": r["ln"], "lw": r["lw"],
             "nt": e["nt"], "ht": round(e["wt"] / e["nt"] * 100.0, 1) if e["nt"] else None, "nl": e["nl"],
             "hl": round(e["wl"] / e["nl"] * 100.0, 1) if e["nl"] else None, "rare": bool(e.get("rare")),
-            "rh": float(b.get("ht") or 0), "ok": _sg_pass(e, st, cfg, cat), "nd": int(e.get("nd") or 0) if _sg_mktwide(e) else 0,
+            "rh": float(b.get("ht") or 0), "ok": _sg_pass(e, st, cfg, cat), "lb": round(_sg_wlb(r["w"], r["n"]), 1), "nd": int(e.get("nd") or 0) if _sg_mktwide(e) else 0,
             "better": r["h"] > float(b.get("ht") or 0) and r["m"] > float(b.get("mt") or 0)}
 
 
@@ -1417,7 +1440,7 @@ def sg_view():
         for fr, x in F.items():
             rows = [_sg_row(idx[i], st, cat, cfg) for i in x.get("alive") or [] if i in idx]
             rows = [dict(r, new=r["id"] in (x.get("fired") or [])) for r in rows]
-            rows.sort(key=lambda r: (not r["ok"], -r["h"], -r["n"]))
+            rows.sort(key=lambda r: (not r["ok"], -r["lb"]))
             it["fr"][fr] = {"t": x.get("t"), "px": x.get("px"), "rows": rows[:80], "nb": sum(1 for r in rows if r["s"] > 0 and r["ok"]),
                             "ns": sum(1 for r in rows if r["s"] < 0 and r["ok"])}
         now_.append(it)
@@ -1454,7 +1477,7 @@ def sg_catlist(q):
         if txt and txt.strip() and txt.strip().lower() not in (" ".join(r["nm"]) + " " + " ".join(e["k"])).lower():
             continue
         rows.append(r)
-    key = {"n": lambda r: -r["n"], "m": lambda r: -r["m"], "live": lambda r: -r["ln"]}.get(srt, lambda r: (-r["h"], -r["n"]))
+    key = {"n": lambda r: -r["n"], "m": lambda r: -r["m"], "live": lambda r: -r["ln"]}.get(srt, lambda r: -r["lb"])
     rows.sort(key=key)
     return {"ok": True, "rows": rows[:250], "total": len(rows), "base": cat.get("base")}
 

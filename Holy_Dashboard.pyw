@@ -19095,7 +19095,19 @@ def _sg_search(COIN, prog=None):
                     out[e["id"]]["rare"] = True
                 else:
                     out[e["id"]] = e
-    return {"e": list(out.values()), "base": BASE, "wk": WK}
+    # ✂️ تركيبة بنفس حالات تركيبة أصغر منها (الإشارة الزايدة ما أضافت شي) ⇒ تُحذف — الأصغر تكفي
+    bk = {}
+    for e in out.values():
+        bk.setdefault((e["f"], e["s"], e["nl"], e["wl"], e["nt"], e["wt"]), []).append(e)
+    drop = set()
+    for grp in bk.values():
+        if len(grp) < 2:
+            continue
+        for e in grp:
+            ks = set(e["k"])
+            if any(o is not e and set(o["k"]) < ks for o in grp):
+                drop.add(e["id"])
+    return {"e": [e for e in out.values() if e["id"] not in drop], "base": BASE, "wk": WK, "dup": len(drop)}
 
 
 def _sg_compass_states(Dd_btc, dailies):
@@ -19501,6 +19513,17 @@ def _sg_keys_txt(keys, side, mx=6):
     return " · ".join(nm[:mx]) + (f" · و{len(nm) - mx} غيرها" if len(nm) > mx else "")
 
 
+def _sg_wlb(w, n, z=1.96):
+    """الحد الأدنى المضمون للصدق (ويلسون 95%): 13 من 15 (87%) أوثق من 2 من 2 (100%) — للترتيب «الأصدق» وللأقوى"""
+    if n <= 0:
+        return 0.0
+    p = w / n
+    d = 1 + z * z / n
+    c = p + z * z / (2 * n)
+    r = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
+    return max(0.0, (c - r) / d * 100.0)
+
+
 def _sg_mktwide(e):
     """فيها قراءة للسوق كله (🌊 · 😨 · 🗞️) ⇒ حالاتها على العملات تقع في الأيام نفسها — نذكر عدد الأيام الحقيقي"""
     return any(k == "W-crash" or k.startswith("M-") for k in e["k"])
@@ -19522,7 +19545,7 @@ def _sg_rec_line(e, r, cat, rare=False):
 
 def _sg_block(sym, ty, fr, ents, st, cat, scan, comp):
     """📨 إشعار عملة واحدة لنوع واحد — يجمع كل ما اتفق (أقواها أولاً)"""
-    ents = sorted(ents, key=lambda e: (-_sg_rec(e, st)["h"], -_sg_rec(e, st)["n"]))
+    ents = sorted(ents, key=lambda e: -_sg_wlb(_sg_rec(e, st)["w"], _sg_rec(e, st)["n"]))
     top = ents[0]
     side = top["s"]
     keys = list(dict.fromkeys(k for e in ents for k in e["k"]))
@@ -19997,7 +20020,7 @@ def _sg_row(e, st, cat, cfg):
             "n": r["n"], "w": r["w"], "h": round(r["h"], 1), "m": round(r["m"] if e["s"] > 0 else -r["m"], 5), "ln": r["ln"], "lw": r["lw"],
             "nt": e["nt"], "ht": round(e["wt"] / e["nt"] * 100.0, 1) if e["nt"] else None, "nl": e["nl"],
             "hl": round(e["wl"] / e["nl"] * 100.0, 1) if e["nl"] else None, "rare": bool(e.get("rare")),
-            "rh": float(b.get("ht") or 0), "ok": _sg_pass(e, st, cfg, cat), "nd": int(e.get("nd") or 0) if _sg_mktwide(e) else 0,
+            "rh": float(b.get("ht") or 0), "ok": _sg_pass(e, st, cfg, cat), "lb": round(_sg_wlb(r["w"], r["n"]), 1), "nd": int(e.get("nd") or 0) if _sg_mktwide(e) else 0,
             "better": r["h"] > float(b.get("ht") or 0) and r["m"] > float(b.get("mt") or 0)}
 
 
@@ -20027,7 +20050,7 @@ def sg_view():
         for fr, x in F.items():
             rows = [_sg_row(idx[i], st, cat, cfg) for i in x.get("alive") or [] if i in idx]
             rows = [dict(r, new=r["id"] in (x.get("fired") or [])) for r in rows]
-            rows.sort(key=lambda r: (not r["ok"], -r["h"], -r["n"]))
+            rows.sort(key=lambda r: (not r["ok"], -r["lb"]))
             it["fr"][fr] = {"t": x.get("t"), "px": x.get("px"), "rows": rows[:80], "nb": sum(1 for r in rows if r["s"] > 0 and r["ok"]),
                             "ns": sum(1 for r in rows if r["s"] < 0 and r["ok"])}
         now_.append(it)
@@ -20064,7 +20087,7 @@ def sg_catlist(q):
         if txt and txt.strip() and txt.strip().lower() not in (" ".join(r["nm"]) + " " + " ".join(e["k"])).lower():
             continue
         rows.append(r)
-    key = {"n": lambda r: -r["n"], "m": lambda r: -r["m"], "live": lambda r: -r["ln"]}.get(srt, lambda r: (-r["h"], -r["n"]))
+    key = {"n": lambda r: -r["n"], "m": lambda r: -r["m"], "live": lambda r: -r["ln"]}.get(srt, lambda r: -r["lb"])
     rows.sort(key=key)
     return {"ok": True, "rows": rows[:250], "total": len(rows), "base": cat.get("base")}
 
@@ -20109,7 +20132,7 @@ def _sg_coin_rows(sym, st, cat, cfg, k=6):
     for fr, x in F.items():
         rows = [_sg_row(cat["idx"][i], st, cat, cfg) for i in x.get("alive") or [] if i in cat["idx"]]
         rows = [dict(r, new=r["id"] in (x.get("fired") or [])) for r in rows]
-        rows.sort(key=lambda r: (not r["ok"], -r["h"], -r["n"]))
+        rows.sort(key=lambda r: (not r["ok"], -r["lb"]))
         out[fr] = {"t": x.get("t"), "rows": rows[:k], "nb": sum(1 for r in rows if r["s"] > 0 and r["ok"]),
                    "ns": sum(1 for r in rows if r["s"] < 0 and r["ok"]), "n": len(rows)}
     return out
@@ -30940,7 +30963,7 @@ async function openSig(tab){if(tab)SGTAB=tab;
 async function sgLoad(){clearTimeout(SGT);try{SGV=await api('/api/signals')}catch(e){SGV=null}sgRender();if(SGTAB==='cat')sgCat();
   if(SGV&&SGV.busy&&SGV.busy.phase&&$('#sg_body'))SGT=setTimeout(sgLoad,4000)}
 function sgTab(t){SGTAB=t;sgRender();if(t==='cat')sgCat()}
-function sgAr(n,k){const W={day:['يوم واحد','يومين','أيام','يوماً'],time:['مرة واحدة','مرتين','مرات','مرة'],coin:['عملة واحدة','عملتين','عملات','عملة']}[k];n=+n||0;   // 55 يوماً · 13 مرة · 9 مرات
+function sgAr(n,k){const W={day:['يوم واحد','يومين','أيام','يوماً'],time:['مرة واحدة','مرتين','مرات','مرة'],coin:['عملة واحدة','عملتين','عملات','عملة'],min:['دقيقة واحدة','دقيقتين','دقائق','دقيقة']}[k];n=+n||0;   // 55 يوماً · 13 مرة · 9 مرات
   return n===1?W[0]:n===2?W[1]:(n%100>=3&&n%100<=10)?`${n} ${W[2]}`:`${n} ${W[3]}`}
 function sgPct(x){x=+x||0;return `<b class="${x>=0?'up':'dn'}" dir="ltr">${x>=0?'+':''}${(x*100).toFixed(1)}%</b>`}
 function sgTy(V,t){return ((V&&V.types)||{})[t]||['•','']}
@@ -30985,12 +31008,12 @@ function sgNow(V){let h=sgHead(V);
 function sgCatUI(V){const b=(k,v,t)=>`<button class="${SGF[k]===v?'on':''}" onclick="SGF['${k}']='${v}';sgRender();sgCat()">${t}</button>`;
   const C=V.cat;if(!C)return sgHead(V)+'<div class="sg-empty">🏗️ الدليل لم يُبنَ بعد — تتابعه في «الآن»</div>';
   const tys=Object.entries(V.types||{}).filter(([k])=>!['mkt','res'].includes(k));
-  return `<div class="ind-sub" style="margin-bottom:6px">📒 <b>${C.n}</b> إشارة وتركيبة (منها ${C.ncombo} تركيبة · 💎 ${C.nrare} نادرة) · من تاريخ ${(C.coins||[]).length} عملة · بُني ${C.ts?gAgo(C.ts):'—'}${C.secs?` في ${Math.round(C.secs/60)} دقيقة`:''} · يُعاد كل أسبوع</div>
+  return `<div class="ind-sub" style="margin-bottom:6px">📒 <b>${C.n}</b> إشارة وتركيبة (منها ${C.ncombo} تركيبة · 💎 ${C.nrare} نادرة) · من تاريخ ${(C.coins||[]).length} عملة · بُني ${C.ts?gAgo(C.ts):'—'}${C.secs?` في ${C.secs<90?'دقيقة أو أقل':sgAr(Math.round(C.secs/60),'min')}`:''} · يُعاد كل أسبوع</div>
     <div class="sg-flt">${b('fr','','الكل')}${b('fr','1D','يومي')}${b('fr','4H','4 ساعات')}</div>
     <div class="sg-flt">${b('side','1','🟢 شراء وصعود')}${b('side','-1','🔴 بيع ونزول')}${b('side','','الكل')}</div>
     <div class="sg-flt">${b('size','','كل الأحجام')}${b('size','1','وحدها')}${b('size','2','2 معاً')}${b('size','3','3 معاً')}${b('size','4','4 فأكثر')}${b('rare','1','💎 النادرة فقط')}${SGF.rare?b('rare','','✕ النادرة'):''}</div>
     <div class="sg-flt"><select onchange="SGF.ty=this.value;sgCat()"><option value="">كل الأنواع</option>${tys.map(([k,t])=>`<option value="${k}"${SGF.ty===k?' selected':''}>${t[0]} ${gEsc(t[1])}</option>`).join('')}</select>
-      <select onchange="SGF.sort=this.value;sgCat()"><option value="">الأصدق أولاً</option><option value="n"${SGF.sort==='n'?' selected':''}>الأكثر حالات</option><option value="m"${SGF.sort==='m'?' selected':''}>الأكبر حركة</option><option value="live"${SGF.sort==='live'?' selected':''}>الأكثر سجلاً حياً</option></select>
+      <select onchange="SGF.sort=this.value;sgCat()"><option value="">الأصدق أولاً (مع عدد المرات)</option><option value="n"${SGF.sort==='n'?' selected':''}>الأكثر حالات</option><option value="m"${SGF.sort==='m'?' selected':''}>الأكبر حركة</option><option value="live"${SGF.sort==='live'?' selected':''}>الأكثر سجلاً حياً</option></select>
       <input type="search" placeholder="🔍 ابحث: MACD · بولنجر · Supertrend…" value="${gEsc(SGF.q)}" oninput="SGF.q=this.value;clearTimeout(SGET);SGET=setTimeout(sgCat,350)"></div>
     <div id="sg_cat">${LDR('…')}</div>`}
 async function sgCat(){const el=$('#sg_cat');if(!el)return;try{SGC=await api('/api/signals_cat?'+new URLSearchParams(SGF).toString())}catch(e){SGC=null}

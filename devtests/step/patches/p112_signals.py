@@ -40,7 +40,7 @@ def _sg_coin_rows(sym, st, cat, cfg, k=6):
     for fr, x in F.items():
         rows = [_sg_row(cat["idx"][i], st, cat, cfg) for i in x.get("alive") or [] if i in cat["idx"]]
         rows = [dict(r, new=r["id"] in (x.get("fired") or [])) for r in rows]
-        rows.sort(key=lambda r: (not r["ok"], -r["h"], -r["n"]))
+        rows.sort(key=lambda r: (not r["ok"], -r["lb"]))
         out[fr] = {"t": x.get("t"), "rows": rows[:k], "nb": sum(1 for r in rows if r["s"] > 0 and r["ok"]),
                    "ns": sum(1 for r in rows if r["s"] < 0 and r["ok"]), "n": len(rows)}
     return out
@@ -98,7 +98,7 @@ async function openSig(tab){if(tab)SGTAB=tab;
 async function sgLoad(){clearTimeout(SGT);try{SGV=await api('/api/signals')}catch(e){SGV=null}sgRender();if(SGTAB==='cat')sgCat();
   if(SGV&&SGV.busy&&SGV.busy.phase&&$('#sg_body'))SGT=setTimeout(sgLoad,4000)}
 function sgTab(t){SGTAB=t;sgRender();if(t==='cat')sgCat()}
-function sgAr(n,k){const W={day:['يوم واحد','يومين','أيام','يوماً'],time:['مرة واحدة','مرتين','مرات','مرة'],coin:['عملة واحدة','عملتين','عملات','عملة']}[k];n=+n||0;   // 55 يوماً · 13 مرة · 9 مرات
+function sgAr(n,k){const W={day:['يوم واحد','يومين','أيام','يوماً'],time:['مرة واحدة','مرتين','مرات','مرة'],coin:['عملة واحدة','عملتين','عملات','عملة'],min:['دقيقة واحدة','دقيقتين','دقائق','دقيقة']}[k];n=+n||0;   // 55 يوماً · 13 مرة · 9 مرات
   return n===1?W[0]:n===2?W[1]:(n%100>=3&&n%100<=10)?`${n} ${W[2]}`:`${n} ${W[3]}`}
 function sgPct(x){x=+x||0;return `<b class="${x>=0?'up':'dn'}" dir="ltr">${x>=0?'+':''}${(x*100).toFixed(1)}%</b>`}
 function sgTy(V,t){return ((V&&V.types)||{})[t]||['•','']}
@@ -143,12 +143,12 @@ function sgNow(V){let h=sgHead(V);
 function sgCatUI(V){const b=(k,v,t)=>`<button class="${SGF[k]===v?'on':''}" onclick="SGF['${k}']='${v}';sgRender();sgCat()">${t}</button>`;
   const C=V.cat;if(!C)return sgHead(V)+'<div class="sg-empty">🏗️ الدليل لم يُبنَ بعد — تتابعه في «الآن»</div>';
   const tys=Object.entries(V.types||{}).filter(([k])=>!['mkt','res'].includes(k));
-  return `<div class="ind-sub" style="margin-bottom:6px">📒 <b>${C.n}</b> إشارة وتركيبة (منها ${C.ncombo} تركيبة · 💎 ${C.nrare} نادرة) · من تاريخ ${(C.coins||[]).length} عملة · بُني ${C.ts?gAgo(C.ts):'—'}${C.secs?` في ${Math.round(C.secs/60)} دقيقة`:''} · يُعاد كل أسبوع</div>
+  return `<div class="ind-sub" style="margin-bottom:6px">📒 <b>${C.n}</b> إشارة وتركيبة (منها ${C.ncombo} تركيبة · 💎 ${C.nrare} نادرة) · من تاريخ ${(C.coins||[]).length} عملة · بُني ${C.ts?gAgo(C.ts):'—'}${C.secs?` في ${C.secs<90?'دقيقة أو أقل':sgAr(Math.round(C.secs/60),'min')}`:''} · يُعاد كل أسبوع</div>
     <div class="sg-flt">${b('fr','','الكل')}${b('fr','1D','يومي')}${b('fr','4H','4 ساعات')}</div>
     <div class="sg-flt">${b('side','1','🟢 شراء وصعود')}${b('side','-1','🔴 بيع ونزول')}${b('side','','الكل')}</div>
     <div class="sg-flt">${b('size','','كل الأحجام')}${b('size','1','وحدها')}${b('size','2','2 معاً')}${b('size','3','3 معاً')}${b('size','4','4 فأكثر')}${b('rare','1','💎 النادرة فقط')}${SGF.rare?b('rare','','✕ النادرة'):''}</div>
     <div class="sg-flt"><select onchange="SGF.ty=this.value;sgCat()"><option value="">كل الأنواع</option>${tys.map(([k,t])=>`<option value="${k}"${SGF.ty===k?' selected':''}>${t[0]} ${gEsc(t[1])}</option>`).join('')}</select>
-      <select onchange="SGF.sort=this.value;sgCat()"><option value="">الأصدق أولاً</option><option value="n"${SGF.sort==='n'?' selected':''}>الأكثر حالات</option><option value="m"${SGF.sort==='m'?' selected':''}>الأكبر حركة</option><option value="live"${SGF.sort==='live'?' selected':''}>الأكثر سجلاً حياً</option></select>
+      <select onchange="SGF.sort=this.value;sgCat()"><option value="">الأصدق أولاً (مع عدد المرات)</option><option value="n"${SGF.sort==='n'?' selected':''}>الأكثر حالات</option><option value="m"${SGF.sort==='m'?' selected':''}>الأكبر حركة</option><option value="live"${SGF.sort==='live'?' selected':''}>الأكثر سجلاً حياً</option></select>
       <input type="search" placeholder="🔍 ابحث: MACD · بولنجر · Supertrend…" value="${gEsc(SGF.q)}" oninput="SGF.q=this.value;clearTimeout(SGET);SGET=setTimeout(sgCat,350)"></div>
     <div id="sg_cat">${LDR('…')}</div>`}
 async function sgCat(){const el=$('#sg_cat');if(!el)return;try{SGC=await api('/api/signals_cat?'+new URLSearchParams(SGF).toString())}catch(e){SGC=null}
