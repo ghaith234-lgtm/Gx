@@ -87,6 +87,12 @@ ok(f"① SOL now: «{cl[0][:60]}…» · the short term · vs Bitcoin with its r
    cl[0].startswith("الاتجاه اليومي:") and any(t.startswith("على المدى القصير") for t in cl) and any(t.startswith("مقابل البيتكوين") and "من العملات" in t for t in cl)
    and any(t.startswith("التذبذب") for t in cl) and any("أقرب دعم" in t or "أقرب مقاومة" in t for t in cl), cl)
 ok("① plain Arabic — no Latin words in any line (the numbers and prices only)", not lat, lat)
+H1 = [[T1E - (719 - i) * 3600, 0, 11.0 + (i % 9) * 0.5, 10.0 + (i % 9) * 0.5, 10.5 + (i % 9) * 0.5, 50000.0 if i % 9 == 4 else 100.0] for i in range(720)]
+DD = CDB["c"]["SOL-USDT"]["d"]
+lvh = m._an_levels(*([float(r[k]) for r in DD] for k in (2, 3, 4, 5)), px=12.0, h1=H1)
+lvd = m._an_levels(*([float(r[k]) for r in DD] for k in (2, 3, 4, 5)), px=12.0, h1=H1[:100])
+ok(f"① 📍 the busiest area from 30 days of hourly candles (typical price × volume — v3.36.76): the heavy hours traded around 12.5 ⇒ {lvh['poc']:.2f} · "
+   f"fewer than 240 hourly candles ⇒ the daily way ({lvd['poc']:.2f})", abs(lvh["poc"] - 12.5) < 0.12 and abs(lvd["poc"] - 12.5) > 0.12, (lvh, lvd))
 ok("① SOL climbed for months (its own drift) ⇒ «صاعد» and stronger than Bitcoin", SOL["trend"] == "up" and (SOL.get("rs30") or 0) > 0, (SOL["trend"], SOL.get("rs30")))
 
 # ② the range

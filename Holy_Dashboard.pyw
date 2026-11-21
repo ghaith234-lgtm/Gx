@@ -20705,7 +20705,7 @@ def _an_volstate(C, w=30, look=365):
     return {"pct": round(pct), "ann": round(cur * math.sqrt(365) * 100, 1), "k": "calm" if pct < 25 else "storm" if pct > 75 else "normal"}
 
 
-def _an_levels(H, L, C, V, px=None, look=30):
+def _an_levels(H, L, C, V, px=None, look=30, h1=None):
     """🧱 أقرب دعم ومقاومة (قيعان وقمم واضحة خلال الشهر — كل واحدة أدنى/أعلى من يومين قبلها وبعدها) + منطقة أكثر تداول"""
     n = len(C)
     if n < look + 5:
@@ -20721,7 +20721,17 @@ def _an_levels(H, L, C, V, px=None, look=30):
     res = min([x for x in highs if x > px * 1.002] or [max(H[-look:])])
     lo, hi = min(L[-look:]), max(H[-look:])
     poc = None
-    if hi > lo:
+    hh = [r for r in (h1 or [])[-look * 24:] if float(r[2]) >= float(r[3]) > 0]
+    if len(hh) >= 240:                               # 📍 v3.36.76: من شموع الساعة — السعر النموذجي (أعلى + أدنى + إغلاق) / 3 × الحجم
+        lo2, hi2 = min(float(r[3]) for r in hh), max(float(r[2]) for r in hh)
+        if hi2 > lo2:
+            bins = [0.0] * 40
+            for r in hh:
+                tp = (float(r[2]) + float(r[3]) + float(r[4])) / 3.0
+                bins[min(39, int((tp - lo2) / (hi2 - lo2) * 40))] += float(r[5])
+            b = max(range(40), key=lambda j: bins[j])
+            poc = lo2 + (b + 0.5) * (hi2 - lo2) / 40
+    elif hi > lo:                                    # (أقل من 240 شمعة ساعة ⇒ الطريقة اليومية)
         bins = [0.0] * 24
         for i in range(n - look, n):
             k = min(23, int((C[i] - lo) / (hi - lo) * 24))
@@ -20797,7 +20807,7 @@ def _an_coin(sym, cdb, btc_d, uni_rs):
             if x >= 1.6 or x <= 0.5:
                 out["lines"].append(("📊", f"الحجم: آخر 24 ساعة ×{x:.1f} من المعتاد" + (" — نشاط غير عادي" if x >= 1.6 else " — تداول خفيف"),
                                      "w" if x >= 1.6 else "z"))
-    lv = _an_levels(H, L, C, V, px)
+    lv = _an_levels(H, L, C, V, px, h1=h1)
     if lv:
         out["lv"] = lv
         bits = []
