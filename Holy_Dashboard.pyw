@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.73"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.74"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -10285,6 +10285,13 @@ def _tp_stored(b, st, cp):
     return out
 
 
+def _tp_split(lv, cp):
+    """⏳ v3.36.74 (المالك: «العدد يلحق السعر»): المحفوظ قسمان — الفايتة فوق السعر الآن (تُشترى بأمر واحد بسعر السوق عند الفتح) ·
+    والتي تحت السعر تنتظر بأماكنها (لا أوامر حتى الفتح — ثم تعود إلى السلم كالمعتاد) — نفس قاعدة عدّاد 📦 (السعر ≥ الحالي)"""
+    a = [(p, q) for p, q in lv if p >= cp]
+    return a, [(p, q) for p, q in lv if p < cp]
+
+
 def _tp_cover(lv, cp, budget):
     """كم مستوى من البداية يغطيه الدولار (سعر الشراء ≤ السعر × 1.005 ولا فوق المستوى · هامش 0.2%) — المستويات بنفس السعر
     (أجزاء 🪜) ما تنقسم: الأرضية ما تفصل بينها ⇒ (العدد، الكلفة)"""
@@ -10547,8 +10554,9 @@ def _tp_open(b, st, cp, dry=False):
         av = _tp_budget(r, d)
         kc, cost = _tp_cover(lv, cp, av)
         first = round(lv[0][1] * min(cp * 1.005, lv[0][0]), 2) if lv else 0.0
+        la, lw = _tp_split(lv, cp)                     # ⏳ v3.36.74: الفايتة فوق السعر · والتي تنتظر تحته
         info = {"ok": True, "n": len(lv), "k": kc, "av": round(av, 2), "cost": round(cost, 2), "first": first, "own": own, "temp": temp,
-                "one": _tp_kind(b) != "grid_step"}
+                "one": _tp_kind(b) != "grid_step", "na": len(la), "nw": len(lw), "ka": min(kc, len(la)), "kw": max(0, kc - len(la))}
         if dry:
             return info
         if lv and kc == 0:
@@ -10561,17 +10569,19 @@ def _tp_open(b, st, cp, dry=False):
             d.setdefault("opened", {})[k] = now
         else:
             r["temp"], r["freed"], r["opened"] = new, round(max(0.0, float(r.get("freed") or 0) - cost), 6), now
-            r["n"], r["k"] = len(lv) - kc, 0
+            r["n"], r["k"], r["w"] = len(_tp_split(lv[kc:], cp)[0]), 0, len(_tp_split(lv[kc:], cp)[1])
         save_json_atomic(CASHW_FILE, d)
     sym = b.get("symbol") or ""
     one = "" if _tp_kind(b) == "grid_step" else "بأمر واحد "     # 🪜 يشتري خاناته واحدة واحدة (بسعر السوق)
     if not lv:
         msg = "🔓 فُتح وقف الشراء المؤقت — لا مستويات محفوظة: يعود البوت إلى الشراء العادي، ويُغلق المؤقت وحده إذا قصر الدولار"
     elif new <= 0:
-        msg = (f"🔓 فُتح وقف الشراء المؤقت — تُشترى المستويات المحفوظة كلها ({len(lv)}) من البداية {one}بسعر السوق (≈ {cost:.2f}$) · "
-               "ويعود البوت إلى الشراء العادي، ويُغلق المؤقت وحده إذا قصر الدولار")
+        msg = (f"🔓 فُتح وقف الشراء المؤقت — الفايتة فوق السعر ({len(la)}) تُشترى من البداية {one}بسعر السوق"
+               + (f" · والتي تحت السعر ({len(lw)}) تعود إلى أماكنها في السلم كالمعتاد" if lw else "")
+               + f" (≈ {cost:.2f}$) · ويعود البوت إلى الشراء العادي، ويُغلق المؤقت وحده إذا قصر الدولار")
     else:
-        msg = (f"🔓 فُتح وقف الشراء المؤقت لـ {kc} من {len(lv)} — تُشترى من البداية {one}بسعر السوق (≈ {cost:.2f}$) · "
+        msg = (f"🔓 فُتح وقف الشراء المؤقت لـ {kc} من {len(lv)} — تُشترى من البداية: {min(kc, len(la))} فايتة {one}بسعر السوق"
+               + (f" و{kc - len(la)} تعود إلى أماكنها تحت السعر" if kc > len(la) else "") + f" (≈ {cost:.2f}$) · "
                f"والباقي ({len(lv) - kc}) يبقى محفوظاً والمؤقت مغلقاً تحته من {_px_s(new)}")
     if own > 0:
         msg += f" · إيقافك (⏸ {_px_s(own)}) كما هو: لا شراء تحته"
@@ -10640,8 +10650,9 @@ def _cash_watch(g, now, snaps):
                                     st = read_retry(paths_of(b)[0]) or st
                         lv = _tp_stored(b, st, cp) if cp > 0 else []
                         kc, _c = _tp_cover(lv, cp, un + float(r.get("freed") or 0)) if lv else (0, 0.0)
-                        if r.get("n") != len(lv) or r.get("k") != kc:
-                            r["n"], r["k"] = len(lv), kc
+                        na = len(_tp_split(lv, cp)[0])     # ⏳ v3.36.74: العدد يلحق السعر — الفايتة فوقه بس · والباقي ينتظر بمكانه
+                        if r.get("n") != na or r.get("k") != kc or r.get("w") != len(lv) - na:
+                            r["n"], r["k"], r["w"] = na, kc, len(lv) - na
                             ch = True
                         if lv:
                             waiting.append((i, r, lv, kc, cp))
@@ -10671,8 +10682,10 @@ def _cash_watch(g, now, snaps):
                 if on and waiting and any(kc > 0 for *_, kc, _cp in waiting) and now - float(d["avail"].get(wq) or 0) >= TP_AVAIL_S:
                     rows = []
                     for i, r, lv, kc, cp in waiting:
-                        need = round(sum(q_ * min(cp * 1.005, p) for p, q_ in lv), 2)
-                        rows.append(f"{_cw_lbl(i)}: محفوظ {len(lv)} (≈ {need}$) — يكفي الدولار {kc} منها")
+                        la_, lw_ = _tp_split(lv, cp)
+                        need = round(sum(q_ * min(cp * 1.005, p) for p, q_ in la_), 2)
+                        rows.append(f"{_cw_lbl(i)}: فايتة فوق السعر {len(la_)} (≈ {need}$)" + (f" · تنتظر تحت السعر بأماكنها {len(lw_)}" if lw_ else "")
+                                    + f" — يكفي الدولار {kc} من {len(lv)}")
                     _gd_event(g, f"tpa:{wid}:{q}:{int(now)}", "🟢", f"💵 توفر دولار — {q}",
                               f"الدولار الحر غير المحجوز {un:.2f} {q}" + (f" (محجوز لـ DCA البيعي {dh:.2f})" if dh > 0.005 else "") + "\n"
                               + "⏳ في وقف الشراء المؤقت: " + " · ".join(rows) + "\n"
@@ -10711,7 +10724,7 @@ def _cw_card(bdir):
         r = (d.get("bots") or {}).get(k)
         if isinstance(r, dict) and r.get("v") == 2:
             return {"tp": True, "need": round(float(r.get("need") or 0), 4), "temp": float(r.get("temp") or 0),
-                    "own": float(r.get("own") or 0), "n": int(r.get("n") or 0), "k": int(r.get("k") or 0)}
+                    "own": float(r.get("own") or 0), "n": int(r.get("n") or 0), "k": int(r.get("k") or 0), "w": int(r.get("w") or 0)}
         sv = (d.get("seen") or {}).get(k)
         if isinstance(sv, dict) and time.time() - float(sv.get("ts") or 0) < 3 * GUARD_EVERY:
             return {"need": round(float(sv.get("need") or 0), 4), "auto": False}
@@ -29752,26 +29765,28 @@ function accBtnSync(dir){const el=CARDS.get(dir),b=botOf(dir);if(!el||!el._r||!e
 async function tempOpen(dir){const b=botOf(dir)||{};let I=null;      // 🔓 v3.36.58: فتح وقف الشراء المؤقت — بقرارك
   try{I=await api('/api/control',{dir,action:'temp_info'},true)}catch(e){}
   if(!I||!I.ok){toast((I&&I.msg)||'تعذر الاتصال',false);return}
-  const all=I.k>=I.n,can=!I.n||I.k>0;
+  const all=I.k>=I.n,can=!I.n||I.k>0,NA=I.na!=null?I.na:I.n,NW=I.nw||0;      // ⏳ v3.36.74: الفايتة فوق السعر · والتي تنتظر تحته
   const txt=!I.n?'لا توجد مستويات محفوظة — يعود البوت إلى الشراء العادي، ويُغلق المؤقت وحده إذا قصر الدولار.'
     :!I.k?`الدولار الحر غير المحجوز (${I.av}$) لا يكفي ولا مستوى واحداً (أول مستوى ≈ ${I.first}$) — يبقى مغلقاً.`
-    :all?`يكفي الكل: تُشترى المستويات المحفوظة (${I.n}) من البداية <b>${I.one?'بأمر واحد ':''}بسعر السوق</b> (≈ ${I.cost}$) ويعود البوت إلى الشراء العادي، ويُغلق المؤقت وحده إذا قصر الدولار.`
-    :`يكفي ${I.k} من ${I.n}: تُشترى من البداية <b>${I.one?'بأمر واحد ':''}بسعر السوق</b> (≈ ${I.cost}$)، والباقي (${I.n-I.k}) يبقى محفوظاً والمؤقت مغلقاً تحته.`;
+    :all?`يكفي الكل: الفايتة (${NA}) تُشترى من البداية <b>${I.one?'بأمر واحد ':''}بسعر السوق</b>${NW?` · والتي تحت السعر (${NW}) تعود إلى أماكنها في السلم كالمعتاد`:''} (≈ ${I.cost}$) ويعود البوت إلى الشراء العادي، ويُغلق المؤقت وحده إذا قصر الدولار.`
+    :`يكفي ${I.k} من ${I.n}: تُشترى من البداية${I.ka?` ${I.ka} فايتة <b>${I.one?'بأمر واحد ':''}بسعر السوق</b>`:''}${I.kw?` و${I.kw} تعود إلى أماكنها تحت السعر`:''} (≈ ${I.cost}$)، والباقي (${I.n-I.k}) يبقى محفوظاً والمؤقت مغلقاً تحته.`;
   showDialog(`<h2>🔓 وقف الشراء المؤقت — ${gEsc(b.symbol||'')}</h2>
-    <p style="color:var(--mut);font-size:13px;line-height:1.9;margin-bottom:10px">مغلق من <b class="num">${f4(I.temp)}</b> · المحفوظ <b>${I.n}</b> مستوى · الدولار الحر غير المحجوز (مع دولار مخزنه): <b>${I.av}$</b> — دولار DCA البيعي لا يُحسب.</p>
+    <p style="color:var(--mut);font-size:13px;line-height:1.9;margin-bottom:10px">مغلق من <b class="num">${f4(I.temp)}</b> · فاته السعر <b>${NA}</b> مستوى${NW?` · و<b>${NW}</b> تحت السعر تنتظر بأماكنها`:''} · الدولار الحر غير المحجوز (مع دولار مخزنه): <b>${I.av}$</b> — دولار DCA البيعي لا يُحسب.</p>
     <p style="color:var(--mut);font-size:13px;line-height:1.9;margin-bottom:14px">${txt}${I.own>0?` · إيقافك (⏸ ${f4(I.own)}) يبقى كما هو: لا شراء تحته.`:''}</p>
     <div class="mbtns">${can?`<button class="primary" onclick="hideModal();ctl('${dir}','temp_open')">🔓 افتح</button>`:''}<button onclick="hideModal()">رجوع</button></div>`)}
 function accChipsOf(b){
   const AX=b.accx||{};let c='';
   const CW=b.cashw;
+  const tpN=CW&&CW.tp?(AX.nb!=null&&AX.kb!=null?+AX.nb:+CW.n||0):0,tpW=CW&&CW.tp?(AX.kb!=null?Math.max(0,(+AX.kb||0)-(+AX.nb||0)):+CW.w||0):0;   // ⏳ v3.36.74: العدد يلحق السعر
+  const tpT=tpW?` · ${tpW} تحت السعر تنتظر بأماكنها (لا أوامر حتى تفتحه — ثم تعود إلى السلم كالمعتاد)`:'';
   if(CW&&CW.tp)c+=(+CW.k>0?`<span class="chip cashw tpo" onclick="event.stopPropagation();tempOpen('${b.dir}')" style="cursor:pointer;color:var(--green);border-color:rgb(var(--green-rgb)/.5);background:rgb(var(--green-rgb)/.10)"
-    title="توفر دولار غير محجوز يكفي ${CW.k} من ${CW.n} محفوظة — اضغط لتفتح وقف الشراء المؤقت (يشتري من البداية بقدر الدولار)">🔓 افتح المؤقت (${+CW.n||0})</span>`
+    title="توفر دولار غير محجوز يكفي ${CW.k} من ${tpN+tpW} محفوظة — ${tpN} فايتة فوق السعر تُشترى بأمر واحد بسعر السوق${tpT} · اضغط لتفتح وقف الشراء المؤقت">🔓 افتح المؤقت (${tpN})</span>`
     :`<span class="chip cashw tpc" onclick="event.stopPropagation();tempOpen('${b.dir}')" style="cursor:pointer;color:var(--amber);border-color:rgb(var(--amber2-rgb)/.45);background:rgb(var(--amber2-rgb)/.08)"
-    title="وقف الشراء المؤقت من ${f4(CW.temp)} — الدولار الحر غير المحجوز لا يكفي: المستويات تُحفظ ولا تُشترى، ولا يأخذ دولار غيره، ولا يُفتح إلا بقرارك · فوقه يبيع ويشتري كالمعتاد">⏳ مؤقت (${+CW.n||0})</span>`);
+    title="وقف الشراء المؤقت من ${f4(CW.temp)} — الدولار الحر غير المحجوز لا يكفي: ${tpN} مستوى فاته السعر محفوظ ولا يُشترى${tpT} · لا يأخذ دولار غيره، ولا يُفتح إلا بقرارك · فوقه يبيع ويشتري كالمعتاد">⏳ مؤقت (${tpN})</span>`);
   else if(CW&&+CW.need>0)c+=`<span class="chip cashw" style="color:var(--amber);border-color:rgb(var(--amber2-rgb)/.45);background:rgb(var(--amber2-rgb)/.08)"
     title="${CW.auto?'⏸ أُوقف الشراء تلقائياً فوق السعر بقليل لأن الدولار الحر في المحفظة لا يكفي أمر الشراء — كل مستوى ينزل إليه السعر يُحفظ ويُشترى بأمر واحد حين يعود الدولار (وتعود أرضيتك إن كانت لك أرضية) · زر الاستئناف يلغي الإيقاف التلقائي لهذا البوت':'الدولار الحر في المحفظة لا يكفي أمر الشراء القادم — يكمل البوت البيع وينتظر الدولار'}">🟠 ينتظر دولار — يحتاج $${(+CW.need).toFixed(2)}${CW.auto?' · ⏸':''}</span>`;
-  if(b.floor>0){if((AX.nb||0)>0){c+=`<span class="chip acc" title="${AX.nb} تُشترى بأمر واحد إن استأنفت الآن · ${Math.max(0,(AX.kb||0)-AX.nb)} محفوظة تعود إلى أماكنها">📦 شراء ${AX.nb} ≈ $${AX.ub}</span>`;
-    if(AX.ab!=null&&AX.ab<AX.nb)c+=`<span class="chip" style="color:var(--red);border-color:rgb(var(--red2-rgb)/.45);background:rgb(var(--red2-rgb)/.08)"
+  if(b.floor>0||(CW&&CW.tp)){if((AX.nb||0)>0){c+=`<span class="chip acc" title="${AX.nb} تُشترى بأمر واحد إن ${b.floor>0?'استأنفت':'فتحت المؤقت'} الآن · ${Math.max(0,(AX.kb||0)-AX.nb)} محفوظة تحت السعر تنتظر بأماكنها">📦 شراء ${AX.nb} ≈ $${AX.ub}</span>`;
+    if(b.floor>0&&AX.ab!=null&&AX.ab<AX.nb)c+=`<span class="chip" style="color:var(--red);border-color:rgb(var(--red2-rgb)/.45);background:rgb(var(--red2-rgb)/.08)"
       title="💵 ب٢٤: دولارك الحر $${AX.qa} يغطي ${AX.ab} من ${AX.nb} درجة إن استأنفت الآن (الكل ≈ $${AX.qn}) — يشتري البوت ما يغطيه بأمر واحد وينتظر الباقي في المخزن حتى يتوفر دولار · الدولار الحر مشترك بين بوتات الحساب نفسه">💵 يغطي ${AX.ab}/${AX.nb}</span>`}}
   else if(b.n_abuys>0)c+=`<span class="chip acc">📦 شراء ${b.n_abuys} ≈ $${b.abuys_usd}</span>`;
   if(b.ceil>0){if((AX.ns||0)>0)c+=`<span class="chip acc" title="حتى ${AX.ns} تُباع بأمر واحد إن استأنفت الآن (بقدر عملتك الحرّة) · ${Math.max(0,(AX.ks||0)-AX.ns)} محفوظة تعود إلى أماكنها">📦 بيع ${AX.ns} ≈ $${AX.us}</span>`}
