@@ -425,7 +425,7 @@ final class WidgetArt {
         float top = yh + 9f * v, foot = 17f * v;
         float bottom = H - foot - 2f * v;
         float tw = (W - 2 * gx - (cols - 1) * gap) / cols;
-        float th = Math.min(72f * v, (bottom - top - (rows - 1) * gap) / rows);
+        float th = Math.min(96f * v, (bottom - top - (rows - 1) * gap) / rows);   // fewer coins ⇒ taller tiles (the widget stays full)
         Paint tile = new Paint(Paint.ANTI_ALIAS_FLAG);
         tile.setColor(0x0DA78BFA);
         Paint tileEdge = new Paint(Paint.ANTI_ALIAS_FLAG);
