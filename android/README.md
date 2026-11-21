@@ -5,7 +5,7 @@
 | المسار | ما فيه |
 |---|---|
 | `smali/` | شيفرة التطبيق كما فكّها baksmali 2.5.2 من `classes.dex` (التجميع ثم الفك من جديد يعطي النص نفسه حرفاً بحرف) |
-| `java/` | الأجزاء الجديدة المكتوبة بجافا 8 — `WidgetArt.java`: رسم الويدجت (كرت B بنفسجي، ستة أرقام) |
+| `java/` | الأجزاء الجديدة المكتوبة بجافا 8 — `WidgetArt.java`: رسم الويدجتين (كرت B بنفسجي، ستة أرقام · ومنذ 2.3 مربعات الأسعار `renderPx`) · `HolyPxWidget.java` (2.3): ويدجت الأسعار — يشارك الأول جلبه وتحديثه |
 | `base/` | `AndroidManifest.xml` و`resources.arsc` و`res/` كما هي داخل التطبيق (بصيغتها الثنائية) |
 | `version.json` | رقم النسخة ورمزها، وارتفاع الويدجت الافتراضي |
 | `build.py` | أداة البناء |
@@ -29,6 +29,12 @@ HOLY_KEY_PASS='…' python3 android/build.py --key /مسار/خارج/المست
 1. غيّر `code` و`name` في `version.json`.
 2. التطبيق يكتب نسخته بنفسه في عدة أماكن داخل `smali/` (هكذا بُني أصلاً). `build.py` يرفض البناء ويسمّي كل مكان لا يطابق `version.json`: ‏`BuildInfo` · ‏`Net` (‏`HolyApp/…`) · ‏`MainActivity` · ‏`MainActivity$Bridge` · ‏`Updater` · ‏`Updater$1$1`.
 3. ابنِ ووقّع، ثم ضع الملف في اللوحة: `APP_APK_CODE` و`APP_APK_NAME` و`APP_APK_B64` (التحديث الذاتي يعمل فقط بين نسختين بالمفتاح نفسه).
+
+## 🪙 الويدجت الثاني (2.3)
+
+- `build.py` يضيف للـmanifest الثنائي مستقبلاً ثانياً `com.holy.dash.HolyPxWidget` باسم «Holy · الأسعار» منسوخاً من مستقبل `HolyWidget` (نفس ملف الويدجت `@xml/holy_widget_info`) — `axml_add_receiver` · ويتحقق بـ`axml_receivers`.
+- `HolyWidget.any` يعدّ الويدجتين، و`HolyWidget.draw` يبدأ بـ`HolyPxWidget.draw` ⇒ جواب واحد من `/api/app/widget` يرسم الاثنين (والأسعار في «px»).
+- `MainActivity$Bridge.pinPrices()` + «pxWidget» في الحالة ⇒ زر «📌 أضفه» بلوحة 📱.
 
 ## 🔐 مفتاح التوقيع
 
