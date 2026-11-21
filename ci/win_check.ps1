@@ -141,11 +141,11 @@ $wv = @(Get-Process msedgewebview2 -ErrorAction SilentlyContinue).Count
 Check "2.0: the dashboard in the program's own window (WebView2 · no Edge window)" ($h -ne [IntPtr]::Zero -and -not $edge -and $wv -gt 0) "hwnd=$h webview2 processes=$wv"
 function Hello($after) {      # the page says where it drew — ☐ ✕ (screen points) · the newest line after $after
   for ($k = 0; $k -lt 60; $k++) {
-    $l = (Get-Content $L -ErrorAction SilentlyContinue | Select-String "page: buttons drawn" | Select-Object -Last 1)
-    if ($l -and ($after -eq $null -or $l.LineNumber -gt $after)) {
-      $m = [regex]::Match($l.Line, "min=(-?\d+),(-?\d+) max=(-?\d+),(-?\d+) close=(-?\d+),(-?\d+) drag=(-?\d+),(-?\d+)")
-      if ($m.Success) { return @{ n = $l.LineNumber; min = @([int]$m.Groups[1].Value, [int]$m.Groups[2].Value); max = @([int]$m.Groups[3].Value, [int]$m.Groups[4].Value);
-        cls = @([int]$m.Groups[5].Value, [int]$m.Groups[6].Value); drag = @([int]$m.Groups[7].Value, [int]$m.Groups[8].Value); line = $l.Line } } }
+    $hl = (Get-Content $L -ErrorAction SilentlyContinue | Select-String "page: buttons drawn" | Select-Object -Last 1)   # ($hl — not $l: PowerShell names ignore case, $l was $L, the log's path, after the first miss)
+    if ($hl -and ($after -eq $null -or $hl.LineNumber -gt $after)) {
+      $m = [regex]::Match($hl.Line, "min=(-?\d+),(-?\d+) max=(-?\d+),(-?\d+) close=(-?\d+),(-?\d+) drag=(-?\d+),(-?\d+)")
+      if ($m.Success) { return @{ n = $hl.LineNumber; min = @([int]$m.Groups[1].Value, [int]$m.Groups[2].Value); max = @([int]$m.Groups[3].Value, [int]$m.Groups[4].Value);
+        cls = @([int]$m.Groups[5].Value, [int]$m.Groups[6].Value); drag = @([int]$m.Groups[7].Value, [int]$m.Groups[8].Value); line = $hl.Line } } }
     Start-Sleep -Milliseconds 500 }
   return $null }
 Start-Sleep -Seconds 6     # the opening animation ends, the numbers load
