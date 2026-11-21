@@ -33150,7 +33150,7 @@ function winInit(){if(!WINF)return;const R=document.documentElement;R.classList.
     document.querySelectorAll('#wMax,#mwMax').forEach(b=>{b.textContent=d.max||d.fs?'❐':'☐';b.title=d.max||d.fs?'إرجاع النافذة':'تكبير'})});
   chrome.webview.addEventListener('message',e=>{const d=e.data||{};if(d.t==='hw'){HWST=d;wgSync()}});     // 🖥️ v3.36.72: الويدجت (البرنامج 2.1)
   if((window.HOLYWIN||{}).wg)winHw('state');
-  winCmd('state');setTimeout(winHello,1500);addEventListener('resize',()=>{clearTimeout(ht);ht=setTimeout(winHello,600)})}
+  winCmd('state');[1500,4200,8000].forEach(t=>setTimeout(winHello,t));addEventListener('resize',()=>{clearTimeout(ht);ht=setTimeout(winHello,600)})}
 /* 💻 v3.36.54: برنامج ويندوز قديم (1.x — بشريط عنوان) ⇒ شريط واضح أعلى اللوحة بتنزيل 2.0 بضغطة · 2.0 بلا WebView2 ⇒ تنصيبه */
 async function winOldBar(){
   if(!IN_WIN||WINF||document.getElementById('winOld'))return;
