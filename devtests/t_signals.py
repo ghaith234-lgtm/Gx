@@ -233,6 +233,10 @@ ok("⑥ the browser 🔮: the ETH card shows «🟢 قاع قوي 70/100» · th
    "قاع قوي" in card and "70/100" in card and "أعلى بعدها" in card and "/48" in card and "غير مؤكد" in card, {k: U.get(k) for k in ("card", "err")})
 ok("… the details: the bottom's parts, its 28-coin record (14 days · normal 46%), Bitcoin's state, the limits (2026 · in parts · no confirmation) · what followed the lean",
    "مؤشر القاع" in det and "نزل" in det and "العادي 46%" in det and "البيتكوين" in det and "دفعات" in det and "2026" in det and "على الأسعار الحقيقية" in det, det[:1500])
+ok("⑥ 🔮 relies on the same indicators (v3.36.71): «يوم» starts with «🧠 المحلل (غداً)» · the indicators' vote is «📊 ميل المؤشرات … وصف لا توقع» · "
+   "every indicator by its plain name from «🎯 المؤشرات» (its technical name small)", "🧠 المحلل (غداً)" in det and "📊 ميل المؤشرات" in det
+   and "وصف لا توقع" in det and any(n in det for n in ("الاتجاه العام صاعد", "الاتجاه العام هابط", "خط الاتجاه أخضر", "خط الاتجاه أحمر", "قوة الدفع تزداد"))
+   and "EMA 50/200" in det, det[:1800])
 rk = {"g": 0, "y": 1, "n": 2, "short": 3, "r": 4}
 od = [rk.get(c.split()[0], 3) for c in U.get("order") or []]
 ok(f"… the indicators under the horizon truthful first ({U.get('order')})", od and od == sorted(od), U.get("order"))

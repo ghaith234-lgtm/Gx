@@ -18003,6 +18003,7 @@ def fc_api():
     v = fc_view()
     v["rows"] = [dict(r) for r in v["rows"]]
     v["sig"] = _safe(sg_fc, v["rows"], default=None)          # 🎯 v3.36.66: إشارات كل عملة الآن + البوصلة
+    v["plain"] = _safe(sg_plain_all, default={})              # 🔮 v3.36.71: المؤشرات نفسها بأسمائها الواضحة (نفس جدول «🎯 المؤشرات»)
     if not v["rows"] and v["on"] and ticker_cfg()["coins"] and not _FC_RUN["busy"]:
         threading.Thread(target=_safe, args=(_fc_run,), daemon=True).start()
     v["busy"] = _FC_RUN["busy"] or (not v["rows"] and v["on"] and bool(ticker_cfg()["coins"]))
@@ -18801,6 +18802,8 @@ _SG_XNM = {   # 🎯 v3.36.71: (الأسرة · اسم الصعود · اسم ا
              "عقود الخيارات على الصعود أكثر من عقود الهبوط", "عقود الخيارات على الهبوط أكثر من عقود الصعود", "Put/Call"),
     "P-mv": ("market", "🔗 الحائزون قريبون من سعر شرائهم", "🔗 الحائزون في ربح كبير",
              "أغلب الحائزين قريبون من سعر شرائهم — ضغط البيع عادة أقل", "أغلب الحائزين في ربح كبير — قد يبيع بعضهم", "MVRV"),
+    "P-fund": ("market", "💸 البيع مزدحم في العقود (قراءة عكسية)", "💸 الشراء مزدحم في العقود (قراءة عكسية)",
+               "البائعون في العقود يدفعون الرسوم — البيع مزدحم وقد يرتد السعر", "المشترون في العقود يدفعون رسوماً عالية — الشراء مزدحم وقد يتراجع السعر", "Funding"),
 }
 SG_GRP = (   # 🎯 v3.36.71: أُسر العرض — (المفتاح · الأيقونة · الاسم · ماذا تقيس) · كل مؤشر جديد يُضاف إلى إحداها
     ("trend", "📈", "الاتجاه", "هل السعر في صعود أم هبوط على مدى أطول"),
@@ -27738,6 +27741,7 @@ button.warn{border-color:rgb(var(--amber-rgb)/.55);color:var(--amber);box-shadow
 .fc-r .fv.rk-up{color:var(--green)}.fc-r .fv.rk-dn{color:var(--red)}.fc-r .fv.rk-eq,.fc-r .fv.rk-na{color:var(--mut)}.fc-r .fv small{color:var(--mut2);font-weight:400}.fc-bot{margin-top:6px;font-size:12px;padding:4px 8px;border-radius:8px;background:rgb(var(--ov-rgb)/.03);color:var(--mut)}.fc-bot.lv-watch{color:var(--amber)}.fc-bot.lv-zone{color:var(--amber);background:rgb(var(--amber-rgb)/.08)}.fc-bot.lv-strong{color:var(--green);background:rgb(var(--green-rgb)/.10);font-weight:700}.fc-botd{margin:8px 0;padding:8px 10px;border:1px solid var(--line);border-radius:10px;font-size:12px;line-height:1.8}.fc-botd.lv-strong{border-color:rgb(var(--green-rgb)/.5)}.fc-botd.lv-zone{border-color:rgb(var(--amber-rgb)/.5)}.fc-botp{color:var(--mut2)}.fc-botp.on{color:var(--tx)}.fc-botw{color:var(--amber);font-size:11.5px;margin-top:4px}.fb.g{color:var(--green)}.fb.y{color:var(--amber)}.fb.n{color:var(--mut)}.fb.r{color:var(--red)}.fb.short{color:var(--mut2)}
 i.fb{font-style:normal;font-weight:600;margin:0 7px;font-size:11px;direction:ltr;unicode-bidi:isolate;display:inline-block}
 .fc-sq{font-size:12px;color:var(--amber)}
+.fc-an{padding:6px 8px;margin:2px 0 6px;border-radius:8px;background:var(--bg1)}.fc-an.p{border-inline-start:3px solid var(--green)}.fc-an.n{border-inline-start:3px solid var(--red)}
 .sg-pl{border-top:1px solid var(--bd);padding:6px 2px}.sg-pl .sg-plh{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .sg-pl .sg-plh b{color:var(--tx);font-size:13px}.sg-pl .sg-fr{margin-inline-start:auto}.sg-pl.ten{cursor:pointer}.sg-pl.flat{opacity:.75}
 .sg-tech{color:var(--mut2);font-size:10.5px}.sg-grp{margin-top:8px}.ind-avg{margin-top:4px}
@@ -31350,6 +31354,15 @@ function fcBotDet(r){const b=r.bot;if(!b)return '';const R=b.real||{},N=b.normal
     ${bt?`<div>${bt}</div>`:''}
     ${o?`<div>📒 على ${B}: ${o.p14}% من ${o.n} ${o.n>2&&o.n<11?'مرات':'مرة'} كان أعلى بعد 14 يوماً (الوسيط ${o.m14>0?'+':''}${o.m14}%)</div>`:''}
     <div class="fc-botw">⚠️ ${gEsc(b.years||'')} · قد ينزل السعر بعد الإشارة: عادةً حتى ${Math.abs(R.dd||0)}% خلال 30 يوماً (مثل الأيام العادية) — الشراء على دفعات أسلم · لا ننتظر تأكيد الانعطاف لأن الانتظار أضاع أغلب الارتداد في القياس.</div></div>`}
+const FCK={vp:'O-vp',avwap:'O-avwap',of:'O-of',pa:'O-pa',trend:'O-trend',st:'O-st',macd:'O-macd',rsi:'O-rsi',adx:'O-adx',cmf:'O-cmf',lc:'F-lc',nw:'F-nw',fng:'M-fng',fund:'P-fund'};
+function fcPl(p){const P=((FCV&&FCV.plain)||{})[FCK[p.k]]||null;                 // 🔮 v3.36.71: المؤشر نفسه في «🎯 المؤشرات» — اسمه الواضح لحاله ومعناه
+  if(!P)return {nm:p.name,mean:p.what||'',tech:''};
+  return {nm:p.w==='p'?P[1]:p.w==='n'?P[2]:(P[5]||p.name)+': محايد',mean:p.w==='p'?P[3]:p.w==='n'?P[4]:(p.what||''),tech:P[5]||''}}
+function fcAn(r,k){const fr={d:'4H',m:'1D'}[k];if(!fr)return '';const A=r.an,z=A&&(A.hz||{})[fr],nm=fr==='4H'?'غداً':'الشهر القادم';   // 🧠 المحلل لهذا المدى
+  if(!A)return `<div class="fc-an">🧠 <b>المحلل (${nm})</b>: يظهر بعد أول فحص للمؤشرات على هذه العملة</div>`;
+  if(!z||!z.dir)return `<div class="fc-an">🧠 <b>المحلل (${nm})</b>: لا توجد الآن مجموعة مؤشرات مثبتة تتفق على اتجاه — الأصدق ألا تُبنى قراءة على الميل وحده</div>`;
+  return `<div class="fc-an ${z.dir>0?'p':'n'}">🧠 <b>المحلل (${nm})</b>: ${z.dir>0?'📈 صعود':'📉 هبوط'} · دقة <b>${z.h}%</b> <small>(من ${sgAr(z.n,'time')})</small>${(z.why||[]).length?` · لماذا: ${z.why.map(gEsc).join(' · ')}`:''}
+    <div class="ind-sub">مجموعة مؤشرات متفقة صدقت في كل فترات التاريخ (${(z.nm||[]).map(gEsc).join(' + ')}) — التفاصيل في «🧠 المحلل»</div></div>`}
 function fcVote(z){if(['su','u'].includes(z.vk))return `${z.up} من ${z.n}`;if(['sd','d'].includes(z.vk))return `${z.dn} من ${z.n}`;return 'محايد'}
 function fcRender(){
   const el=$('#fc_body');if(!el)return;const V=FCV;
@@ -31358,7 +31371,7 @@ function fcRender(){
   const R=V.rows||[],HZ=V.hz||[];
   if(!R.length){el.innerHTML=V.busy?LDR('⏳ أول حساب: يجلب تاريخ كل عملة ويفحص مؤشراتها على ماضيها — مرة واحدة فقط (بعدها يصبح خفيفاً)…'):('لا توجد عملات في الشريط — أضفها من ⚙️ ← 📈 شريط الأسعار'+(V.err?'<br><small>'+gEsc(V.err)+'</small>':''));return}
   el.style.cssText='text-align:right';
-  let h=sgFcTop(V.sig)+`<div class="ind-top"><span class="ind-chip">📊 نفس مؤشرات «المؤشرات» + 4 إضافات</span><span class="ind-chip">🔄 ${V.ts?gAgo(V.ts):'—'} · كل ${Math.round((V.every||1800)/60)} د</span>
+  let h=sgFcTop(V.sig)+`<div class="ind-top"><span class="ind-chip">🎯 نفس المؤشرات بأسمائها في «🎯 المؤشرات» + 🧠 المحلل</span><span class="ind-chip">🔄 ${V.ts?gAgo(V.ts):'—'} · كل ${Math.round((V.every||1800)/60)} د</span>
     <span class="ind-chip">🔕 بلا إشعارات</span></div>${V.busy?`<div class="ind-sub">⏳ يُكمل حساب بقية العملات…</div>`:''}`;
   h+=`<div class="ind-list">${R.map(r=>{
     if(r.short)return `<div class="ind-c"><div class="ind-h"><span class="cn">${gEsc(r.base)}</span><span class="ind-v flat">⏳ تاريخها قصير (${r.days||0} يوم)</span></div>
@@ -31375,14 +31388,15 @@ function fcRender(){
       if(x.short||!x.vk)det=`<div class="ind-det" onclick="event.stopPropagation()">${tabs}<div class="ind-sub">⏳ تاريخ قليل لهذا المدى (${x.have||0} شمعة من ${x.need||'—'}).</div></div>`;
       else{const lv=x.lv||{},lvT=a=>(a||[]).map(q=>`<b class="rg">${fcN(q[1])}</b> <small>(${gEsc(q[0])})</small>`).join(' · ')||'—',L=x.live||{};
         det=`<div class="ind-det" onclick="event.stopPropagation()">${tabs}${fcBotDet(r)}<div class="fc-sum">
-          <div><b style="color:var(${['su','u'].includes(x.vk)?'--green':['sd','d'].includes(x.vk)?'--red':'--mut'})">${gEsc(x.vt)}</b> — ${x.up} صاعدة · ${x.dn} هابطة · ${x.fl} محايدة <small>(على شموع ${gEsc(x.tfn)} · بعد ${gEsc(x.name)})</small></div>
+          ${fcAn(r,k)}
+          <div>📊 ميل المؤشرات: <b style="color:var(${['su','u'].includes(x.vk)?'--green':['sd','d'].includes(x.vk)?'--red':'--mut'})">${gEsc(x.vt)}</b> — ${x.up} صاعدة · ${x.dn} هابطة · ${x.fl} محايدة <small>(على شموع ${gEsc(x.tfn)} · بعد ${gEsc(x.name)} · وصف لا توقع)</small></div>
           <div>🔬 <b>${gEsc((x.real||{}).t||'')}</b> — ${gEsc(fcRealW(x.real||{},x.name))}</div>
           <div><small>🎯 ميل المؤشرات وحده كتوقّع على ${gEsc(r.base)}: ${fcBW(x.rel)}</small></div>
           ${x.lo!=null?`<div>📏 النطاق 80%: <b class="rg">${fcN(x.lo)} – ${fcN(x.hi)}</b> <small>(الأرجح ${fcN(x.mid)}${(x.rng||{}).cov!=null?` · صدق ${x.rng.cov}% على الماضي`:''})</small></div>`:''}
           <div>🧱 دعم: ${lvT(lv.sup)}<br>🧱 مقاومة: ${lvT(lv.res)}</div>
           ${x.sq&&x.sq.on?`<div style="color:var(--amber)">⚡ هدوء غير معتاد (انضغاط) — يشيع أن بعده حركة كبيرة، والقياس العام لا يؤكد ذلك${x.sq.x?` · في تاريخ ${gEsc(r.base)}: الحركة بعده ×${x.sq.x} من المعتاد`:''}</div>`:''}
           <div><small>📒 ${L.n||L.done?`منذ بدء التسجيل: صدقت ${L.hit||0} من ${L.n||0}${L.cov!=null?` · داخل النطاق ${L.cov}%`:''}${L.wait?` · ${L.wait} تنتظر وقتها`:''}`:'يبدأ السجل الحي الآن — تُحكم كل قراءة حين يحلّ وقتها'}</small></div></div>
-          ${(x.sig||[]).slice().sort(fcRank).map(p=>{const b=fcB(p.acc);return `<div class="ind-row" onclick="openGuide('${gEsc(p.k)}','fc')"><span>${p.ico} <b>${gEsc(p.name)}</b> <small class="gd-i">ⓘ</small></span><span class="w ${p.w}">${{p:'⬆️ صاعد',n:'⬇️ هابط',z:'↔️ محايد'}[p.w]}<i class="fb ${b.g}" title="${gEsc(fcBW(p.acc))}">${b.t}</i></span><small>${gEsc(p.txt)}</small></div>`}).join('')}</div>`}}
+          ${(x.sig||[]).slice().sort(fcRank).map(p=>{const b=fcB(p.acc),q=fcPl(p);return `<div class="ind-row" onclick="openGuide('${gEsc(p.k)}','fc')"><span><b>${gEsc(q.nm)}</b> <small class="gd-i">ⓘ</small></span><span class="w ${p.w}">${{p:'⬆️ صاعد',n:'⬇️ هابط',z:'↔️ محايد'}[p.w]}<i class="fb ${b.g}" title="${gEsc(fcBW(p.acc))}">${b.t}</i></span><small>${q.mean?gEsc(q.mean)+' · ':''}${gEsc(p.txt)}${q.tech?` <span class="sg-tech">· ${gEsc(q.tech)}</span>`:''}</small></div>`}).join('')}</div>`}}
     const v0=(H.w&&H.w.vk)||(H.d&&H.d.vk)||'f';
     return `<div class="ind-c fc-c ${['su','u'].includes(v0)?'up':['sd','d'].includes(v0)?'down':''}${op?' open':''}" onclick="fcTog('${gEsc(r.sym)}')">
       <div class="ind-h"><span class="cn">${gEsc(r.base)}</span><span class="px">${fmtPx(r.px)}</span><span class="chg ${(+r.chg||0)>=0?'up':'dn'}">${(+r.chg||0)>=0?'▲':'▼'}${Math.abs(+r.chg||0).toFixed(2)}%</span>
@@ -31390,6 +31404,7 @@ function fcRender(){
       ${fcBot(r)}${sgFc(r)}<div class="fc-rows"><div class="fc-r fc-hd"><span>المدى</span><span title="كم مرة كان السعر أعلى بعد المدة على الأسعار الحقيقية / العادي">أعلى بعدها</span><span>النطاق المتوقع</span><span>المؤشرات</span></div>${rows}</div>${det}</div>`}).join('')}</div>`;
   h+=`<details class="ind-help"><summary>كيف أقرأ هذه النافذة؟</summary>
     <div>• كل سطر مدى زمني: <b>ماذا تقول المؤشرات</b> (كم مؤشراً صاعداً أو هابطاً من العدد كله: المؤشرات العشرة نفسها وأربعة إضافية) · <b>النطاق المتوقع</b> (يقع السعر في نهاية المدة بين الرقمين بنسبة 80%) · <b>صدقها</b>.</div>
+    <div>• المؤشرات هنا هي نفسها في «🎯 المؤشرات» بأسمائها ومعانيها · وفي «يوم» و«شهر» يأتي أولاً <b>🧠 المحلل</b>: لا يتوقع إلا حين تتفق مجموعة مؤشرات صدقت في كل فترات التاريخ (غداً من شموع 4 ساعات · الشهر القادم من اليومية)، وميل المؤشرات تحته وصف للحال.</div>
     <div>• تُحسب المؤشرات على شموع أطول بحسب المدى: اليوم على شموع 4 ساعات · الأسبوع على اليومية · الشهر على شموع 3 أيام · الأشهر الثلاثة على الأسبوعية.</div>
     <div>• <b>صدقها</b>: القراءة نفسها فُحصت على ماضي العملة (كل مرة ترى ما قبلها فقط): كم مرة أصاب السهم مقارنة بالصدفة — 🟢 أفضل من الصدفة بوضوح · 🟡 أفضل قليلاً · ⚪\uFE0F مثل الصدفة · 🔴 أسوأ من الصدفة · ⏳ عينة قليلة. ولكل مؤشر في التفاصيل صدقه الخاص.</div>
     <div>• الإضافات: 🧠 تصنيف لورنتز · 〰️ نادارايا–واتسون (دون إعادة رسم الماضي) · 😨 الخوف والطمع بأطرافه · 💸 التمويل (اليوم والأسبوع). ⚡ = هدوء غير معتاد؛ يُشاع أنه يسبق حركة كبيرة، وقياسنا على 20 عملة أعطى ×0.95 — أي لا يسبقها في المتوسط.</div>
