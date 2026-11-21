@@ -1,0 +1,26 @@
+name: Holy signals check 16
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/sig_check16.py', 'ci/RUN_SIG16', '.github/workflows/holy-sig16-check.yml']
+permissions:
+  contents: read
+jobs:
+  groups:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: the indicator groups (the dashboard's own gp_walk on 1H, 4H and 1D, every group vs its usual, variants, the notification gate, shuffled prices) and probes of the new data sources (public data · no keys · no orders · no notifications)
+        run: |
+          pip install -q requests numpy
+          python3 ci/sig_check16.py Holy_Dashboard.pyw
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: holysig16
+          path: /tmp/holysig16.json
+          if-no-files-found: ignore
