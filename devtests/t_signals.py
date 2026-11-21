@@ -206,11 +206,10 @@ const { chromium } = require('playwright');
   o.det = await pg.evaluate(() => { const c = [...document.querySelectorAll('#fc_body .fc-c')].find(e => e.innerText.includes('ETH')); return c ? c.innerText : '' });
   o.order = await pg.evaluate(() => { const c = [...document.querySelectorAll('#fc_body .fc-c')].find(e => e.innerText.includes('ETH'));
     return c ? [...c.querySelectorAll('.ind-row .fb')].map(x => x.className.replace('fb ', '')) : [] });
-  await pg.evaluate(() => { hideModal(); openInd('ind') }); await pg.waitForTimeout(1800);
-  await pg.evaluate(() => { SGO['ETH-USDT'] = true; sgRender() }); await pg.waitForTimeout(400);
-  o.ind = await pg.evaluate(() => { const c = [...document.querySelectorAll('#sg_body .sg-c')].find(e => e.innerText.includes('ETH')); return c ? [...c.querySelectorAll('.ind-row')].map(r => { const s = r.querySelectorAll('small'); return s.length ? s[s.length - 1].innerText : '' }).filter(t => t.startsWith('سطر')) : [] });
-  o.indg = await pg.evaluate(() => { const c = [...document.querySelectorAll('#sg_body .sg-c')].find(e => e.innerText.includes('ETH')); return c ? [...c.querySelectorAll('.sg-grp')].map(g => [(g.querySelector('.sg-frh') || {}).textContent || '', [...g.querySelectorAll('.ind-row b')].map(b => b.textContent)]) : [] });
-  o.inda = await pg.evaluate(() => { const c = [...document.querySelectorAll('#sg_body .sg-c')].find(e => e.innerText.includes('ETH')); return c ? ((c.querySelector('.ind-avg') || {}).innerText || '') : '' });
+  await pg.evaluate(() => { hideModal(); SBS = 'ETH-USDT'; SBV = null; openInd('ind') }); await pg.waitForTimeout(2200);      // 📋 v3.36.73: ETH's table
+  o.ind = await pg.evaluate(() => ({ s: SBV && SBV.s, rows: document.querySelectorAll('#sg_body .sb-r').length, top: (document.querySelector('#sg_body .sb-top') || {}).innerText || '',
+    cells: [...document.querySelectorAll('#sg_body .sb-r .sb-cell .sb-fh')].slice(0, 3).map(x => x.innerText) }));
+  o.inda = await pg.evaluate(() => (document.querySelector('#sg_body .ind-avg') || {}).innerText || '');
   o.indh = await pg.evaluate(() => (document.querySelector('#modal h2') || {}).innerText || '');
   o.errs = errs; console.log(JSON.stringify(o)); await br.close();
 })().catch(e => { console.log(JSON.stringify({ err: String(e) })); process.exit(1) });
@@ -240,14 +239,11 @@ ok("⑥ 🔮 relies on the same indicators (v3.36.71): «يوم» starts with «
 rk = {"g": 0, "y": 1, "n": 2, "short": 3, "r": 4}
 od = [rk.get(c.split()[0], 3) for c in U.get("order") or []]
 ok(f"… the indicators under the horizon truthful first ({U.get('order')})", od and od == sorted(od), U.get("order"))
-ind_ = U.get("ind") or []
-grp_ = U.get("indg") or []
-tr_ = next((g for g in grp_ if "الاتجاه" in g[0]), ["", []])
-ok(f"⑥ 🎯 المؤشرات (one tab · v3.36.71): the ten indicators inside their families, the most accurate first in each "
-   f"({' | '.join(g[0].split('—')[0].strip() + ': ' + ' · '.join(g[1]) for g in grp_)}) · their accuracy kept · «{U.get('indh')}»",
-   len(ind_) == 4 and any("61%" in x for x in ind_) and any("55%" in x for x in ind_) and any("48%" in x for x in ind_)
-   and tr_[1][:2] == ["🟩 خط الاتجاه أخضر", "📈 الاتجاه العام صاعد"] and "📊 المؤشرات — المحلل" in (U.get("indh") or ""), {k: U.get(k) for k in ("ind", "indg", "indh")})
-ok(f"⑥ every coin: «📊 اتجاه المؤشرات الآن» — the ten's average as one line, «ليس توقعاً» ({(U.get('inda') or '')[:90]}…)",
+ind_ = U.get("ind") or {}
+ok(f"⑥ 🎯 المؤشرات = the tables (📋 v3.36.73): ETH's own table — 70 rows · ⏱ الآن · 🕓 4 ساعات · 📅 يوم · «{(ind_.get('top') or '')[:60]}…» · «{U.get('indh')}»",
+   ind_.get("s") == "ETH-USDT" and ind_.get("rows") == 70 and "جدول ETH" in (ind_.get("top") or "") and len(ind_.get("cells") or []) == 3
+   and "الآن" in ind_["cells"][0] and "📊 المؤشرات — المحلل" in (U.get("indh") or ""), {k: U.get(k) for k in ("ind", "indh")})
+ok(f"⑥ the coin table: «📊 اتجاه المؤشرات الآن» — the ten's average as one line, «ليس توقعاً» ({(U.get('inda') or '')[:90]}…)",
    "اتجاه المؤشرات الآن" in (U.get("inda") or "") and "ليس توقعاً" in (U.get("inda") or ""), U.get("inda"))
 tp = " | ".join(U.get("tape") or [])
 ok(f"⑥ 🎞️ the strip in words: «{tp[:160]}»", "صاعدة بقوة" in tp and "هابطة بقوة" in tp and "/4" in tp and "قاع قوي" in tp and "RSI" not in tp, U.get("tape"))

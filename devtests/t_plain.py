@@ -7,7 +7,7 @@
 #   fails on any code without its entry.
 #   ① every code has its entry (36 systems · the ten · 🔮 · 🧲 · 💪 · 🌊 · 😨 · 🗞️ · 🏦) · ② the entry is plain (no Latin letters in the
 #   names or meanings · no dialect · short · a rise and a fall that differ) · ③ the same names everywhere (_sg_name · the window's table)
-#   · ④ one tab «🎯 المؤشرات» (no «📈 المؤشرات العشرة» / «🎯 الإشارات الشغّالة») · ⑤ one setting: the % (the minimum 15 and «better than
+#   · ④ one tab «🎯 المؤشرات» (no «📈 المؤشرات العشرة» / «🎯 الإشارات الشغّالة») — the tables since v3.36.73 · ⑤ one setting: the % (the minimum 15 and «better than
 #   random» fixed inside, whatever an old config says)
 #   python3 devtests/t_plain.py [Holy_Dashboard.pyw] [-q]
 import importlib.machinery, importlib.util, json, math, os, random, re, shutil, sys, tempfile
@@ -149,9 +149,10 @@ try:
        and "📈 المؤشرات العشرة" not in js and "الإشارات الشغّالة" not in js, js[:400])
     ok("④ the old parts are gone (sgNow · sgCoin · indRender · indTog · indLoad) — the old name «now» opens the merged tab",
        not any(f"function {f}(" in SRC for f in ("sgNow", "sgCoin", "indRender", "indTog", "indLoad")) and "tab==='now'?'ind'" in SRC, "")
-    ok("④ every coin: «📊 اتجاه المؤشرات الآن» (the ten's average — «ليس توقعاً») then the indicators on now by family, each with its meaning "
-       "and record («صدق … من …» · «العشوائي»)", "اتجاه المؤشرات الآن" in SRC and "وصف لحال المؤشرات العشرة الآن — ليس توقعاً" in SRC
-       and "function sgIndRow(" in SRC and "العشوائي ${(+r.rh).toFixed(0)}%" in SRC[SRC.index("function sgIndRow("):], "")
+    ok("④ the tab is the tables (📋 v3.36.73): «🌐 السوق» + a table per coin · each row its plain name and job · the coin table keeps "
+       "«📊 اتجاه المؤشرات الآن» («ليس توقعاً») · the old per-coin cards with the history records are gone",
+       "اتجاه المؤشرات الآن" in SRC and "وصف لحال المؤشرات العشرة الآن — ليس توقعاً" in SRC and "function sbTable(" in SRC and "if(I)h+=sgIndAvg(I)" in SRC
+       and "function sgIndRow(" not in SRC and "function sgIndCoin(" not in SRC and "return h+sbTable(V)" in SRC, "")
 
     # ── ⑤ one setting
     m.app_cfg = lambda: {"sg_thr": 60, "sg_min": 3, "sg_rnd": False}

@@ -116,6 +116,12 @@ try:
     st = m._sg_st()
     ok(f"the closed folder is ready: the catalog ({len((m._sg_cat() or {}).get('e') or [])} signals and combinations) · a scan · the live record · 🧭",
        m._sg_cat() and st.get("now") and st.get("comp"), {k: bool(st.get(k)) for k in ("now", "comp", "pend")})
+    B = m._sb_load()                                   # 📋 v3.36.73: SOL's table with a few results (the ranking · «قيد الاختبار» · ⏸)
+    dd = NOW // 86400
+    B["rec"]["SOL-USDT"] = {"20": {"4H": [40, 10, 30, dd]}, "12": {"1H": [60, 30, 40, dd]}, "5": {"1H": [3, 0, 1, dd]}}
+    B["off"]["SOL-USDT"] = [33]
+    m.save_json_atomic(m.SB_FILE, B)
+    ok(f"📋 the tables are fed by the same scan ({len(B['pend'])} predictions waiting for their candle)", B["pend"], len(B["pend"]))
     P1 = port()
     open(os.path.join(R, "_l.py"), "w").write(LAUNCH)
     d = subprocess.Popen([sys.executable, os.path.join(R, "_l.py"), R, str(P1)], stdout=subprocess.PIPE, text=True, env=env)
@@ -127,6 +133,9 @@ try:
     cfg = json.load(open(m.APP_CFG, encoding="utf-8"))
     ok("after the browser: the slider and the buttons saved the settings (90% · 🔴 off · the daily cap 5)", cfg.get("sg_thr") == 90
        and (cfg.get("sg_types") or {}).get("sell") is False and cfg.get("sg_cap") == 5, {k: v for k, v in cfg.items() if k.startswith("sg_")})
+    Bo = json.load(open(m.SB_FILE, encoding="utf-8"))
+    ok("after the browser: ⏸ row 7 is off in SOL's table (with 33) — not in the market's", sorted(Bo["off"].get("SOL-USDT") or []) == [7, 33]
+       and 7 not in (Bo["off"].get("MKT") or []), Bo.get("off"))
     ok("the browser part", r.returncode == 0)
     rc = 0 if res and all(res) else 1
 finally:

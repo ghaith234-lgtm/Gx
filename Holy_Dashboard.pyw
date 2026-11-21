@@ -28221,6 +28221,18 @@ button.warn{border-color:rgb(var(--amber-rgb)/.55);color:var(--amber);box-shadow
 i.fb{font-style:normal;font-weight:600;margin:0 7px;font-size:11px;direction:ltr;unicode-bidi:isolate;display:inline-block}
 .fc-sq{font-size:12px;color:var(--amber)}
 .fc-an{padding:6px 8px;margin:2px 0 6px;border-radius:8px;background:var(--bg1)}.fc-an.p{border-inline-start:3px solid var(--green)}.fc-an.n{border-inline-start:3px solid var(--red)}
+.sb-tabs,.sb-sort{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}.sb-sort{font-size:12px;color:var(--mut);margin:8px 0}
+.sb-tabs button,.sb-sort button{padding:5px 10px;border-radius:999px;border:1px solid var(--bd);background:var(--bg1);color:var(--tx);font-size:12px;cursor:pointer}
+.sb-tabs button.on,.sb-sort button.on{border-color:var(--green);font-weight:700}.sb-top{margin:6px 0}
+.sb-sec{margin:12px 0 4px;font-size:12px;color:var(--mut);font-weight:700}
+.sb-r{border:1px solid var(--bd);border-radius:10px;padding:6px 8px;margin:6px 0;background:var(--bg1)}.sb-r.off{opacity:.55}
+.sb-h{display:flex;gap:8px;align-items:center;cursor:pointer}.sb-n{min-width:26px;text-align:center;font-weight:700;color:var(--mut)}
+.sb-nm{flex:1;display:flex;flex-direction:column;gap:1px;min-width:0}.sb-job{color:var(--mut);font-size:11px}
+.sb-sw{border:1px solid var(--bd);border-radius:999px;background:transparent;color:var(--tx);font-size:11px;padding:3px 8px;white-space:nowrap;cursor:pointer}
+.sb-cells{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:6px}
+.sb-cell{border:1px solid var(--bd);border-radius:8px;padding:4px 2px;text-align:center;font-size:11.5px;line-height:1.5}.sb-cell.test{opacity:.8}
+.sb-fh{color:var(--mut);font-size:11px}.sb-wl .up{color:var(--green)}.sb-wl .dn{color:var(--red)}.sb-p b{font-size:13px}
+.sb-det{margin-top:6px;font-size:12px;color:var(--mut);display:flex;flex-direction:column;gap:3px}
 .sg-pl{border-top:1px solid var(--bd);padding:6px 2px}.sg-pl .sg-plh{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .sg-pl .sg-plh b{color:var(--tx);font-size:13px}.sg-pl .sg-fr{margin-inline-start:auto}.sg-pl.ten{cursor:pointer}.sg-pl.flat{opacity:.75}
 .sg-tech{color:var(--mut2);font-size:10.5px}.sg-grp{margin-top:8px}.ind-avg{margin-top:4px}
@@ -31594,9 +31606,9 @@ async function openInd(tab){SGTAB=tab==='now'?'ind':(tab||'an');              //
 let SGV=null,SGT=null,SGTAB='an',SGC=null,SGP={},SGET=null;const SGO={},SGF={fr:'',side:'1',size:'',rare:'',ty:'',q:'',sort:''};
 const SGCOMP={up:['صاعد','🟢','p'],flat:['مختلط','🟡','z'],down:['نازل','🔴','n']};
 async function openSig(tab){return openInd(tab==='now'?'ind':(tab||'an'))}     // (الاسم القديم: الأزرار وضغط الإشعارات تفتح المحلل · «now» أصبح «🎯 المؤشرات»)
-async function sgLoad(){clearTimeout(SGT);try{SGV=await api('/api/signals')}catch(e){SGV=null}sgRender();if(SGTAB==='cat')sgCat();if(SGTAB==='ind'&&!INDV)sgIndLoad();
+async function sgLoad(){clearTimeout(SGT);try{SGV=await api('/api/signals')}catch(e){SGV=null}sgRender();if(SGTAB==='cat')sgCat();if(SGTAB==='ind'){if(!INDV)sgIndLoad();if(!SBV)sbLoad()}
   if(SGV&&SGV.busy&&SGV.busy.phase&&$('#sg_body'))SGT=setTimeout(sgLoad,4000)}
-function sgTab(t){SGTAB=t==='now'?'ind':t;sgRender();if(SGTAB==='cat')sgCat();if(SGTAB==='ind')sgIndLoad()}
+function sgTab(t){SGTAB=t==='now'?'ind':t;sgRender();if(SGTAB==='cat')sgCat();if(SGTAB==='ind'){sgIndLoad();sbLoad()}}
 async function sgIndLoad(){clearTimeout(INDT);try{INDV=await api('/api/indicators')}catch(e){INDV=null}      // 🎯 v3.36.71: اتجاه المؤشرات العشرة لكل عملة
   if(SGTAB==='ind')sgRender();if(INDV&&INDV.busy&&!(INDV.rows||[]).length&&SGTAB==='ind'&&$('#sg_body'))INDT=setTimeout(sgIndLoad,3000)}
 function sgAr(n,k){const W={day:['يوم واحد','يومين','أيام','يوماً'],time:['مرة واحدة','مرتين','مرات','مرة'],coin:['عملة واحدة','عملتين','عملات','عملة'],min:['دقيقة واحدة','دقيقتين','دقائق','دقيقة']}[k];n=+n||0;   // 55 يوماً · 13 مرة · 9 مرات
@@ -31624,51 +31636,57 @@ function sgIndAvg(I){if(!I)return '';const sc=Math.max(-100,Math.min(100,+I.scor
   return `<div class="ind-avg"><div class="ind-sub">📊 <b style="color:var(--tx)">اتجاه المؤشرات الآن:</b> <span class="ind-v ${gEsc(I.verdict)}">${gEsc(I.txt)}</span> <b style="color:var(--tx)" dir="ltr">${sc>0?'+':''}${sc}</b> · ${up} صاعدة · ${dn} هابطة · ${P.length-up-dn} محايدة</div>
     <div class="ind-bar" title="معدل المؤشرات العشرة من −100 (هبوط) إلى +100 (صعود)"><i style="left:${((sc+100)/2).toFixed(1)}%"></i></div>
     <div class="ind-sub">وصف لحال المؤشرات العشرة الآن — ليس توقعاً${acc.pct!=null?` · صدقه للساعات القليلة القادمة ${acc.pct}% <small>(${acc.n})</small> وهو قريب من الصدفة`:''}</div></div>`}
-function sgIndRow(V,it,hz){const p=sgPl(V,it.code)||[],r=it.r,s=it.s,mean=s>0?p[3]:p[4];
-  return `<div class="sg-pl${s<0?' sell':''}"><div class="sg-plh"><span class="sg-pld">${s>0?'🟢':'🔴'}</span><b>${gEsc(sgPlNm(V,it.code,s))}</b>
-      <small class="sg-fr">${gEsc(((V.fn||{})[it.f])||it.f)}</small>${r.new?'<span class="sg-b new">🆕 الآن</span>':''}${r.ok?'<span class="sg-b ok">🔔 تصلك</span>':''}</div>
-    ${mean?`<div class="ind-sub">${gEsc(mean)}</div>`:''}
-    <div class="sg-rec">صدق <b>${r.w}</b> من <b>${sgAr(r.n,'time')}</b> (<b>${(+r.h).toFixed(0)}%</b>) ${gEsc(hz)} · العشوائي ${(+r.rh).toFixed(0)}%${r.better?'':' · <span style="color:var(--amber)">⚠️ ليس أفضل من العشوائي</span>'}${p[5]?` <small class="sg-tech">· ${gEsc(p[5])}</small>`:''}</div></div>`}
-function sgIndTen(V,p,base){const c='O-'+p.k,s=+p.s>=0.15?1:+p.s<=-0.15?-1:0,P=sgPl(V,c)||[];      // أحد المؤشرات العشرة: حاله الآن
-  return `<div class="ind-row sg-pl ten${s<0?' sell':s?'':' flat'}" onclick="openGuide('${gEsc(p.k)}','ind')"><div class="sg-plh"><span class="sg-pld">${s>0?'🟢':s<0?'🔴':'⚪'}</span>
-      <b>${gEsc(s?sgPlNm(V,c,s):((P[5]||p.name)+': محايد'))}</b> <small class="gd-i">ⓘ</small><small class="sg-fr">الآن</small></div>
-    <div class="ind-sub">${gEsc(s>0?(P[3]||''):s<0?(P[4]||''):(p.what||''))}</div>
-    <small>${gEsc(p.txt)}${p.acc!=null?` · 🎯 دقته على ${gEsc(base)}: ${p.acc}% (${p.n})`:''}${P[5]?` <span class="sg-tech">· ${gEsc(P[5])}</span>`:''}</small></div>`}
-function sgIndCoin(x,V){const op=!!SGO[x.sym],F=x.fr||{},G=V.grp||[],I=((INDV&&INDV.rows)||[]).find(r=>r.sym===x.sym)||null;
-  const items=[];['1D','4H'].forEach(f=>{((F[f]||{}).rows||[]).filter(r=>r.k.length===1&&sgPl(V,r.k[0])).forEach(r=>items.push({code:r.k[0],s:r.s,f,r}))});
-  const nb=items.filter(i=>i.s>0).length,ns=items.filter(i=>i.s<0).length,px=(F['4H']||F['1D']||{}).px||(I&&I.px);
-  let det='';
-  if(op){const hz={'4H':'غداً','1D':'الشهر القادم'};
-    det=`<div class="ind-det" onclick="event.stopPropagation()">${G.map(([g,ic,nm,what])=>{
-        const ten=((I&&I.parts)||[]).filter(p=>(sgPl(V,'O-'+p.k)||[])[0]===g).sort((a,b)=>((b.acc??-1)-(a.acc??-1)));
-        const on=items.filter(i=>(sgPl(V,i.code)||[])[0]===g).sort((a,b)=>(b.r.ok-a.r.ok)||(b.r.h-a.r.h));
-        if(!ten.length&&!on.length)return '';
-        return `<div class="sg-grp"><div class="sg-frh">${ic} ${gEsc(nm)} <small>— ${gEsc(what)}</small></div>${ten.map(p=>sgIndTen(V,p,x.base)).join('')}${on.map(i=>sgIndRow(V,i,hz[i.f]||'')).join('')}</div>`}).join('')
-      ||'<div class="ind-sub">لا مؤشر نشط الآن على هذه العملة</div>'}
-      ${I?`<div class="sg-grp"><div class="sg-frh">➕ قراءات أخرى</div>${indX(I)}${indXDet(I)}${indPDet(I)}</div>`:''}
-      ${(()=>{const c=['1D','4H'].reduce((a,f)=>a+((F[f]||{}).rows||[]).filter(r=>r.k.length>1&&r.ok).length,0);return c?`<div class="an-more"><button onclick="sgTab('an')">🤝 ${c} من المجموعات المتفقة المثبتة نشطة الآن — في 🧠 المحلل ←</button></div>`:''})()}</div>`}
-  return `<div class="ind-c sg-c${op?' open':''}" onclick="SGO['${gEsc(x.sym)}']=!SGO['${gEsc(x.sym)}'];sgRender()"><div class="ind-h"><span class="cn">${gEsc(x.base)}</span>${px?`<span class="px">${fmtPx(px)}</span>`:''}
-    ${I?`<span class="chg ${(+I.chg24||0)>=0?'up':'dn'}">${(+I.chg24||0)>=0?'▲':'▼'}${Math.abs(+I.chg24||0).toFixed(2)}%</span>`:''}<span class="ind-sub" style="margin-inline-start:auto">${op?'':'اضغط للتفاصيل ←'}</span></div>
-    ${sgIndAvg(I)}<div class="ind-dots"><span class="ind-chip">نشطة الآن: <b style="color:var(--green)">🟢 ${nb}</b> · <b style="color:var(--red)">🔴 ${ns}</b></span></div>${det}</div>`}
-function sgInd(V){let h='';const B=V.busy||{};                                  // 🎯 v3.36.71: كل المؤشرات في تبويب واحد — بكلام واضح، مجمّعة بأسرها، بسجلها
-  if(B.phase)h+=`<div class="sg-busy">${gEsc(B.msg||'…')}<div class="sg-pb"><i style="width:${Math.max(3,+B.pct||0)}%"></i></div></div>`;
-  if(V.err)h+=`<div class="ind-sub" style="color:var(--amber)">⚠️ ${gEsc(V.err)}</div>`;
-  if(INDV&&INDV.ok!==false&&INDV.on)h+=`<details class="sg-more"><summary>🌐 السوق كله الآن — الخوف والطمع · السيولة · المحترفون · الاقتصاد</summary><div style="text-align:right">${indFng(INDV.fng||{})}${indMkt(INDV.mkt)}${indPro(INDV.pro)}</div></details>`;
-  const N=V.cat?(V.now||[]):[],mine=N.filter(x=>x.mine),oth=N.filter(x=>!x.mine);
-  ((INDV&&INDV.rows)||[]).forEach(r=>{if(!N.some(x=>x.sym===r.sym))mine.push({sym:r.sym,base:r.base,mine:true,fr:{}})});    // المؤشرات العشرة تظهر قبل بناء السجل أيضاً
-  if(!V.cat)h+=`<div class="sg-empty">🏗️ <b>أول مرة:</b> تُجلب شموع ~${(V.uni||[]).length} عملة (سنتان على 4 ساعات ونحو 7 سنوات يومية) ثم تُحسب كل المؤشرات وسجلها — بعملية منفصلة لا تُثقل اللوحة. يأخذ ذلك من ربع ساعة إلى ساعة مرة واحدة.${V.on?'':'<br>⚠️ المؤشرات وإشعارات المحلل متوقفة — شغّل أحدهما'}</div>`;
-  else if(!(V.now||[]).length)h+='<div class="sg-empty">🔍 أول فحص عند إغلاق شمعة 4 ساعات القادمة (3 · 7 · 11 صباحاً ومساءً بتوقيت بغداد) أو اليومية (3 فجراً)</div>';
-  if(!mine.length&&!oth.length)return h;
-  if(V.cat)h+=`<div class="ind-top"><span class="ind-chip">🔄 آخر فحص ${V.scan_ts?gAgo(V.scan_ts):'—'}</span><span class="ind-chip">🎯 ${Object.keys(V.plain||{}).length} مؤشراً</span></div>`;
-  h+=`<div class="ind-list">${mine.map(x=>sgIndCoin(x,V)).join('')||'<div class="ind-sub">لا توجد عملات في إشعاراتك — اخترها من ⚙️ الإشعارات</div>'}</div>`;
-  if(oth.length)h+=`<details class="sg-more"><summary>عملات القياس الأخرى (${oth.length}) — تُفحص لتقوية السجل ولا تصلك إشعاراتها</summary><div class="ind-list">${oth.map(x=>sgIndCoin(x,V)).join('')}</div></details>`;
-  h+=`<details class="ind-help"><summary>كيف أقرأ هذه النافذة؟</summary>
-    <div>• <b>📊 اتجاه المؤشرات الآن</b>: معدل المؤشرات العشرة من −100 (هبوط) إلى +100 (صعود) — يصف الحال الآن ولا يتوقع؛ قياسه على الساعات القليلة القادمة قريب من الصدفة.</div>
-    <div>• تحته <b>كل مؤشر نشط الآن</b> على العملة، مجمّعاً بأسرته (${(V.grp||[]).map(g=>g[1]+' '+gEsc(g[2])).join(' · ')}): اسمه بكلام واضح، وماذا يعني، و<b>سجله</b> — صدق كم من كم مرة على الأسعار الحقيقية (غداً على شموع 4 ساعات · الشهر القادم على اليومية) مقارنةً بالعشوائي.</div>
-    <div>• 🟢 يميل إلى الصعود · 🔴 يميل إلى الهبوط · ⚪ محايد · 🔔 تصلك = يمر بنسبتك في ⚙️ الإشعارات · الاسم الفني بخط صغير لمن يعرفه.</div>
-    <div>• المؤشر وحده قليل الصدق غالباً؛ <b>🧠 المحلل</b> لا يعتمد إلا على مجموعات منها تتفق وصدقت في كل فترات التاريخ.</div>
+/* 📋 v3.36.73: جداول المؤشرات — جدول للسوق كله ولكل عملة: كل صف (رقم ثابت) يتنبأ وحده لكل مدة ويُحكم بعدها ✅ ❌ — العدّ من الصفر ·
+   الترتيب بأقل نسبة نثق بها · ▶️ ⏸ لكل صف في جدوله · عرض فقط */
+let SBV=null,SBS='MKT',SBT=null,SBSORT='best';const SBO={};
+async function sbLoad(s){if(s){SBS=s;SBV=null;if(SGTAB==='ind'&&$('#sg_body'))sgRender()}clearTimeout(SBT);
+  try{SBV=await api('/api/board?s='+encodeURIComponent(SBS))}catch(e){SBV={ok:false,msg:'تعذّر تحميل الجدول'}}
+  if(SBV&&SBV.s)SBS=SBV.s;if(SGTAB==='ind'&&$('#sg_body')){sgRender();SBT=setTimeout(()=>{if(SGTAB==='ind'&&$('#sg_body'))sbLoad()},60000)}}
+async function sbOff(n,on){try{const r=await api('/api/control',{action:'sb_off',value:{s:SBS,n,on}});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok))}catch(e){toast('تعذر الاتصال',false)}sbLoad()}
+function sbSort(k){SBSORT=k;sgRender()}
+function sbN(c){return c?(+c.w||0)+(+c.l||0):0}
+function sbScore(r){const fs=SBSORT==='best'||SBSORT==='n'?['1H','4H','1D']:[SBSORT];let b=-1;      // أقل نسبة نثق بها (ويلسون) لمن له نتائج كافية
+  fs.forEach(f=>{const c=(r.f||{})[f];if(c&&sbN(c)>=SBV.minn)b=Math.max(b,+c.lb||0)});return b}
+function sbCell(c,f){const F=(SBV.frs||{})[f]||['',f,''],n=sbN(c),L=c.last;
+  const now=c.now?`<b class="${c.now>0?'up':'dn'}" title="تنبؤ جارٍ لـ${gEsc(F[2])}">${c.now>0?'⬆️':'⬇️'} ⏳</b>`
+    :L?`<small title="آخر نتيجة">${L[2]?'✅':'❌'} ${L[0]>0?'⬆️':'⬇️'}</small>`:'<small>—</small>';
+  return `<div class="sb-cell${n&&n<SBV.minn?' test':''}"><div class="sb-fh">${F[0]} ${gEsc(F[1])}</div><div class="sb-now">${now}</div>
+    <div class="sb-wl"><span class="up">✅ ${+c.w||0}</span> <span class="dn">❌ ${+c.l||0}</span></div><div class="sb-p">${n?`<b>${Math.round(+c.p||0)}%</b>`:'—'}</div></div>`}
+function sbRow(r){const op=!!SBO[r.n],G=(SBV.grp||[]).find(g=>g[0]===r.g)||['','🤝','توليفة قوية',''],one=r.up===r.dn;
+  return `<div class="sb-r${r.off?' off':''}" data-n="${r.n}"><div class="sb-h" onclick="SBO[${r.n}]=!SBO[${r.n}];sgRender()"><span class="sb-n">${r.n}</span>
+      <span class="sb-nm"><b>${gEsc(r.nm)}</b><small class="sb-job">${G[1]} ${gEsc(G[2])}</small></span>
+      <button class="sb-sw${r.off?'':' on'}" onclick="event.stopPropagation();sbOff(${r.n},${r.off?'true':'false'})" title="${r.off?'موقوف — اضغط لتشغيله':'يعمل — اضغط لإيقافه'}">${r.off?'⏸ موقوف':'▶️ يعمل'}</button></div>
+    <div class="sb-cells">${['1H','4H','1D'].map(f=>sbCell((r.f||{})[f]||{w:0,l:0},f)).join('')}</div>
+    ${op?`<div class="sb-det">${r.k?`<div>🤝 ${r.k.map(gEsc).join(' + ')}</div>`:one?`<div><b>${gEsc(r.up)}</b> — ${gEsc(r.mu)}</div>`:`<div>⬆️ <b>${gEsc(r.up)}</b> — ${gEsc(r.mu)}</div><div>⬇️ <b>${gEsc(r.dn)}</b> — ${gEsc(r.md)}</div>`}${r.tech?`<div class="sg-tech">${gEsc(r.tech)}</div>`:''}</div>`:''}</div>`}
+function sbTable(V){const S=SBV,cs=(S&&S.coins)||[];
+  let h=`<div class="sb-tabs">${[['MKT','🌐 السوق']].concat(cs).map(([s,nm])=>`<button class="${SBS===s?'on':''}" onclick="sbLoad('${gEsc(s)}')">${gEsc(nm)}</button>`).join('')}</div>`;
+  if(!S)return h+`<div class="sg-empty">${LDR('جاري تحميل الجدول…')}</div>`;
+  if(S.ok===false)return h+`<div class="ind-sub" style="color:var(--amber)">⚠️ ${gEsc(S.msg||'تعذّر تحميل الجدول')}</div>`;
+  const base=S.s==='MKT'?'':S.s.split('-')[0],I=base?((INDV&&INDV.rows)||[]).find(r=>r.sym===S.s):null;
+  const on=S.rows.filter(r=>!r.off),off=S.rows.filter(r=>r.off),top=on.filter(r=>sbScore(r)>=0),tst=on.filter(r=>sbScore(r)<0);
+  top.sort((a,b)=>SBSORT==='n'?a.n-b.n:(sbScore(b)-sbScore(a))||(a.n-b.n));tst.sort((a,b)=>a.n-b.n);off.sort((a,b)=>a.n-b.n);
+  const since=S.since?new Date(S.since*1000).toLocaleDateString('ar',{day:'numeric',month:'long',year:'numeric'}):'—';
+  h+=`<div class="sb-top"><b>${base?`🪙 جدول ${gEsc(base)}`:'🌐 جدول السوق كله'}</b> <small>${base?`كل صف محكوم بسعر ${gEsc(base)}`:'إشارات البيتكوين وقراءات السوق كله — محكومة بسعر البيتكوين'}</small>
+    <div class="ind-sub">العدّ بدأ ${gEsc(since)}${S.ts?` · 🔄 آخر فحص ${gAgo(S.ts)}`:''} · لها نتائج كافية: ${top.length} · قيد الاختبار: ${tst.length}${off.length?` · موقوفة: ${off.length}`:''}</div></div>`;
+  if(I)h+=sgIndAvg(I);
+  if(!base&&INDV&&INDV.ok!==false&&INDV.on)h+=`<details class="sg-more"><summary>🌐 السوق كله الآن — الخوف والطمع · السيولة · المحترفون · الاقتصاد</summary><div style="text-align:right">${indFng(INDV.fng||{})}${indMkt(INDV.mkt)}${indPro(INDV.pro)}</div></details>`;
+  h+=`<div class="sb-sort">الترتيب: ${[['best','⭐ الأفضل'],['1H','⏱ الآن'],['4H','🕓 4 ساعات'],['1D','📅 يوم'],['n','# الرقم']].map(([k,t])=>`<button class="${SBSORT===k?'on':''}" onclick="sbSort('${k}')">${t}</button>`).join('')}</div>`;
+  if(SBSORT==='n')h+=on.slice().sort((a,b)=>a.n-b.n).map(sbRow).join('');                   // # بالرقم: كل الصفوف العاملة بترتيب أرقامها
+  else{if(top.length)h+=`<div class="sb-sec">⭐ لها نتائج كافية — الأصدق في الأعلى</div>${top.map(sbRow).join('')}`;
+    if(tst.length)h+=`<div class="sb-sec">🧪 قيد الاختبار (${tst.length}) — أقل من ${S.minn} نتائج</div>${tst.map(sbRow).join('')}`}
+  if(off.length)h+=`<div class="sb-sec">⏸ موقوفة (${off.length}) — تبقى تتنبأ وتُحكم بصمت ولا تدخل الإشعارات</div>${off.map(sbRow).join('')}`;
+  h+=`<details class="ind-help"><summary>كيف أقرأ الجدول؟</summary>
+    <div>• كل صف مؤشر برقم ثابت لا يتغير. حين ينطلق على شمعة مغلقة يتنبأ بجهته: <b>⏱ الآن</b> للساعة القادمة · <b>🕓 4 ساعات</b> للساعات الأربع القادمة · <b>📅 يوم</b> لليوم القادم.</div>
+    <div>• بعد المدة يُحكم وحده: <b>✅</b> تحرك السعر بجهته · <b>❌</b> عكسها — والنسبة = ✅ من كل النتائج · ⬆️ ⏳ = تنبؤ جارٍ الآن.</div>
+    <div>• الترتيب بـ<b>أقل نسبة نثق بها</b>: تجمع النسبة وعدد النتائج معاً، فـ3 من 3 (100%) لا تسبق 60 من 90 (67%) · وما له أقل من ${S.minn} نتائج «قيد الاختبار».</div>
+    <div>• العدّ بدأ من الصفر: المدة الأطول تحتاج وقتاً أطول (خانة اليوم نحو شهر).</div>
+    <div>• ▶️ / ⏸ يوقف الصف في هذا الجدول فقط: يبقى يتنبأ ويُحكم بصمت، وينزل إلى آخر الجدول.</div>
     <div style="color:var(--amber);margin-top:6px">⚠️ احتمالات لا ضمانات · اللوحة تقرأ وتنبّه فقط: لا تفتح أمراً ولا تغلقه.</div></details>`;
   return h}
+function sgInd(V){let h='';const B=V.busy||{};                                  // 🎯 v3.36.71 · 📋 v3.36.73: الجداول (السوق · كل عملة)
+  if(B.phase)h+=`<div class="sg-busy">${gEsc(B.msg||'…')}<div class="sg-pb"><i style="width:${Math.max(3,+B.pct||0)}%"></i></div></div>`;
+  if(V.err)h+=`<div class="ind-sub" style="color:var(--amber)">⚠️ ${gEsc(V.err)}</div>`;
+  return h+sbTable(V)}
 function sgCatUI(V){const b=(k,v,t)=>`<button class="${SGF[k]===v?'on':''}" onclick="SGF['${k}']='${v}';sgRender();sgCat()">${t}</button>`;
   const C=V.cat;if(!C)return sgHead(V)+'<div class="sg-empty">🏗️ الدليل لم يُبنَ بعد — تتابعه في «🎯 المؤشرات»</div>';
   const tys=Object.entries(V.types||{}).filter(([k])=>!['mkt','res'].includes(k));
@@ -31752,7 +31770,7 @@ function sgAnCoin(x,V){const A=x.an||{},H=A.hz||{},F=x.fr||{},px=(F['4H']||F['1D
   return `<div class="ind-c an-c ${c}"><div class="ind-h"><span class="cn">${gEsc(x.base)}</span>${px?`<span class="px">${fmtPx(px)}</span>`:''}<span class="an-w ${c}">${gEsc(A.wi||'⏸️')} ${gEsc(A.wt||'انتظر')}</span></div>
     ${sgHz(H['4H'],'غداً',V,false)}${sgHz(H['1D'],'الشهر القادم',V,true)}
     <div class="an-now"><div class="sg-frh">🔎 الآن في السوق</div>${A.tr?`<div class="an-st">${gEsc(A.tr)}</div>`:''}${ns||'<div class="ind-sub">لا جديد في السيولة أو العقود في الأيام الأخيرة</div>'}<div class="ind-sub">وصف لما يحدث الآن — ليس توقعاً</div></div>
-    <div class="an-more"><button onclick="SGO['${gEsc(x.sym)}']=true;sgTab('ind')">🎯 كل مؤشرات العملة النشطة الآن ←</button></div></div>`}
+    <div class="an-more"><button onclick="SBS='${gEsc(x.sym)}';SBV=null;sgTab('ind')">📋 جدول مؤشرات العملة ←</button></div></div>`}
 function sgAnMkt(V){const C=V.comp,M=V.mkt||{};let h='<div class="an-mkt"><div class="sg-frh">🌐 السوق كله الآن</div>';
   if(C&&SGCOMP[C.s]){const nm=SGCOMP[C.s];h+=`<div class="an-st"><b>🧭 ${nm[1]} ${nm[0]}</b> <small>منذ ${sgAr(C.days,'day')}</small> · البيتكوين ${C.btc?'فوق':'تحت'} متوسط 200 يوم · ${C.k} من ${sgAr(C.n,'coin')} فوق متوسطها (50 يوماً)</div>
     ${C.m30!=null?`<div class="ind-sub">تاريخياً في هذا الوضع: متوسط الشهر التالي ${sgPct(C.m30)}${C.h30!=null?` · كان السعر أعلى بعد شهر في ${(+C.h30).toFixed(0)}% من الأيام`:''}</div>`:''}
@@ -31786,7 +31804,7 @@ function sgFcAn(r){const A=r.an;if(!A)return '';const H=A.hz||{},z=(x,n)=>x&&x.d
   return `<div class="sg-fc an-fc" onclick="event.stopPropagation();openInd('an')">🧠 <b>ملخص المحلل:</b> ${gEsc(A.wi||'')} ${gEsc(A.wt||'')} · ${z(H['4H'],'غداً')} · ${z(H['1D'],'الشهر القادم')} ←</div>`}
 function sgFc(r){const S=r.sig;const an=sgFcAn(r);if(!S)return an;const fs=['1D','4H'].filter(f=>S[f]&&(S[f].rows||[]).length);if(!fs.length)return an;
   const best=fs.map(f=>S[f].rows[0]).filter(Boolean).sort((a,b)=>(b.ok-a.ok)||(b.h-a.h))[0];
-  return `<div class="sg-fc" onclick="event.stopPropagation();SGO['${gEsc(r.sym)}']=true;openSig('now')">🎯 ${fs.map(f=>`${f==='1D'?'يومي':'4 ساعات'}: <b style="color:var(--green)">🟢 ${S[f].nb}</b> · <b style="color:var(--red)">🔴 ${S[f].ns}</b>`).join(' · ')}
+  return `<div class="sg-fc" onclick="event.stopPropagation();SBS='${gEsc(r.sym)}';SBV=null;openSig('now')">🎯 ${fs.map(f=>`${f==='1D'?'يومي':'4 ساعات'}: <b style="color:var(--green)">🟢 ${S[f].nb}</b> · <b style="color:var(--red)">🔴 ${S[f].ns}</b>`).join(' · ')}
     ${best?`<small> — أقواها: ${gEsc(best.nm.join(' + '))} (صدقت ${best.w} من ${sgAr(best.n,'time')} · ${(+best.h).toFixed(0)}%)</small>`:''}</div>`.replace(/^/,an)}
 function sgMini(){return `<div class="ind-al" style="margin-top:10px"><div class="ind-al-h"><b>🔔 إشعارات المحلل — 🟢 دخول شراء · 🔴 دخول بيع · 🔎 الآن في السوق · 🌐 السوق</b>
   <span style="display:flex;gap:6px"><button onclick="openSig('cfg')">⚙️ الإعدادات</button><button onclick="openInd('an')">🧠 المحلل</button></span></div>

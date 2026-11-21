@@ -1,6 +1,6 @@
 // 🎯 v3.36.66 in a real browser (run through ui_sig.py — a closed folder with a catalog, a scan and the live record · no network):
-//   ① 🎯 the window: 5 tabs · «🎯 المؤشرات» (one tab · v3.36.71): your coins first · a coin opens to its indicators on now by family, each in
-//     plain words with «صدق … من … مرة» and random beside it
+//   ① 🎯 the window: 5 tabs · «🎯 المؤشرات» = the tables (v3.36.73): «🌐 السوق» + a table per coin · ranked by the lowest % we trust ·
+//     «قيد الاختبار» · ⏸ per row · a row opens to its meanings
 //   ② 📒 the catalog: filters (frame · side · size · 💎) · search · every row has its record
 //   ③ 🧾 the log · ④ ⚙️ the notifications: the slider moves the weekly estimate live and saves on release · type and cap buttons save
 //   ⑤ 🔮 the forecasts: «🎯 الإشارات الآن» on top + every coin's line · a tap opens 🎯 · 📊 has the button · ⚙️ has the row · the ticker's
@@ -28,25 +28,48 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   await pg.evaluate(() => { const sp = document.getElementById('splash'); if (sp) sp.remove() });
   await sleep(800);
   const shot = async n => { if (SHOTS) { await sleep(450); await pg.locator('#modal .modal-box, #modal > div').first().screenshot({ path: `${SHOTS}/${n}.png` }).catch(async () => pg.screenshot({ path: `${SHOTS}/${n}.png` })) } };
-  // ① 🎯 the indicators — one tab (v3.36.71: «📈 المؤشرات العشرة» + «🎯 الإشارات الشغّالة» merged · every indicator in plain words)
+  // ① 📋 the indicator tables (v3.36.73: «🎯 المؤشرات» = a table for the whole market and one per coin · counted from zero)
   await pg.evaluate(() => openSig('now'));                                     // the old name still opens it
-  await pg.waitForFunction(() => document.querySelector('#sg_body .sg-c'), null, { timeout: 20000 }).catch(() => {});
+  await pg.waitForFunction(() => document.querySelector('#sg_body .sb-r'), null, { timeout: 20000 }).catch(() => {});
   const w1 = await pg.evaluate(() => ({ h2: (document.querySelector('#modal h2') || {}).textContent || '', tabs: [...document.querySelectorAll('#sg_tabs button')].map(b => b.textContent),
-    tab: SGTAB, coins: [...document.querySelectorAll('#sg_body > .ind-list > .sg-c .cn')].map(x => x.textContent), others: !!document.querySelector('#sg_body details.sg-more'),
-    chips: [...document.querySelectorAll('#sg_body > .ind-list > .sg-c .ind-chip')].map(x => x.textContent) }));
+    tab: SGTAB, sb: [...document.querySelectorAll('#sg_body .sb-tabs button')].map(b => b.textContent), on: (document.querySelector('#sg_body .sb-tabs button.on') || {}).textContent || '',
+    rows: document.querySelectorAll('#sg_body .sb-r').length, top: (document.querySelector('#sg_body .sb-top') || {}).textContent || '' }));
   ok(`① 🧠 one window «${w1.h2}» · tabs ${w1.tabs.join(' | ')} — «now» opens «🎯 المؤشرات»`, w1.h2.startsWith('📊 المؤشرات — المحلل') && w1.tab === 'ind'
      && w1.tabs.join('|') === '🧠 المحلل|🎯 المؤشرات|📚 المجموعات|📜 السجل|⚙️ الإشعارات', w1);
-  ok(`① your coins first (${w1.coins.join(' · ')}) · the other measured coins folded below · each «نشطة الآن: 🟢 … · 🔴 …»`, w1.coins.join(',') === 'SOL,XRP' && w1.others
-     && w1.chips.length >= 2 && w1.chips.every(t => t.includes('نشطة الآن') && t.includes('🟢') && t.includes('🔴')), w1);
-  await pg.evaluate(() => { const c = [...document.querySelectorAll('#sg_body .sg-c')].find(x => x.querySelector('.cn').textContent === 'XRP'); c.click() });
-  await sleep(300);
-  const w2 = await pg.evaluate(() => { const rows = [...document.querySelectorAll('#sg_body .sg-c.open .sg-pl:not(.ten)')];
-    return { n: rows.length, nm: rows.map(r => (r.querySelector('b') || {}).textContent || ''), txt: rows.slice(0, 4).map(r => r.textContent.replace(/\s+/g, ' ').trim()),
-      grp: [...document.querySelectorAll('#sg_body .sg-c.open .sg-grp > .sg-frh')].map(x => x.textContent.replace(/\s+/g, ' ').trim()) } });
-  ok(`① XRP opens to its indicators on now by family (${w2.grp.map(g => g.split('—')[0].trim()).join(' · ')}) — ${w2.n} indicators, each with its meaning and «صدق … من … · العشوائي …»`,
-     w2.n > 0 && w2.grp.length >= 1 && w2.txt.every(t => /صدق \d+ من \d+ مرة/.test(t) && t.includes('العشوائي')), w2);
-  ok(`① plain names, no technical letters in them («${w2.nm.slice(0, 3).join('» · «')}») — the technical name only small beside the record`,
-     w2.nm.length && w2.nm.every(t => t && !/[A-Za-z]/.test(t)), w2.nm);
+  ok(`① the tables: «${w1.sb.join(' · ')}» — «🌐 السوق» first and open · its 70 rows · «${w1.top.replace(/\s+/g, ' ').trim().slice(0, 90)}…»`,
+     w1.sb[0] === '🌐 السوق' && w1.on === '🌐 السوق' && w1.sb.includes('SOL') && w1.sb.includes('XRP') && w1.rows === 70 && w1.top.includes('جدول السوق كله')
+     && w1.top.includes('العدّ بدأ'), w1);
+  await pg.evaluate(() => sbLoad('SOL-USDT'));
+  await pg.waitForFunction(() => SBV && SBV.s === 'SOL-USDT' && document.querySelector('#sg_body .sb-r'), null, { timeout: 15000 }).catch(() => {});
+  const w2 = await pg.evaluate(() => { const R = [...document.querySelectorAll('#sg_body .sb-r')];
+    const secs = [...document.querySelectorAll('#sg_body .sb-sec')].map(x => x.textContent);
+    const first = R[0], cells = first ? [...first.querySelectorAll('.sb-cell')].map(c => c.textContent.replace(/\s+/g, ' ').trim()) : [];
+    return { on: (document.querySelector('#sg_body .sb-tabs button.on') || {}).textContent || '', order: R.map(r => +r.dataset.n), secs, cells,
+      nm: R.map(r => (r.querySelector('.sb-nm b') || {}).textContent || ''), job: first ? (first.querySelector('.sb-job') || {}).textContent : '',
+      off: R.filter(r => r.classList.contains('off')).map(r => +r.dataset.n), avg: !!document.querySelector('#sg_body .ind-avg'),
+      ten: !!((INDV && INDV.rows) || []).find(r => r.sym === 'SOL-USDT') } });
+  J.board = w2.order.slice(0, 6);
+  ok(`① SOL's table: the truest first — 20 (40 ✅ · 10 ❌ on 🕓) before 12 (60 · 30 on ⏱) · 5 (3 of 3) stays «قيد الاختبار» · ⏸ 33 at the bottom (${w2.order.slice(0, 4).join(' · ')} … ${w2.order.slice(-2).join(' · ')})`,
+     w2.on === 'SOL' && w2.order[0] === 20 && w2.order[1] === 12 && w2.order.indexOf(5) > 1 && w2.order[w2.order.length - 1] === 33 && w2.off.join() === '33'
+     && w2.secs.length === 3 && w2.secs[0].includes('لها نتائج كافية') && w2.secs[1].includes('قيد الاختبار') && w2.secs[2].includes('موقوفة'), w2);
+  ok(`① each row: its number · plain name (no Latin) · its job («${w2.job}») · ⏱ الآن · 🕓 4 ساعات · 📅 يوم with ✅ ❌ and % («${w2.cells.join(' | ')}»)`,
+     w2.nm.length === 70 && w2.nm.every(t => t && !/[A-Za-z]/.test(t)) && w2.job.trim() && w2.cells.length === 3 && w2.cells[0].includes('⏱ الآن')
+     && w2.cells[1].includes('🕓 4 ساعات') && w2.cells[1].includes('✅ 40') && w2.cells[1].includes('❌ 10') && w2.cells[1].includes('80%') && w2.cells[2].includes('📅 يوم'), w2);
+  ok(`① the coin table keeps «📊 اتجاه المؤشرات الآن» when the ten indicators have SOL (${w2.ten ? 'they have' : 'not in this closed folder'})`, w2.avg === w2.ten, w2);
+  await pg.evaluate(() => sbSort('n'));
+  await sleep(200);
+  ok('① «# الرقم» ⇒ every working row by its number (1 · 2 · 3 …) · no sections', await pg.evaluate(() => [...document.querySelectorAll('#sg_body .sb-r:not(.off)')].slice(0, 3).map(r => +r.dataset.n).join() === '1,2,3'
+     && document.querySelectorAll('#sg_body .sb-sec').length === 1), '');
+  await pg.evaluate(() => sbSort('best'));
+  await pg.evaluate(() => { document.querySelector('#sg_body .sb-r[data-n="12"] .sb-h').click() });
+  await sleep(250);
+  const w3 = await pg.evaluate(() => (document.querySelector('#sg_body .sb-r[data-n="12"] .sb-det') || {}).textContent || '');
+  ok(`① a tap opens the row: both meanings and the technical name («${w3.replace(/\s+/g, ' ').trim().slice(0, 80)}…»)`, w3.includes('⬆️') && w3.includes('⬇️'), w3);
+  await pg.evaluate(() => { document.querySelector('#sg_body .sb-r[data-n="7"] .sb-sw').click() });
+  await pg.waitForFunction(() => SBV && (SBV.rows.find(r => r.n === 7) || {}).off, null, { timeout: 10000 }).catch(() => {});
+  const w4 = await pg.evaluate(() => { const R = [...document.querySelectorAll('#sg_body .sb-r')]; return { last2: R.slice(-2).map(r => +r.dataset.n), sw: (document.querySelector('#sg_body .sb-r[data-n="7"] .sb-sw') || {}).textContent } });
+  ok(`① ▶️ → ⏸ turns row 7 off in SOL's table (it sinks to the bottom: ${w4.last2.join(' · ')})`, w4.last2.includes(7) && (w4.sw || '').includes('⏸'), w4);
+  J.off7 = true;
   await shot('sig_now');
   // ⓪ 🧠 the analyst (the first tab)
   await pg.evaluate(() => openInd());
@@ -64,7 +87,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   await shot('sig_analyst');
   await pg.evaluate(() => { const b = [...document.querySelectorAll('#sg_body .an-more button')][0]; if (b) b.click() });
   await sleep(500);
-  ok('⓪ «🎯 كل مؤشرات العملة النشطة الآن ←» on a card opens the merged tab with that coin open', await pg.evaluate(() => SGTAB === 'ind' && !!document.querySelector('#sg_body .sg-c.open')), '');
+  ok('⓪ «📋 جدول مؤشرات العملة ←» on a card opens that coin\'s table', await pg.evaluate(() => SGTAB === 'ind' && SBS !== 'MKT' && (document.querySelector('#sg_body .sb-tabs button.on') || {}).textContent !== '🌐 السوق'), '');
   // ② 📒 the catalog
   await pg.evaluate(() => sgTab('cat'));
   await pg.waitForFunction(() => document.querySelectorAll('#sg_cat .sg-r').length > 0, null, { timeout: 15000 }).catch(() => {});
