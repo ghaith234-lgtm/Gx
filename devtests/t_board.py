@@ -6,7 +6,7 @@
 #   ② the scan sees the hour too: every frame (1H · 4H · 1D) answers what fired on that very candle («e1») · every fired code has a row
 #   ③ the whole market's readings: 🚀 a third of the coins jumping together on the last hour · 🌊 the crash on the hour · 📊 most coins
 #      crossing above their 50-candle mean · 🧭 the compass turning up (after three days) — each on every coin's last candle
-#   ④ a fired row predicts its side for the next candle of its frame · graded at that close: ✅ its way · ❌ the other way · no move ⇒ not
+#   ④ a fired row predicts its side for the next candle of its frame · graded at that close: ✅ its way · ❌ the other way · under 0.2% ⇒ not
 #      counted · a one-sided event (🌊) predicts only its side · both sides at once ⇒ nothing · the same scan twice ⇒ once · from zero ·
 #      «🌐 السوق» from Bitcoin · «*» every coin together · days counted · a prediction without its candle for long is dropped
 #   ⑤ the table: 70 rows × ⏱ 🕓 📅 with ✅ ❌ % and the lower bound we trust · the running prediction · the last result · ⏸ per table
@@ -137,7 +137,7 @@ ok("④ the board starts from zero (no record · no prediction)", not B0["rec"] 
 t0 = T1E - 7200
 cdb = {"c1": {"SOL-USDT": {"d": [[t0, 1, 1, 1, 100.0, 1], [t0 + 3600, 1, 1, 1, 105.0, 1]]},
               "BTC-USDT": {"d": [[t0, 1, 1, 1, 50.0, 1], [t0 + 3600, 1, 1, 1, 49.0, 1]]},
-              "XRP-USDT": {"d": [[t0, 1, 1, 1, 2.0, 1], [t0 + 3600, 1, 1, 1, 2.0, 1]]}}}
+              "XRP-USDT": {"d": [[t0, 1, 1, 1, 2.0, 1], [t0 + 3600, 1, 1, 1, 2.002, 1]]}}}     # +0.1%: under the fees (v3.36.76)
 S1 = {"c": {"SOL-USDT": {"1H": {"t": t0, "px": 100.0, "e1": ["O-trend:1", "09:-1", "W-crash:1", "W-crash:-1", "14:1", "14:-1", "ZZ-unknown:1"], "a1": [], "a0": []}},
             "BTC-USDT": {"1H": {"t": t0, "px": 50.0, "e1": ["O-trend:1"], "a1": [], "a0": []}},
             "XRP-USDT": {"1H": {"t": t0, "px": 2.0, "e1": ["O-trend:1"], "a1": [], "a0": []}}}}
@@ -155,7 +155,7 @@ g = lambda sc_, n_, f="1H": (rc.get(sc_) or {}).get(str(n_), {}).get(f)
 ok("④ graded at the next hour's close: SOL up 5% ⇒ row 1 ✅ · row 5 (down) ❌ · 🌊 60 (down) ❌ · Bitcoin down 2% ⇒ row 1 ❌ on BTC and on «🌐 السوق»",
    g("SOL-USDT", 1)[:2] == [1, 0] and g("SOL-USDT", 5)[:2] == [0, 1] and g("SOL-USDT", 60)[:2] == [0, 1] and g("BTC-USDT", 1)[:2] == [0, 1]
    and g("MKT", 1)[:2] == [0, 1], rc)
-ok("④ XRP did not move ⇒ not counted · «*» (every coin together) = SOL ✅ + BTC ❌ for row 1 (the market table not counted twice) · days counted",
+ok("④ XRP moved +0.1% — under the 0.2% fees ⇒ not counted (⚖️ v3.36.76: before, any move was a ✅) · «*» (every coin together) = SOL ✅ + BTC ❌ for row 1 (the market table not counted twice) · days counted",
    g("XRP-USDT", 1) is None and g("*", 1)[:3] == [1, 1, 1] and g("SOL-USDT", 1)[2] == 1 and r2["graded"] == 5 and not B2["pend"], (g("*", 1), r2, B2["pend"]))
 ok("④ the last result is kept per row (side · time · ✅/❌ · the move)", (B2["last"]["SOL-USDT"]["1"]["1H"][:3] == [1, t0, 1]
    and abs(B2["last"]["SOL-USDT"]["1"]["1H"][3] - 0.05) < 1e-6), B2["last"].get("SOL-USDT"))
