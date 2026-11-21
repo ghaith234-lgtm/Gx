@@ -228,8 +228,10 @@ finally:
     if dproc:
         dproc.kill()
 card, det = U.get("card") or "", U.get("det") or ""
-ok("⑥ the browser 🔮: the ETH card shows «🟢 قاع قوي 70/100» · the column «أعلى بعدها» with the share and the normal (…% /48) · the indicators' lean kept",
-   "قاع قوي" in card and "70/100" in card and "أعلى بعدها" in card and "/48" in card and "غير مؤكد" in card, {k: U.get(k) for k in ("card", "err")})
+ok("⑥ the browser 🔮 (v3.36.76 — on the same basis as 📈): the ETH card shows «🟢 قاع قوي 70/100» and the market layer's range (⏳ until the first market scan "
+   "in this closed folder) · the indicators' lean moved into the details as a description («/48» per horizon)",
+   "قاع قوي" in card and "70/100" in card and ("يظهر المدى المتوقع" in card or "بين كم وكم" in card) and "أعلى بعدها" not in card
+   and "ميل المؤشرات على كل مدى — وصف للحال لا توقّع" in det and "/48" in det, {k: U.get(k) for k in ("card", "err")})
 ok("… the details: the bottom's parts, its 28-coin record (14 days · normal 46%), Bitcoin's state, the limits (2026 · in parts · no confirmation) · what followed the lean",
    "مؤشر القاع" in det and "نزل" in det and "العادي 46%" in det and "البيتكوين" in det and "دفعات" in det and "2026" in det and "على الأسعار الحقيقية" in det, det[:1500])
 ok("⑥ 🔮 relies on the same indicators (v3.36.71) — the old analyst's line is gone (📈 v3.36.75) · the indicators' vote is «📊 ميل المؤشرات … وصف لا توقع» · "

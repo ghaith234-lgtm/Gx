@@ -164,6 +164,14 @@ const LAT = /[A-Za-z]{2,}/;
     btn: [...document.querySelectorAll('#modal .mbtns button')].map(b => b.textContent) }));
   ok(`⑦ 🔮 «${f1.top.replace(/\s+/g, ' ').trim().slice(0, 70)}» on top · no old analyst line («🧠 المحلل») · buttons ${f1.btn.slice(0, 2).join(' · ')}`,
      f1.top.includes('السوق الآن') && !f1.an && f1.btn[0] === '📈 السوق' && f1.btn[1] === '📋 المؤشرات', f1);
+  const f2 = await pg.evaluate(() => { const c = [...document.querySelectorAll('#fc_body .fc-c')].find(e => e.innerText.includes('SOL'));
+    const rr = c ? [...c.querySelectorAll('.fc-rows .fc-r:not(.fc-hd)')].map(x => x.textContent.replace(/\s+/g, ' ').trim()) : [];
+    const sol = ((ANV && ANV.coins) || []).find(x => x.sym === 'SOL-USDT') || {};
+    return { top: (document.querySelector('#fc_body .fc-tdt') || {}).textContent || '', hd: c ? ((c.querySelector('.fc-rows .fc-hd') || {}).textContent || '') : '', rr,
+      same: rr.length && sol.rng ? rr[0].includes(fcN(sol.rng['4h'].lo)) && rr[0].includes(fcN(sol.rng['4h'].hi)) : null } });
+  ok(`⑦ 🔮 on the same basis: «🎯 الميل اليومي» on top («${f2.top.replace(/\s+/g, ' ').trim().slice(0, 70)}…») · SOL's range rows = 📈's numbers (${f2.rr.slice(0, 2).join(' | ')})`,
+     f2.top.includes('🎯 الميل اليومي') && f2.top.includes('صدق الميل') && f2.hd.includes('بين كم وكم') && f2.rr.length === 3 && f2.rr[0].includes('الساعات الأربع القادمة') && f2.same !== false, f2);
+  if (SHOTS) { await pg.evaluate(() => { const c = [...document.querySelectorAll('#fc_body .fc-c')].find(e => e.innerText.includes('SOL')); if (c) c.click() }); await sleep(400); await shot('mkt_fc') }
   await pg.evaluate(() => document.querySelector('#fc_body .sg-go').click());
   await sleep(500);
   ok('⑦ a tap on it opens 📈 the market on your coins', (await H2()) === '📈 السوق — الآن والمتوقع' && await pg.evaluate(() => SGTAB === 'coins'), '');
