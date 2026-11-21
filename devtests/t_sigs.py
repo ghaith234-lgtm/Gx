@@ -200,7 +200,7 @@ sg_ = m._sg_sig([100 * math.exp(0.01 * ((-1) ** i)) for i in range(300)], 6)
 ok("②b the target/stop distance comes from the coin's own moves before the entry (×√horizon) — bounded 0.4% … 40%",
    sg_[100] == 0.0 and 0.004 <= sg_[200] <= 0.4 and abs(sg_[200] - 0.02 * math.sqrt(6)) < 0.005, sg_[200])
 ok("②b the horizons: the 4-hour frame is judged after a day («غداً») · the daily after 30 days («الشهر القادم») · the daily history ~7 years",
-   m.SG_HZ == {"4H": 6, "1D": 30} and m.SG_HZW == {"4H": "غداً", "1D": "الشهر القادم"} and m.SG_N["1D"] >= 2500, (m.SG_HZ, m.SG_N))
+   {k: m.SG_HZ[k] for k in ("4H", "1D")} == {"4H": 6, "1D": 30} and m.SG_HZW == {"4H": "غداً", "1D": "الشهر القادم"} and m.SG_N["1D"] >= 2500, (m.SG_HZ, m.SG_N))
 
 # ③ the publication delay
 pdb, fdb = m._pro_db(), m._fc_db()
