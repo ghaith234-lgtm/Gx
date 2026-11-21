@@ -294,12 +294,13 @@ b6 = m._sg_process(sc6, ["1D"], st, m.sg_cfg(), CAT, CDB, NOW + 86400)
 ok("⑤ 🧠 a combination that did NOT hold in all four periods (13 cases · 85%) is recorded for the live record but never notified — even with "
    "the old «💎» switch on", not b6 and any(p[0] == "1D|1|20+37+O-rsi" and p[4] == 0 for p in st["pend"]), (b6, st["pend"][-2:]))
 _CFG.update(sg_rare=False)
-_CFG.update(sg_rnd=False, sg_thr=50, sg_min=10, sg_types={"dist": True})
+_CFG.update(sg_thr=50, sg_types={"dist": True})
+m.SG_MINC, m.SG_RNDC = 10, False                  # 🎯 v3.36.71: fixed inside (no longer a setting) — loosened here to see the sell
 st_d = {}
 b7 = m._sg_process(scan(T4E, TDE, {}, {}, {"XRP-USDT": ["X-ad:-1"]}, {}), ["1D"], st_d, m.sg_cfg(), CAT, CDB, NOW)
 b7s = next((b for b in b7 if b["ty"] == "sell"), None)
 b7n = next((b for b in b7 if b["ty"] == "nst"), None)
-ok("⑤ a SELL group passes only without «better than random» — and then it says so: «🔴 دخول بيع — XRP-USDT · الشهر القادم» · «⚠️ تاريخياً "
+ok("⑤ a SELL group passes only without «better than random» (the inside switch — the owner can no longer turn it off) — and then it says so: «🔴 دخول بيع — XRP-USDT · الشهر القادم» · «⚠️ تاريخياً "
    "ليست أفضل من العشوائي» · why «السيولة تخرج من العملة»", b7s and b7s["t"] == "🔴 دخول بيع — XRP-USDT · الشهر القادم"
    and "⚠️ تاريخياً ليست أفضل من العشوائي" in b7s["b"] and "لماذا: السيولة تخرج من العملة" in b7s["b"], b7)
 ok("⑤ 🔎 a new state on a coin of yours: «🔎 XRP الآن: 🔻 السيولة تخرج والسعر لم ينزل بعد (تصريف)» · «وصف لما يحدث الآن على المنصة — ليس توقعاً» "
@@ -317,7 +318,8 @@ st_g = {}
 b8 = m._sg_process(scan(T4E, TDE, {}, {}, {"XRP-USDT": ["M-gpr:1"]}, {}), ["1D"], st_g, m.sg_cfg(), CAT, CDB, NOW)
 ok("⑤ 🗞️ a market reading that did NOT hold in the four periods is not sent (the real check of 20-11 sent «المخاطر الجيوسياسية منخفضة» at 28% "
    "vs random 47%) — it still goes to the live record", not [b for b in b8 if b["ty"] == "eco"] and any(p[0] == "1D|1|M-gpr" for p in st_g.get("pend") or []), b8)
-_CFG.update(sg_rnd=True, sg_thr=60, sg_min=15)
+_CFG.update(sg_thr=60)
+m.SG_MINC, m.SG_RNDC = 15, True
 _CFG.pop("sg_types", None)
 
 # ⑤ a market-wide combination counts its DAYS, not its coins (the real check of 20-11: the best «panic bounce» had 22 cases on ONE day)
@@ -449,8 +451,8 @@ m.save_app_cfg = lambda c: real_cfg.clear() or real_cfg.update(c) or c
 r = m.sg_set({"thr": 120, "min": 1, "rmin": 99, "cap": -4, "coins": ["xrp", "sol-usdt", "bad coin!", "XRP"], "quiet": [23, 7], "sum": 25, "ch": "tg",
               "types": {"sell": False, "nope": True}, "fr": {"4H": False}})
 c = r["cfg"]
-ok("⑧ settings are bounded and cleaned: 95% · 3 · 50 · cap 0 · coins XRP-USDT · SOL-USDT (no junk, no duplicate) · quiet 23–07 · summary 01:00 · "
-   "Telegram only · 🔴 off · 4H off", c["thr"] == 95 and c["min"] == 3 and c["rmin"] == 50 and c["cap"] == 0 and c["coins"] == ["XRP-USDT", "SOL-USDT"]
+ok("⑧ settings are bounded and cleaned: 95% · the count stays 15 (fixed inside · v3.36.71) · 50 · cap 0 · coins XRP-USDT · SOL-USDT (no junk, no duplicate) · quiet 23–07 · summary 01:00 · "
+   "Telegram only · 🔴 off · 4H off", c["thr"] == 95 and c["min"] == 15 and "sg_min" not in real_cfg and c["rmin"] == 50 and c["cap"] == 0 and c["coins"] == ["XRP-USDT", "SOL-USDT"]
    and c["quiet"] == [23, 7] and c["sum"] == 1 and c["ch"] == "tg" and c["types"]["sell"] is False and "nope" not in c["types"] and c["fr"]["4H"] is False, c)
 m.sg_set({"coins": None})
 ok("⑧ «↩️ مثل الشريط» ⇒ your coins follow the ticker again", m.sg_cfg()["coins"] is None and "sg_coins" not in real_cfg, real_cfg)
@@ -472,16 +474,17 @@ r_tk = m.sg_set({"coins": None})
 time.sleep(0.3)
 m._SG["cidx"] = _ci0
 ok("⑧ 🪙 a coin whose data is already here: «🪙 أُضيفت SOL لإشعاراتك» (nothing to fetch, no round) · «↩️ مثل الشريط» says so",
-   r_sol["msg"] == "🪙 أُضيفت SOL لإشعاراتك" and r_tk["msg"] == "↩️ عملات إشعارات الإشارات الآن نفس عملات الشريط" and not _t_sol, (r_sol["msg"], r_tk["msg"], _t_sol))
+   r_sol["msg"] == "🪙 أُضيفت SOL لإشعاراتك" and r_tk["msg"] == "↩️ عملات إشعارات المحلل الآن نفس عملات الشريط" and not _t_sol, (r_sol["msg"], r_tk["msg"], _t_sol))
 m.sg_set({"coins": None})
 time.sleep(0.3)
-real_cfg.update(ticker_coins=list(cat["coins"]), sg_thr=50, sg_min=3, sg_rnd=False, sg_cap=0)
+real_cfg.update(ticker_coins=list(cat["coins"]), sg_thr=50, sg_cap=0)
+m.SG_MINC, m.SG_RNDC = 3, False
 _c4 = {e["id"]: e.get("c4") for e in m._sg_cat()["e"]}
 for e in m._sg_cat()["e"]:
     e["c4"] = True                                       # (the random synthetic history proves nothing — as if every entry held in the 4 periods)
 e50 = m.sg_estimate()
-e70 = m.sg_estimate(m._sg_cfg_merge(m.sg_cfg(), {"thr": 70, "min": 20}))
-ok(f"⑧ the weekly estimate falls when the threshold rises: 50% ≈ {e50['wk']} a week ({e50['n']} pass) · 70% & 20 cases ≈ {e70['wk']} ({e70['n']})",
+e70 = m.sg_estimate(m._sg_cfg_merge(m.sg_cfg(), {"thr": 70}))
+ok(f"⑧ the weekly estimate falls when the threshold rises: 50% ≈ {e50['wk']} a week ({e50['n']} pass) · 70% ≈ {e70['wk']} ({e70['n']})",
    e50["n"] > e70["n"] and e50["wk"] >= e70["wk"] and e50["wk"] > 0, (e50, e70))
 real_cfg.update(sg_cap=5)
 e5 = m.sg_estimate()
@@ -526,7 +529,8 @@ for f in (m.SG_FILE, m.SG_CAT):
         pass
 m._SG.update(cat=None, cat_mt=0, cidx=None, build=None)
 real_cfg.clear()
-real_cfg.update(ticker_coins=["XRP", "SOL"], sg_thr=50, sg_min=3, sg_rnd=False, sg_cap=0)
+real_cfg.update(ticker_coins=["XRP", "SOL"], sg_thr=50, sg_cap=0)
+m.SG_MINC, m.SG_RNDC = 3, False
 m.MKT_COINS = tuple(COINS)
 m.SG_UNI = len(COINS)
 CALLS = []

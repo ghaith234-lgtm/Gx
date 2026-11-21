@@ -46,6 +46,7 @@ m._okx_pub = lambda p: None
 m._okx_post = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("devtests: no orders"))
 m.tg_send = lambda *a, **k: True
 m.sg_tick = lambda *a, **k: None                       # the page reads the prepared files (no new scan while the browser looks)
+m.SG_MINC, m.SG_RNDC = 5, False
 m._fc_run = lambda *a, **k: None
 m.FC.update(ts=time.time(), coins={s: {"sym": s, "base": s.split("-")[0], "px": px, "chg": 1.2, "h": {}} for s, px in (("XRP-USDT", 2.4512), ("SOL-USDT", 182.37))},
             order=["XRP-USDT", "SOL-USDT"], err="")
@@ -69,7 +70,8 @@ try:
     m = importlib.util.module_from_spec(importlib.util.spec_from_loader("hd_sig_prep", ld)); a0 = sys.argv; sys.argv = ["x"]; ld.exec_module(m); sys.argv = a0
     m.tg_send = lambda *a, **k: True
     m.app_feed_push = lambda *a, **k: True
-    json.dump({"ticker_coins": ["XRP", "SOL"], "sg_thr": 55, "sg_min": 5, "sg_rnd": False, "indic_on": True}, open(m.APP_CFG, "w"))
+    json.dump({"ticker_coins": ["XRP", "SOL"], "sg_thr": 55, "indic_on": True}, open(m.APP_CFG, "w"))
+    m.SG_MINC, m.SG_RNDC = 5, False                    # 🎯 v3.36.71: fixed inside — loosened for the random synthetic history
     rnd = random.Random(5)
     NOW = int(time.time())
     T4E, TDE = NOW // 14400 * 14400 - 14400, NOW // 86400 * 86400 - 86400
