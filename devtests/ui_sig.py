@@ -1,7 +1,10 @@
-# 🎯 v3.36.66 — the signals in a real browser (p112). The owner (20-11): «… افحص وضيف وكذلك التوقعات لا تنسها».
-#   A closed folder (no network · no keys): synthetic candles for 12 coins → the dashboard's own catalog build, scan and live record (the
-#   functions t_sigs.py checks) → the page (ui_sig.js): 🎯 the window and its 4 tabs · 🔮 the forecasts show the signals · 📊 · ⚙️ · the
-#   ticker's settings · a notification tap · the slider's weekly estimate · settings saved · a phone width.
+# 📈 v3.36.75 — the market window in a real browser (p130 · before it 🎯 v3.36.66 p112). The owner (21-11): «اريد يقلي شديصير بالسوق بالحاضر
+#   وشراح يصير للسوق بشكل عام وبالعملات بشكل خاص».
+#   A closed folder (no network · no keys): synthetic candles for 12 coins (1 hour · 4 hours · a day, all ending at the same price) → the
+#   dashboard's own scan, market layer and tables (the functions t_market.py / t_board.py check) → a second hour where SOL jumps (a notice) →
+#   the page (ui_sig.js): «📈 السوق — الآن والمتوقع» and its 5 tabs · 🌐 the market now + Bitcoin's range · 🪙 your coins open to their facts
+#   and ranges · 📋 the tables · 📜 the range record and the last notices · ⚙️ the facts types and coins · 🔮 · ⚙️ · the ticker · a
+#   notification tap · settings saved · a phone width.
 #   python3 devtests/ui_sig.py [Holy_Dashboard.pyw] [-q] [--shots DIR]        (run with `unset TMPDIR`)
 import importlib.machinery, importlib.util, json, math, os, random, shutil, socket, subprocess, sys, tempfile, time, urllib.request
 
@@ -74,28 +77,27 @@ try:
     m.SG_MINC, m.SG_RNDC = 5, False                    # 🎯 v3.36.71: fixed inside — loosened for the random synthetic history
     rnd = random.Random(5)
     NOW = int(time.time())
-    T4E, TDE = NOW // 14400 * 14400 - 14400, NOW // 86400 * 86400 - 86400
+    T1E, T4E, TDE = NOW // 3600 * 3600 - 3600, NOW // 14400 * 14400 - 14400, NOW // 86400 * 86400 - 86400
     COINS = ["BTC-USDT", "ETH-USDT", "SOL-USDT", "XRP-USDT", "DOGE-USDT", "ADA-USDT", "LINK-USDT", "LTC-USDT", "TRX-USDT", "DOT-USDT", "AVAX-USDT", "BNB-USDT"]
-    N4, ND = 820, 330
-    MK = [rnd.gauss(0, 0.011) for _ in range(N4)]
-    for k in range(60, N4 - 5, 140):
-        MK[k] = -0.085
 
-    def path(n, px, vol, drift, mk=None):
-        rows, p = [], px
-        for i in range(n):
-            r = rnd.gauss(drift, vol) + (mk[i] if mk else 0)
-            o, c = p, max(1e-6, p * math.exp(r))
-            rows.append([o, max(o, c) * (1 + abs(rnd.gauss(0, vol / 2))), min(o, c) * (1 - abs(rnd.gauss(0, vol / 2))), c,
+    def path(t_end, step, n, p_end, vol, drift):
+        """candles that END at p_end (every frame agrees on today's price)"""
+        lr = [rnd.gauss(drift, vol) for _ in range(n)]
+        p, rows = p_end / math.exp(sum(lr)), []
+        for i, r in enumerate(lr):
+            o, c = p, p * math.exp(r)
+            rows.append([t_end - (n - 1 - i) * step, o, max(o, c) * (1 + abs(rnd.gauss(0, vol / 2))), min(o, c) * (1 - abs(rnd.gauss(0, vol / 2))), c,
                          abs(rnd.gauss(1000, 300)) * (3 if abs(r) > 2 * vol else 1)])
             p = c
         return rows
-    CDB = {"c4": {}, "c": {}}
+    CDB = {"c1": {}, "c4": {}, "c": {}}
     for j, s in enumerate(COINS):
-        CDB["c4"][s] = {"d": [[T4E - (N4 - 1 - i) * 14400] + r for i, r in enumerate(path(N4, 10 + j * 7, 0.014 + 0.002 * j, 0.0002, MK))]}
-        CDB["c"][s] = {"d": [[TDE - (ND - 1 - i) * 86400] + r for i, r in enumerate(path(ND, 10 + j * 7, 0.034, 0.0006))]}
+        px = 10 + j * 7
+        CDB["c"][s] = {"d": path(TDE, 86400, 330, px, 0.034, 0.012 if s == "SOL-USDT" else 0.0006)}
+        CDB["c4"][s] = {"d": path(T4E, 14400, 820, px, 0.014 + 0.002 * j, 0.0002)}
+        CDB["c1"][s] = {"d": [r[:5] + [r[5] / 24] for r in path(T1E, 3600, 420, px, 0.006, 0.0)]}     # (an hour trades ~1/24 of a day)
     os.makedirs(m.SG_DIR, exist_ok=True)
-    json.dump(CDB, open(m.SG_CFILE, "w"))
+    json.dump({"c1": {}, "c4": {}, "c": {}}, open(m.SG_CFILE, "w"))
     json.dump({"fng": {"d": {str(TDE - (499 - i) * 86400): int(50 + 42 * math.sin(i / 13)) for i in range(500)}, "ts": NOW}}, open(m.FC_FILE, "w"))
     m.MKT_COINS = tuple(COINS)
     m.SG_UNI = len(COINS)
@@ -108,14 +110,17 @@ try:
         return db[sec][sym]["d"], None
     m._fc_cache = fake_cache
     os.environ["HOLY_SIG_THREAD"] = "1"
-    m.sg_tick(now=float(T4E + 14400 + 100))
-    j = m._SG.get("build")
-    if j and "th" in j:
-        j["th"].join(600)
-    m.sg_tick(now=float(T4E + 14400 + 130))
-    st = m._sg_st()
-    ok(f"the closed folder is ready: the catalog ({len((m._sg_cat() or {}).get('e') or [])} signals and combinations) · a scan · the live record · 🧭",
-       m._sg_cat() and st.get("now") and st.get("comp"), {k: bool(st.get(k)) for k in ("now", "comp", "pend")})
+    t_a = float(T1E + 3600 + 100)
+    m.sg_tick(now=t_a)
+    for s in COINS:                                    # the next hour: SOL jumps 9% (outside its 4-hour range ⇒ a notice in 📜)
+        last = CDB["c1"][s]["d"][-1]
+        jump = 1.09 if s == "SOL-USDT" else 1.0004
+        CDB["c1"][s]["d"].append([last[0] + 3600, last[4], last[4] * jump * 1.002, last[4] * 0.999, last[4] * jump, 50.0])
+    m.sg_tick(now=t_a + 3600)
+    st, A = m._sg_st(), m._an_load()
+    ok(f"the closed folder is ready: a scan · the market now ({len((A.get('now') or {}).get('coins') or {})} coins) · the ranges waiting for their end "
+       f"({len(A.get('pend') or [])}) · the SOL notice in the log · no old catalog", (A.get("now") or {}).get("mkt") and A.get("pend")
+       and any("SOL" in x["t"] for x in st.get("log") or []) and not m._sg_cat(), {"now": bool(A.get("now")), "log": [x["t"] for x in st.get("log") or []][:3]})
     B = m._sb_load()                                   # 📋 v3.36.73: SOL's table with a few results (the ranking · «قيد الاختبار» · ⏸)
     dd = NOW // 86400
     B["rec"]["SOL-USDT"] = {"20": {"4H": [40, 10, 30, dd]}, "12": {"1H": [60, 30, 40, dd]}, "5": {"1H": [3, 0, 1, dd]}}
@@ -131,8 +136,9 @@ try:
                        capture_output=True, text=True, timeout=900, cwd="/tmp", env=env)
     print(r.stdout.strip() or r.stderr.strip()[-1500:], flush=True)
     cfg = json.load(open(m.APP_CFG, encoding="utf-8"))
-    ok("after the browser: the slider and the buttons saved the settings (90% · 🔴 off · the daily cap 5)", cfg.get("sg_thr") == 90
-       and (cfg.get("sg_types") or {}).get("sell") is False and cfg.get("sg_cap") == 5, {k: v for k, v in cfg.items() if k.startswith("sg_")})
+    ok("after the browser: the buttons saved the settings (📊 unusual volume off · 🌙 quiet hours on · coins back to the ticker)",
+       (cfg.get("an_types") or {}).get("vol") is False and (cfg.get("an_types") or {}).get("trend", True) is True and cfg.get("sg_quiet") == [0, 8]
+       and "sg_coins" not in cfg, {k: v for k, v in cfg.items() if k.startswith(("sg_", "an_"))})
     Bo = json.load(open(m.SB_FILE, encoding="utf-8"))
     ok("after the browser: ⏸ row 7 is off in SOL's table (with 33) — not in the market's", sorted(Bo["off"].get("SOL-USDT") or []) == [7, 33]
        and 7 not in (Bo["off"].get("MKT") or []), Bo.get("off"))

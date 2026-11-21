@@ -144,11 +144,12 @@ try:
 
     # ── ④ one tab
     js = SRC[SRC.index("function sgRender(){"):SRC.index("function sgFcTop(")]
-    ok("④ the window's tabs: 🧠 المحلل · 🎯 المؤشرات · 📚 المجموعات · 📜 السجل · ⚙️ الإشعارات (the two old tabs are one)",
-       "[['an','🧠 المحلل'],['ind','🎯 المؤشرات'],['cat','📚 المجموعات'],['log','📜 السجل'],['cfg','⚙️ الإشعارات']]" in js
+    ok("④ the window's tabs (📈 v3.36.75): 🌐 السوق · 🪙 العملات · 📋 المؤشرات · 📜 السجل · ⚙️ الإشعارات (the old analyst and groups tabs are gone)",
+       "[['mkt','🌐 السوق'],['coins','🪙 العملات'],['ind','📋 المؤشرات'],['log','📜 السجل'],['cfg','⚙️ الإشعارات']]" in js
+       and "🧠 المحلل'" not in js and "📚 المجموعات" not in js
        and "📈 المؤشرات العشرة" not in js and "الإشارات الشغّالة" not in js, js[:400])
-    ok("④ the old parts are gone (sgNow · sgCoin · indRender · indTog · indLoad) — the old name «now» opens the merged tab",
-       not any(f"function {f}(" in SRC for f in ("sgNow", "sgCoin", "indRender", "indTog", "indLoad")) and "tab==='now'?'ind'" in SRC, "")
+    ok("④ the old parts are gone (sgNow · sgCoin · indRender · indTog · indLoad · sgAn · sgCatUI) — the old names open the new tabs (now → 🪙 · an → 🌐 · cat → 📋)",
+       not any(f"function {f}(" in SRC for f in ("sgNow", "sgCoin", "indRender", "indTog", "indLoad", "sgAn", "sgCatUI")) and "({now:'coins',an:'mkt',cat:'ind'})" in SRC, "")
     ok("④ the tab is the tables (📋 v3.36.73): «🌐 السوق» + a table per coin · each row its plain name and job · the coin table keeps "
        "«📊 اتجاه المؤشرات الآن» («ليس توقعاً») · the old per-coin cards with the history records are gone",
        "اتجاه المؤشرات الآن" in SRC and "وصف لحال المؤشرات العشرة الآن — ليس توقعاً" in SRC and "function sbTable(" in SRC and "if(I)h+=sgIndAvg(I)" in SRC
@@ -159,9 +160,10 @@ try:
     c = m.sg_cfg()
     ok("⑤ one setting: the % · «أقل عدد مرات» stays 15 and «أفضل من العشوائي» stays on whatever an old config says",
        c["thr"] == 60 and c["min"] == 15 and c["rnd"] is True, c)
-    cfgjs = SRC[SRC.index("function sgCfg(V){"):SRC.index("async function sgRecDl(")]
-    ok("⑤ ⚙️ الإشعارات: «🎯 لا يصلك إلا ما صدق في X% من المرات أو أكثر» + the weekly estimate · no slider for the count · no random switch",
-       "لا يصلك إلا ما صدق في" in cfgjs and 'id="sg_min"' not in cfgjs and "rnd:" not in cfgjs and "sg_est" in cfgjs, "")
+    cfgjs = SRC[SRC.index("function sgCfg(V){"):SRC.index("function sgCoinAdd(")]
+    ok("⑤ ⚙️ الإشعارات (📈 v3.36.75): the facts by group (🪙 عملاتك · 🌐 السوق كله) each on/off · no % · no count · no random switch · no estimate · "
+       "no daily summary · no cap", "sgSet({atypes:" in cfgjs and "🪙 عملاتك" in cfgjs and "🌐 السوق كله" in cfgjs and "لا يصلك إلا ما صدق في" not in cfgjs
+       and 'id="sg_min"' not in cfgjs and "rnd:" not in cfgjs and "sg_est" not in cfgjs and "sum:" not in cfgjs and "cap:" not in cfgjs, cfgjs[:300])
 finally:
     os.chdir(H)
     shutil.rmtree(R, ignore_errors=True)

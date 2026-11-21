@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.74"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.75"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -19468,7 +19468,8 @@ def sg_scan_calc(jd, job):
                                            "a1": a1, "a0": a0, "lo": min(D["L"][i - lk + 1:i + 1]),
                                            "hi": max(D["H"][i - lk + 1:i + 1]), "ch": D["C"][i] / D["C"][i - 1] - 1.0 if D["C"][i - 1] else 0.0}
             res[sym][fr]["e1"] = sorted(f"{c}:{s}" for (c, s), lst in E.items() if i in lst[-4:])      # 📋 ما انطلق على هذه الشمعة بالذات
-    return {"ok": True, "c": res, "crash": crash, "ts": time.time()}
+    an = _safe(an_scan, cdb, pdb, fdb, coins, default=None)          # 📈 v3.36.75: الآن والمدى المتوقع لكل عملة وللسوق
+    return {"ok": True, "c": res, "crash": crash, "ts": time.time(), "an": an}
 
 
 def sg_child(jd, proc=False):
@@ -19562,9 +19563,10 @@ def sg_cfg():
     ch = str(c.get("sg_ch") or "both")
     return {"on": bool(c.get("sg_on", True)), "thr": iv("sg_thr", 65, 50, 95), "min": SG_MINC,           # 🎯 v3.36.71: إعداد واحد (النسبة)
             "rnd": SG_RNDC, "rare": bool(c.get("sg_rare", True)), "rmin": iv("sg_rmin", 6, 3, 50),
-            "types": {k: bool(ty.get(k, True)) for k in SG_TY}, "coins": coins, "cap": iv("sg_cap", 8, 0, 100),
-            "quiet": qh, "sum": (int(sm) % 24) if isinstance(sm, (int, float)) and not isinstance(sm, bool) else None,
-            "ch": ch if ch in SG_CH else "both", "fr": {f: bool(fr.get(f, True)) for f in SG_FR}}
+            "types": {k: bool(ty.get(k, True)) for k in SG_TY}, "coins": coins, "cap": 12,      # 📈 v3.36.75: الحد اليومي داخلي
+            "quiet": qh, "sum": None,      # 📈 v3.36.75: لا ملخص يومي
+            "ch": ch if ch in SG_CH else "both", "fr": {f: bool(fr.get(f, True)) for f in SG_FR},
+            "atypes": {k: bool((c.get("an_types") if isinstance(c.get("an_types"), dict) else {}).get(k, True)) for k in AN_TY}}
 
 
 def sg_coins(cfg=None):
@@ -19685,6 +19687,10 @@ def sg_set(v):
         t = dict(c.get("sg_types") or {})
         t.update({k: bool(x) for k, x in v["types"].items() if k in SG_TY})
         c["sg_types"] = t
+    if isinstance(v.get("atypes"), dict):                                   # 📈 v3.36.75: تنبيهات الحقائق
+        t = dict(c.get("an_types") or {})
+        t.update({k: bool(x) for k, x in v["atypes"].items() if k in AN_TY})
+        c["an_types"] = t
     if isinstance(v.get("fr"), dict):
         f = dict(c.get("sg_fr") or {})
         f.update({k: bool(x) for k, x in v["fr"].items() if k in SG_FR})
@@ -19716,12 +19722,11 @@ def sg_set(v):
     fetch = [s for s in new if s not in _ci["c4"] or s not in _ci["c"]]
     if fetch and not _SG["busy"]:
         threading.Thread(target=_safe, args=(sg_tick,), daemon=True).start()     # 🪙 v3.36.67: تاريخ العملة الجديدة يُجلب الآن بالخلفية
-    msg = ((f"🎯 إشعارات المحلل مفعّلة — لا يصلك إلا ما صدق في {p['thr']}% من المرات أو أكثر · " + SG_CH[p["ch"]]) if p["on"]
-           else "🔕 إشعارات المحلل متوقفة")
+    msg = ("📈 تنبيهات السوق مفعّلة · " + SG_CH[p["ch"]]) if p["on"] else "🔕 تنبيهات السوق متوقفة"
     if "coins" in v and v["coins"] is None:
-        msg = "↩️ عملات إشعارات المحلل الآن نفس عملات الشريط"
+        msg = "↩️ عملات تنبيهات السوق الآن نفس عملات الشريط"
     elif fetch:
-        msg = "🪙 أُضيفت " + " · ".join(s.split("-")[0] for s in fetch) + " — تُجلب بياناتها بالخلفية وتظهر إشاراتها بعد إغلاق الشمعة القادمة"
+        msg = "🪙 أُضيفت " + " · ".join(s.split("-")[0] for s in fetch) + " — تُجلب بياناتها بالخلفية وتظهر في «📈 السوق» بعد الفحص القادم"
     elif new:
         msg = "🪙 أُضيفت " + " · ".join(s.split("-")[0] for s in new) + " لإشعاراتك"
     return {"ok": True, "msg": msg, "cfg": p, "est": sg_estimate(p)}
@@ -19938,14 +19943,14 @@ def _sg_deliver(blocks, st, cfg, now, send=True):
             out = blocks[:max(0, room)]
             if not st.get("capped"):
                 st["capped"] = True
-                note = f"🔕 وصلت حد إشعارات المحلل اليوم ({cfg['cap']}) — الباقي في نافذة 📊 المؤشرات"
+                note = f"🔕 وصلت حد تنبيهات السوق اليوم ({cfg['cap']}) — الباقي في نافذة 📈 السوق"
     st["n"] = int(st.get("n") or 0) + len(out)
     if not out and not note:
         return []
     if len(out) == 1:
         text = out[0]["t"] + "\n" + out[0]["b"]
     else:
-        text = f"🧠 المحلل — إشعارات جديدة ({len(out)})\n\n" + "\n\n".join(b["t"] + "\n" + b["b"] for b in out)
+        text = f"📈 السوق — تنبيهات جديدة ({len(out)})\n\n" + "\n\n".join(b["t"] + "\n" + b["b"] for b in out)
     text += ("\n\n" + note) if note else ""
     if send:
         _sg_tg(text, cfg)
@@ -19957,8 +19962,8 @@ def _sg_flush(st, cfg, now, send=True):
     sent = None
     if st.get("qq") and not _sg_quiet(cfg, now):
         q = st.pop("qq")
-        text = f"🌙 إشعارات المحلل أثناء ساعات الهدوء ({len(q)})\n\n" + "\n\n".join(x["t"] + "\n" + x["b"] for x in q[:15]) + \
-            (f"\n\n… و{len(q) - 15} غيرها في نافذة 📊 المؤشرات" if len(q) > 15 else "")
+        text = f"🌙 تنبيهات السوق أثناء ساعات الهدوء ({len(q)})\n\n" + "\n\n".join(x["t"] + "\n" + x["b"] for x in q[:15]) + \
+            (f"\n\n… و{len(q) - 15} غيرها في نافذة 📈 السوق" if len(q) > 15 else "")
         if send:
             _sg_tg(text, cfg)
         sent = text
@@ -20265,7 +20270,7 @@ def sg_tick(now=None, send=True):
         full = lambda s: ci["c4"].get(s, 0) >= SG_MIN["4H"] and ci["c"].get(s, 0) >= SG_MIN["1D"]
         need_cat = (not cat or now - float(cat.get("ts") or 0) > SG_CAT_AGE or bool(st.get("cat_force")) or int(cat.get("cv") or 1) != SG_CAT_VER
                     or any(s not in (cat.get("coins") or []) and full(s) for s in sg_coins(cfg)))
-        build_now = need_cat and not _SG.get("build") and now - float(st.get("cat_try") or 0) > (6 * 3600 if cat and not st.get("cat_force") else 600)
+        build_now = False                                    # 📈 v3.36.75: دليل المحلل القديم لا يُبنى (المحلل الجديد: حقائق + المدى المثبت)
         cdb = None
         if missing or due or build_now:
             cdb = _safe(load_json, SG_CFILE, default={}) or {}
@@ -20313,17 +20318,8 @@ def sg_tick(now=None, send=True):
                 if "4H" in due:
                     st["crash"] = sc.get("crash")
                 _safe(sb_feed, sc, due, cdb or {}, now, default=None)          # 📋 v3.36.73: الجداول — كل صف يتنبأ ويُحكم من الصفر
-                cf = cfg if cfg["on"] else dict(cfg, types={k: False for k in SG_TY})
-                if cat and any(f in SG_FR for f in due):
-                    res = _sg_grade(st, cdb or {}, cat, now)
-                    blocks = _sg_process(sc, [f for f in due if f in SG_FR], st, cf, cat, cdb, now)
-                    if res and cf["types"].get("res", True):
-                        rb = _sg_res_block(res, st, cat)
-                        if rb:
-                            blocks.append(rb)
-                comp = st.get("comp")
-                if st.pop("comp_new", None) and comp and cf["types"].get("mkt", True):
-                    blocks.insert(0, _sg_comp_block(comp))
+                blocks = _safe(an_feed, sc, due, cdb or {}, now, cfg, st, default=[]) or []     # 📈 v3.36.75: تنبيهات الحقائق (بدل المحلل القديم)
+                st.pop("comp_new", None)
                 for s in [s for s in (st.get("now") or {}) if s not in uni]:
                     st["now"].pop(s, None)
                 _SG["err"] = ""
@@ -20638,6 +20634,462 @@ def sb_off(v):
     return {"ok": True, "msg": f"✅ الصف {num} يعمل" if on else f"⏸ الصف {num} موقوف", "off": num in cur}
 
 
+# ───────────── 🔎 v3.36.75: الآن في السوق — حقائق تُقاس (لا تنبؤ): السوق كله وكل عملة ─────────────
+#   المالك (21-11): «اريد يقلي شديصير بالسوق بالحاضر … للسوق بشكل عام وبالعملات بشكل خاص» — كل سطر رقم من الشموع المحفوظة وقراءات
+#   اللوحة (بلا شبكة · في عامل الفحص): الاتجاه ومنذ متى · القوة مقابل البيتكوين · الهدوء والهيجان · الحجم · أقرب دعم ومقاومة ومنطقة أكثر
+#   تداول · التجميع والتصريف · التشبع · المزاج والدولار والأسهم · العقود — وكل سطر بحالة (p صعود · n هبوط · z محايد · w انتباه)
+AN_TREND = {"up": ("📈", "صاعد"), "down": ("📉", "نازل"), "side": ("↔️", "عرضي")}
+
+
+def _an_ema(x, n):
+    a, out, e = 2.0 / (n + 1), [], None
+    for v in x:
+        e = v if e is None else e + a * (v - e)
+        out.append(e)
+    return out
+
+
+def _an_sd(r):
+    if len(r) < 3:
+        return 0.0
+    m = sum(r) / len(r)
+    return math.sqrt(sum((x - m) ** 2 for x in r) / (len(r) - 1))
+
+
+def _an_lr(C):
+    return [math.log(C[i] / C[i - 1]) if C[i] > 0 and C[i - 1] > 0 else 0.0 for i in range(1, len(C))]
+
+
+def _an_trend_seq(C):
+    """حالة الاتجاه لكل يوم: صاعد = فوق متوسط 200 ومتوسط 50 فوقه وصاعد · نازل = العكس · غير ذلك عرضي — وتثبت يومين قبل أن تتغير"""
+    e50, e200 = _an_ema(C, 50), _an_ema(C, 200)
+    seq, cur, cand, cnt = [], None, None, 0
+    for i in range(len(C)):
+        if i < 200:
+            seq.append(None)
+            continue
+        sl = e50[i] / e50[i - 10] - 1.0
+        raw = "up" if C[i] > e200[i] and e50[i] > e200[i] and sl > 0 else "down" if C[i] < e200[i] and e50[i] < e200[i] and sl < 0 else "side"
+        if cur is None:
+            cur = raw
+        elif raw != cur:
+            cand, cnt = (raw, cnt + 1) if raw == cand else (raw, 1)
+            if cnt >= 2:
+                cur, cand, cnt = raw, None, 0
+        else:
+            cand, cnt = None, 0
+        seq.append(cur)
+    return seq, e50, e200
+
+
+def _an_since(seq):
+    s = seq[-1]
+    k = 0
+    for x in reversed(seq):
+        if x != s:
+            break
+        k += 1
+    return s, k
+
+
+def _an_volstate(C, w=30, look=365):
+    """🎢 تذبذب آخر 30 يوماً مقارنةً بأيام السنة: أين يقع (0…100) ⇒ هادئ · عادي · هائج"""
+    lr = _an_lr(C)
+    if len(lr) < w + 60:
+        return None
+    vols = [_an_sd(lr[i - w:i]) for i in range(w, len(lr) + 1)][-look:]
+    cur = vols[-1]
+    pct = 100.0 * sum(1 for v in vols if v < cur) / len(vols)
+    return {"pct": round(pct), "ann": round(cur * math.sqrt(365) * 100, 1), "k": "calm" if pct < 25 else "storm" if pct > 75 else "normal"}
+
+
+def _an_levels(H, L, C, V, px=None, look=30):
+    """🧱 أقرب دعم ومقاومة (قيعان وقمم واضحة خلال الشهر — كل واحدة أدنى/أعلى من يومين قبلها وبعدها) + منطقة أكثر تداول"""
+    n = len(C)
+    if n < look + 5:
+        return None
+    px = px or C[-1]
+    lows, highs = [], []
+    for i in range(max(2, n - look), n - 2):
+        if L[i] <= min(L[i - 2:i + 3]):
+            lows.append(L[i])
+        if H[i] >= max(H[i - 2:i + 3]):
+            highs.append(H[i])
+    sup = max([x for x in lows if x < px * 0.998] or [min(L[-look:])])
+    res = min([x for x in highs if x > px * 1.002] or [max(H[-look:])])
+    lo, hi = min(L[-look:]), max(H[-look:])
+    poc = None
+    if hi > lo:
+        bins = [0.0] * 24
+        for i in range(n - look, n):
+            k = min(23, int((C[i] - lo) / (hi - lo) * 24))
+            bins[k] += V[i]
+        b = max(range(24), key=lambda j: bins[j])
+        poc = lo + (b + 0.5) * (hi - lo) / 24
+    return {"sup": sup, "res": res, "poc": poc, "lo": lo, "hi": hi,
+            "ds": round((sup / px - 1) * 100, 1) if sup < px else None, "dr": round((res / px - 1) * 100, 1) if res > px else None}
+
+
+def _an_rsi(C, n=14):
+    if len(C) < n * 3:
+        return None
+    up = dn = 0.0
+    a = 1.0 / n
+    for i in range(1, len(C)):
+        d = C[i] - C[i - 1]
+        up += a * (max(d, 0.0) - up)
+        dn += a * (max(-d, 0.0) - dn)
+    return 100.0 - 100.0 / (1.0 + up / max(dn, 1e-12))
+
+
+def _an_coin(sym, cdb, btc_d, uni_rs):
+    """🪙 العملة الآن: [(الأيقونة · السطر · الحالة)] + الأرقام"""
+    d = ((cdb.get("c") or {}).get(sym) or {}).get("d") or []
+    h1 = ((cdb.get("c1") or {}).get(sym) or {}).get("d") or []
+    if len(d) < 220:
+        return None
+    T, O, H, L, C, V = ([float(r[k]) for r in d] for k in range(6))
+    px = float(h1[-1][4]) if h1 else C[-1]
+    ch24 = (px / float(h1[-25][4]) - 1) * 100 if len(h1) >= 25 else (C[-1] / C[-2] - 1) * 100
+    ch7 = (px / C[-8] - 1) * 100
+    seq, e50, e200 = _an_trend_seq(C)
+    tr, days = _an_since(seq)
+    out = {"sym": sym, "px": px, "ch24": round(ch24, 2), "ch7": round(ch7, 2), "trend": tr, "days": days, "lines": []}
+    ic, nm = AN_TREND.get(tr, ("↔️", "عرضي"))
+    where = "فوق" if C[-1] > e200[-1] else "تحت"
+    out["lines"].append((ic, f"الاتجاه اليومي: {nm} منذ {_sg_ar(days, 'day')} — السعر {where} متوسط 200 يوم", {"up": "p", "down": "n"}.get(tr, "z")))
+    h4 = ((cdb.get("c4") or {}).get(sym) or {}).get("d") or []
+    if len(h4) >= 60:
+        c4 = [float(r[4]) for r in h4]
+        e20 = _an_ema(c4, 20)
+        s4 = "صاعد" if c4[-1] > e20[-1] and e20[-1] > e20[-6] else "نازل" if c4[-1] < e20[-1] and e20[-1] < e20[-6] else "متردد"
+        out["short"] = s4
+        out["lines"].append(("⏱", f"على المدى القصير (4 ساعات): {s4}", {"صاعد": "p", "نازل": "n"}.get(s4, "z")))
+    if btc_d and not sym.startswith("BTC-"):
+        bm = {int(r[0]): float(r[4]) for r in btc_d}
+        b7, b30 = bm.get(int(T[-8])), bm.get(int(T[-31])) if len(T) > 31 else None
+        bn = bm.get(int(T[-1]))
+        if b7 and b30 and bn:
+            r7 = (C[-1] / C[-8] - bn / b7) * 100
+            r30 = (C[-1] / C[-31] - bn / b30) * 100
+            rk = None
+            if uni_rs:
+                rk = round(100.0 * sum(1 for x in uni_rs if x < r30) / len(uni_rs))
+            out.update(rs7=round(r7, 1), rs30=round(r30, 1), rsk=rk)
+            k = "p" if r7 > 0 and r30 > 0 else "n" if r7 < 0 and r30 < 0 else "z"
+            word = "أقوى من" if k == "p" else "أضعف من" if k == "n" else "قريبة من"
+            out["lines"].append(("💪", f"مقابل البيتكوين: {word} البيتكوين — أسبوع {r7:+.1f}% · شهر {r30:+.1f}%"
+                                 + (f" · أقوى من {rk}% من العملات خلال الشهر" if rk is not None else ""), k))
+    vs = _an_volstate(C)
+    if vs:
+        out["vol"] = vs
+        word = {"calm": "هادئة", "storm": "هائجة", "normal": "عادية الحركة"}[vs["k"]]
+        out["lines"].append(("🎢", f"التذبذب: {word} — أهدأ من {100 - vs['pct']}% من أيام السنة" if vs["k"] != "storm" else
+                             f"التذبذب: {word} — أعلى من {vs['pct']}% من أيام السنة", "w" if vs["k"] == "storm" else "z"))
+    if len(h1) >= 24 and len(V) >= 22:
+        v24 = sum(float(r[5]) for r in h1[-24:])
+        avg = sum(V[-21:-1]) / 20.0
+        if avg > 0:
+            x = v24 / avg
+            out["volx"] = round(x, 2)
+            if x >= 1.6 or x <= 0.5:
+                out["lines"].append(("📊", f"الحجم: آخر 24 ساعة ×{x:.1f} من المعتاد" + (" — نشاط غير عادي" if x >= 1.6 else " — تداول خفيف"),
+                                     "w" if x >= 1.6 else "z"))
+    lv = _an_levels(H, L, C, V, px)
+    if lv:
+        out["lv"] = lv
+        bits = []
+        if lv["ds"] is not None:
+            bits.append(f"أقرب دعم {_px_s(lv['sup'])} ({lv['ds']:+.1f}%)")
+        if lv["dr"] is not None:
+            bits.append(f"أقرب مقاومة {_px_s(lv['res'])} ({lv['dr']:+.1f}%)")
+        if lv["poc"]:
+            bits.append(f"منطقة أكثر تداول {_px_s(lv['poc'])}")
+        out["lines"].append(("🧱", " · ".join(bits), "z"))
+    try:
+        S = _xc_ad(T, H, L, C, V)
+        q = _xc_ad_at(len(C) - 1, S, C)
+        if q and q[0] in ("acc", "dist", "up", "down"):
+            txt = {"acc": "تجميع — السيولة تدخل والسعر لم يتحرك بعد", "dist": "تصريف — السيولة تخرج والسعر لم ينزل بعد",
+                   "up": "صعود مدعوم بدخول السيولة", "down": "نزول مدعوم بخروج السيولة"}[q[0]]
+            out["ad"] = q[0]
+            out["lines"].append(("🧲", f"السيولة: {txt}", {"acc": "p", "up": "p", "dist": "n", "down": "n"}[q[0]]))
+    except Exception:
+        pass
+    r = _an_rsi(C)
+    if r is not None:
+        out["rsi"] = round(r)
+        if r >= 70 or r <= 30:
+            out["lines"].append(("🌡️", f"قوة الشراء اليومية {round(r)} من 100 — " + ("مشتراة بكثرة (قد تهدأ)" if r >= 70 else "مبيعة بكثرة (قد ترتد)"), "w"))
+    return out
+
+
+def an_present(cdb, pdb=None, fdb=None, coins=None):
+    """🔎 الآن في السوق كله ولكل عملة — من الشموع المحفوظة وقراءات اللوحة (لا شبكة)"""
+    allc = [s for s, e in (cdb.get("c") or {}).items() if len((e or {}).get("d") or []) >= 220]
+    btc_d = ((cdb.get("c") or {}).get("BTC-USDT") or {}).get("d") or []
+    uni_rs = []
+    if btc_d:
+        bm = {int(r[0]): float(r[4]) for r in btc_d}
+        for s in allc:
+            d = (cdb["c"][s] or {}).get("d") or []
+            if len(d) > 31 and not s.startswith("BTC-"):
+                b0, b1 = bm.get(int(d[-31][0])), bm.get(int(d[-1][0]))
+                if b0 and b1:
+                    uni_rs.append((float(d[-1][4]) / float(d[-31][4]) - b1 / b0) * 100)
+    out = {"t": round(time.time()), "coins": {}, "mkt": None}
+    for s in (coins or allc):
+        c = _safe(_an_coin, s, cdb, btc_d, uni_rs, default=None)
+        if c:
+            out["coins"][s] = c
+    M = {"lines": []}
+    b = _safe(_an_coin, "BTC-USDT", cdb, None, None, default=None) if btc_d else None
+    if b:
+        M.update(btc=b["px"], ch24=b["ch24"], ch7=b["ch7"], trend=b["trend"], days=b["days"])
+        ic, nm = AN_TREND.get(b["trend"], ("↔️", "عرضي"))
+        M["lines"].append((ic, f"اتجاه السوق (البيتكوين): {nm} منذ {_sg_ar(b['days'], 'day')} · 24 ساعة {b['ch24']:+.2f}% · أسبوع {b['ch7']:+.2f}%",
+                           {"up": "p", "down": "n"}.get(b["trend"], "z")))
+    up24, above, n_ = 0, 0, 0
+    beat = 0
+    movers = []
+    for s in allc:
+        d = cdb["c"][s]["d"]
+        h1 = ((cdb.get("c1") or {}).get(s) or {}).get("d") or []
+        C = [float(r[4]) for r in d]
+        n_ += 1
+        m50 = sum(C[-50:]) / 50.0
+        above += 1 if C[-1] > m50 else 0
+        ch = (float(h1[-1][4]) / float(h1[-25][4]) - 1) * 100 if len(h1) >= 25 else (C[-1] / C[-2] - 1) * 100
+        up24 += 1 if ch > 0 else 0
+        movers.append((ch, s))
+    if n_ >= 5:
+        M.update(n=n_, above=above, up24=up24)
+        sh = above / n_
+        M["lines"].append(("📊", f"العملات: {above} من {_sg_ar(n_, 'coin')} فوق متوسط 50 يوماً ({round(100 * sh)}%) · {up24} منها صعدت خلال 24 ساعة",
+                           "p" if sh >= 0.6 else "n" if sh <= 0.4 else "z"))
+        if uni_rs:
+            beat = sum(1 for x in uni_rs if x > 0)
+            M["beat"] = beat
+            M["lines"].append(("💪", f"البيتكوين مقابل العملات: {beat} من {_sg_ar(len(uni_rs), 'coin')} أقوى منه خلال الشهر — "
+                               + ("موسم العملات البديلة" if beat / len(uni_rs) >= 0.7 else "البيتكوين يقود" if beat / len(uni_rs) <= 0.3 else "متوازن"), "z"))
+        movers.sort()
+        M["top"] = [[s, round(c, 2)] for c, s in movers[-3:][::-1]]
+        M["bottom"] = [[s, round(c, 2)] for c, s in movers[:3]]
+    if b and b.get("vol"):
+        v = b["vol"]
+        word = {"calm": "هادئ", "storm": "هائج", "normal": "عادي"}[v["k"]]
+        M["vk"] = v["k"]
+        M["lines"].append(("🎢", f"حركة السوق: {word} — تذبذب البيتكوين أعلى من {v['pct']}% من أيام السنة", "w" if v["k"] == "storm" else "z"))
+    try:
+        f = ((fdb or {}).get("fng") or {}).get("d") or {}
+        ks = sorted(int(x) for x in f)
+        if ks:
+            v, v7 = float(f[str(ks[-1])]), float(f[str(ks[-8])]) if len(ks) >= 8 else None
+            word = "خوف شديد" if v <= 20 else "خوف" if v <= 40 else "طمع شديد" if v >= 80 else "طمع" if v >= 60 else "محايد"
+            M["fng"] = v
+            M["lines"].append(("😨" if v < 45 else "🤑" if v > 55 else "😐", f"مزاج السوق: {word} ({round(v)} من 100)" + (f" · قبل أسبوع {round(v7)}" if v7 is not None else ""),
+                               "w" if v <= 20 or v >= 80 else "z"))
+    except Exception:
+        pass
+    for k, nm, good in (("dxy", "مؤشر الدولار", -1), ("vix", "مقياس خوف الأسهم الأمريكية", -1)):
+        try:
+            ks, vs = _pro_sorted((pdb or {}).get(k))
+            if len(vs) >= 6:
+                ch = (vs[-1] / vs[-6] - 1) * 100
+                M["lines"].append(("💱" if k == "dxy" else "😱", f"{nm}: {vs[-1]:.2f} ({ch:+.1f}% خلال 5 أيام)"
+                                   + (" — يضغط على العملات الرقمية عادة" if ch * good < -1 else " — يساعد العملات الرقمية عادة" if ch * good > 1 else ""),
+                                   "n" if ch * good < -1 else "p" if ch * good > 1 else "z"))
+        except Exception:
+            pass
+    out["mkt"] = M
+    return out
+
+
+AN_TY = {   # 📈 v3.36.75: تنبيهات الحقائق — (الأيقونة · الاسم · المجموعة) · لا توقّع اتجاه (لم يغلب الصدفة في الفحصين 13 و14)
+    "trend": ("📈", "تغيّر الاتجاه", "coin"), "rs": ("💪", "القوة مقابل البيتكوين", "coin"), "vol": ("📊", "حجم غير عادي", "coin"),
+    "lvl": ("🧱", "كسر دعم أو اختراق مقاومة", "coin"), "out": ("⚡", "حركة خارج المدى المتوقع", "coin"), "ad": ("🧲", "التجميع والتصريف", "coin"),
+    "mtrend": ("🧭", "تغيّر اتجاه السوق", "mkt"), "storm": ("🎢", "السوق هاج أو هدأ", "mkt"), "wave": ("🌊", "انهيار السوق كله", "mkt"),
+    "fng": ("😨", "خوف أو طمع شديد", "mkt")}
+
+
+# ───────────── 🔮 المدى المتوقع (المثبت بالفحص 14: احتوى السعر 80–82% من المرات) + سجله الحي ─────────────
+AN_FILE = os.path.join(ROOT, "Holy_Market.json")
+AN_HZ = (("4h", "c1", 4, 3600, "الساعات الأربع القادمة"), ("1d", "c4", 6, 14400, "غداً"), ("1w", "c", 7, 86400, "الأسبوع القادم"))
+AN_Z = 1.2816                                   # 80% (10% … 90%)
+_AN = {"lock": threading.Lock()}
+
+
+def _an_range(cdb, sym, px):
+    """لكل مدة: التذبذب (آخر 48 شمعة من إطارها) × √المدة ⇒ بين كم وكم بثقة 80% — {مفتاح: {lo, hi, w%}}"""
+    out = {}
+    for k, sec, h, step, _nm in AN_HZ:
+        rows = ((cdb.get(sec) or {}).get(sym) or {}).get("d") or []
+        if len(rows) < 60 or not px:
+            continue
+        C = [float(r[4]) for r in rows[-49:]]
+        sd = _an_sd(_an_lr(C))
+        if sd <= 0:
+            continue
+        w = AN_Z * sd * math.sqrt(h)
+        out[k] = {"lo": px * math.exp(-w), "hi": px * math.exp(w), "w": round((math.exp(w) - 1) * 100, 2), "t": int(rows[-1][0]) + step}
+    return out
+
+
+def an_scan(cdb, pdb, fdb, coins):
+    """🔎 + 🔮 في عامل الفحص (بلا شبكة): الآن لكل عملة وللسوق + المدى المتوقع لكل مدة"""
+    P = an_present(cdb, pdb, fdb, coins)
+    for s, c in P["coins"].items():
+        c["rng"] = _an_range(cdb, s, c["px"])
+    if P.get("mkt") and P["mkt"].get("btc"):
+        P["mkt"]["rng"] = _an_range(cdb, "BTC-USDT", P["mkt"]["btc"])
+    return P
+
+
+def _an_load():
+    A = _safe(load_json, AN_FILE, default=None)
+    if not isinstance(A, dict) or A.get("v") != 1:
+        A = {"v": 1, "since": round(time.time()), "rec": {}, "pend": [], "now": None, "sent": {}}
+    for k, d in (("rec", {}), ("pend", []), ("sent", {})):
+        if not isinstance(A.get(k), type(d)):
+            A[k] = d
+    return A
+
+
+def _an_grade(A, cdb, now):
+    """✅ كل مدى سُجّل يُحكم عند نهاية مدته (إغلاق شمعة الساعة التي تنتهي فيها): السعر داخله ⇒ صدق · خارجه ⇒ خرج"""
+    keep, T = [], {}
+    for it in A["pend"]:
+        try:
+            sym, k, lo, hi, t_end = str(it[0]), str(it[1]), float(it[2]), float(it[3]), int(it[4])
+        except Exception:
+            continue
+        if sym not in T:
+            rows = ((cdb.get("c1") or {}).get(sym) or {}).get("d") or []
+            T[sym] = {int(r[0]) + 3600: float(r[4]) for r in rows[-400:]}
+        px = T[sym].get(t_end)
+        if px is None:
+            if now - t_end < 3 * 86400:
+                keep.append(it)
+            continue
+        r = A["rec"].setdefault(k, [0, 0])
+        r[0 if lo <= px <= hi else 1] += 1
+        if sym == "BTC-USDT":
+            rb = A["rec"].setdefault("btc_" + k, [0, 0])
+            rb[0 if lo <= px <= hi else 1] += 1
+    A["pend"] = keep[-4000:]
+
+
+def _an_issue(A, P, frs, now):
+    """📝 يُسجَّل المدى عند إغلاق شمعة إطاره فقط (4 ساعات ⇐ شمعة 4 ساعات · غداً ⇐ اليومية · الأسبوع ⇐ يومية الاثنين) — مدد لا تتداخل"""
+    want = {"4h": "4H" in frs, "1d": "1D" in frs, "1w": "1D" in frs and datetime.utcfromtimestamp(now).weekday() == 0}
+    have = {(p[0], p[1], p[4]) for p in A["pend"]}
+    for s, c in (P.get("coins") or {}).items():
+        for k, band in (c.get("rng") or {}).items():
+            h = {"4h": 4 * 3600, "1d": 86400, "1w": 7 * 86400}[k]
+            if not want.get(k):
+                continue
+            t_end = int(now) // 3600 * 3600 + h
+            if (s, k, t_end) not in have:
+                A["pend"].append([s, k, band["lo"], band["hi"], t_end])
+
+
+def _an_facts(prev, P, rng_prev, mine, types, crash, lvd=None):
+    """📨 إشعارات الحقائق: ما تغيّر بين لقطتين (الاتجاه · القوة · الحجم · كسر المستويات · الخروج عن المدى · السيولة · السوق) —
+    [(مفتاح التكرار، كتلة)]"""
+    out = []
+    pc = (prev or {}).get("coins") or {}
+    for s in mine:
+        c, o = (P.get("coins") or {}).get(s), pc.get(s)
+        if not c or not o:
+            continue
+        b = s.split("-")[0]
+        if types.get("trend", True) and c.get("trend") != o.get("trend") and c.get("trend") in ("up", "down"):
+            ic, nm = AN_TREND[c["trend"]]
+            out.append((f"trend|{s}|{c['trend']}", {"sym": s, "ty": "trend", "t": f"{ic} {b}: الاتجاه اليومي أصبح {nm}",
+                        "b": next((x[1] for x in c["lines"] if x[0] in ("📈", "📉", "↔️")), "")}))
+        if types.get("rs", True) and o.get("rs7") is not None and c.get("rs7") is not None and c.get("rs30") is not None:
+            was, now_ = (o["rs7"] > 0 and (o.get("rs30") or 0) > 0) - (o["rs7"] < 0 and (o.get("rs30") or 0) < 0), (c["rs7"] > 0 and c["rs30"] > 0) - (c["rs7"] < 0 and c["rs30"] < 0)
+            if now_ and now_ != was:
+                out.append((f"rs|{s}|{now_}", {"sym": s, "ty": "rs", "t": f"💪 {b}: أصبحت {'أقوى' if now_ > 0 else 'أضعف'} من البيتكوين",
+                            "b": f"خلال أسبوع {c['rs7']:+.1f}% · خلال شهر {c['rs30']:+.1f}% مقارنةً بالبيتكوين"}))
+        if types.get("vol", True) and (c.get("volx") or 0) >= 2.0 and (o.get("volx") or 0) < 2.0:
+            out.append((f"vol|{s}", {"sym": s, "ty": "vol", "t": f"📊 {b}: حجم تداول غير عادي ×{c['volx']:.1f}",
+                        "b": f"تداول آخر 24 ساعة ×{c['volx']:.1f} من المعتاد · السعر {_px_s(c['px'])} ({c['ch24']:+.2f}% خلال 24 ساعة)"}))
+        lv = (lvd or {}).get(s) or {}                        # الكسر يُحسب على إغلاق اليوم فقط ومن مستويات أمس (لا ذيول الساعة)
+        if types.get("lvl", True) and lvd is not None and lv.get("px"):
+            if lv.get("res") and c["px"] > float(lv["res"]) * 1.003 and float(lv["px"]) <= float(lv["res"]):
+                out.append((f"lvl|{s}|r|{lv['res']:.6g}", {"sym": s, "ty": "lvl", "t": f"🧱 {b}: اخترق المقاومة {_px_s(lv['res'])}",
+                            "b": f"أغلق اليوم على {_px_s(c['px'])} — فوق أعلى قمة واضحة خلال الشهر"}))
+            if lv.get("sup") and c["px"] < float(lv["sup"]) * 0.997 and float(lv["px"]) >= float(lv["sup"]):
+                out.append((f"lvl|{s}|s|{lv['sup']:.6g}", {"sym": s, "ty": "lvl", "t": f"🧱 {b}: كسر الدعم {_px_s(lv['sup'])}",
+                            "b": f"أغلق اليوم على {_px_s(c['px'])} — تحت أدنى قاع واضح خلال الشهر"}))
+        rp = ((rng_prev or {}).get(s) or {}).get("4h")
+        if types.get("out", True) and rp and (c["px"] > rp["hi"] or c["px"] < rp["lo"]):
+            up = c["px"] > rp["hi"]
+            out.append((f"out|{s}|{rp['t']}", {"sym": s, "ty": "out", "t": f"⚡ {b}: {'صعد' if up else 'نزل'} أكثر من المتوقع",
+                        "b": f"السعر {_px_s(c['px'])} خارج المدى المتوقع للساعات الأربع ({_px_s(rp['lo'])} – {_px_s(rp['hi'])}) — حركة غير عادية"}))
+        if types.get("ad", True) and c.get("ad") in ("acc", "dist") and c.get("ad") != o.get("ad"):
+            out.append((f"ad|{s}|{c['ad']}", {"sym": s, "ty": "ad", "t": f"🧲 {b}: {'تجميع' if c['ad'] == 'acc' else 'تصريف'}",
+                        "b": next((x[1] for x in c["lines"] if x[0] == "🧲"), "")}))
+    M, Mo = P.get("mkt") or {}, (prev or {}).get("mkt") or {}
+    if types.get("mtrend", True) and M.get("trend") and Mo.get("trend") and M["trend"] != Mo["trend"] and M["trend"] in ("up", "down"):
+        ic, nm = AN_TREND[M["trend"]]
+        out.append((f"mtrend|{M['trend']}", {"sym": "السوق", "ty": "mtrend", "t": f"{ic} السوق: اتجاه البيتكوين اليومي أصبح {nm}",
+                    "b": M["lines"][0][1] if M.get("lines") else ""}))
+    if types.get("storm", True) and M.get("vk") and Mo.get("vk") and (M["vk"] == "storm") != (Mo["vk"] == "storm"):
+        out.append((f"storm|{M['vk']}", {"sym": "السوق", "ty": "storm", "t": "🎢 السوق " + ("هاج" if M["vk"] == "storm" else "هدأ"),
+                    "b": next((x[1] for x in M.get("lines") or [] if x[0] == "🎢"), "")}))
+    if types.get("wave", True) and crash and crash.get("on"):
+        out.append((f"wave|crash|{crash.get('t')}", {"sym": "السوق", "ty": "wave", "t": "🌊 انهيار في السوق كله",
+                    "b": f"{crash.get('k')} من {_sg_ar(crash.get('n') or 0, 'coin')} هبطت بقوة غير معتادة في الشمعة نفسها (4 ساعات)"}))
+    f, fo = M.get("fng"), Mo.get("fng")
+    if types.get("fng", True) and f is not None and fo is not None and ((f <= 20 < fo) or (f >= 80 > fo)):
+        out.append((f"fng|{'f' if f <= 20 else 'g'}", {"sym": "السوق", "ty": "fng", "t": f"{'😨' if f <= 20 else '🤑'} مزاج السوق: {'خوف شديد' if f <= 20 else 'طمع شديد'} ({round(f)})",
+                    "b": "الخوف الشديد سبق ارتدادات في الماضي أحياناً، والطمع الشديد سبق تراجعات — قراءة للمزاج لا أمر"}))
+    return out
+
+
+def an_feed(sc, frs, cdb, now, cfg, st, send=True):
+    """📈 بعد كل فحص: يحفظ «الآن» والمدى · يحكم المدى القديم · ويرسل إشعارات ما تغيّر (مرة لكل حدث · ساعات الهدوء والقناة كالمعتاد)"""
+    P = (sc or {}).get("an")
+    if not isinstance(P, dict) or not P.get("coins"):
+        return []
+    with _AN["lock"]:
+        A = _an_load()
+        _an_grade(A, cdb, now)
+        prev, rng_prev = A.get("now"), {s: c.get("rng") for s, c in ((A.get("now") or {}).get("coins") or {}).items()}
+        _an_issue(A, P, frs, now)
+        daily = "1D" in frs
+        facts = _an_facts(prev, P, rng_prev, sg_coins(cfg), cfg.get("atypes") or {}, (sc or {}).get("crash") if "4H" in frs else None,
+                          (A.get("lvd") or {}) if daily else None) if prev else []
+        A["now"] = P
+        if daily:                                            # مستويات إغلاق اليوم — مرجع كسر الغد
+            A["lvd"] = {s: {"px": c.get("px"), "res": (c.get("lv") or {}).get("res"), "sup": (c.get("lv") or {}).get("sup")}
+                        for s, c in (P.get("coins") or {}).items() if c.get("px")}
+        blocks = []
+        for key, b in facts:
+            if now - float(A["sent"].get(key) or 0) < 20 * 3600:
+                continue
+            A["sent"][key] = round(now)
+            blocks.append(dict(b, f=""))
+        for k in [k for k, v in A["sent"].items() if now - float(v) > 7 * 86400]:
+            A["sent"].pop(k, None)
+        A["ts"] = round(now)
+        save_json_atomic(AN_FILE, A)
+    return blocks
+
+
+def an_view():
+    """📈 GET /api/market — الآن والمدى لكل عملة من عملاتك وللسوق + صدق المدى الحي"""
+    A = _an_load()
+    P = A.get("now") or {}
+    mine = sg_coins()
+    rec = {k: {"in": v[0], "out": v[1], "p": round(100.0 * v[0] / max(1, v[0] + v[1]), 1)} for k, v in (A.get("rec") or {}).items()}
+    return {"ok": True, "t": P.get("t"), "since": A.get("since"), "mkt": P.get("mkt"), "coins": [P["coins"][s] for s in mine if s in (P.get("coins") or {})],
+            "mine": mine, "missing": [s for s in mine if s not in (P.get("coins") or {})], "rec": rec,
+            "hz": [[k, nm] for k, _sec, _h, _st, nm in AN_HZ], "z": 80}
+
+
 def sg_loop():
     """⏱️ حلقة مستقلة (كل 5 دقائق) — تعمل مع المؤشرات أو مع إشعارات الإشارات"""
     time.sleep(150)
@@ -20766,7 +21218,7 @@ def sg_view():
     cat = _sg_cat()
     bj = _SG.get("build")
     bp = _sg_job_prog(bj) if bj else {}
-    v = {"ok": True, "cfg": cfg, "types": {k: list(x) for k, x in SG_TY.items()}, "ch": SG_CH, "fn": SG_FN, "hzn": SG_HZN,
+    v = {"ok": True, "cfg": cfg, "types": {k: list(x) for k, x in SG_TY.items()}, "atypes": {k: list(x) for k, x in AN_TY.items()}, "ch": SG_CH, "fn": SG_FN, "hzn": SG_HZN,
          "mine": sg_coins(cfg), "tick": ticker_cfg()["coins"], "uni": _sg_universe(),
          "busy": {"phase": "build" if bj else _SG.get("phase") or "", "pct": int(bp.get("pct") or 0) if bj else int(_SG.get("pct") or 0),
                   "msg": (bp.get("msg") or "🏗️ بناء دليل الإشارات") if bj else _SG.get("msg") or ""},
@@ -20841,9 +21293,8 @@ def sg_test():
     if TG_MUTED["v"]:
         return {"ok": False, "msg": "🔕 الكتم مفعّل (زر 🔔 في الأعلى) — لن يُرسَل شيء حتى تلغيه"}
     sym = (sg_coins(cfg) or ["BTC-USDT"])[0]
-    text = (f"🧪 تجربة — 🟢 شراء — {sym} · يومي\nاتفقت 3 إشارات: Supertrend انقلب أخضر فوق EMA 150 · تقاطع MACD صاعد فوق EMA 20 · 💧 تدفق السيولة (CMF): صاعد\n"
-            f"📊 هكذا يصلك السجل: كم مرة صدقت من كم مرة · والعشوائي للمقارنة · والمتوسط بعد المدة\n"
-            f"⚙️ إعداداتك: {cfg['thr']}% فأكثر · {_sg_ar(cfg['min'], 'time')} فأكثر · {SG_CH[cfg['ch']]}")
+    text = (f"🧪 تجربة — 🧱 {sym.split('-')[0]}: اخترق المقاومة\nهكذا يصلك التنبيه: ما حدث فعلاً بالأرقام — لا توقّع اتجاه ولا أمر\n"
+            f"⚙️ {SG_CH[cfg['ch']]}")
     ok = _sg_tg(text, cfg)
     return {"ok": True, "msg": "🧪 أُرسلت التجربة" + ("" if ok or cfg["ch"] == "app" else " — لم يستلمها تيليغرام (تأكد من التوكن ومن Chat ID)")}
 
@@ -26227,6 +26678,8 @@ class Handler(_AuthMixin, BaseHTTPRequestHandler):
             return self._json(_safe(sg_api, default={"ok": False, "msg": "تعذّر تحميل الإشارات"}))
         if u.path == "/api/board":                        # 📋 v3.36.73: جدول المؤشرات (السوق أو عملة) — من الملف · لا ينتظر الحساب
             return self._json(_safe(sb_view, (q.get("s") or [""])[0], default={"ok": False, "rows": [], "msg": "تعذّر تحميل الجدول"}))
+        if u.path == "/api/market":                       # 📈 v3.36.75: السوق — الآن والمدى المتوقع (من الملف · لا ينتظر الحساب)
+            return self._json(_safe(an_view, default={"ok": False, "msg": "تعذّر تحميل السوق"}))
         if u.path == "/api/signals_cat":                  # 📒 دليل الإشارات للتصفّح
             return self._json(_safe(sg_catlist, q, default={"ok": False, "rows": [], "msg": "تعذّر تحميل الدليل"}))
         if u.path == "/api/forecast":                     # 🔮 v3.29.0: التوقعات (نفس مؤشرات 📊 على شموع أطول · قراءة عامة · عرض بس · ولا إشعار)
@@ -28234,6 +28687,13 @@ button.warn{border-color:rgb(var(--amber-rgb)/.55);color:var(--amber);box-shadow
 i.fb{font-style:normal;font-weight:600;margin:0 7px;font-size:11px;direction:ltr;unicode-bidi:isolate;display:inline-block}
 .fc-sq{font-size:12px;color:var(--amber)}
 .fc-an{padding:6px 8px;margin:2px 0 6px;border-radius:8px;background:var(--bg1)}.fc-an.p{border-inline-start:3px solid var(--green)}.fc-an.n{border-inline-start:3px solid var(--red)}
+.an-card{border:1px solid var(--bd);border-radius:12px;padding:8px 10px;margin:8px 0;background:var(--bg1)}.an-coin{cursor:pointer}
+.an-h{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px}.an-h small{color:var(--mut)}
+.an-l{display:flex;gap:6px;align-items:flex-start;font-size:12.5px;line-height:1.7;padding:1px 0}.an-ic{min-width:20px;text-align:center}
+.an-l.up{color:var(--green)}.an-l.dn{color:var(--red)}.an-l.warn{color:var(--amber)}
+.an-rng{margin-top:6px;border-top:1px dashed var(--bd);padding-top:6px}.an-rh{font-size:12px;color:var(--mut);margin-bottom:2px}
+.an-rr{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-size:12.5px;padding:2px 0}.an-rr span{min-width:120px;color:var(--mut)}.an-rr small{color:var(--mut)}
+.an-mvs{display:flex;gap:6px;flex-wrap:wrap;margin:3px 0}.an-mv{border:1px solid var(--bd);border-radius:999px;padding:2px 8px;font-size:12px}.an-mv.up{color:var(--green)}.an-mv.dn{color:var(--red)}
 .sb-tabs,.sb-sort{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}.sb-sort{font-size:12px;color:var(--mut);margin:8px 0}
 .sb-tabs button,.sb-sort button{padding:5px 10px;border-radius:999px;border:1px solid var(--bd);background:var(--bg1);color:var(--tx);font-size:12px;cursor:pointer}
 .sb-tabs button.on,.sb-sort button.on{border-color:var(--green);font-weight:700}.sb-top{margin:6px 0}
@@ -31443,7 +31903,7 @@ function openSettings(){
    ${G('🔔 الإشعارات',
       T('✈️','تنبيهات تيليغرام',"g('mute');setTimeout(openSettings,700)",'sMute',!d.muted,'تعمل — تصل إلى تيليغرام','مكتومة — لا تصل')
      +L('📈','شريط الأسعار وإشعاراته','openTicker()','العملات في الشريط · إشعارات الأسعار')
-     +L('🎯','المؤشرات وإشعارات المحلل',"openSig('cfg')",'شراء · بيع · تجميع · صعود · نزول · السوق — بنسبتك'))}
+     +L('📈','تنبيهات السوق',"openSig('cfg')",'الاتجاه · الحجم · كسر المستويات · الحركة خارج المدى · السوق'))}
    ${G('🔊 الأصوات — لهذا الجهاز',
       T('🎵','صوت الربح',"toggleSound();openSettings()",'sSound',soundOn(),'يعمل — نغمة مع كل ربح','متوقف')
      +T('🔊','صوت فتح القفل','uiUnlockToggle()','bUnl',uiUnlockOn(),'يعمل — نغمة عند فتح القفل','متوقف')
@@ -31612,18 +32072,17 @@ function pxaRender(){const el=$('#tk_pxa');if(el)el.innerHTML=(PXAV?pxaPanel(PXA
 async function pxaLoad(){try{const r=await api('/api/control',{action:'pxa_get'});PXAV=r&&r.pxa||null}catch(e){PXAV=null}pxaRender()}
 async function pxaSet(v){try{const r=await api('/api/control',{action:'pxa_set',value:v});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok));if(r&&r.pxa)PXAV=r.pxa}catch(e){toast('تعذر الاتصال',false)}pxaRender()}
 async function pxaTest(){try{const r=await api('/api/control',{action:'pxa_test'});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok))}catch(e){toast('تعذر الاتصال',false)}pxaLoad()}
-async function openInd(tab){SGTAB=tab==='now'?'ind':(tab||'an');              // 🧠 v3.36.69: نافذة واحدة — المؤشرات هي المحلل · 🎯 v3.36.71: تبويب واحد للمؤشرات
-  showModal(`<h2>📊 المؤشرات — المحلل</h2><div class="sg-tabs" id="sg_tabs"></div><div id="sg_body" style="color:var(--mut);font-size:12.5px;padding:16px;text-align:center">${LDR('جاري التحميل…')}</div>
+async function openInd(tab){SGTAB=({now:'coins',an:'mkt',cat:'ind'})[tab]||tab||'mkt';     // 📈 v3.36.75: السوق — الآن والمتوقع              // 🧠 v3.36.69: نافذة واحدة — المؤشرات هي المحلل · 🎯 v3.36.71: تبويب واحد للمؤشرات
+  showModal(`<h2>📈 السوق — الآن والمتوقع</h2><div class="sg-tabs" id="sg_tabs"></div><div id="sg_body" style="color:var(--mut);font-size:12.5px;padding:16px;text-align:center">${LDR('جاري التحميل…')}</div>
     <div class="mbtns"><button onclick="openFc()">🔮 التوقعات</button><button onclick="openGuide('','ind')">📖 الدليل</button><button onclick="openTicker()">⚙️ العملات</button><button onclick="hideModal()">إغلاق</button></div>`);
   await sgLoad()}
 /* 🎯 v3.36.66: الإشارات — كل المؤشرات وتركيباتها (2 … 6 معاً · 💎 النادرة) بسجلها على الأسعار الحقيقية · 🧭 البوصلة · إشعارات بنسبتك ·
    عرض وإشعارات فقط: لا أمر ولا إلغاء ولا لمس لأي بوت */
-let SGV=null,SGT=null,SGTAB='an',SGC=null,SGP={},SGET=null;const SGO={},SGF={fr:'',side:'1',size:'',rare:'',ty:'',q:'',sort:''};
-const SGCOMP={up:['صاعد','🟢','p'],flat:['مختلط','🟡','z'],down:['نازل','🔴','n']};
-async function openSig(tab){return openInd(tab==='now'?'ind':(tab||'an'))}     // (الاسم القديم: الأزرار وضغط الإشعارات تفتح المحلل · «now» أصبح «🎯 المؤشرات»)
-async function sgLoad(){clearTimeout(SGT);try{SGV=await api('/api/signals')}catch(e){SGV=null}sgRender();if(SGTAB==='cat')sgCat();if(SGTAB==='ind'){if(!INDV)sgIndLoad();if(!SBV)sbLoad()}
+let SGV=null,SGT=null,SGTAB='mkt',SGC=null,SGP={},SGET=null;const SGO={},SGF={fr:'',side:'1',size:'',rare:'',ty:'',q:'',sort:''};
+async function openSig(tab){return openInd(tab)}     // (الاسم القديم: الأزرار وضغط الإشعارات تفتح المحلل · «now» أصبح «🎯 المؤشرات»)
+async function sgLoad(){clearTimeout(SGT);try{SGV=await api('/api/signals')}catch(e){SGV=null}sgRender();anLoad();if(SGTAB==='ind'){if(!INDV)sgIndLoad();if(!SBV)sbLoad()}
   if(SGV&&SGV.busy&&SGV.busy.phase&&$('#sg_body'))SGT=setTimeout(sgLoad,4000)}
-function sgTab(t){SGTAB=t==='now'?'ind':t;sgRender();if(SGTAB==='cat')sgCat();if(SGTAB==='ind'){sgIndLoad();sbLoad()}}
+function sgTab(t){SGTAB=({now:'coins',an:'mkt',cat:'ind'})[t]||t;sgRender();if(['mkt','coins','log'].includes(SGTAB))anLoad();if(SGTAB==='ind'){sgIndLoad();sbLoad()}}
 async function sgIndLoad(){clearTimeout(INDT);try{INDV=await api('/api/indicators')}catch(e){INDV=null}      // 🎯 v3.36.71: اتجاه المؤشرات العشرة لكل عملة
   if(SGTAB==='ind')sgRender();if(INDV&&INDV.busy&&!(INDV.rows||[]).length&&SGTAB==='ind'&&$('#sg_body'))INDT=setTimeout(sgIndLoad,3000)}
 function sgAr(n,k){const W={day:['يوم واحد','يومين','أيام','يوماً'],time:['مرة واحدة','مرتين','مرات','مرة'],coin:['عملة واحدة','عملتين','عملات','عملة'],min:['دقيقة واحدة','دقيقتين','دقائق','دقيقة']}[k];n=+n||0;   // 55 يوماً · 13 مرة · 9 مرات
@@ -31631,19 +32090,6 @@ function sgAr(n,k){const W={day:['يوم واحد','يومين','أيام','يو
 function sgDt(n){n=+n||0;return n===1?'كلها في يوم واحد':n===2?'في يومين مختلفين':(n%100>=3&&n%100<=10)?`في ${n} أيام مختلفة`:`في ${n} يوماً مختلفاً`}
 function sgPct(x){x=+x||0;return `<b class="${x>=0?'up':'dn'}" dir="ltr">${x>=0?'+':''}${(x*100).toFixed(1)}%</b>`}
 function sgTy(V,t){return ((V&&V.types)||{})[t]||['•','']}
-function sgRow(r,V){const T=sgTy(V,r.ty),hz=((V&&V.hzn)||{})[r.f]||'';
-  return `<div class="sg-r${r.ok?' ok':''}${r.s<0?' sell':''}"><div class="sg-rh"><span class="sg-ty">${T[0]} ${gEsc(T[1])}</span><span class="sg-fr">${gEsc(((V&&V.fn)||{})[r.f]||r.f)}${r.k.length>1?' · '+r.k.length+' معاً':''}</span>
-    ${r.rare?'<span class="sg-b rare">💎 نادرة</span>':''}${r.new?'<span class="sg-b new">🆕 الآن</span>':''}${r.ok?'<span class="sg-b ok">🔔 تصلك</span>':''}</div>
-    <div class="sg-k">${r.nm.map(gEsc).join(' <b>+</b> ')}</div>
-    <div class="sg-rec">صدقت <b>${r.w}</b> من <b>${sgAr(r.n,'time')}</b> (<b>${(+r.h).toFixed(0)}%</b>)${r.nd&&r.nd<r.nt?` <small>— اختبارها ${sgDt(r.nd)}</small>`:''} · العشوائي ${(+r.rh).toFixed(0)}% · المتوسط بعد ${gEsc(hz)} ${sgPct(r.m)}${r.ln?` · منها حيّة ${r.lw} من ${r.ln}`:''}${r.better?'':' · <span style="color:var(--amber)">⚠️ ليست أفضل من العشوائي</span>'}</div></div>`}
-function sgHead(V){const C=V.comp,B=V.busy||{};let h='';
-  if(C&&SGCOMP[C.s]){const nm=SGCOMP[C.s];
-    h+=`<div class="sg-comp ${nm[2]}"><div><b>🧭 السوق الآن: ${nm[1]} ${nm[0]}</b> <small>منذ ${sgAr(C.days,'day')}</small></div>
-      <div class="ind-sub">البيتكوين ${C.btc?'فوق':'تحت'} متوسط 200 يوم · ${C.k} من ${sgAr(C.n,'coin')} فوق متوسطها (50 يوماً)${C.m14!=null?` · تاريخياً متوسط الشراء بعد أسبوعين في هذا الوضع ${sgPct(C.m14)}`:''}${C.s==='flat'?' · تاريخياً أسوأ وضع للشراء':''}</div>
-      <div class="sg-hist" title="آخر 60 يوماً — 🟢 صاعد · 🟡 مختلط · 🔴 نازل (منعّمة: لا تتغير إلا إذا ثبتت 3 أيام)">${(C.hist||[]).map(x=>`<i class="${gEsc(x[2])}"></i>`).join('')}</div></div>`}
-  if(B.phase)h+=`<div class="sg-busy">${gEsc(B.msg||'…')}<div class="sg-pb"><i style="width:${Math.max(3,+B.pct||0)}%"></i></div></div>`;
-  if(V.err)h+=`<div class="ind-sub" style="color:var(--amber)">⚠️ ${gEsc(V.err)}</div>`;
-  return h}
 function sgPl(V,c){return ((V&&V.plain)||{})[c]||null}                     // 🎯 v3.36.71: [الأسرة · الصعود · الهبوط · معنى الصعود · معنى الهبوط · الفني]
 function sgPlNm(V,c,s){const p=sgPl(V,c);return p?(s>0?p[1]:p[2]):c}
 function sgIndAvg(I){if(!I)return '';const sc=Math.max(-100,Math.min(100,+I.score||0)),P=I.parts||[];      // 📊 اتجاه المؤشرات الآن (العشرة) — وصف لا توقع
@@ -31702,34 +32148,57 @@ function sgInd(V){let h='';const B=V.busy||{};                                  
   if(B.phase)h+=`<div class="sg-busy">${gEsc(B.msg||'…')}<div class="sg-pb"><i style="width:${Math.max(3,+B.pct||0)}%"></i></div></div>`;
   if(V.err)h+=`<div class="ind-sub" style="color:var(--amber)">⚠️ ${gEsc(V.err)}</div>`;
   return h+sbTable(V)}
-function sgCatUI(V){const b=(k,v,t)=>`<button class="${SGF[k]===v?'on':''}" onclick="SGF['${k}']='${v}';sgRender();sgCat()">${t}</button>`;
-  const C=V.cat;if(!C)return sgHead(V)+'<div class="sg-empty">🏗️ الدليل لم يُبنَ بعد — تتابعه في «🎯 المؤشرات»</div>';
-  const tys=Object.entries(V.types||{}).filter(([k])=>!['mkt','res'].includes(k));
-  return `<div class="ind-sub" style="margin-bottom:6px">📒 <b>${C.n}</b> إشارة وتركيبة (منها ${C.ncombo} مجموعة متفقة صدقت في الفترات الأربع) · من تاريخ ${(C.coins||[]).length} عملة · بُني ${C.ts?gAgo(C.ts):'—'}${C.secs?` في ${C.secs<90?'دقيقة أو أقل':sgAr(Math.round(C.secs/60),'min')}`:''} · يُعاد كل أسبوع</div>
-    <div class="sg-flt">${b('fr','','الكل')}${b('fr','1D','يومي')}${b('fr','4H','4 ساعات')}</div>
-    <div class="sg-flt">${b('side','1','🟢 شراء وصعود')}${b('side','-1','🔴 بيع ونزول')}${b('side','','الكل')}</div>
-    <div class="sg-flt">${b('size','','كل الأحجام')}${b('size','1','وحدها')}${b('size','2','2 معاً')}${b('size','3','3 معاً')}${b('size','4','4 فأكثر')}</div>
-    <div class="sg-flt"><select onchange="SGF.ty=this.value;sgCat()"><option value="">كل الأنواع</option>${tys.map(([k,t])=>`<option value="${k}"${SGF.ty===k?' selected':''}>${t[0]} ${gEsc(t[1])}</option>`).join('')}</select>
-      <select onchange="SGF.sort=this.value;sgCat()"><option value="">الأصدق أولاً (مع عدد المرات)</option><option value="n"${SGF.sort==='n'?' selected':''}>الأكثر حالات</option><option value="m"${SGF.sort==='m'?' selected':''}>الأكبر حركة</option><option value="live"${SGF.sort==='live'?' selected':''}>الأكثر سجلاً حياً</option></select>
-      <input type="search" placeholder="🔍 ابحث: الاتجاه · الدفع · القاع · MACD…" value="${gEsc(SGF.q)}" oninput="SGF.q=this.value;clearTimeout(SGET);SGET=setTimeout(sgCat,350)"></div>
-    <div id="sg_cat">${LDR('…')}</div>`}
-async function sgCat(){const el=$('#sg_cat');if(!el)return;try{SGC=await api('/api/signals_cat?'+new URLSearchParams(SGF).toString())}catch(e){SGC=null}
-  const e2=$('#sg_cat');if(!e2)return;if(!SGC||!SGC.ok){e2.innerHTML='<div class="ind-sub">⚠️ '+gEsc((SGC&&SGC.msg)||'تعذّر التحميل')+'</div>';return}
-  e2.innerHTML=`<div class="ind-sub">النتائج: ${SGC.total}${SGC.total>SGC.rows.length?` · تُعرض أول ${SGC.rows.length}`:''}</div>`+(SGC.rows.map(r=>sgRow(r,SGV)).join('')||'<div class="ind-sub">لا شيء بهذه الفلاتر</div>')}
-function sgLog(V){const L=V.log||[],R=((V.live||{}).recent)||[],lv=V.live||{};
-  const dt=t=>new Date(t*1000).toLocaleString('ar',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
-  const mon=(lv.mon||[]).map(([k,v])=>`<div class="sg-lg"><b>${gEsc(k)}</b> · ${[['4H','غداً'],['1D','الشهر القادم']].map(([f,n])=>v[f]?`${n}: <b>${Math.round(v[f][1]/v[f][0]*100)}%</b> <small>(${v[f][1]} من ${v[f][0]})</small>`:`${n}: —`).join(' · ')}</div>`).join('');
-  return `<div class="ind-sub">📒 السجل الحي: حُكم عليها ${lv.done||0} · تنتظر وقتها ${lv.pend||0} (كل ما أُطلق على عملات القياس — لا ما وصلك فقط) · ✅ إذا لمس الهدف قبل الوقف أو انتهت المدة بالاتجاه الصحيح</div>
-    <div class="an-more" style="text-align:right"><button onclick="sgRecDl()">📥 سحب السجل</button></div>
-    <div class="sg-frh">📅 دقة ما وصلك — كل شهر</div>${mon||'<div class="ind-sub">تظهر بعد أول نتيجة</div>'}
-    <div class="sg-frh">✅ نتائج ما وصلك إشعاره</div>${R.map(x=>`<div class="sg-lg"><b class="${x.x>0?'up':'dn'}">${x.x>0?'✅':'❌'} ${(x.x*100).toFixed(1)}%</b> · ${gEsc(sgTy(V,x.ty)[0]+' '+sgTy(V,x.ty)[1])} ${gEsc((x.sym||'').split('-')[0])} · ${gEsc(x.nm||'')} <small>· ${dt(x.ts)}</small></div>`).join('')||'<div class="ind-sub">لا نتائج بعد — يُحكم كل إشعار بعد وقته (غداً أو بعد شهر)</div>'}
-    <div class="sg-frh">🔔 آخر الإشعارات (${L.length})</div>${L.map(x=>`<div class="sg-lg"><b>${gEsc(x.t)}</b> <small>· ${dt(x.ts)}</small><div class="ind-sub" style="white-space:pre-line">${gEsc(x.b)}</div></div>`).join('')||'<div class="ind-sub">لا إشعارات بعد</div>'}`}
-function sgEstTxt(E){if(!E)return 'التقدير يظهر بعد بناء الدليل';
-  return `بهذه النسبة كان سيصلك أسبوعياً نحو <b>${E.cut}</b> من الإشعارات على عملاتك${E.capped?` (بلا حدك اليومي ${E.wk})`:''}${E.cut>25?' · <span style="color:var(--amber)">⚠️ كثير — ارفع النسبة</span>':''}`}
-function sgEst(v){Object.assign(SGP,v);const lb=$('#sg_thr_v');if(lb&&v.thr!=null)lb.textContent=v.thr+'%';
-  clearTimeout(SGET);SGET=setTimeout(async()=>{try{const r=await api('/api/control',{action:'sg_est',value:SGP});const el=$('#sg_est');if(el)el.innerHTML=sgEstTxt(r&&r.est)}catch(e){}},250)}
-async function sgSet(v){try{const r=await api('/api/control',{action:'sg_set',value:v});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok));
-    if(r&&r.cfg&&SGV){SGV.cfg=r.cfg;SGV.est=r.est;SGV.mine=r.cfg.coins||SGV.tick;SGP={}}}catch(e){toast('تعذر الاتصال',false)}if(SGTAB==='cfg')sgRender()}
+/* 📈 v3.36.75: السوق — الآن والمتوقع (المحلل الجديد بعد الفحصين 13 و14): 🔎 حقائق الآن للسوق ولكل عملة · 🔮 المدى المتوقع (المثبت 80–82%)
+   · لا توقّع للاتجاه (لم يغلب الصدفة على سنتين) · تنبيهات الحقائق · عرض فقط */
+let ANV=null;const ANO={};
+async function anLoad(){try{ANV=await api('/api/market')}catch(e){ANV={ok:false}}if(['mkt','coins','log'].includes(SGTAB)&&$('#sg_body'))sgRender()}
+function anCls(k){return {p:'up',n:'dn',w:'warn'}[k]||''}
+function anLines(L){return (L||[]).map(x=>`<div class="an-l ${anCls(x[2])}"><span class="an-ic">${x[0]}</span><span>${gEsc(x[1])}</span></div>`).join('')}
+function anRng(R,rec){const H=(ANV&&ANV.hz)||[];if(!R)return '';
+  return `<div class="an-rng"><div class="an-rh">🔮 المتوقع — بين كم وكم سيكون السعر بثقة 80%</div>${H.map(([k,nm])=>{const b=R[k];if(!b)return '';const r=(rec||{})[k];
+    return `<div class="an-rr"><span>${gEsc(nm)}</span><b class="num">${fmtPx(b.lo)} – ${fmtPx(b.hi)}</b><small>±${b.w}%${r&&r.in+r.out>=5?` · صدق ${r.p}% (${r.in} من ${r.in+r.out})`:''}</small></div>`}).join('')}</div>`}
+function anHelp(){return `<details class="ind-help"><summary>كيف أقرأ هذه النافذة؟</summary>
+  <div>• <b>🔎 الآن</b>: حقائق تُقاس من الأسعار — الاتجاه ومنذ متى · القوة مقابل البيتكوين · الهدوء والهيجان · الحجم · أقرب دعم ومقاومة · التجميع والتصريف · المزاج والدولار.</div>
+  <div>• <b>🔮 المتوقع</b>: بين كم وكم سيكون السعر بعد كل مدة بثقة 80% — فُحص على سنتين من الأسعار الحقيقية لـ38 عملة فاحتوى السعر 80–82% من المرات، وصدقه الحي يظهر بجانبه.</div>
+  <div>• <b>لا تخمين للاتجاه</b>: الفحص نفسه أثبت أن لا مؤشر ولا مجموعة مؤشرات تغلب الصدفة في صعود أو نزول الساعات والأيام القادمة.</div>
+  <div style="color:var(--amber);margin-top:6px">⚠️ معلومات لا توصيات · اللوحة تقرأ وتنبّه فقط: لا تفتح أمراً ولا تغلقه.</div></details>`}
+function anWait(){const B=(SGV&&SGV.busy)||{};return B.phase?`<div class="sg-busy">${gEsc(B.msg||'…')}<div class="sg-pb"><i style="width:${Math.max(3,+B.pct||0)}%"></i></div></div>`:''}
+function anMkt(){const A=ANV;if(!A)return `<div class="sg-empty">${LDR('جاري التحميل…')}</div>`;const M=A.mkt;
+  if(!M)return anWait()+'<div class="sg-empty">🔍 أول قراءة للسوق بعد أول فحص (كل ساعة) — يُجلب تاريخ الشموع مرة واحدة أولاً</div>';
+  const rb={'4h':(A.rec||{}).btc_4h,'1d':(A.rec||{}).btc_1d,'1w':(A.rec||{}).btc_1w};
+  const mv=x=>(x||[]).map(([s,v])=>`<span class="an-mv ${v>=0?'up':'dn'}">${gEsc(s.split('-')[0])} ${v>=0?'+':''}${(+v).toFixed(1)}%</span>`).join('');
+  return anWait()+`<div class="an-card"><div class="an-h"><b>🌐 السوق الآن</b>${A.t?`<small>🔄 ${gAgo(A.t)}</small>`:''}</div>${anLines(M.lines)}</div>
+    <div class="an-card"><div class="an-h"><b>₿ البيتكوين</b><span class="num">${M.btc?fmtPx(M.btc):''}</span></div>${anRng(M.rng,rb)}</div>
+    ${(M.top||[]).length?`<div class="an-card"><div class="an-h"><b>🏁 أكثر حركة خلال 24 ساعة</b></div><div class="an-mvs">${mv(M.top)}</div><div class="an-mvs">${mv(M.bottom)}</div></div>`:''}${anHelp()}`}
+function anCoin(c){const op=!!ANO[c.sym],b=c.sym.split('-')[0];
+  return `<div class="an-card an-coin${op?' open':''}" data-s="${gEsc(c.sym)}" onclick="ANO['${gEsc(c.sym)}']=!ANO['${gEsc(c.sym)}'];sgRender()"><div class="an-h"><b>${gEsc(b)}</b><span class="num">${fmtPx(c.px)}</span>
+     <span class="chg ${c.ch24>=0?'up':'dn'}">${c.ch24>=0?'▲':'▼'}${Math.abs(+c.ch24).toFixed(2)}%</span><small style="margin-inline-start:auto">${op?'▲':'التفاصيل ▼'}</small></div>
+    ${anLines(op?c.lines:(c.lines||[]).slice(0,2))}${op?anRng(c.rng,ANV.rec):''}</div>`}
+function anCoins(){const A=ANV;if(!A)return `<div class="sg-empty">${LDR('جاري التحميل…')}</div>`;
+  let h=anWait()+((A.coins||[]).map(anCoin).join('')||'<div class="sg-empty">🔍 تظهر عملاتك بعد أول فحص (كل ساعة)</div>');
+  if((A.missing||[]).length&&(A.coins||[]).length)h+=`<div class="ind-sub">⏳ ${A.missing.map(s=>gEsc(s.split('-')[0])).join(' · ')} — تظهر بعد جلب تاريخها</div>`;
+  return h+anHelp()}
+function anLog(V){const L=V.log||[],R=(ANV&&ANV.rec)||{},H=(ANV&&ANV.hz)||[];
+  return `<div class="an-card"><div class="an-h"><b>📏 صدق المدى المتوقع (حي)</b></div>${H.map(([k,nm])=>{const r=R[k];return `<div class="an-rr"><span>${gEsc(nm)}</span><b>${r&&r.in+r.out?`${r.p}%`:'—'}</b><small>${r?`${r.in} داخله · ${r.out} خارجه`:'يبدأ العدّ مع أول مدى يكتمل'}</small></div>`}).join('')}
+      <div class="ind-sub">الهدف 80% — أكثر منه يعني أن المدى أوسع قليلاً من اللازم، وأقل منه يعني أن الحركة أعنف من المعتاد.</div></div>
+    <div class="an-card"><div class="an-h"><b>🔔 آخر التنبيهات</b></div>${L.map(x=>`<div class="ind-sub">${new Date(x.ts*1000).toLocaleString('ar',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})} · <b>${gEsc(x.t)}</b> — ${gEsc(x.b)}</div>`).join('')||'<div class="ind-sub">لا تنبيهات بعد</div>'}</div>`}
+async function sgSet(v){try{const r=await api('/api/control',{action:'sg_set',value:v});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok));if(r&&r.cfg&&SGV)SGV.cfg=r.cfg}catch(e){toast('تعذر الاتصال',false)}sgRender()}
+function sgCfg(V){const c=V.cfg||{},A=c.atypes||{},ty=V.atypes||{},hrs=[...Array(24).keys()];
+  const hsel=(id,val,fn)=>`<select id="${id}" onchange="${fn}">${hrs.map(h=>`<option value="${h}"${val===h?' selected':''}>${String(h).padStart(2,'0')}:00</option>`).join('')}</select>`;
+  const q=c.quiet||null,mine=c.coins||V.tick||[];
+  const grp=(g,t)=>`<div class="sg-sh">${t}</div><div class="sg-flt">${Object.entries(ty).filter(([k,x])=>x[2]===g).map(([k,x])=>`<button data-k="${k}" class="${A[k]!==false?'on':''}" onclick="sgSet({atypes:{${k}:${A[k]===false}}})">${x[0]} ${gEsc(x[1])}</button>`).join('')}</div>`;
+  return `<div class="ind-al${c.on?'':' off'}"><div class="ind-al-h"><b>🔔 تنبيهات السوق <small style="color:var(--mut2);font-weight:400">${c.on?gEsc((V.ch||{})[c.ch]||''):'متوقفة'}</small></b>
+      <span style="display:flex;gap:6px"><button id="sg_on" class="${c.on?'on':''}" onclick="sgSet({on:${c.on?'false':'true'}})">${c.on?'✅ مفعّلة':'⏸️ متوقفة'}</button></span></div>
+    <div class="sg-set">${grp('coin','🪙 عملاتك')}${grp('mkt','🌐 السوق كله')}
+      <div class="ind-sub">تنبيهات بما يحدث فعلاً — لا توقّع اتجاه ولا أوامر · كل حدث مرة واحدة · الحد اليومي تضبطه اللوحة وحدها</div></div>
+    <div class="sg-set" id="sg_coins"><div class="sg-sh">🪙 عملات تنبيهاتك <small>(${mine.length})</small> ${c.coins?`<button onclick="sgSet({coins:null})">↩️ مثل الشريط</button>`:'<small>· الآن نفس عملات الشريط (📊)</small>'}</div>
+      <div class="sg-flt">${mine.map(s=>`<button class="on sg-cn" data-c="${gEsc(s)}" onclick="sgCoinTog('${gEsc(s)}')" title="اضغط لإزالتها من تنبيهاتك">${gEsc(s.split('-')[0])}${(V.bad||[]).includes(s)?' ⚠️':''} <b>✕</b></button>`).join('')||'<span class="ind-sub">لا عملات — أضف واحدة</span>'}</div>
+      <div class="sg-add"><input id="sg_cadd" placeholder="أضف عملة — مثل BTC أو DOGE أو PEPE" autocomplete="off" onkeydown="if(event.key==='Enter')sgCoinAdd()"><button onclick="sgCoinAdd()">➕ أضف</button></div>
+      ${(V.bad||[]).length?`<div class="ind-sub" style="color:var(--amber)">⚠️ لم تُعثر على بيانات من المنصة لـ ${(V.bad||[]).map(s=>gEsc(s.split('-')[0])).join(' · ')} — تأكد من الاسم</div>`:''}</div>
+    <div class="sg-set"><div class="sg-sh">🌙 ساعات الهدوء <small>(تنتظر ثم تصلك برسالة واحدة)</small></div>
+      <button class="${q?'on':''}" onclick="sgSet({quiet:${q?'null':'[0,8]'}})">${q?'مفعّلة':'متوقفة'}</button> ${q?`من ${hsel('sg_q0',q[0],`sgSet({quiet:[+this.value,${q[1]}]})`)} إلى ${hsel('sg_q1',q[1],`sgSet({quiet:[${q[0]},+this.value]})`)}`:''}</div>
+    <div class="sg-set"><div class="sg-sh">📨 أين تصل</div><div class="sg-flt">${Object.entries(V.ch||{}).map(([k,t])=>`<button class="${c.ch===k?'on':''}" onclick="sgSet({ch:'${k}'})">${gEsc(t)}</button>`).join('')}</div></div>
+    <div class="sg-set sg-flt"><button onclick="sgTest()">🧪 جرّب تنبيهاً</button></div></div>`}
 function sgCoinAdd(){const el=$('#sg_cadd');if(!el||!SGV)return;let v=(el.value||'').trim().toUpperCase().replace(/[\/\s]/g,'');if(!v)return;   // 🪙 v3.36.67
   if(!v.includes('-'))v+='-USDT';
   if(!/^[A-Z0-9]{1,15}-[A-Z0-9]{2,8}$/.test(v)){toast('اكتب اسم العملة فقط — مثل BTC أو PEPE',false);return}
@@ -31737,93 +32206,18 @@ function sgCoinAdd(){const el=$('#sg_cadd');if(!el||!SGV)return;let v=(el.value|
   if(cur.length>=40){toast('الحد 40 عملة',false);return}
   cur.push(v);el.value='';sgSet({coins:cur})}
 function sgCoinTog(s){const c=SGV.cfg,cur=(c.coins||SGV.tick||[]).slice(),i=cur.indexOf(s);if(i>=0)cur.splice(i,1);else cur.push(s);sgSet({coins:cur})}
-function sgCfg(V){const c=V.cfg||{},T=c.types||{},ty=V.types||{},hrs=[...Array(24).keys()];
-  const tg=(on,fn,a,b)=>`<button class="${on?'on':''}" onclick="${fn}">${on?a:b}</button>`;
-  const hsel=(id,val,fn,off)=>`<select id="${id}" onchange="${fn}">${off?`<option value="">${off}</option>`:''}${hrs.map(h=>`<option value="${h}"${val===h?' selected':''}>${String(h).padStart(2,'0')}:00</option>`).join('')}</select>`;
-  const q=c.quiet||null,mine=c.coins||V.tick||[];
-  return `<div class="ind-al${c.on?'':' off'}"><div class="ind-al-h"><b>🔔 إشعارات المحلل <small style="color:var(--mut2);font-weight:400">${c.on?gEsc((V.ch||{})[c.ch]||''):'متوقفة'}</small></b>
-      <span style="display:flex;gap:6px"><button id="sg_on" class="${c.on?'on':''}" onclick="sgSet({on:${c.on?'false':'true'}})">${c.on?'✅ مفعّلة':'⏸️ متوقفة'}</button></span></div>
-    <div class="sg-set"><div class="sg-sh">🎯 لا يصلك إلا ما صدق في <b id="sg_thr_v">${c.thr}%</b> من المرات أو أكثر</div><input type="range" id="sg_thr" min="50" max="95" step="1" value="${c.thr}" oninput="sgEst({thr:+this.value})" onchange="sgSet({thr:+this.value})">
-      <div class="ind-sub" id="sg_est">${sgEstTxt(V.est)}</div>
-      <div class="ind-sub">النسبة الأعلى = إشعارات أقل وأصدق · 60% مناسبة لأغلب الناس · ويُشترط دائماً أن يكون قد ظهر ${sgAr(c.min,'time')} على الأقل وأن يكون أفضل من الشراء أو البيع العشوائي.</div></div>
-    <div class="sg-set"><div class="sg-sh">🪙 عملاتك</div><div class="sg-flt">${[['buy','🟢 دخول شراء'],['sell','🔴 دخول بيع'],['nst','🔎 الآن في السوق']].map(([k,t])=>`<button class="${T[k]!==false?'on':''}" onclick="sgSet({types:{${k}:${T[k]===false}}})">${t}</button>`).join('')}</div>
-      <div class="ind-sub">🟢 و🔴: حين تتفق مجموعة مؤشرات مثبتة (غداً أو الشهر القادم) — تحليل لا أسعار · 🔎: حالة جديدة (تجميع · تصريف · شراء أو بيع عدواني) — وصف لا توقع · مرة في اليوم على الأكثر لكل حالة</div>
-      <div class="sg-sh" style="margin-top:8px">🌐 السوق كله</div><div class="sg-flt">${['mkt','crash','fng','eco','res'].filter(k=>ty[k]).map(k=>`<button class="${T[k]!==false?'on':''}" onclick="sgSet({types:{${k}:${T[k]===false}}})">${ty[k][0]} ${gEsc(ty[k][1])}</button>`).join('')}</div>
-      <div class="ind-sub">🧭 السوق: حين يثبت وضع جديد · 🌊 الانهيار: مرة في اليوم على الأكثر · 😨 🗞️: فقط إذا صدقت القراءة نفسها في الفترات الأربع · ✅ النتائج: بعد وقت كل إشعار وصلك</div></div>
-    <div class="sg-set"><div class="sg-sh">🕯️ الفريم</div><div class="sg-flt">${['1D','4H'].map(f=>`<button class="${(c.fr||{})[f]!==false?'on':''}" onclick="sgSet({fr:{'${f}':${(c.fr||{})[f]===false}}})">${gEsc((V.fn||{})[f]||f)}</button>`).join('')}</div></div>
-    <div class="sg-set" id="sg_coins"><div class="sg-sh">🪙 عملات إشعاراتك <small>(${mine.length})</small> ${c.coins?`<button onclick="sgSet({coins:null})">↩️ مثل الشريط</button>`:'<small>· الآن نفس عملات الشريط (📊) — أي تغيير هنا لإشعارات المحلل فقط</small>'}</div>
-      <div class="sg-flt">${mine.map(s=>`<button class="on sg-cn" data-c="${gEsc(s)}" onclick="sgCoinTog('${gEsc(s)}')" title="اضغط لتشيلها من إشعاراتك">${gEsc(s.split('-')[0])}${(V.bad||[]).includes(s)?' ⚠️':(V.short||[]).includes(s)?' ⏳':''} <b>✕</b></button>`).join('')||'<span class="ind-sub">لا توجد عملات — أضف عملة تحت</span>'}</div>
-      <div class="sg-add"><input id="sg_cadd" placeholder="أضف عملة — مثل BTC أو DOGE أو PEPE" autocomplete="off" onkeydown="if(event.key==='Enter')sgCoinAdd()"><button onclick="sgCoinAdd()">➕ أضف</button></div>
-      ${(V.bad||[]).length?`<div class="ind-sub" style="color:var(--amber)">⚠️ لم تُعثر على بيانات من المنصة لـ ${(V.bad||[]).map(s=>gEsc(s.split('-')[0])).join(' · ')} — تأكد من الاسم</div>`:''}
-      ${(V.short||[]).length?`<div class="ind-sub">⏳ تاريخ قصير: ${(V.short||[]).map(s=>gEsc(s.split('-')[0])).join(' · ')} — تظهر إشاراتها حين يصبح لها نحو 50 يوماً من الشموع</div>`:''}
-      ${(()=>{const oth=(V.uni||[]).filter(s=>!mine.includes(s));return oth.length?`<details class="sg-more"><summary>عملات يقيسها النظام لبناء السجل (${oth.length}) — اضغط عملة لتضيفها لإشعاراتك</summary>
-        <div class="sg-flt">${oth.map(s=>`<button data-c="${gEsc(s)}" onclick="sgCoinTog('${gEsc(s)}')">${gEsc(s.split('-')[0])} ➕</button>`).join('')}</div>
-        <div class="ind-sub">تُفحص هذه العملات لتقوية السجل فقط (تاريخ أكثر = نسبة أصدق)، ولا تصلك إشعاراتها إلا إذا أضفتها.</div></details>`:''})()}</div>
-    <div class="sg-set"><div class="sg-sh">📮 الحد اليومي <small>(الزائد يبقى في اللوحة بلا رنّة)</small></div><div class="sg-flt">${[3,5,8,12,20,0].map(n=>`<button class="${c.cap===n?'on':''}" onclick="sgSet({cap:${n}})">${n||'بلا حد'}</button>`).join('')}</div></div>
-    <div class="sg-set"><div class="sg-sh">🌙 ساعات الهدوء <small>(تنتظر ثم تصلك برسالة واحدة)</small></div>
-      ${tg(!!q,q?'sgSet({quiet:null})':'sgSet({quiet:[0,8]})','مفعّلة','متوقفة')} ${q?`من ${hsel('sg_q0',q[0],`sgSet({quiet:[+this.value,${q[1]}]})`)} إلى ${hsel('sg_q1',q[1],`sgSet({quiet:[${q[0]},+this.value]})`)}`:''}</div>
-    <div class="sg-set"><div class="sg-sh">🗓️ ملخص يومي بدل الإشعارات المتفرقة</div>${hsel('sg_sum',c.sum,`sgSet({sum:this.value===''?null:+this.value})`,'لا — كل إشعار بوقته')}</div>
-    <div class="sg-set"><div class="sg-sh">📨 أين تصل</div><div class="sg-flt">${Object.entries(V.ch||{}).map(([k,t])=>`<button class="${c.ch===k?'on':''}" onclick="sgSet({ch:'${k}'})">${gEsc(t)}</button>`).join('')}</div></div>
-    <div class="sg-set sg-flt"><button onclick="sgTest()">🧪 جرّب إشعاراً</button><button onclick="sgRebuild()">🏗️ أعد البحث عن التركيبات الآن</button></div>
-    <div class="ind-sub">إشعار واحد لكل عملة يجمع كل ما اتفق · نفس العملة ونفس النوع لا يتكرر (يوم على 4 ساعات · 3 أيام على اليومي) إلا إذا طلعت أقوى بوضوح · الضغط على الإشعار في الهاتف يفتح هذه النافذة.</div></div>`}
-async function sgRecDl(){try{const r=await api('/api/control',{action:'sg_rec'});if(!r||!r.ok)return toast('تعذّر تحميل السجل',false);   // 📥 v3.36.69
-  const esc=v=>{v=String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
-  const rows=[['التاريخ (UTC)','العملة','الاتجاه','المدة','المجموعة','النتيجة','الربح %','وصلك إشعارها'].join(',')].concat((r.rows||[]).map(x=>x.map(esc).join(',')));
-  if(await holySave(new Blob(['\ufeff'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'}),'holy_analyst_record.csv'))toast('⬇️ حُفظ السجل ('+(r.rows||[]).length+')',true)}catch(e){toast('تعذر الاتصال',false)}}
 async function sgTest(){try{const r=await api('/api/control',{action:'sg_test'});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok))}catch(e){toast('تعذر الاتصال',false)}}
-async function sgRebuild(){try{const r=await api('/api/control',{action:'sg_rebuild'});toast(r&&r.msg?r.msg:'تم',!!(r&&r.ok))}catch(e){toast('تعذر الاتصال',false)}SGTAB='now';setTimeout(sgLoad,1500)}
-const SGW={buy:'p',buyc:'p',wait:'z',avoid:'w',risk:'n'};
-function sgPxR(x){return x!=null&&isFinite(+x)&&+x>0?fmtPx(+x):'—'}
-function sgHz(z,lbl,V,mon){const C=V.comp||{},nm=SGCOMP[C.s];
-  if(!z||!z.dir)return `<div class="an-hz"><b>${lbl}</b>: لا توجد الآن مجموعة مؤشرات مثبتة تتفق على اتجاه${mon&&nm&&C.m30!=null?`<div class="ind-sub">السوق ${nm[0]}: تاريخياً كان متوسط الشهر التالي في هذا الوضع ${sgPct(C.m30)} — ثقة منخفضة</div>`:''}</div>`;
-  const up=z.dir>0;
-  return `<div class="an-hz ${up?'p':'n'}"><b>${lbl}</b>: ${up?'📈 صعود':'📉 هبوط'} · دقة <b>${z.h}%</b> <small>(من ${sgAr(z.n,'time')})</small>${z.s?` · المدى المتوقع ${sgPxR(z.px*(1-z.s))} – ${sgPxR(z.px*(1+z.s))}`:''}
-    ${(z.why||[]).length?`<div class="ind-sub">لماذا: ${z.why.map(gEsc).join(' · ')}</div>`:''}${z.two?'<div class="ind-sub" style="color:var(--amber)">⚠️ توجد أيضاً مجموعة بالاتجاه المعاكس</div>':''}
-    ${z.tgt?`<div class="an-lv">💵 الدخول ${sgPxR(z.px)} · 🎯 الهدف ${sgPxR(z.tgt)} · 🛑 الوقف ${sgPxR(z.stop)}</div>`:''}</div>`}
-function sgAnCoin(x,V){const A=x.an||{},H=A.hz||{},F=x.fr||{},px=(F['4H']||F['1D']||{}).px,c=SGW[A.w]||'z';
-  const ns=(A.nst||[]).map(n=>`<div class="an-st">${gEsc(n[0])} <small>· ${n[1]?gAgo(n[1]):''}${n[2]?' · '+gEsc(n[2]):''}</small></div>`).join('');
-  return `<div class="ind-c an-c ${c}"><div class="ind-h"><span class="cn">${gEsc(x.base)}</span>${px?`<span class="px">${fmtPx(px)}</span>`:''}<span class="an-w ${c}">${gEsc(A.wi||'⏸️')} ${gEsc(A.wt||'انتظر')}</span></div>
-    ${sgHz(H['4H'],'غداً',V,false)}${sgHz(H['1D'],'الشهر القادم',V,true)}
-    <div class="an-now"><div class="sg-frh">🔎 الآن في السوق</div>${A.tr?`<div class="an-st">${gEsc(A.tr)}</div>`:''}${ns||'<div class="ind-sub">لا جديد في السيولة أو العقود في الأيام الأخيرة</div>'}<div class="ind-sub">وصف لما يحدث الآن — ليس توقعاً</div></div>
-    <div class="an-more"><button onclick="SBS='${gEsc(x.sym)}';SBV=null;sgTab('ind')">📋 جدول مؤشرات العملة ←</button></div></div>`}
-function sgAnMkt(V){const C=V.comp,M=V.mkt||{};let h='<div class="an-mkt"><div class="sg-frh">🌐 السوق كله الآن</div>';
-  if(C&&SGCOMP[C.s]){const nm=SGCOMP[C.s];h+=`<div class="an-st"><b>🧭 ${nm[1]} ${nm[0]}</b> <small>منذ ${sgAr(C.days,'day')}</small> · البيتكوين ${C.btc?'فوق':'تحت'} متوسط 200 يوم · ${C.k} من ${sgAr(C.n,'coin')} فوق متوسطها (50 يوماً)</div>
-    ${C.m30!=null?`<div class="ind-sub">تاريخياً في هذا الوضع: متوسط الشهر التالي ${sgPct(C.m30)}${C.h30!=null?` · كان السعر أعلى بعد شهر في ${(+C.h30).toFixed(0)}% من الأيام`:''}</div>`:''}
-    <div class="sg-hist" title="آخر 60 يوماً — 🟢 صاعد · 🟡 مختلط · 🔴 نازل">${(C.hist||[]).map(x=>`<i class="${gEsc(x[2])}"></i>`).join('')}</div>`}
-  else h+='<div class="ind-sub">حالة السوق تظهر بعد أول فحص</div>';
-  if(M.crash&&M.crash.on)h+=`<div class="an-st" style="color:var(--red)">🌊 انهيار في السوق كله الآن: ${M.crash.k} من ${sgAr(M.crash.n,'coin')} هبطت بقوة</div>`;
-  if(M.fng!=null)h+=`<div class="an-st">😨 الخوف والطمع: <b>${M.fng}</b>${M.fng<=25?' — خوف شديد':M.fng>=75?' — طمع شديد':''}</div>`;
-  return h+'</div>'}
-function sgAn(V){const B=V.busy||{};let h='';
-  if(B.phase)h+=`<div class="sg-busy">${gEsc(B.msg||'…')}<div class="sg-pb"><i style="width:${Math.max(3,+B.pct||0)}%"></i></div></div>`;
-  if(V.err)h+=`<div class="ind-sub" style="color:var(--amber)">⚠️ ${gEsc(V.err)}</div>`;
-  h+=sgAnMkt(V);
-  if(!V.cat)return h+`<div class="sg-empty">🏗️ <b>أول مرة:</b> تُجلب شموع العملات (سنتان على 4 ساعات ونحو 7 سنوات يومية) ثم يُبحث عن مجموعات المؤشرات المتفقة التي صدقت في كل فترات التاريخ — بعملية منفصلة لا تُثقل اللوحة، مرة واحدة.</div>`;
-  const N=(V.now||[]).filter(x=>x.mine);
-  h+=N.length?`<div class="ind-list">${N.map(x=>sgAnCoin(x,V)).join('')}</div>`:'<div class="sg-empty">🔍 أول تحليل عند إغلاق شمعة 4 ساعات القادمة — واختر عملاتك من ⚙️ الإشعارات</div>';
-  h+=`<details class="ind-help"><summary>كيف يعمل المحلل؟</summary>
-    <div>• يعتمد فقط على <b>مجموعات مؤشرات محددة تتفق</b> — كلها بالاتجاه نفسه ولا مؤشر معاكس — وقد <b>صدقت في الفترات الأربع</b> من تاريخ الأسعار الحقيقية، لا على مؤشر وحده ولا على اختيار عشوائي.</div>
-    <div>• <b>الدقة</b>: كم مرة لمس السعر الهدف قبل الوقف (أو انتهت المدة بالاتجاه الصحيح بعد العمولة) على كل التاريخ ثم السجل الحي. الهدف والوقف من تذبذب العملة نفسها.</div>
-    <div>• <b>غداً</b> من شموع 4 ساعات · <b>الشهر القادم</b> من الشموع اليومية · لا توقع للساعات القليلة القادمة: القياس وجده أضعف من الصدفة.</div>
-    <div>• <b>🔎 الآن في السوق</b>: وصف لما يحدث (تجميع · تصريف · شراء أو بيع عدواني · ازدحام · القوة مقابل البيتكوين) وليس توقعاً.</div>
-    <div style="color:var(--amber);margin-top:6px">⚠️ احتمالات لا ضمانات — أفضل دقة مقاسة بين 55% و65% · اللوحة تقرأ وتنبّه فقط: لا تفتح أمراً ولا تغلقه.</div></details>`;
-  return h}
 function sgRender(){const el=$('#sg_body'),tb=$('#sg_tabs');if(!el)return;const V=SGV;
-  if(tb)tb.innerHTML=[['an','🧠 المحلل'],['ind','🎯 المؤشرات'],['cat','📚 المجموعات'],['log','📜 السجل'],['cfg','⚙️ الإشعارات']].map(([k,t])=>`<button class="${SGTAB===k?'on':''}" onclick="sgTab('${k}')">${t}</button>`).join('');
-  if(!V||V.ok===false){el.innerHTML='⚠️ تعذّر تحميل المحلل';return}
+  if(tb)tb.innerHTML=[['mkt','🌐 السوق'],['coins','🪙 العملات'],['ind','📋 المؤشرات'],['log','📜 السجل'],['cfg','⚙️ الإشعارات']].map(([k,t])=>`<button class="${SGTAB===k?'on':''}" onclick="sgTab('${k}')">${t}</button>`).join('');
+  if(!V||V.ok===false){el.innerHTML='⚠️ تعذّر تحميل السوق';return}
   el.style.cssText='text-align:right';
-  el.innerHTML=SGTAB==='an'?sgAn(V):SGTAB==='cat'?sgCatUI(V):SGTAB==='log'?sgLog(V):SGTAB==='cfg'?sgCfg(V):sgInd(V)}
-function sgFcTop(S){if(!S)return '';const C=S.comp,nm=C&&SGCOMP[C.s];               // 🔮 v3.36.66: الإشارات داخل التوقعات
-  return `<button class="sg-go" onclick="openSig('ind')">🎯 <b>المؤشرات الآن</b>${S.ready?` · <b style="color:var(--green)">🟢 ${S.nb}</b> · <b style="color:var(--red)">🔴 ${S.ns}</b> تمر بإعداداتك`:' · 🏗️ الدليل يُبنى'}${nm?` · 🧭 السوق ${nm[1]} ${nm[0]}`:''} ←</button>`}
-function sgFcAn(r){const A=r.an;if(!A)return '';const H=A.hz||{},z=(x,n)=>x&&x.dir?`${n}: ${x.dir>0?'📈':'📉'} ${x.h}%`:`${n}: —`;    // 🧠 v3.36.69
-  return `<div class="sg-fc an-fc" onclick="event.stopPropagation();openInd('an')">🧠 <b>ملخص المحلل:</b> ${gEsc(A.wi||'')} ${gEsc(A.wt||'')} · ${z(H['4H'],'غداً')} · ${z(H['1D'],'الشهر القادم')} ←</div>`}
-function sgFc(r){const S=r.sig;const an=sgFcAn(r);if(!S)return an;const fs=['1D','4H'].filter(f=>S[f]&&(S[f].rows||[]).length);if(!fs.length)return an;
-  const best=fs.map(f=>S[f].rows[0]).filter(Boolean).sort((a,b)=>(b.ok-a.ok)||(b.h-a.h))[0];
-  return `<div class="sg-fc" onclick="event.stopPropagation();SBS='${gEsc(r.sym)}';SBV=null;openSig('now')">🎯 ${fs.map(f=>`${f==='1D'?'يومي':'4 ساعات'}: <b style="color:var(--green)">🟢 ${S[f].nb}</b> · <b style="color:var(--red)">🔴 ${S[f].ns}</b>`).join(' · ')}
-    ${best?`<small> — أقواها: ${gEsc(best.nm.join(' + '))} (صدقت ${best.w} من ${sgAr(best.n,'time')} · ${(+best.h).toFixed(0)}%)</small>`:''}</div>`.replace(/^/,an)}
-function sgMini(){return `<div class="ind-al" style="margin-top:10px"><div class="ind-al-h"><b>🔔 إشعارات المحلل — 🟢 دخول شراء · 🔴 دخول بيع · 🔎 الآن في السوق · 🌐 السوق</b>
-  <span style="display:flex;gap:6px"><button onclick="openSig('cfg')">⚙️ الإعدادات</button><button onclick="openInd('an')">🧠 المحلل</button></span></div>
-  <div class="ind-sub" style="margin-top:6px">فقط مجموعات مؤشرات متفقة صدقت في الفترات الأربع من تاريخ الأسعار الحقيقية · تصلك بالدقة التي تختارها · مع تقدير كم إشعاراً بالأسبوع قبل أن تختار</div></div>`}
+  el.innerHTML=SGTAB==='mkt'?anMkt():SGTAB==='coins'?anCoins():SGTAB==='log'?anLog(V):SGTAB==='cfg'?sgCfg(V):sgInd(V)}
+function sgFcTop(S){return `<button class="sg-go" onclick="openInd('coins')">📈 <b>السوق الآن</b> — الحقائق والمدى المتوقع لكل عملة ←</button>`}     // 📈 v3.36.75
+function sgFcAn(r){return ''}                                          // 📈 v3.36.75: المحلل القديم أُزيل (لم يغلب الصدفة)
+function sgFc(r){return ''}
+function sgMini(){return `<div class="ind-al" style="margin-top:10px"><div class="ind-al-h"><b>🔔 تنبيهات السوق — الاتجاه · الحجم · كسر المستويات · الحركة خارج المدى · السوق</b>
+  <span style="display:flex;gap:6px"><button onclick="openSig('cfg')">⚙️ الإعدادات</button><button onclick="openInd('mkt')">📈 السوق</button></span></div>
+  <div class="ind-sub" style="margin-top:6px">تنبيهات بما يحدث فعلاً بالأرقام — لا توقّع اتجاه ولا أوامر · كل حدث مرة واحدة · لعملاتك وللسوق كله</div></div>`}
 /* 🔮 v3.29.0: التوقعات — نفس مؤشرات 📊 على شموع أطول (يوم ← 4 ساعات · أسبوع ← يوم · شهر ← 3 أيام · 3 أشهر ← أسبوع) + 4 إضافات ·
    دائماً «شنو تكول المؤشرات» ويمها شارة صدقها على نفس العملة · النطاق 80% · الدعم والمقاومة · بلا إشعارات */
 let FCV=null,FCT=null;const FCO={},FCS={};
@@ -31836,7 +32230,7 @@ function fcAlign(){const a=$('#fcBtn'),b=$('#indBtn');if(!a||!b||!a.offsetParent
 addEventListener('resize',()=>{const a=$('#fcBtn');if(a){a._al='';fcAlign()}});
 async function openFc(){
   showModal(`<h2>🔮 التوقعات</h2><div id="fc_body" style="color:var(--mut);font-size:12.5px;padding:16px;text-align:center">${LDR('جاري الحساب…')}</div>
-    <div class="mbtns"><button onclick="openInd('ind')">🎯 المؤشرات</button><button onclick="openGuide('','fc')">📖 الدليل</button><button onclick="openTicker()">⚙️ العملات</button><button onclick="hideModal()">إغلاق</button></div>`);
+    <div class="mbtns"><button onclick="openInd('coins')">📈 السوق</button><button onclick="openInd('ind')">📋 المؤشرات</button><button onclick="openGuide('','fc')">📖 الدليل</button><button onclick="openTicker()">⚙️ العملات</button><button onclick="hideModal()">إغلاق</button></div>`);
   await fcLoad()}
 async function fcLoad(){clearTimeout(FCT);try{FCV=await api('/api/forecast')}catch(e){FCV=null}fcRender();
   if(FCV&&FCV.busy&&$('#fc_body'))FCT=setTimeout(fcLoad,4000)}
@@ -31870,11 +32264,7 @@ const FCK={vp:'O-vp',avwap:'O-avwap',of:'O-of',pa:'O-pa',trend:'O-trend',st:'O-s
 function fcPl(p){const P=((FCV&&FCV.plain)||{})[FCK[p.k]]||null;                 // 🔮 v3.36.71: المؤشر نفسه في «🎯 المؤشرات» — اسمه الواضح لحاله ومعناه
   if(!P)return {nm:p.name,mean:p.what||'',tech:''};
   return {nm:p.w==='p'?P[1]:p.w==='n'?P[2]:(P[5]||p.name)+': محايد',mean:p.w==='p'?P[3]:p.w==='n'?P[4]:(p.what||''),tech:P[5]||''}}
-function fcAn(r,k){const fr={d:'4H',m:'1D'}[k];if(!fr)return '';const A=r.an,z=A&&(A.hz||{})[fr],nm=fr==='4H'?'غداً':'الشهر القادم';   // 🧠 المحلل لهذا المدى
-  if(!A)return `<div class="fc-an">🧠 <b>المحلل (${nm})</b>: يظهر بعد أول فحص للمؤشرات على هذه العملة</div>`;
-  if(!z||!z.dir)return `<div class="fc-an">🧠 <b>المحلل (${nm})</b>: لا توجد الآن مجموعة مؤشرات مثبتة تتفق على اتجاه — الأصدق ألا تُبنى قراءة على الميل وحده</div>`;
-  return `<div class="fc-an ${z.dir>0?'p':'n'}">🧠 <b>المحلل (${nm})</b>: ${z.dir>0?'📈 صعود':'📉 هبوط'} · دقة <b>${z.h}%</b> <small>(من ${sgAr(z.n,'time')})</small>${(z.why||[]).length?` · لماذا: ${z.why.map(gEsc).join(' · ')}`:''}
-    <div class="ind-sub">مجموعة مؤشرات متفقة صدقت في كل فترات التاريخ (${(z.nm||[]).map(gEsc).join(' + ')}) — التفاصيل في «🧠 المحلل»</div></div>`}
+function fcAn(r,k){return ''}                                         // 📈 v3.36.75: لا توقّع اتجاه (لم يثبت في الفحصين 13 و14)
 function fcVote(z){if(['su','u'].includes(z.vk))return `${z.up} من ${z.n}`;if(['sd','d'].includes(z.vk))return `${z.dn} من ${z.n}`;return 'محايد'}
 function fcRender(){
   const el=$('#fc_body');if(!el)return;const V=FCV;
@@ -31883,7 +32273,7 @@ function fcRender(){
   const R=V.rows||[],HZ=V.hz||[];
   if(!R.length){el.innerHTML=V.busy?LDR('⏳ أول حساب: يجلب تاريخ كل عملة ويفحص مؤشراتها على ماضيها — مرة واحدة فقط (بعدها يصبح خفيفاً)…'):('لا توجد عملات في الشريط — أضفها من ⚙️ ← 📈 شريط الأسعار'+(V.err?'<br><small>'+gEsc(V.err)+'</small>':''));return}
   el.style.cssText='text-align:right';
-  let h=sgFcTop(V.sig)+`<div class="ind-top"><span class="ind-chip">🎯 نفس المؤشرات بأسمائها في «🎯 المؤشرات» + 🧠 المحلل</span><span class="ind-chip">🔄 ${V.ts?gAgo(V.ts):'—'} · كل ${Math.round((V.every||1800)/60)} د</span>
+  let h=sgFcTop(V.sig)+`<div class="ind-top"><span class="ind-chip">🎯 نفس المؤشرات بأسمائها</span><span class="ind-chip">🔄 ${V.ts?gAgo(V.ts):'—'} · كل ${Math.round((V.every||1800)/60)} د</span>
     <span class="ind-chip">🔕 بلا إشعارات</span></div>${V.busy?`<div class="ind-sub">⏳ يُكمل حساب بقية العملات…</div>`:''}`;
   h+=`<div class="ind-list">${R.map(r=>{
     if(r.short)return `<div class="ind-c"><div class="ind-h"><span class="cn">${gEsc(r.base)}</span><span class="ind-v flat">⏳ تاريخها قصير (${r.days||0} يوم)</span></div>
@@ -31916,7 +32306,7 @@ function fcRender(){
       ${fcBot(r)}${sgFc(r)}<div class="fc-rows"><div class="fc-r fc-hd"><span>المدى</span><span title="كم مرة كان السعر أعلى بعد المدة على الأسعار الحقيقية / العادي">أعلى بعدها</span><span>النطاق المتوقع</span><span>المؤشرات</span></div>${rows}</div>${det}</div>`}).join('')}</div>`;
   h+=`<details class="ind-help"><summary>كيف أقرأ هذه النافذة؟</summary>
     <div>• كل سطر مدى زمني: <b>ماذا تقول المؤشرات</b> (كم مؤشراً صاعداً أو هابطاً من العدد كله: المؤشرات العشرة نفسها وأربعة إضافية) · <b>النطاق المتوقع</b> (يقع السعر في نهاية المدة بين الرقمين بنسبة 80%) · <b>صدقها</b>.</div>
-    <div>• المؤشرات هنا هي نفسها في «🎯 المؤشرات» بأسمائها ومعانيها · وفي «يوم» و«شهر» يأتي أولاً <b>🧠 المحلل</b>: لا يتوقع إلا حين تتفق مجموعة مؤشرات صدقت في كل فترات التاريخ (غداً من شموع 4 ساعات · الشهر القادم من اليومية)، وميل المؤشرات تحته وصف للحال.</div>
+    <div>• المؤشرات هنا هي نفسها في «📋 المؤشرات» بأسمائها ومعانيها — وصف للحال لا توقّع · الحقائق والمدى المتوقع لكل عملة في «📈 السوق».</div>
     <div>• تُحسب المؤشرات على شموع أطول بحسب المدى: اليوم على شموع 4 ساعات · الأسبوع على اليومية · الشهر على شموع 3 أيام · الأشهر الثلاثة على الأسبوعية.</div>
     <div>• <b>صدقها</b>: القراءة نفسها فُحصت على ماضي العملة (كل مرة ترى ما قبلها فقط): كم مرة أصاب السهم مقارنة بالصدفة — 🟢 أفضل من الصدفة بوضوح · 🟡 أفضل قليلاً · ⚪\uFE0F مثل الصدفة · 🔴 أسوأ من الصدفة · ⏳ عينة قليلة. ولكل مؤشر في التفاصيل صدقه الخاص.</div>
     <div>• الإضافات: 🧠 تصنيف لورنتز · 〰️ نادارايا–واتسون (دون إعادة رسم الماضي) · 😨 الخوف والطمع بأطرافه · 💸 التمويل (اليوم والأسبوع). ⚡ = هدوء غير معتاد؛ يُشاع أنه يسبق حركة كبيرة، وقياسنا على 20 عملة أعطى ×0.95 — أي لا يسبقها في المتوسط.</div>
@@ -33363,7 +33753,7 @@ function holyGoNow(){const t=HGO;HGO=null;if(!t)return;
   if(k==='app')return openAppPanel();
   if(k==='win')return openWinPanel();
   if(k==='ind')return openInd();
-  if(k==='sig')return openSig('ind');                            // 🎯 v3.36.66 · v3.36.71: «🎯 المؤشرات»
+  if(k==='sig')return openSig('coins');                          // 📈 v3.36.75: تنبيهات السوق ⇒ عملاتك الآن (قبلها 🎯 v3.36.66 · v3.36.71)
   if(k==='set')return openSettings();                             // ⚙️ v3.26.8                                  // 🔔 v3.26.6: إشعار سعر انضغط ⇒ «📊 المؤشرات»
   if(k==='bot')return holyFlash(CARDS.get(v));
   if(k==='sym'){for(const [d,el] of CARDS){if((botOf(d)||{}).symbol===v)return holyFlash(el)}return}

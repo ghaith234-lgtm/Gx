@@ -14,7 +14,7 @@
 #     the channel · 🌊 not twice when «📊 تنبيهات المؤشرات» already sends it · 🧭 a new state of the market
 #   ⑧ settings: bounds · coins cleaned · the weekly estimate falls when the threshold rises
 #   ⑨ the worker: its own process with no network writes its answer · the thread mode leaves the dashboard's network alone
-#   ⑩ the tick end to end (candles stubbed): history → the catalog built → a scan at the close → notifications · 🔮 gets every coin's signals
+#   ⑩ the tick end to end (candles stubbed): history → a scan at the close → the market now saved (📈 v3.36.75: no catalog built · no old notifications)
 #   ⑪ safety: no order function is called · no key in any signals file
 #   python3 devtests/t_sigs.py [Holy_Dashboard.pyw] [-q]
 import importlib.machinery, importlib.util, json, math, os, random, shutil, subprocess, sys, tempfile, time, urllib.request
@@ -379,32 +379,33 @@ ok("⑥b the word: BUY 83% with a SELL 52% on too ⇒ «🟢 فرصة شراء �
 SENT.clear()
 blocks = [{"sym": f"C{i}-USDT", "ty": "buy", "f": "4H", "t": f"🟢 شراء — C{i}-USDT · 4 ساعات", "b": "x"} for i in range(5)]
 st7 = {}
-_CFG.update(sg_cap=3)
-outd = m._sg_deliver(blocks, st7, m.sg_cfg(), NOW)
-ok("⑦ one Telegram message for the round · the daily cap 3 ⇒ 3 of 5 sent + «🔕 وصلت حد إشعارات المحلل اليوم (3)» · all 5 in the page log",
-   len(outd) == 3 and len([x for x in SENT if x[0] == "tg"]) == 1 and "🧠 المحلل — إشعارات جديدة (3)" in SENT[0][1] and "🔕 وصلت حد إشعارات المحلل اليوم (3)" in SENT[0][1]
+CAP3 = lambda: dict(m.sg_cfg(), cap=3)                    # (📈 v3.36.75: the daily cap is fixed inside at 12 — 3 here to see it act)
+outd = m._sg_deliver(blocks, st7, CAP3(), NOW)
+ok("⑦ one Telegram message for the round · the daily cap 3 ⇒ 3 of 5 sent + «🔕 وصلت حد تنبيهات السوق اليوم (3)» · all 5 in the page log",
+   m.sg_cfg()["cap"] == 12 and len(outd) == 3 and len([x for x in SENT if x[0] == "tg"]) == 1 and "📈 السوق — تنبيهات جديدة (3)" in SENT[0][1]
+   and "🔕 وصلت حد تنبيهات السوق اليوم (3)" in SENT[0][1]
    and len(st7["log"]) == 5 and any(x[0] == "app" and x[2] == "sig" and x[3] == "ind" for x in SENT), SENT)
 SENT.clear()
-m._sg_deliver(blocks[:1], st7, m.sg_cfg(), NOW + 60)
+m._sg_deliver(blocks[:1], st7, CAP3(), NOW + 60)
 ok("⑦ the cap reached ⇒ nothing more today (no second note)", not SENT, SENT)
 SENT.clear()
-_CFG.update(sg_cap=0, sg_quiet=[0, 8])
+_CFG.update(sg_quiet=[0, 8])
 night = time.mktime(time.strptime(time.strftime("%Y-%m-%d", time.localtime(NOW)) + " 03:00", "%Y-%m-%d %H:%M"))
 st8 = {}
 m._sg_deliver(blocks[:2], st8, m.sg_cfg(), night)
 ok("⑦ 🌙 quiet hours (00–08): nothing sent at 03:00, the two wait", not SENT and len(st8.get("qq") or []) == 2, (SENT, st8))
 m._sg_flush(st8, m.sg_cfg(), night + 6 * 3600)
-ok("⑦ at 09:00 they come as one message «🌙 إشعارات المحلل أثناء ساعات الهدوء (2)»", len(SENT) == 2 and "🌙 إشعارات المحلل أثناء ساعات الهدوء (2)" in SENT[0][1]
+ok("⑦ at 09:00 they come as one message «🌙 تنبيهات السوق أثناء ساعات الهدوء (2)»", len(SENT) == 2 and "🌙 تنبيهات السوق أثناء ساعات الهدوء (2)" in SENT[0][1]
    and not st8.get("qq"), SENT)
 SENT.clear()
 _CFG.update(sg_quiet=None, sg_sum=20)
 st9 = {}
 m._sg_deliver(blocks[:3], st9, m.sg_cfg(), night + 9 * 3600)
-m._sg_flush(st9, m.sg_cfg(), night + 9 * 3600)
-ok("⑦ 🗓️ the daily summary at 20:00: nothing at noon …", not SENT and len(st9.get("sumq") or []) == 3, (SENT, st9.get("sumq")))
+n9 = len([x for x in SENT if x[0] == "tg"])
 m._sg_flush(st9, m.sg_cfg(), night + 17 * 3600 + 60)
-m._sg_flush(st9, m.sg_cfg(), night + 17 * 3600 + 120)
-ok("⑦ … at 20:00 one message «🗓️ ملخص المحلل اليوم (3)» (once a day)", len([x for x in SENT if x[0] == "tg"]) == 1 and "🗓️ ملخص المحلل اليوم (3)" in SENT[0][1], SENT)
+ok("⑦ 📈 v3.36.75: no daily summary any more (an old «20:00» setting is ignored) — the round goes out at once as «📈 السوق — تنبيهات جديدة (3)» · nothing more at 20:00",
+   m.sg_cfg()["sum"] is None and n9 == 1 and "📈 السوق — تنبيهات جديدة (3)" in SENT[0][1] and not st9.get("sumq")
+   and len([x for x in SENT if x[0] == "tg"]) == 1, SENT)
 SENT.clear()
 _CFG.update(sg_sum=None, sg_ch="app")
 m.TG_MUTED["v"] = True
@@ -415,9 +416,8 @@ ok("⑦ 🔕 mute ⇒ nothing goes out · the channel «التطبيق فقط» 
    SENT == [("app", "🟢 شراء — C1-USDT · 4 ساعات\nx", "sig", "ind")], SENT)
 _CFG.pop("sg_ch", None)
 SENT.clear()
-_CFG.update(sg_cap=0)
 long_ = [{"sym": f"C{i}-USDT", "ty": "buy", "f": "4H", "t": f"🟢 شراء — C{i}-USDT · 4 ساعات", "b": "اتفقت 4 إشارات: " + "س" * 380} for i in range(30)]
-m._sg_deliver(long_, {}, m.sg_cfg(), NOW + 120)
+m._sg_deliver(long_, {}, dict(m.sg_cfg(), cap=0), NOW + 120)
 tg_ = [x[1] for x in SENT if x[0] == "tg"]
 ok(f"⑦ a long round (30 notifications ≈ {sum(len(b['t']) + len(b['b']) for b in long_)} letters) reaches Telegram in {len(tg_)} parts, each under its "
    "4096-letter limit, nothing lost", len(tg_) >= 3 and all(len(t) <= 3800 for t in tg_) and all(f"C{i}-USDT" in "".join(tg_) for i in range(30)),
@@ -451,9 +451,9 @@ m.save_app_cfg = lambda c: real_cfg.clear() or real_cfg.update(c) or c
 r = m.sg_set({"thr": 120, "min": 1, "rmin": 99, "cap": -4, "coins": ["xrp", "sol-usdt", "bad coin!", "XRP"], "quiet": [23, 7], "sum": 25, "ch": "tg",
               "types": {"sell": False, "nope": True}, "fr": {"4H": False}})
 c = r["cfg"]
-ok("⑧ settings are bounded and cleaned: 95% · the count stays 15 (fixed inside · v3.36.71) · 50 · cap 0 · coins XRP-USDT · SOL-USDT (no junk, no duplicate) · quiet 23–07 · summary 01:00 · "
-   "Telegram only · 🔴 off · 4H off", c["thr"] == 95 and c["min"] == 15 and "sg_min" not in real_cfg and c["rmin"] == 50 and c["cap"] == 0 and c["coins"] == ["XRP-USDT", "SOL-USDT"]
-   and c["quiet"] == [23, 7] and c["sum"] == 1 and c["ch"] == "tg" and c["types"]["sell"] is False and "nope" not in c["types"] and c["fr"]["4H"] is False, c)
+ok("⑧ settings are bounded and cleaned: 95% · the count stays 15 (fixed inside · v3.36.71) · 50 · the cap stays 12 and no summary (inside · v3.36.75) · coins XRP-USDT · SOL-USDT (no junk, no duplicate) · quiet 23–07 · "
+   "Telegram only · 🔴 off · 4H off", c["thr"] == 95 and c["min"] == 15 and "sg_min" not in real_cfg and c["rmin"] == 50 and c["cap"] == 12 and c["coins"] == ["XRP-USDT", "SOL-USDT"]
+   and c["quiet"] == [23, 7] and c["sum"] is None and c["ch"] == "tg" and c["types"]["sell"] is False and "nope" not in c["types"] and c["fr"]["4H"] is False, c)
 m.sg_set({"coins": None})
 ok("⑧ «↩️ مثل الشريط» ⇒ your coins follow the ticker again", m.sg_cfg()["coins"] is None and "sg_coins" not in real_cfg, real_cfg)
 _ticks.clear()
@@ -474,7 +474,7 @@ r_tk = m.sg_set({"coins": None})
 time.sleep(0.3)
 m._SG["cidx"] = _ci0
 ok("⑧ 🪙 a coin whose data is already here: «🪙 أُضيفت SOL لإشعاراتك» (nothing to fetch, no round) · «↩️ مثل الشريط» says so",
-   r_sol["msg"] == "🪙 أُضيفت SOL لإشعاراتك" and r_tk["msg"] == "↩️ عملات إشعارات المحلل الآن نفس عملات الشريط" and not _t_sol, (r_sol["msg"], r_tk["msg"], _t_sol))
+   r_sol["msg"] == "🪙 أُضيفت SOL لإشعاراتك" and r_tk["msg"] == "↩️ عملات تنبيهات السوق الآن نفس عملات الشريط" and not _t_sol, (r_sol["msg"], r_tk["msg"], _t_sol))
 m.sg_set({"coins": None})
 time.sleep(0.3)
 real_cfg.update(ticker_coins=list(cat["coins"]), sg_thr=50, sg_cap=0)
@@ -551,52 +551,35 @@ SENT.clear()
 t_a = float(T4E + 14400 + 100)
 m.sg_tick(now=t_a)
 st_a = m._sg_st()
-ok("⑩ first tick: the history of every coin is fetched (both frames) and the catalog is started in its own worker",
-   len(CALLS) >= 2 * len(COINS) and m._SG.get("build") is not None and st_a.get("cat_try"), (len(CALLS), m._SG.get("build"), st_a))
-job = m._SG["build"]
-job["th"].join(600) if "th" in job else None
-m.sg_tick(now=t_a + 30)
-cat2 = m._sg_cat()
-ok("⑩ the catalog is ready on the next tick", cat2 and len(cat2["e"]) > 100 and m._SG.get("build") is None, m._SG.get("err"))
-ok("⑩ the catalog carries its code's version (cv) — one built by an older code (without a new signal) is rebuilt by itself",
-   cat2 and cat2.get("cv") == m.SG_CAT_VER, cat2 and cat2.get("cv"))
-st_b = m._sg_st()
-ok("⑩ … and the scan of the closed candles ran (both frames) · the live record started · 🧭 the compass is there",
-   st_b.get("t_4H") == T4E and st_b.get("t_1D") == TDE and len(st_b.get("pend") or []) > 0 and (st_b.get("comp") or {}).get("s") in ("up", "flat", "down")
-   and set(st_b.get("now") or {}) == set(COINS), {k: st_b.get(k) for k in ("t_4H", "t_1D", "comp")})
+mk = m._an_load()
+ok("⑩ first tick (📈 v3.36.75): the history of every coin is fetched (every frame) · the scan of the closed candles ran · the market now is saved · "
+   "no old catalog is built any more", len(CALLS) >= 2 * len(COINS) and m._SG.get("build") is None and not os.path.exists(m.SG_CAT) and not st_a.get("cat_try")
+   and st_a.get("b_4H") == T4E and st_a.get("b_1D") == TDE and (mk.get("now") or {}).get("coins"),
+   (len(CALLS), m._SG.get("build"), {k: st_a.get(k) for k in ("b_4H", "b_1D", "cat_try")}))
+ok("⑩ … 🧭 the compass is still read (the market's daily state)", (st_a.get("comp") or {}).get("s") in ("up", "flat", "down"), st_a.get("comp"))
 n_calls = len(CALLS)
 m.sg_tick(now=t_a + 400)
 ok("⑩ a tick before the next close fetches nothing and scans nothing (no load on the exchange)", len(CALLS) == n_calls, len(CALLS) - n_calls)
 sent_tg = [x for x in SENT if x[0] == "tg"]
-ok(f"⑩ notifications of that scan reached Telegram ({len(sent_tg)} message) — only XRP · SOL and the market", sent_tg and all(
-   ("ADA-USDT" not in x[1] and "ETH-USDT" not in x[1] and "BNB-USDT" not in x[1]) for x in sent_tg), sent_tg[:1])
+ok("⑩ the old analyst's notifications never go out (no «دخول شراء» · no «🧠»): the first look has nothing to compare yet ⇒ nothing sent",
+   not sent_tg and not any("دخول" in x[1] or "🧠" in x[1] for x in SENT), sent_tg[:1])
 st_bad = m._sg_st()
 st_bad["bad"] = ["ZZZ-USDT"]
 m._sg_save(st_bad)
 real_cfg.update(sg_coins=["XRP-USDT", "SOL-USDT", "ZZZ-USDT"])
 vb = m.sg_view()
 ok("⑩ 🪙 a coin of yours the exchange does not have is marked ⚠️ (bad) · XRP and SOL are not", vb["bad"] == ["ZZZ-USDT"] and vb["short"] == [], (vb["bad"], vb["short"]))
+va = m.an_view()
+ok("⑩ … and the market window says so too (missing ZZZ)", "ZZZ-USDT" in (va.get("missing") or []) and "XRP-USDT" not in (va.get("missing") or []), va.get("missing"))
 real_cfg.pop("sg_coins", None)
-v = m.sg_view()
-ok("⑩ the 🎯 window's data: the catalog · now per coin (your coins first) · the estimate · the log · the compass",
-   v["cat"] and v["now"] and v["now"][0]["mine"] and v["est"] and v["comp"] and isinstance(v["log"], list), {k: bool(v.get(k)) for k in ("cat", "now", "est", "comp")})
-ok("⑩ «the truest first» counts how many times: 13 of 15 (87%) ranks above 2 of 2 (100%) (Wilson's 95% lower bound)",
+ok("⑩ «the truest first» counts how many times: 13 of 15 (87%) ranks above 2 of 2 (100%) (Wilson's 95% lower bound — the tables' order)",
    m._sg_wlb(13, 15) > m._sg_wlb(2, 2) and m._sg_wlb(20, 24) > m._sg_wlb(3, 3) and abs(m._sg_wlb(0, 0)) < 1e-9, (m._sg_wlb(13, 15), m._sg_wlb(2, 2)))
-qa = m.sg_catlist({})
-ok("⑩ … and the catalog's default order is that bound, highest first", qa["rows"] == sorted(qa["rows"], key=lambda r: -r["lb"]), [r["lb"] for r in qa["rows"][:5]])
-q = m.sg_catlist({"fr": ["1D"], "side": ["1"], "size": ["2"]})
-ok(f"⑩ the catalog browser filters: daily · buy · 2 together ({q['total']})", q["ok"] and all(r["f"] == "1D" and r["s"] == 1 and len(r["k"]) == 2 for r in q["rows"]),
-   q.get("rows", [])[:2])
-rows = [{"sym": "XRP-USDT"}, {"sym": "SOL-USDT"}]
-fs = m.sg_fc(rows)
-ok("⑩ 🔮 the forecasts get every coin's signals (daily · 4-hour) and the compass", fs["ready"] and "sig" in rows[0] and set(rows[0]["sig"]) <= {"4H", "1D"}
-   and rows[0]["sig"] and fs.get("comp"), (fs, rows[0].get("sig")))
 
 # ⑪ safety
 blob = ""
-for f in (m.SG_FILE, m.SG_CAT, m.SG_CFILE):
-    blob += open(f, encoding="utf-8").read()
-ok("⑪ no order was sent · no key, secret or passphrase in any signals file", not ORD and not any(w in blob.lower() for w in ("api_key", "secret", "passphrase", "apikey")),
+for f in (m.SG_FILE, m.SG_CAT, m.SG_CFILE, m.AN_FILE):
+    blob += open(f, encoding="utf-8").read() if os.path.exists(f) else ""
+ok("⑪ no order was sent · no key, secret or passphrase in any signals or market file", not ORD and not any(w in blob.lower() for w in ("api_key", "secret", "passphrase", "apikey")),
    (ORD, [w for w in ("api_key", "secret", "passphrase") if w in blob.lower()]))
 src = open(os.path.join(R, "Holy_Dashboard.pyw"), encoding="utf-8").read()
 a, b = src.index("# ═══════════════ 🎯 v3.36.66"), src.index("# ═══════════════ 🔔 v3.26.6: إشعارات الأسعار")
