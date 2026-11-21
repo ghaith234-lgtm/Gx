@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.75"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.76"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -19442,7 +19442,7 @@ def sg_scan_calc(jd, job):
             rows = ((cdb.get(sec) or {}).get(sym) or {}).get("d") or []
             if len(rows) < 300 or len(rd) < 220:
                 continue
-            D, E = _sg_events(rows, fr == "1D", ctx, t0=len(rows) - SG_LK[fr] - 3, dx=SG_SEC[fr])
+            D, E = _sg_events(rows, fr == "1D", ctx, t0=210 if fr == "1D" else len(rows) - SG_LK[fr] - 3, dx=SG_SEC[fr])   # 🎯 v3.36.76: اليومي بكامل تاريخه (للميل)
             out.setdefault(sym, {})[fr] = (D, E)
             FF.setdefault(fr, {})[sym] = (D, E)
             if fr == "4H":
@@ -19469,7 +19469,8 @@ def sg_scan_calc(jd, job):
                                            "hi": max(D["H"][i - lk + 1:i + 1]), "ch": D["C"][i] / D["C"][i - 1] - 1.0 if D["C"][i - 1] else 0.0}
             res[sym][fr]["e1"] = sorted(f"{c}:{s}" for (c, s), lst in E.items() if i in lst[-4:])      # 📋 ما انطلق على هذه الشمعة بالذات
     an = _safe(an_scan, cdb, pdb, fdb, coins, default=None)          # 📈 v3.36.75: الآن والمدى المتوقع لكل عملة وللسوق
-    return {"ok": True, "c": res, "crash": crash, "ts": time.time(), "an": an}
+    td = _safe(td_pack, FF.get("1D"), default=None) if "1D" in frs else None     # 🎯 v3.36.76: الميل اليومي (أبطال الجداول المجمّعة)
+    return {"ok": True, "c": res, "crash": crash, "ts": time.time(), "an": an, "td": td}
 
 
 def sg_child(jd, proc=False):
@@ -21088,6 +21089,149 @@ def an_view():
     return {"ok": True, "t": P.get("t"), "since": A.get("since"), "mkt": P.get("mkt"), "coins": [P["coins"][s] for s in mine if s in (P.get("coins") or {})],
             "mine": mine, "missing": [s for s in mine if s not in (P.get("coins") or {})], "rec": rec,
             "hz": [[k, nm] for k, _sec, _h, _st, nm in AN_HZ], "z": 80}
+
+
+# ───────────── 🎯 v3.36.76: الميل اليومي — أبطال الجداول المجمّعة (بطل ⇄ صامت) ─────────────
+#   المالك (21-11): «نعم اريد إضافة ميل يومي ضعيف» · فحص 13: سجل كل العملات معاً على اليومي (≥ 50 يوماً · ≥ 60%) صدق 56% من 1165 بالماضي ⇒
+#   · كل صف يُحكم بإغلاق اليوم التالي على كل العملات معاً، بترتيب الزمن (لا نتيجة قبل وقتها) · حركة أصغر من TD_P["mv"] لا تُحسب
+#   · البطل: سجله ≥ dmin يوماً مختلفاً ونسبته ≥ up ⇒ يبقى بطلاً حتى تنزل تحت dn (فجوة أمان) · بطلان على الأكثر من كل أسرة
+#   · ميل العملة = أبطال انطلقوا على شمعتها اليوم بجهة واحدة (ولا بطل عكسها) ⇒ يُحكم بإغلاق الغد بالطريقة نفسها · وهذا سجله الذي يُعرض
+#   · نفس الدوال في اللوحة وفي ci/sig_check15.py (الذي اختار القيم) — عرض وإشعارات فقط، لا أوامر
+TD_P = {"dmin": 50, "up": 0.60, "dn": 0.52, "dec": 1.0, "cap": 2, "k": 1, "mv": 0.002, "mode": "raw"}
+
+
+def _td_fires(D, E):
+    """كل شمعة ⇒ {الرمز: الجهة} لما انطلق عليها (قاعدة الجداول: الجهتان معاً ⇒ لا شيء · أحداث الجهة الواحدة بجهتها)"""
+    f = {}
+    for (code, s), lst in E.items():
+        if code not in SB_NUM or (code in SB_ONE and s != SB_ONE[code]):
+            continue
+        for i in lst:
+            d = f.setdefault(i, {})
+            d[code] = s if d.get(code, s) == s else 0
+    return {i: {c: s for c, s in d.items() if s} for i, d in f.items()}
+
+
+def _td_fam(code):
+    return (_sg_plain(code) or ("market",))[0]
+
+
+def td_walk(F, p=None, t_from=0):
+    """🎯 F = {العملة: (الشموع, الإشارات)} على اليومي ⇒ بترتيب الزمن: سجل كل صف للعملات كلها معاً من الصفر · الأبطال بما عُرف وقتها فقط ·
+    ميل كل عملة وحكمه ⇒ {"p", "rec" (لكل رمز: صدق · أخطأ · آخر وقت · أيام مختلفة · آخر يوم · العدد), "on", "champ", "tend"}
+    tend = [(اليوم, العملة, الجهة, النتيجة 1 صدق · 0 أخطأ · 2 حركة صغيرة · -1 لم يُغلق الغد بعد, الأبطال)]"""
+    p = dict(TD_P, **(p or {}))
+    dec, mv, up, dn, dmin, cap, kk = float(p["dec"]), float(p["mv"]), float(p["up"]), float(p["dn"]), int(p["dmin"]), int(p["cap"]), int(p["k"])
+    wlb = p.get("mode") == "wlb"
+    fam = {c: _td_fam(c) for c in SB_NUM}
+    FI, days = {}, {}
+    for sym, (D, E) in F.items():
+        FI[sym] = fi = _td_fires(D, E)
+        for i in fi:
+            days.setdefault(D["T"][i], []).append((sym, i))
+    rec, on, champ, pend, pk, tend = {}, set(), set(), {}, [], []
+
+    def sc(r):
+        return r[0] / (r[0] + r[1]) if r[0] + r[1] > 0 else 0.0
+
+    def ok_up(r):
+        if wlb:
+            return r[5] >= dmin and _sg_wlb(r[0], r[0] + r[1]) / 100.0 >= up
+        return r[3] >= dmin and sc(r) >= up
+    for t in sorted(days):
+        moved = False
+        while pk and pk[0] <= t:
+            k = heapq.heappop(pk)
+            for code, win, d in pend.pop(k, ()):
+                r = rec.get(code)
+                if r is None:
+                    r = rec[code] = [0.0, 0.0, k, 0, -1, 0]
+                if dec < 1.0 and k > r[2]:
+                    f_ = dec ** ((k - r[2]) / 86400.0)
+                    r[0] *= f_
+                    r[1] *= f_
+                r[2] = k
+                r[0 if win else 1] += 1.0
+                r[5] += 1
+                if d != r[4]:
+                    r[3] += 1
+                    r[4] = d
+            moved = True
+        if moved:
+            for code, r in rec.items():
+                if code in on:
+                    if sc(r) < dn:
+                        on.discard(code)
+                elif ok_up(r):
+                    on.add(code)
+            by = {}
+            for code in on:
+                by.setdefault(fam.get(code, "market"), []).append(code)
+            champ = set()
+            for lst in by.values():
+                lst.sort(key=lambda c: (-sc(rec[c]), -rec[c][5], c))
+                champ.update(lst[:cap])
+        for sym, i in days[t]:
+            D = F[sym][0]
+            fires = FI[sym][i]
+            C = D["C"]
+            r_ = (C[i + 1] / C[i] - 1.0) if i + 1 < D["n"] and C[i] else None
+            if champ and t >= t_from:
+                ups = sorted(c for c, s in fires.items() if s > 0 and c in champ)
+                dns = sorted(c for c, s in fires.items() if s < 0 and c in champ)
+                side = 1 if ups and not dns and len(ups) >= kk else -1 if dns and not ups and len(dns) >= kk else 0
+                if side:
+                    res = -1 if r_ is None else 2 if abs(r_) < mv else (1 if r_ * side > 0 else 0)
+                    tend.append((t, sym, side, res, ups or dns))
+            if r_ is not None and abs(r_) >= mv:
+                kn = D["T"][i + 1]
+                if kn not in pend:
+                    pend[kn] = []
+                    heapq.heappush(pk, kn)
+                d = t // 86400
+                pend[kn].extend((c, (r_ > 0) == (s > 0), d) for c, s in fires.items())
+    return {"p": p, "rec": rec, "on": sorted(on), "champ": sorted(champ), "tend": tend}
+
+
+def td_score(tend, t_from=0, t_to=None):
+    """صدق الميل: [صدق · المحكوم] (الحركة الصغيرة والتي لم تُغلق بعد لا تُحسب)"""
+    w = n = 0
+    for t, _s, _sd, res, _c in tend:
+        if t >= t_from and (t_to is None or t < t_to) and res in (0, 1):
+            w += res
+            n += 1
+    return [w, n]
+
+
+def td_prep(cdb, coins, pdb, fdb, wide=True):
+    """🎯 كل عملة على اليومي بكامل تاريخها (نفس كود الفحص والجداول) ⇒ {العملة: (الشموع, الإشارات)}"""
+    mkt, fng = _sg_mkt(pdb, fdb), _sg_fng_raw(fdb)
+    bd = ((cdb.get("c") or {}).get("BTC-USDT") or {}).get("d") or []
+    btc = {int(r[0]): float(r[4]) for r in bd}
+    F = {}
+    for sym in coins:
+        rd = ((cdb.get("c") or {}).get(sym) or {}).get("d") or []
+        if len(rd) < 300:
+            continue
+        F[sym] = _sg_events(rd, True, _sg_ctx(sym, rd, pdb, mkt, fng, btc), dx=86400)
+    if wide:
+        _safe(_sb_wide, {"1D": F}, default=None)
+    return F
+
+
+def td_pack(F, p=None):
+    """🎯 للوحة: ميل كل عملة على آخر شمعة يومية مغلقة + الأبطال + صدق الميل (كله · آخر سنة)"""
+    if not F or len(F) < 5:
+        return None
+    W = td_walk(F, p)
+    tl = max(D["T"][D["n"] - 1] for D, E in F.values())
+    rec = W["rec"]
+    ch = sorted(([c, SB_NUM[c], round(100.0 * rec[c][0] / max(1e-9, rec[c][0] + rec[c][1]), 1), rec[c][3], rec[c][5]] for c in W["champ"] if c in rec),
+                key=lambda x: (-x[2], x[1]))
+    now = {s: [sd, cs] for t, s, sd, res, cs in W["tend"] if t == tl}
+    first = W["tend"][0][0] if W["tend"] else None
+    return {"t": tl, "now": now, "ch": ch, "on": len(W["on"]), "rec": td_score(W["tend"]), "rec1": td_score(W["tend"], tl - 365 * 86400),
+            "since": first, "p": W["p"], "coins": len(F)}
 
 
 def sg_loop():
