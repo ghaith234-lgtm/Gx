@@ -161,8 +161,8 @@ try:
     ok("⑤ one setting: the % · «أقل عدد مرات» stays 15 and «أفضل من العشوائي» stays on whatever an old config says",
        c["thr"] == 60 and c["min"] == 15 and c["rnd"] is True, c)
     cfgjs = SRC[SRC.index("function sgCfg(V){"):SRC.index("function sgCoinAdd(")]
-    ok("⑤ ⚙️ الإشعارات (📈 v3.36.75): the facts by group (🪙 عملاتك · 🌐 السوق كله) each on/off · no % · no count · no random switch · no estimate · "
-       "no daily summary · no cap", "sgSet({atypes:" in cfgjs and "🪙 عملاتك" in cfgjs and "🌐 السوق كله" in cfgjs and "لا يصلك إلا ما صدق في" not in cfgjs
+    ok("⑤ ⚙️ الإشعارات (📈 v3.36.75 · 🔔 v3.36.76): the facts by group (🔴 طوارئ · 🪙 عملاتك · 🌐 السوق كله) each 📲 · 👁 · ⛔ · no % · no count · no random switch · no estimate · "
+       "no daily summary · no cap", "sgSet({alv:" in cfgjs and "🪙 عملاتك" in cfgjs and "🔴 طوارئ" in cfgjs and "👁 بالنافذة" in cfgjs and "🌐 السوق كله" in cfgjs and "لا يصلك إلا ما صدق في" not in cfgjs
        and 'id="sg_min"' not in cfgjs and "rnd:" not in cfgjs and "sg_est" not in cfgjs and "sum:" not in cfgjs and "cap:" not in cfgjs, cfgjs[:300])
 finally:
     os.chdir(H)

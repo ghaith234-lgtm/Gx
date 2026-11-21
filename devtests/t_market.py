@@ -6,8 +6,8 @@
 #      accumulation · overbought) — plain Arabic, no Latin letters
 #   ② 🔮 the range for 4 hours · tomorrow · the week (80%): the price inside · wider with time · ③ its live record: bands issued only at their
 #      frame's close (no overlap) and graded at their end (inside ⇒ ✅ · outside ⇒ ❌ · Bitcoin apart)
-#   ④ the facts notifications: trend change · vs Bitcoin · unusual volume · support break / resistance breakout · outside the range ·
-#      accumulation · the market's trend · stormy · crash · extreme fear — each type off ⇒ nothing · once per event (20 hours)
+#   ④ the facts (🔔 v3.36.76): 14 types in plain words · a level per type (📲 · 👁 · ⛔) · 🔴 urgent (crash · surge · Bitcoin 3% an hour)
+#      past quiet hours and the cap · one card per coin + 🔮 tomorrow · 6 hours between a coin's cards unless its trend turned · the cap 12
 #   ⑤ the tick end to end (candles stubbed): the scan carries «an» · the first tick only learns the present (no notification) · the next hour's
 #      jump outside the range reaches Telegram once · no old catalog is built · ⑥ /api/market · settings: the types saved · no numbers
 #   python3 devtests/t_market.py [Holy_Dashboard.pyw] [-q]
@@ -118,7 +118,7 @@ m._an_grade(A3, cdb3, float(NOW))
 ok("③ graded at the band's end: SOL inside ⇒ ✅ · XRP outside ⇒ ❌ · Bitcoin also counted apart · one still running waits · one without its candle for days dropped",
    A3["rec"].get("4h") == [1, 1] and A3["rec"].get("1d") == [1, 0] and A3["rec"].get("btc_1d") == [1, 0] and [p[0] for p in A3["pend"]] == ["ETH-USDT"], A3)
 
-# ④ the facts
+# ④ the facts (🔔 v3.36.76: a level per type · 🔴 urgent · one card per coin)
 prev = json.loads(json.dumps(P))
 new = json.loads(json.dumps(P))
 c0, c1 = prev["coins"]["SOL-USDT"], new["coins"]["SOL-USDT"]
@@ -127,20 +127,89 @@ c1.update(trend="up", rs7=2.0, rs30=3.0, volx=2.6, ad="acc")
 c1["px"] = c0["px"] * 1.05
 LVD = {"SOL-USDT": {"px": c0["px"], "res": c0["px"] * 1.01, "sup": c0["px"] * 0.9}}         # yesterday's close and its levels
 prev["coins"]["SOL-USDT"]["rng"] = {"4h": {"lo": c0["px"] * 0.98, "hi": c0["px"] * 1.02, "w": 2.0, "t": T1E}}
-prev["mkt"].update(trend="side", vk="normal", fng=30)
-new["mkt"].update(trend="down", vk="storm", fng=18)
+prev["mkt"].update(trend="side", vk="normal", fng=30, season="mix", rng={"4h": {"lo": 9.0, "hi": 11.0}})
+new["mkt"].update(trend="down", vk="storm", fng=18, season="alt", beat=9, rsn=11)
 rng_prev = {s: c.get("rng") for s, c in prev["coins"].items()}
-F = m._an_facts(prev, new, rng_prev, ["SOL-USDT"], {}, {"on": True, "t": T4E, "k": 6, "n": 12}, LVD)
-tys = sorted({b["ty"] for k, b in F})
-ok(f"④ what changed becomes a notice: {' · '.join(tys)}", tys == sorted(["trend", "rs", "vol", "lvl", "out", "ad", "mtrend", "storm", "wave", "fng"]), [(k, b["t"]) for k, b in F])
-tt = {b["ty"]: b["t"] for k, b in F}
-ok(f"④ in plain words: «{tt['out']}» · «{tt['lvl']}» · «{tt['trend']}» · «{tt['wave']}»", "أكثر من المتوقع" in tt["out"] and "اخترق المقاومة" in tt["lvl"]
-   and "الاتجاه اليومي أصبح صاعد" in tt["trend"] and "انهيار" in tt["wave"] and "خوف شديد" in tt["fng"], tt)
-F0 = m._an_facts(prev, new, rng_prev, ["SOL-USDT"], {k: False for k in m.AN_TY}, {"on": True, "t": T4E, "k": 6, "n": 12}, LVD)
-Fh = m._an_facts(prev, new, rng_prev, ["SOL-USDT"], {}, None, None)
-ok("④ every type off ⇒ nothing (each one is the owner's switch)", F0 == [], F0)
-ok("④ a support break or resistance breakout counts only on the daily close (an hour's spike above it is not a breakout)",
-   not any(b["ty"] == "lvl" for k, b in Fh) and any(b["ty"] == "lvl" and "أغلق اليوم على" in b["b"] for k, b in F), [b["t"] for k, b in Fh])
+cdbu = {"c1": {"BTC-USDT": {"d": [[T1E - 3600, 1, 1, 1, 100.0, 1], [T1E, 1, 1, 1, 103.5, 1]]},
+               "SOL-USDT": {"d": [[T1E - 4 * 3600 + k * 3600, 1, 1, 1, 20.0 - k, 1] for k in range(5)]}}}
+SCX = {"crash": {"on": True, "t": T4E, "k": 6, "n": 12}, "c": {"BTC-USDT": {"1H": {"e1": ["W-surge:1"]}}}}
+TD = {"t": TDE, "now": {"SOL-USDT": [1, ["O-trend", "O-st"]]}, "rec": [570, 1000]}
+ALL = {k: "now" for k in m.AN_TY}
+F = m._an_facts(prev, new, rng_prev, ["SOL-USDT"], ALL, SCX, LVD, cdbu, TD)
+tys = sorted({f["ty"] for k, f in F})
+ok(f"④ what changed becomes a notice — all {len(tys)} types: {' · '.join(tys)}", tys == sorted(m.AN_TY), [(k, f["ln"][:40]) for k, f in F])
+L = {f["ty"]: f["ln"] for k, f in F}
+ok(f"④ plain words with the numbers: «{L['trend']}» · «{L['out'][:60]}…» · «{L['lvl'][:60]}…»",
+   L["trend"].startswith("📈 الاتجاه اليومي أصبح صاعداً") and "صعد أكثر من المتوقع" in L["out"] and "فوق المدى المتوقع للساعات الأربع" in L["out"]
+   and "اخترق المقاومة" in L["lvl"] and "بإغلاق اليوم" in L["lvl"] and "الحجم ×2.6" in L["lvl"] and "حجم تداول غير عادي: ×2.6" in L["vol"], L)
+ok(f"④ 🎯 the daily tendency (only when the champions fire): «{L['tend'].splitlines()[0]}» · the indicators by name · «ليس ضماناً»",
+   L["tend"].startswith("🎯 ميل يومي للصعود — صدق هذا الميل 57% من 1,000 مرة") and "الاتجاه العام" in L["tend"] and "ليس ضماناً" in L["tend"], L["tend"])
+ok(f"④ the market: «{L['mtrend'][:50]}…» · «{L['season'][:55]}…» · «{L['fng']}»", L["mtrend"].startswith("📉 السوق: اتجاه البيتكوين اليومي أصبح هابطاً")
+   and L["season"].startswith("🪙 السيولة تتجه إلى العملات البديلة: 9 من 11 عملة") and L["fng"] == "😨 مزاج السوق: خوف شديد (18 من 100)" and L["storm"].startswith("🎢 هاج السوق"), L)
+ok(f"④ 🔴 urgent: «{L['wave'].splitlines()[0]}» (6 of 12 · Bitcoin +3.5% in an hour · your coins in 4 hours) · «{L['surge'].splitlines()[0]}» · «{L['bstorm'].splitlines()[0]}»",
+   "6 من 12 عملة" in L["wave"] and "البيتكوين: +3.5% خلال ساعة" in L["wave"] and "من عملاتك (4 ساعات): SOL -20.0%" in L["wave"]
+   and L["surge"].startswith("🚀 صعود جماعي") and L["bstorm"].startswith("⚡ البيتكوين يتحرك بعنف: +3.5% خلال ساعة") and "كان 9 – 11" in L["bstorm"]
+   and all(f["urg"] for k, f in F if f["ty"] in ("wave", "surge", "bstorm")), L)
+lat = [f["ln"] for k, f in F if re.search(r"[A-Za-z]{2,}", f["ln"].replace("SOL", ""))]
+ok("④ no Latin words in any notice (only the coin's own name)", not lat, lat)
+F0 = m._an_facts(prev, new, rng_prev, ["SOL-USDT"], {k: "off" for k in m.AN_TY}, SCX, LVD, cdbu, TD)
+FV = m._an_facts(prev, new, rng_prev, ["SOL-USDT"], {}, SCX, LVD, cdbu, TD)
+lvd = {f["ty"]: f["lv"] for k, f in FV}
+ok("④ ⛔ every type off ⇒ nothing at all · the defaults: 📲 for the trend, breakouts, out of range, volume, the tendency, the market's trend and storms, the urgent · "
+   "👁 for vs Bitcoin, accumulation, money between Bitcoin and the alts, fear & greed", F0 == [] and lvd["rs"] == lvd["ad"] == lvd["season"] == lvd["fng"] == "view"
+   and all(lvd[k] == "now" for k in ("trend", "lvl", "out", "vol", "tend", "mtrend", "storm", "wave", "surge", "bstorm")), lvd)
+Fh = m._an_facts(prev, new, rng_prev, ["SOL-USDT"], ALL, None, None, cdbu, None)
+ok("④ a breakout counts only on the daily close (yesterday's levels) · no tendency outside the daily close", not any(f["ty"] in ("lvl", "tend") for k, f in Fh), [f["ty"] for k, f in Fh])
+
+# ④ delivery — cards
+CFG = dict(m.sg_cfg(), quiet=None, ch="both", cap=12, on=True)
+
+
+def fk(sym, ty, ln, lv="now", rng=None):
+    return {"sym": sym, "ty": ty, "lv": lv, "urg": m.AN_TY[ty][2] == "urgent", "ln": ln, "t": ln, "b": "", **({"rng": rng} if rng else {})}
+
+
+SENT.clear()
+st = {}
+out = m._sg_deliver([fk("SOL-USDT", "out", "⚡ صعد أكثر من المتوقع", rng="🔮 المتوقع غداً: بين 24.70 و27.70 (صدق هذا المدى 81% من 212 مرة)"),
+                     fk("SOL-USDT", "vol", "📊 حجم تداول غير عادي: ×2.6"), fk("XRP-USDT", "lvl", "🧱 كسر الدعم 2.10 بإغلاق اليوم"),
+                     fk("SOL-USDT", "rs", "💪 أصبحت أقوى من البيتكوين", lv="view"), fk("السوق", "mtrend", "📈 السوق: اتجاه البيتكوين اليومي أصبح صاعداً")], st, CFG, float(NOW))
+tg = list(SENT)
+T0 = tg[0] if tg else ""
+ok(f"④ one message for the round: a card per coin (SOL with its two facts + 🔮 tomorrow) · XRP · the market — «{T0[:80]}…»", len(tg) == 1
+   and T0.startswith("📈 السوق — تنبيهات جديدة (3)") and "📈 SOL — حدث الآن\n⚡ صعد أكثر من المتوقع\n📊 حجم تداول غير عادي: ×2.6\n🔮 المتوقع غداً" in T0
+   and "📈 XRP — حدث الآن\n🧱 كسر الدعم" in T0 and "📈 السوق: اتجاه البيتكوين" in T0, SENT)
+ok("④ 👁 «أصبحت أقوى من البيتكوين» is in the window's log only (not sent) · the log says what reached you", "أقوى من البيتكوين" not in T0
+   and [x["st"] for x in st["log"] if x["ty"] == "rs"] == ["view"] and {x["st"] for x in st["log"] if x["ty"] != "rs"} == {"sent"}, st["log"])
+SENT.clear()
+m._sg_deliver([fk("SOL-USDT", "vol", "📊 حجم تداول غير عادي مرة أخرى")], st, CFG, float(NOW + 3600))
+m._sg_deliver([fk("SOL-USDT", "trend", "📉 الاتجاه اليومي أصبح هابطاً")], st, CFG, float(NOW + 7200))
+ok("④ ⏱ SOL's next card waits 6 hours (nothing sent an hour later) · unless its daily trend turned (sent at once)",
+   len(SENT) == 1 and "هابطاً" in SENT[0] and st["log"][1]["st"] == "cool", (SENT, [x["st"] for x in st["log"][:3]]))
+SENT.clear()
+st2 = {}
+m._sg_deliver([fk("SOL-USDT", "out", "⚡ نزل أكثر من المتوقع"), fk("السوق", "wave", "🌊 انهيار في السوق كله الآن\nهبطت 6 من 12 عملة"),
+               fk("السوق", "bstorm", "⚡ البيتكوين يتحرك بعنف: -3.4% خلال ساعة")], st2, dict(CFG, quiet=[0, 23]), float(NOW))
+ok("④ 🔴 urgent in quiet hours: sent at once as ONE market message · SOL's own card stopped in that round (🌊 in the log)",
+   len(SENT) == 1 and SENT[0].startswith("🌊 انهيار في السوق كله الآن") and "يتحرك بعنف" in SENT[0] and "نزل أكثر من المتوقع" not in SENT[0]
+   and [x["st"] for x in st2["log"] if x["ty"] == "out"] == ["storm"] and not st2.get("qq") and not st2.get("n"), (SENT, st2))
+SENT.clear()
+night = time.mktime(time.strptime(time.strftime("%Y-%m-%d", time.localtime(NOW)) + " 03:00", "%Y-%m-%d %H:%M"))
+st3 = {}
+m._sg_deliver([fk("SOL-USDT", "out", "⚡ صعد أكثر من المتوقع"), fk("XRP-USDT", "vol", "📊 حجم تداول غير عادي")], st3, dict(CFG, quiet=[0, 8]), night)
+q_ok = not SENT and len(st3.get("qq") or []) == 2
+m._sg_flush(st3, dict(CFG, quiet=[0, 8]), night + 6 * 3600)
+ok("④ 🌙 quiet hours: the two cards wait · at 09:00 one message «🌙 تنبيهات السوق أثناء ساعات الهدوء (2)» with both cards",
+   q_ok and len(SENT) == 1 and SENT[0].startswith("🌙 تنبيهات السوق أثناء ساعات الهدوء (2)\n\n📈 SOL — حدث الآن") and not st3.get("qq"), (SENT, st3))
+SENT.clear()
+st4 = {}
+m._sg_deliver([fk(f"C{i}-USDT", "out", f"⚡ صعد أكثر من المتوقع {i}") for i in range(15)], st4, CFG, float(NOW))
+m._sg_deliver([fk("ZZ-USDT", "out", "⚡ أخرى")], st4, CFG, float(NOW + 60))
+m._sg_deliver([fk("السوق", "bstorm", "⚡ البيتكوين يتحرك بعنف")], st4, CFG, float(NOW + 120))
+tg4 = list(SENT)
+ok("④ the daily cap: 12 cards of 15 + «🔕 بلغت تنبيهات السوق حدّها اليوم (12)» · nothing more that day · the urgent still reaches you",
+   len(tg4) == 2 and tg4[0].startswith("📈 السوق — تنبيهات جديدة (12)") and "🔕 بلغت تنبيهات السوق حدّها اليوم (12)" in tg4[0] and "📈 C11 —" in tg4[0] and "📈 C12 —" not in tg4[0]
+   and tg4[1].startswith("⚡ البيتكوين") and sum(1 for x in st4["log"] if x["st"] == "cap") == 4, tg4)
 
 # ⑤ the tick end to end
 for f in (m.AN_FILE, m.SG_FILE, m.SB_FILE, m.SG_CAT):
@@ -203,12 +272,17 @@ V = m.an_view()
 ok("⑥ /api/market's data: your coins (SOL · XRP) with their lines and ranges · the market · the ranges' record · the three horizons",
    [c["sym"] for c in V["coins"]] == ["SOL-USDT", "XRP-USDT"] and V["mkt"] and V["coins"][0]["rng"] and [h[0] for h in V["hz"]] == ["4h", "1d", "1w"], {k: V.get(k) for k in ("mine", "hz")})
 c = m.sg_cfg()
-ok("⑥ settings: every facts type on by default · the daily cap inside (12) · no daily summary", all(c["atypes"].values()) and set(c["atypes"]) == set(m.AN_TY)
+ok("⑥ settings: each type at its default level (📲 or 👁) · the daily cap inside (12) · no daily summary", c["alv"] == {k: x[3] for k, x in m.AN_TY.items()}
    and c["cap"] == 12 and c["sum"] is None, c)
-r = m.sg_set({"atypes": {"vol": False, "nope": False}})
+r = m.sg_set({"alv": {"vol": "view", "fng": "now", "rs": "off", "nope": "now", "trend": "loud"}})
 c2 = m.sg_cfg()
-ok(f"⑥ «{r['msg']}» — a type turned off is saved · an unknown one ignored", c2["atypes"]["vol"] is False and "nope" not in c2["atypes"] and "تنبيهات السوق" in r["msg"], c2["atypes"])
-
+ok(f"⑥ «{r['msg']}» — 📊 to 👁 · 😨 to 📲 · 💪 off · an unknown type or level ignored", c2["alv"]["vol"] == "view" and c2["alv"]["fng"] == "now" and c2["alv"]["rs"] == "off"
+   and c2["alv"]["trend"] == "now" and "nope" not in c2["alv"] and c2["atypes"]["rs"] is False and "تنبيهات السوق" in r["msg"], c2["alv"])
+cfg0 = json.load(open(m.APP_CFG))
+cfg0.pop("an_lv", None)
+cfg0["an_types"] = {"ad": False}
+json.dump(cfg0, open(m.APP_CFG, "w"))
+ok("⑥ an old setting (v3.36.75 «🧲 off») becomes ⛔ · the rest keep their defaults", m.sg_cfg()["alv"]["ad"] == "off" and m.sg_cfg()["alv"]["vol"] == "now", m.sg_cfg()["alv"])
 
 def port():
     s_ = socket.socket(); s_.bind(("127.0.0.1", 0)); p_ = s_.getsockname()[1]; s_.close(); return p_

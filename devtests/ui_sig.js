@@ -3,7 +3,7 @@
 //   ② 🌐 the market now in plain words + Bitcoin's range for 4 hours · tomorrow · the week · «كيف أقرأ» says why there is no direction guess
 //   ③ 🪙 your coins: two lines each, a tap opens every fact and its three ranges (the price inside)
 //   ④ 📋 the tables (v3.36.73): ranked by the lowest % we trust · «قيد الاختبار» · ⏸ per row · a row opens to its meanings
-//   ⑤ 📜 the range's live record + the last notices · ⑥ ⚙️ the facts types by group (each on/off · saved) · your coins · quiet hours · no %
+//   ⑤ 📜 the range's live record + the last notices (what reached you) · ⑥ ⚙️ each type 📲 · 👁 · ⛔ by group (🔴 · 🪙 · 🌐 · saved) · your coins · quiet hours · no %
 //   ⑦ 🔮 points to the market · ⚙️ has the row · the ticker's panel · a notification tap opens your coins · ⑧ a phone width · no page error
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -114,20 +114,24 @@ const LAT = /[A-Za-z]{2,}/;
   await sleep(400);
   const l1 = await pg.evaluate(() => ({ cards: [...document.querySelectorAll('#sg_body .an-card .an-h b')].map(b => b.textContent), rr: [...document.querySelectorAll('#sg_body .an-card:first-child .an-rr')].map(r => r.textContent.replace(/\s+/g, ' ').trim()),
     txt: (document.querySelector('#sg_body') || {}).textContent || '' }));
-  ok(`⑤ 📜 «${l1.cards.join(' · ')}»: the range's record per horizon (${l1.rr.length}) · the target 80% explained · the SOL notice listed`, l1.cards.join('|') === '📏 صدق المدى المتوقع (حي)|🔔 آخر التنبيهات'
-     && l1.rr.length === 3 && l1.txt.includes('الهدف 80%') && l1.txt.includes('SOL') && l1.txt.includes('أكثر من المتوقع'), l1);
+  ok(`⑤ 📜 «${l1.cards.join(' · ')}»: the range's record per horizon (${l1.rr.length}) · the target 80% explained · the SOL notice listed with «📲 وصلك»`, l1.cards.join('|') === '📏 صدق المدى المتوقع (حي)|🔔 آخر التنبيهات'
+     && l1.rr.length === 3 && l1.txt.includes('الهدف 80%') && l1.txt.includes('SOL') && l1.txt.includes('أكثر من المتوقع') && l1.txt.includes('📲 وصلك'), l1);
   // ⑥ ⚙️ the notifications
   await pg.evaluate(() => sgTab('cfg'));
   await sleep(300);
   const g0 = await pg.evaluate(() => ({ heads: [...document.querySelectorAll('#sg_body .sg-sh')].map(x => x.textContent.replace(/\s+/g, ' ').trim()),
-    coin: [...document.querySelectorAll('#sg_body .sg-flt button[data-k]')].map(b => b.dataset.k + (b.classList.contains('on') ? '+' : '-')),
+    rows: [...document.querySelectorAll('#sg_body .an-ty')].map(r => r.dataset.k + ':' + ((r.querySelector('.an-seg button.on') || {}).dataset || {}).l),
+    btn: [...document.querySelectorAll('#sg_body .an-ty[data-k="vol"] .an-seg button')].map(b => b.textContent.trim()),
     thr: !!document.getElementById('sg_thr'), est: !!document.getElementById('sg_est'), min: !!document.getElementById('sg_min') }));
-  ok(`⑥ ⚙️ the facts by group: ${g0.heads.slice(0, 2).join(' · ')} — ${g0.coin.length} types all on · no % slider · no estimate · no count`,
-     g0.heads[0] === '🪙 عملاتك' && g0.heads[1] === '🌐 السوق كله' && g0.coin.length === 10 && g0.coin.every(x => x.endsWith('+')) && !g0.thr && !g0.est && !g0.min, g0);
-  await pg.evaluate(() => document.querySelector('#sg_body .sg-flt button[data-k="vol"]').click());
+  const lv = Object.fromEntries(g0.rows.map(x => x.split(':')));
+  ok(`⑥ ⚙️ ${g0.heads.slice(0, 3).join(' · ')} — ${g0.rows.length} types, each with «${g0.btn.join(' · ')}» · 📲 by default for the trend, breakouts, volume, the urgent · 👁 for vs Bitcoin, accumulation, fear & greed · no % · no estimate`,
+     g0.heads[0].startsWith('🔴 طوارئ') && g0.heads[1] === '🪙 عملاتك' && g0.heads[2] === '🌐 السوق كله' && g0.rows.length === 14 && g0.btn.join('|') === '📲 فوري|👁 بالنافذة|⛔ متوقف'
+     && ['wave', 'surge', 'bstorm', 'trend', 'lvl', 'out', 'vol', 'tend', 'mtrend', 'storm'].every(k => lv[k] === 'now') && ['rs', 'ad', 'season', 'fng'].every(k => lv[k] === 'view')
+     && !g0.thr && !g0.est && !g0.min, g0);
+  await pg.evaluate(() => document.querySelector('#sg_body .an-ty[data-k="vol"] button[data-l="view"]').click());
   await sleep(900);
-  const g1 = await pg.evaluate(() => ({ vol: SGV.cfg.atypes.vol, trend: SGV.cfg.atypes.trend, on: document.querySelector('#sg_body .sg-flt button[data-k="vol"]').classList.contains('on') }));
-  ok('⑥ a tap turns «📊 unusual volume» off — saved (the page shows what the server holds) · the others stay on', g1.vol === false && g1.trend === true && !g1.on, g1);
+  const g1 = await pg.evaluate(() => ({ vol: SGV.cfg.alv.vol, trend: SGV.cfg.alv.trend, on: ((document.querySelector('#sg_body .an-ty[data-k="vol"] .an-seg button.on') || {}).dataset || {}).l }));
+  ok('⑥ a tap moves «📊 حجم تداول غير عادي» to 👁 بالنافذة — saved (the page shows what the server holds) · the others keep theirs', g1.vol === 'view' && g1.trend === 'now' && g1.on === 'view', g1);
   const k0 = await pg.evaluate(() => ({ mine: [...document.querySelectorAll('#sg_coins .sg-cn')].map(b => b.dataset.c), add: !!document.getElementById('sg_cadd'),
     head: (document.querySelector('#sg_coins .sg-sh') || {}).textContent || '' }));
   ok(`⑥ 🪙 «${k0.head.replace(/\s+/g, ' ').trim().slice(0, 60)}» · your coins with ✕ (${k0.mine.join(' · ')}) · «➕ أضف»`,
@@ -148,7 +152,7 @@ const LAT = /[A-Za-z]{2,}/;
   await sleep(900);
   const k4 = await pg.evaluate(() => ({ c: SGV.cfg.coins, chips: [...document.querySelectorAll('#sg_coins .sg-cn')].map(b => b.dataset.c) }));
   ok('⑥ «↩️ مثل الشريط» ⇒ your coins follow the ticker again (XRP · SOL)', k4.c === null && k4.chips.join(',') === 'XRP-USDT,SOL-USDT', k4);
-  await pg.evaluate(() => { const b = [...document.querySelectorAll('#sg_body .sg-set')].find(x => x.textContent.includes('ساعات الهدوء')).querySelector('button'); b.click() });
+  await pg.evaluate(() => { const b = [...document.querySelectorAll('#sg_body .sg-set')].find(x => ((x.querySelector('.sg-sh') || {}).textContent || '').startsWith('🌙')).querySelector('button'); b.click() });
   await sleep(900);
   const q1 = await pg.evaluate(() => ({ q: SGV.cfg.quiet, sel: !!document.getElementById('sg_q0') }));
   ok('⑥ 🌙 quiet hours on (00:00 – 08:00 by default) with their two hour lists', JSON.stringify(q1.q) === '[0,8]' && q1.sel, q1);
@@ -169,7 +173,7 @@ const LAT = /[A-Za-z]{2,}/;
   ok(`⑦ ⚙️ «${row}» in 🔔 الإشعارات`, row.includes('📈') && row.includes('خارج المدى'), row);
   await pg.evaluate(() => { const b = [...document.querySelectorAll('.sitem')].find(x => x.textContent.includes('تنبيهات السوق')); b.click() });
   await sleep(600);
-  ok('⑦ … it opens 📈 on «⚙️ الإشعارات»', await pg.evaluate(() => SGTAB === 'cfg' && !!document.querySelector('#sg_body .sg-flt button[data-k]')), '');
+  ok('⑦ … it opens 📈 on «⚙️ الإشعارات»', await pg.evaluate(() => SGTAB === 'cfg' && !!document.querySelector('#sg_body .an-ty[data-k]')), '');
   await pg.evaluate(() => openTicker());
   await sleep(1200);
   ok('⑦ the ticker\'s settings: «🔔 تنبيهات السوق» with its buttons', await pg.evaluate(() => ((document.getElementById('tk_pxa') || {}).textContent || '').includes('🔔 تنبيهات السوق')), '');

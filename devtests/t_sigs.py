@@ -375,61 +375,23 @@ ok("⑥b the word: BUY 83% with a SELL 52% on too ⇒ «🟢 فرصة شراء �
    "الشراء الآن» · only an unproven signal ⇒ «⏸️ انتظر»", an2["w"] == "buyc" and an2["hz"]["1D"]["dir"] == -1 and an2["hz"]["1D"]["h"] == 52
    and an3["w"] == "avoid" and an4["w"] == "wait", (an2["w"], an3["w"], an4["w"]))
 
-# ⑦ delivery
+# ⑦ delivery (🔔 v3.36.76: the cards, levels, urgent, quiet hours and the cap are checked in t_market ④ — here: mute · the channel · long rounds)
 SENT.clear()
-blocks = [{"sym": f"C{i}-USDT", "ty": "buy", "f": "4H", "t": f"🟢 شراء — C{i}-USDT · 4 ساعات", "b": "x"} for i in range(5)]
-st7 = {}
-CAP3 = lambda: dict(m.sg_cfg(), cap=3)                    # (📈 v3.36.75: the daily cap is fixed inside at 12 — 3 here to see it act)
-outd = m._sg_deliver(blocks, st7, CAP3(), NOW)
-ok("⑦ one Telegram message for the round · the daily cap 3 ⇒ 3 of 5 sent + «🔕 وصلت حد تنبيهات السوق اليوم (3)» · all 5 in the page log",
-   m.sg_cfg()["cap"] == 12 and len(outd) == 3 and len([x for x in SENT if x[0] == "tg"]) == 1 and "📈 السوق — تنبيهات جديدة (3)" in SENT[0][1]
-   and "🔕 وصلت حد تنبيهات السوق اليوم (3)" in SENT[0][1]
-   and len(st7["log"]) == 5 and any(x[0] == "app" and x[2] == "sig" and x[3] == "ind" for x in SENT), SENT)
-SENT.clear()
-m._sg_deliver(blocks[:1], st7, CAP3(), NOW + 60)
-ok("⑦ the cap reached ⇒ nothing more today (no second note)", not SENT, SENT)
-SENT.clear()
-_CFG.update(sg_quiet=[0, 8])
-night = time.mktime(time.strptime(time.strftime("%Y-%m-%d", time.localtime(NOW)) + " 03:00", "%Y-%m-%d %H:%M"))
-st8 = {}
-m._sg_deliver(blocks[:2], st8, m.sg_cfg(), night)
-ok("⑦ 🌙 quiet hours (00–08): nothing sent at 03:00, the two wait", not SENT and len(st8.get("qq") or []) == 2, (SENT, st8))
-m._sg_flush(st8, m.sg_cfg(), night + 6 * 3600)
-ok("⑦ at 09:00 they come as one message «🌙 تنبيهات السوق أثناء ساعات الهدوء (2)»", len(SENT) == 2 and "🌙 تنبيهات السوق أثناء ساعات الهدوء (2)" in SENT[0][1]
-   and not st8.get("qq"), SENT)
-SENT.clear()
-_CFG.update(sg_quiet=None, sg_sum=20)
-st9 = {}
-m._sg_deliver(blocks[:3], st9, m.sg_cfg(), night + 9 * 3600)
-n9 = len([x for x in SENT if x[0] == "tg"])
-m._sg_flush(st9, m.sg_cfg(), night + 17 * 3600 + 60)
-ok("⑦ 📈 v3.36.75: no daily summary any more (an old «20:00» setting is ignored) — the round goes out at once as «📈 السوق — تنبيهات جديدة (3)» · nothing more at 20:00",
-   m.sg_cfg()["sum"] is None and n9 == 1 and "📈 السوق — تنبيهات جديدة (3)" in SENT[0][1] and not st9.get("sumq")
-   and len([x for x in SENT if x[0] == "tg"]) == 1, SENT)
-SENT.clear()
-_CFG.update(sg_sum=None, sg_ch="app")
+fk = lambda sym, ty, ln: {"sym": sym, "ty": ty, "lv": "now", "urg": m.AN_TY[ty][2] == "urgent", "ln": ln, "t": ln, "b": ""}
+_CFG.update(sg_ch="app")
 m.TG_MUTED["v"] = True
-m._sg_deliver(blocks[:1], {}, m.sg_cfg(), NOW + 99)
+m._sg_deliver([fk("C0-USDT", "out", "⚡ صعد أكثر من المتوقع")], {}, m.sg_cfg(), NOW + 99)
 m.TG_MUTED["v"] = False
-m._sg_deliver(blocks[1:2], {}, m.sg_cfg(), NOW + 99)
-ok("⑦ 🔕 mute ⇒ nothing goes out · the channel «التطبيق فقط» ⇒ the app only (opens 🎯 · the indicators' channel)",
-   SENT == [("app", "🟢 شراء — C1-USDT · 4 ساعات\nx", "sig", "ind")], SENT)
+m._sg_deliver([fk("C1-USDT", "out", "⚡ صعد أكثر من المتوقع")], {}, m.sg_cfg(), NOW + 99)
+ok("⑦ 🔕 mute ⇒ nothing goes out · the channel «التطبيق فقط» ⇒ the app only (one card · opens 📈 · the indicators' channel)",
+   SENT == [("app", "📈 C1 — حدث الآن\n⚡ صعد أكثر من المتوقع", "sig", "ind")], SENT)
 _CFG.pop("sg_ch", None)
 SENT.clear()
-long_ = [{"sym": f"C{i}-USDT", "ty": "buy", "f": "4H", "t": f"🟢 شراء — C{i}-USDT · 4 ساعات", "b": "اتفقت 4 إشارات: " + "س" * 380} for i in range(30)]
+long_ = [fk(f"C{i}-USDT", "out", "⚡ صعد أكثر من المتوقع: " + "س" * 380) for i in range(30)]
 m._sg_deliver(long_, {}, dict(m.sg_cfg(), cap=0), NOW + 120)
 tg_ = [x[1] for x in SENT if x[0] == "tg"]
-ok(f"⑦ a long round (30 notifications ≈ {sum(len(b['t']) + len(b['b']) for b in long_)} letters) reaches Telegram in {len(tg_)} parts, each under its "
-   "4096-letter limit, nothing lost", len(tg_) >= 3 and all(len(t) <= 3800 for t in tg_) and all(f"C{i}-USDT" in "".join(tg_) for i in range(30)),
-   [len(t) for t in tg_])
-_st10 = {}
-_crash = lambda t_: m._sg_process(scan(t_, TDE, {}, {}, {}, {}, crash=True) | {"c": {"XRP-USDT": {"4H": {"t": t_, "px": 2.4, "a1": ["W-crash:1"], "a0": [],
-                                  "lo": 2.3, "hi": 2.5, "ch": -0.1}}}}, ["4H"], _st10, m.sg_cfg(), CAT, CDB, NOW + (t_ - T4E))
-b10 = _crash(T4E + 40 * 14400)
-b11 = _crash(T4E + 42 * 14400)
-b12 = _crash(T4E + 47 * 14400)
-ok("⑦ 🌊 the market crash comes from 🎯 (the old alerts are gone) · at most once a day: a second crash 8 hours later is not sent · the next day it is",
-   [b["ty"] for b in b10] == ["crash"] and not b11 and [b["ty"] for b in b12] == ["crash"], (b10, b11, b12))
+ok(f"⑦ a long round (30 cards ≈ {sum(len(b['ln']) for b in long_)} letters) reaches Telegram in {len(tg_)} parts, each under its 4096-letter limit, nothing lost",
+   len(tg_) >= 3 and all(len(t) <= 3800 for t in tg_) and all(f"C{i} —" in "".join(tg_) for i in range(30)), [len(t) for t in tg_])
 comp = {"s": "up", "days": 4, "btc": True, "k": 19, "n": 28, "m14": 0.036}
 cb = m._sg_comp_block(comp)
 ok("⑦ 🧭 a new state of the market: «🧭 السوق الآن: صاعد 🟢 (منذ 4 أيام)» · BTC above its 200-day average · 19 of 28 · two weeks +3.6%",

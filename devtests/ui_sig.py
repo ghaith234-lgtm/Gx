@@ -136,8 +136,8 @@ try:
                        capture_output=True, text=True, timeout=900, cwd="/tmp", env=env)
     print(r.stdout.strip() or r.stderr.strip()[-1500:], flush=True)
     cfg = json.load(open(m.APP_CFG, encoding="utf-8"))
-    ok("after the browser: the buttons saved the settings (📊 unusual volume off · 🌙 quiet hours on · coins back to the ticker)",
-       (cfg.get("an_types") or {}).get("vol") is False and (cfg.get("an_types") or {}).get("trend", True) is True and cfg.get("sg_quiet") == [0, 8]
+    ok("after the browser: the buttons saved the settings (📊 unusual volume → 👁 · 🌙 quiet hours on · coins back to the ticker)",
+       (cfg.get("an_lv") or {}).get("vol") == "view" and "trend" not in (cfg.get("an_lv") or {}) and cfg.get("sg_quiet") == [0, 8]
        and "sg_coins" not in cfg, {k: v for k, v in cfg.items() if k.startswith(("sg_", "an_"))})
     Bo = json.load(open(m.SB_FILE, encoding="utf-8"))
     ok("after the browser: ⏸ row 7 is off in SOL's table (with 33) — not in the market's", sorted(Bo["off"].get("SOL-USDT") or []) == [7, 33]
