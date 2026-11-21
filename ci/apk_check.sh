@@ -279,6 +279,41 @@ if [ "${nw:-0}" -ge 1 ]; then
     adb shell dumpsys activity activities | grep -m1 -E "mResumedActivity|topResumedActivity" | grep -q "$P/.MainActivity" && say "PASS 1.9: a tap on the widget opens Holy" || say "FAIL 1.9: a tap on the widget didn't open Holy ($(adb shell dumpsys activity activities | grep -m1 -E 'mResumedActivity|topResumedActivity' | tr -d '\r'))"
   else say "FAIL 1.9: the widget isn't on home pages 1–3 / has no summary ($(python3 ci/ci_tools.py texts $OUT/ui_wd4.xml wd4 | cut -c1-200))"; fi
 fi
+# ── 2.3 🪙 the prices widget: listed by Android · ⚙️ 📱 «🪙 ويدجت الأسعار» «📌 أضفه» ⇒ placed · it draws the ticker's coins in tiles (the coin's
+#    badge · name · change · price · its line of the last 24 hours) from the same answer as the first widget · a tap opens Holy ──
+PCMP="$P/$P.HolyPxWidget"
+adb shell dumpsys appwidget | tr -d '\r' | grep -q "cmp:ComponentInfo{$PCMP}" && say "PASS 2.3: Android lists the prices widget «Holy · الأسعار»" || say "FAIL 2.3: Android doesn't list the prices widget"
+adb shell am start -n $P/.MainActivity --es go app >/dev/null; sleep 7; dump px0
+if grep -q "ويدجت الأسعار" $OUT/ui_px0.xml; then say "PASS 2.3: 📱 panel shows «🪙 ويدجت الأسعار»"; else say "FAIL 2.3: no prices widget row in the 📱 panel"; fi
+if seek "📌 أضفه" px1; then
+  sleep 4; dump px2; asked=""
+  for b in "Add automatically" "ADD AUTOMATICALLY" "Add to home screen" "ADD TO HOME SCREEN" "Add" "ADD"; do
+    xy=$(python3 ci/ci_tools.py findb $OUT/ui_px2.xml "$b"); [ -n "$xy" ] && { adb shell input tap $xy; say "PASS 2.3: Android's own «add widget» sheet ⇒ tap «$b»"; asked=1; break; }; done
+  [ -z "$asked" ] && say "FAIL 2.3: no «add widget» sheet for the prices widget ($(python3 ci/ci_tools.py texts $OUT/ui_px2.xml px2 | cut -c1-200))"
+  sleep 6
+fi
+np=$(adb shell dumpsys appwidget | tr -d '\r' | grep -c "provider=ProviderId{.*cmp:ComponentInfo{$PCMP}")
+[ "${np:-0}" -ge 1 ] && say "PASS 2.3: the prices widget is on the home screen ($np)" || say "FAIL 2.3: no prices widget placed"
+if [ "${np:-0}" -ge 1 ]; then
+  adb shell input keyevent KEYCODE_HOME; sleep 12
+  wj=$(adb shell cat /data/data/$P/shared_prefs/holy_widget.xml 2>/dev/null | tr -d '\r')
+  if [ -n "$wj" ]; then echo "$wj" | grep -q '&quot;px&quot;' && say "PASS 2.3: the shared answer carries «px» (the ticker's coins · prices · lines)" || say "FAIL 2.3: no «px» in the widget's answer"; fi
+  dump px4; shot px4; pw=$(python3 ci/ci_tools.py desc $OUT/ui_px4.xml "Holy الأسعار")
+  for pg in 2 3; do
+    [ -n "$pw" ] && break
+    sz=$(adb shell wm size | tr -d '\r' | grep -oE '[0-9]+x[0-9]+' | tail -1); SW=${sz%x*}; SH=${sz#*x}
+    adb shell input swipe $((SW*85/100)) $((SH/2)) $((SW*15/100)) $((SH/2)) 300; sleep 3
+    dump px4; shot px4; pw=$(python3 ci/ci_tools.py desc $OUT/ui_px4.xml "Holy الأسعار")
+    [ -n "$pw" ] && say "INFO 2.3: the launcher put the prices widget on home page $pg"
+  done
+  if [ -n "$pw" ]; then
+    set -- $pw; python3 ci/ci_tools.py imgc $OUT/px4.png pxwidget $3 $4 $5 $6
+    say "PASS 2.3: the prices widget on the home screen ($3,$4–$5,$6) reads «${pw#* * * * * * }»"
+    echo "$pw" | grep -qE "[A-Z]{2,6} [0-9]" && say "PASS 2.3: it shows coins with their prices" || say "FAIL 2.3: no coin and price in the prices widget («${pw#* * * * * * }»)"
+    adb shell input tap $1 $2; sleep 5
+    adb shell dumpsys activity activities | grep -m1 -E "mResumedActivity|topResumedActivity" | grep -q "$P/.MainActivity" && say "PASS 2.3: a tap on the prices widget opens Holy" || say "FAIL 2.3: a tap on the prices widget didn't open Holy"
+  else say "FAIL 2.3: the prices widget isn't on home pages 1–3 / has no summary ($(python3 ci/ci_tools.py texts $OUT/ui_px4.xml px4 | cut -c1-200))"; fi
+fi
 # ── 1.5 🔐 fingerprint lock: a test PIN on the phone ⇒ turn on (asks the PIN) ⇒ 33 s in the background ⇒ locked ⇒ PIN ⇒ open ⇒ turn off ⇒ PIN removed ──
 #    (the emulator has no finger ⇒ the system sheet offers the phone's PIN — the same path a phone without a fingerprint takes)
 pin(){ sleep 4; adb shell input text 1111; sleep 1; adb shell input keyevent 66; sleep 5; }

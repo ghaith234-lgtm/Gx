@@ -56,6 +56,7 @@ SMALI_CP = ["smali", "baksmali", "dexlib2", "util", "guava", "failureaccess", "j
 # android: attribute resource ids
 A_VERSION_CODE, A_VERSION_NAME = 0x0101021B, 0x0101021C
 A_MIN_HEIGHT, A_TARGET_CELL_H = 0x01010140, 0x01010635
+A_NAME, A_LABEL = 0x01010003, 0x01010001          # android:name · android:label (🪙 the second widget receiver)
 T_STRING, T_DIMENSION, T_INT_DEC = 0x03, 0x05, 0x10
 
 
@@ -169,6 +170,87 @@ def axml_patch(data, element, ints=None, strings=None):
     d[pool_off:pool_off + old_sz] = new_pool
     struct.pack_into("<I", d, 4, len(d))
     return bytes(d)
+
+
+def axml_add_receiver(data, src_name, new_name, label):
+    """🪙 app 2.3: a second <receiver> made from an existing one (its intent filter and meta-data copied — the same widget info) with a new
+    android:name and android:label · inserted right after it · new strings appended to the pool so no existing index moves"""
+    d = bytearray(data)
+    off = struct.unpack_from("<HHI", d, 0)[1]
+    pool_off, pool, resmap = None, [], []
+    start = end = None
+    depth = 0
+    while off < len(d):
+        t, hs, sz = struct.unpack_from("<HHI", d, off)
+        if t == 0x0001:
+            pool_off, pool = off, _pool_strings(d, off)
+        elif t == 0x0180:
+            resmap = list(struct.unpack_from("<%dI" % ((sz - 8) // 4), d, off + 8))
+        elif t == 0x0102:
+            if start is not None:
+                depth += 1
+            else:
+                _, name, astart, asize, acount = struct.unpack_from("<iiHHH", d, off + 16)
+                if pool[name] == "receiver":
+                    for i in range(acount):
+                        a = off + 16 + astart + i * asize
+                        an, raw, _, _, typ, val = struct.unpack_from("<iiHBBI", d, a + 4)
+                        if 0 <= an < len(resmap) and resmap[an] == A_NAME and typ == T_STRING and pool[val] == src_name:
+                            start, depth = off, 0
+        elif t == 0x0103 and start is not None:
+            if depth == 0:
+                end = off + sz
+                break
+            depth -= 1
+        off += sz
+    if start is None or end is None:
+        raise SystemExit("❌ no <receiver %s> in the manifest" % src_name)
+    blk = bytearray(d[start:end])
+    for txt in (new_name, label):
+        if txt not in pool:
+            pool.append(txt)
+    _, name, astart, asize, acount = struct.unpack_from("<iiHHH", blk, 16)
+    hit = set()
+    for i in range(acount):
+        a = 16 + astart + i * asize
+        an = struct.unpack_from("<i", blk, a + 4)[0]
+        rid = resmap[an] if 0 <= an < len(resmap) else None
+        if rid in (A_NAME, A_LABEL):
+            idx = pool.index(new_name if rid == A_NAME else label)
+            struct.pack_into("<iHBBI", blk, a + 8, idx, 8, 0, T_STRING, idx)
+            hit.add(rid)
+    if hit != {A_NAME, A_LABEL}:
+        raise SystemExit("❌ <receiver %s> lacks android:name or android:label" % src_name)
+    d[end:end] = blk
+    old_sz = struct.unpack_from("<I", d, pool_off + 4)[0]
+    d[pool_off:pool_off + old_sz] = _pool_bytes(pool)
+    struct.pack_into("<I", d, 4, len(d))
+    return bytes(d)
+
+
+def axml_receivers(data):
+    """[(android:name, android:label)] of every <receiver> — for the checks"""
+    d = data
+    off = struct.unpack_from("<HHI", d, 0)[1]
+    pool, resmap, out = [], [], []
+    while off < len(d):
+        t, hs, sz = struct.unpack_from("<HHI", d, off)
+        if t == 0x0001:
+            pool = _pool_strings(d, off)
+        elif t == 0x0180:
+            resmap = list(struct.unpack_from("<%dI" % ((sz - 8) // 4), d, off + 8))
+        elif t == 0x0102:
+            _, name, astart, asize, acount = struct.unpack_from("<iiHHH", d, off + 16)
+            if pool[name] == "receiver":
+                at = {}
+                for i in range(acount):
+                    a = off + 16 + astart + i * asize
+                    an, raw, _, _, typ, val = struct.unpack_from("<iiHBBI", d, a + 4)
+                    if 0 <= an < len(resmap) and typ == T_STRING:
+                        at[resmap[an]] = pool[val]
+                out.append((at.get(A_NAME), at.get(A_LABEL)))
+        off += sz
+    return out
 
 
 def axml_read(data, element):
@@ -309,8 +391,12 @@ def main():
     info = axml_patch(open(os.path.join(base, "res/xml/holy_widget_info.xml"), "rb").read(), "appwidget-provider",
                       ints={A_MIN_HEIGHT: (T_DIMENSION, (ver["widget_min_height_dp"] << 8) | 0x01),
                             A_TARGET_CELL_H: (T_INT_DEC, ver["widget_target_cell_height"])})
+    # 🪙 app 2.3: the prices widget — a second receiver on the same widget info (the picture is drawn by its own class)
+    man = axml_add_receiver(man, "com.holy.dash.HolyWidget", "com.holy.dash.HolyPxWidget", "Holy · الأسعار")
     m = axml_read(man, "manifest")
     assert m[A_VERSION_CODE][1] == ver["code"] and m[A_VERSION_NAME][2] == ver["name"], m
+    rc = axml_receivers(man)
+    assert ("com.holy.dash.HolyWidget", "Holy") in rc and ("com.holy.dash.HolyPxWidget", "Holy · الأسعار") in rc, rc
     w = axml_read(info, "appwidget-provider")
     assert w[A_MIN_HEIGHT][1] >> 8 == ver["widget_min_height_dp"] and w[A_TARGET_CELL_H][1] == ver["widget_target_cell_height"], w
 

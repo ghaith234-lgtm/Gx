@@ -61,7 +61,9 @@
     return v0
 
     :cond_8
-    const/4 v0, 0x0
+    invoke-static {p0}, Lcom/holy/dash/HolyPxWidget;->any(Landroid/content/Context;)Z
+
+    move-result v0
 
     goto :goto_7
 .end method
@@ -203,6 +205,8 @@
     .registers 22
 
     .prologue
+    invoke-static/range {p0 .. p3}, Lcom/holy/dash/HolyPxWidget;->draw(Landroid/content/Context;Ljava/lang/String;J)V
+
     .line 130
     :try_start_0
     invoke-static/range {p0 .. p0}, Landroid/appwidget/AppWidgetManager;->getInstance(Landroid/content/Context;)Landroid/appwidget/AppWidgetManager;

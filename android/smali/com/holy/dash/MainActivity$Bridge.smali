@@ -542,7 +542,7 @@
 
     const-string v2, "code"
 
-    const/16 v3, 0xd
+    const/16 v3, 0xe
 
     invoke-virtual {v1, v2, v3}, Lorg/json/JSONObject;->put(Ljava/lang/String;I)Lorg/json/JSONObject;
     :try_end_4c
@@ -579,6 +579,38 @@
     iget-object v0, p0, Lcom/holy/dash/MainActivity$Bridge;->this$0:Lcom/holy/dash/MainActivity;
 
     invoke-static {v0}, Lcom/holy/dash/HolyWidget;->pin(Landroid/content/Context;)Z
+
+    move-result v0
+
+    if-eqz v0, :cond_10
+
+    const/4 v0, 0x1
+
+    :goto_f
+    return v0
+
+    :cond_10
+    const/4 v0, 0x0
+
+    goto :goto_f
+.end method
+
+.method public pinPrices()Z
+    .registers 2
+    .annotation runtime Landroid/webkit/JavascriptInterface;
+    .end annotation
+
+    .prologue
+    .line 1224
+    invoke-virtual {p0}, Lcom/holy/dash/MainActivity$Bridge;->ok()Z
+
+    move-result v0
+
+    if-eqz v0, :cond_10
+
+    iget-object v0, p0, Lcom/holy/dash/MainActivity$Bridge;->this$0:Lcom/holy/dash/MainActivity;
+
+    invoke-static {v0}, Lcom/holy/dash/HolyPxWidget;->pin(Landroid/content/Context;)Z
 
     move-result v0
 
@@ -1025,7 +1057,7 @@
     :try_start_7
     const-string v2, "code"
 
-    const/16 v4, 0xd
+    const/16 v4, 0xe
 
     invoke-virtual {v3, v2, v4}, Lorg/json/JSONObject;->put(Ljava/lang/String;I)Lorg/json/JSONObject;
 
@@ -1033,7 +1065,7 @@
 
     const-string v4, "name"
 
-    const-string v5, "2.2"
+    const-string v5, "2.3"
 
     invoke-virtual {v2, v4, v5}, Lorg/json/JSONObject;->put(Ljava/lang/String;Ljava/lang/Object;)Lorg/json/JSONObject;
 
@@ -1331,6 +1363,18 @@
     move-result v2
 
     invoke-virtual {v0, v1, v2}, Lorg/json/JSONObject;->put(Ljava/lang/String;Z)Lorg/json/JSONObject;
+
+    move-result-object v0
+
+    const-string v1, "pxWidget"
+
+    iget-object v2, p0, Lcom/holy/dash/MainActivity$Bridge;->this$0:Lcom/holy/dash/MainActivity;
+
+    invoke-static {v2}, Lcom/holy/dash/HolyPxWidget;->count(Landroid/content/Context;)I
+
+    move-result v2
+
+    invoke-virtual {v0, v1, v2}, Lorg/json/JSONObject;->put(Ljava/lang/String;I)Lorg/json/JSONObject;
     :try_end_12e
     .catch Ljava/lang/Exception; {:try_start_7 .. :try_end_12e} :catch_13c
 
