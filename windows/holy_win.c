@@ -1,4 +1,4 @@
-// 💻 The Holy Dashboard — Windows program 2.0.1 (dashboard v3.36.55 · 2.0 = v3.36.40)
+// 💻 The Holy Dashboard — Windows program 2.1.0 (dashboard v3.36.72 · 2.0.1 = v3.36.55 · 2.0 = v3.36.40)
 //   The owner (13-11, screenshot of the 1.2 window): «اريد تلغي الرموز الفوق … واتخليهم مع ايقونة الاشعارات · كيف احرك المربع كله اذا انزال
 //   الشريط الفوق». 1.2 opened the dashboard in an Edge app window, and that title bar (— □ ✕) belongs to Edge. 2.0 shows the dashboard in its
 //   own window through WebView2 (the engine inside Edge) with no title bar: the dashboard draws — □ ✕ beside 🔔 ⛶, its top bar moves the
@@ -13,6 +13,11 @@
 //   WebView2 loader (NuGet Microsoft.Web.WebView2).
 //   2.0.1 (v3.36.55 · the audit): the notification reader on a reply that arrives cut off — 2.0 could loop for ever on one cut inside the
 //   list (the watcher spun, the notifications stopped) or read past the end after a «\\»; a cut reply is now asked again (devtests/t_win_json.py).
+//   2.1 (v3.36.72 · the owner 21-11: «ويدجت نفسه الي بالموبايل نفسه الي بالحاسوب بالشكل»): the desktop widgets — the phone's two («Holy» ·
+//   «Holy · الأسعار») in small frameless windows drawn by the dashboard's /widget page (the same drawing as the app 2.3): they stay where you
+//   put them (holy.ini), any size (the bigger, the more they hold), on top of the other windows if you want (📌), refreshed every minute, a
+//   click opens the dashboard, a drag moves them, the right button = their menu · on from the tray menu, the dashboard's 💻 panel or
+//   «--widget=bots|px» · they come back with Windows · the page reads with the device key in its address's #part (never sent, never logged).
 #define WIN32_LEAN_AND_MEAN
 #ifndef UNICODE
 #define UNICODE
@@ -49,12 +54,15 @@
 #pragma comment(lib, "version.lib")
 #endif
 
-#define APP_VER   L"2.0.1"
-#define APP_BUILD 201                       // a watcher with a lower build steps aside for a newer copy
+#define APP_VER   L"2.1.0"
+#define APP_BUILD 210                       // a watcher with a lower build steps aside for a newer copy
 #define APP_TITLE L"The Holy Dashboard"
-#define UA_STR    L"TheHolyDashboard/2.0.1"
+#define UA_STR    L"TheHolyDashboard/2.1.0"
 #define WM_TRAY   (WM_APP + 1)
 #define WM_FEED   (WM_APP + 2)
+#define WM_WGMENU (WM_APP + 6)                  // 🖥️ 2.1: a widget's right button ⇒ its menu (posted: not inside WebView2's handler)
+#define WM_WGOPEN (WM_APP + 7)                  // 🖥️ a click on a widget ⇒ the dashboard window
+#define WM_HWCMD  (WM_APP + 8)                  // 🖥️ the dashboard's 💻 panel: 1 Holy · 2 the prices · 3 on top · 4 the state
 #define CMD_MAGIC 0x484F4C59                // 'HOLY' — WM_COPYDATA between two copies of the program
 #define BG_RGB    RGB(7, 2, 16)
 #define EDGE_RGB  RGB(52, 36, 98)
@@ -110,12 +118,12 @@ static void url_trim(WCHAR *u) { size_t n = wcslen(u); while (n && (u[n - 1] == 
 
 // ───────────────────────────── holy.ini (UTF-8 · key=value lines · the same file 1.2 wrote)
 typedef struct { char k[16]; char v[700]; } KV;
-static KV g_kv[16]; static int g_nkv;
+static KV g_kv[24]; static int g_nkv;
 static void ini_load(void) {
     g_nkv = 0; HANDLE f = CreateFileW(g_ini, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL); if (f == INVALID_HANDLE_VALUE) return;
     char buf[8192]; DWORD r = 0; ReadFile(f, buf, sizeof buf - 1, &r, NULL); CloseHandle(f); buf[r] = 0;
     char *p = buf; if ((unsigned char)p[0] == 0xEF && (unsigned char)p[1] == 0xBB && (unsigned char)p[2] == 0xBF) p += 3;
-    while (*p && g_nkv < 16) {
+    while (*p && g_nkv < 24) {
         char *e = p; while (*e && *e != '\n' && *e != '\r') e++;
         char save = *e; *e = 0; char *eq = strchr(p, '=');
         if (eq && eq - p < 15) { memcpy(g_kv[g_nkv].k, p, eq - p); g_kv[g_nkv].k[eq - p] = 0; strncpy_s(g_kv[g_nkv].v, sizeof g_kv[0].v, eq + 1, _TRUNCATE); g_nkv++; }
@@ -125,7 +133,7 @@ static void ini_load(void) {
 static const char *ini_get(const char *k) { for (int i = 0; i < g_nkv; i++) if (!strcmp(g_kv[i].k, k)) return g_kv[i].v; return ""; }
 static void ini_set(const char *k, const char *v) {
     for (int i = 0; i < g_nkv; i++) if (!strcmp(g_kv[i].k, k)) { strncpy_s(g_kv[i].v, sizeof g_kv[0].v, v, _TRUNCATE); return; }
-    if (g_nkv < 16) { strncpy_s(g_kv[g_nkv].k, 16, k, _TRUNCATE); strncpy_s(g_kv[g_nkv].v, sizeof g_kv[0].v, v, _TRUNCATE); g_nkv++; }
+    if (g_nkv < 24) { strncpy_s(g_kv[g_nkv].k, 16, k, _TRUNCATE); strncpy_s(g_kv[g_nkv].v, sizeof g_kv[0].v, v, _TRUNCATE); g_nkv++; }
 }
 static void ini_save(void) {
     char out[12000]; int n = 0;
@@ -384,8 +392,13 @@ REF_FNS(EnvH) REF_FNS(CtlH) REF_FNS(MsgH) REF_FNS(NewH) REF_FNS(NavH) REF_FNS(Fs
 
 static void wv_fallback(const char *why, HRESULT hr) {
     hlog("WebView2 unavailable (%s 0x%08lx) — the Edge/Chrome window instead", why, (unsigned long)hr); g_noWv2 = 1;
-    WCHAR go[200]; wcscpy_s(go, 200, g_go); if (g_win) { HWND w = g_win; g_win = NULL; DestroyWindow(w); } open_edge(go);
+    if (!g_win) return;                          // 🖥️ 2.1: only the widgets asked (no dashboard window wanted) ⇒ nothing to open
+    WCHAR go[200]; wcscpy_s(go, 200, g_go); { HWND w = g_win; g_win = NULL; DestroyWindow(w); } open_edge(go);
 }
+// 🖥️ 2.1: the desktop widgets (below) — what the handlers above them call
+#define WG_N 2
+static void wg_attach_all(void);
+static int g_envBusy;
 
 static HRESULT STDMETHODCALLTYPE MsgH_Invoke(MsgH *This, ICoreWebView2 *sender, ICoreWebView2WebMessageReceivedEventArgs *args) {
     (void)This; (void)sender; LPWSTR s = NULL;
@@ -397,6 +410,9 @@ static HRESULT STDMETHODCALLTYPE MsgH_Invoke(MsgH *This, ICoreWebView2 *sender, 
     else if (!wcscmp(s, L"win:drag")) { if (!g_fs) { POINT pt; GetCursorPos(&pt); ReleaseCapture();     // Windows moves it (snaps to the edges · a maximized one comes down) —
             PostMessageW(g_win, WM_NCLBUTTONDOWN, HTCAPTION, MAKELPARAM(pt.x, pt.y)); } }                     // posted: its move loop must not run inside WebView2's handler
     else if (!wcscmp(s, L"win:state")) post_state();
+    else if (wstarts(s, L"hw:")) {               // 🖥️ 2.1: the 💻 panel's widget buttons (done on the watcher's thread — not inside this handler)
+        WPARAM c = !wcscmp(s, L"hw:bots") ? 1 : !wcscmp(s, L"hw:px") ? 2 : !wcscmp(s, L"hw:top") ? 3 : !wcscmp(s, L"hw:state") ? 4 : 0;
+        if (c && g_tray) PostMessageW(g_tray, WM_HWCMD, c, 0); }
     else if (wstarts(s, L"hello ")) {            // the dashboard says it drew the buttons (where they are · for the Windows check)
         double v[8] = {0}; char a[400]; w8(s + 6, a, sizeof a);
         if (sscanf_s(a, "%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6], &v[7]) == 8) {
@@ -466,7 +482,7 @@ static HRESULT STDMETHODCALLTYPE CtlH_Invoke(CtlH *This, HRESULT hr, ICoreWebVie
     g_fsH.lpVtbl = &g_fsV;   ICoreWebView2_add_ContainsFullScreenElementChanged(g_wv, &g_fsH, &t);
     g_failH.lpVtbl = &g_failV; ICoreWebView2_add_ProcessFailed(g_wv, &g_failH, &t);
     g_keyH.lpVtbl = &g_keyV; ICoreWebView2Controller_add_AcceleratorKeyPressed(ctl, &g_keyH, &t);
-    WCHAR js[200]; _snwprintf_s(js, 200, _TRUNCATE, L"window.HOLYWIN={v:'" APP_VER L"',ncr:%s};", g_ncr ? L"true" : L"false");
+    WCHAR js[200]; _snwprintf_s(js, 200, _TRUNCATE, L"window.HOLYWIN={v:'" APP_VER L"',ncr:%s,wg:1};", g_ncr ? L"true" : L"false");
     ICoreWebView2_AddScriptToExecuteOnDocumentCreated(g_wv, js, NULL);
     fit_view(); ICoreWebView2Controller_put_IsVisible(ctl, TRUE);
     WCHAR u[1100]; open_url_of(g_go, u, 1100); ICoreWebView2_Navigate(g_wv, u);
@@ -476,14 +492,25 @@ static HRESULT STDMETHODCALLTYPE CtlH_Invoke(CtlH *This, HRESULT hr, ICoreWebVie
 static CtlH g_ctlH; static ICoreWebView2CreateCoreWebView2ControllerCompletedHandlerVtbl g_ctlV = { CtlH_QI, CtlH_AddRef, CtlH_Release, CtlH_Invoke };
 static HRESULT STDMETHODCALLTYPE EnvH_Invoke(EnvH *This, HRESULT hr, ICoreWebView2Environment *env) {
     (void)This;
+    g_envBusy = 0;
     if (FAILED(hr) || !env) { wv_fallback("environment", hr); return S_OK; }
     if (!g_env) { g_env = env; ICoreWebView2Environment_AddRef(env); }
+    wg_attach_all();                             // 🖥️ 2.1: the widgets waiting for it
     if (!g_win) return S_OK;
     g_ctlH.lpVtbl = &g_ctlV; hr = ICoreWebView2Environment_CreateCoreWebView2Controller(g_env, g_win, &g_ctlH);
     if (FAILED(hr)) wv_fallback("create", hr);
     return S_OK;
 }
 static EnvH g_envH; static ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandlerVtbl g_envV = { EnvH_QI, EnvH_AddRef, EnvH_Release, EnvH_Invoke };
+static void ensure_env(void) {                   // one WebView2 environment for the window and the widgets (the same profile ⇒ the same sign-in)
+    if (g_env || g_envBusy) return;
+    if (g_noWv2 < 0) { LPWSTR v = NULL; HRESULT h0 = GetAvailableCoreWebView2BrowserVersionString(NULL, &v);
+        g_noWv2 = FAILED(h0) || !v; if (v) { char a[64]; w8(v, a, 64); hlog("WebView2 %s", a); CoTaskMemFree(v); } }
+    if (g_noWv2 == 1) { if (g_win) wv_fallback("missing", E_FAIL); else hlog("no WebView2 here — the desktop widgets need it"); return; }
+    g_envBusy = 1; g_envH.lpVtbl = &g_envV;
+    HRESULT hr = CreateCoreWebView2EnvironmentWithOptions(NULL, g_udf, NULL, &g_envH);
+    if (FAILED(hr)) { g_envBusy = 0; wv_fallback("start", hr); }
+}
 
 static LRESULT CALLBACK WinProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     switch (m) {
@@ -539,15 +566,159 @@ static void open_window(const WCHAR *go) {
     SetWindowPos(g_win, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
     ShowWindow(g_win, mx ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL); UpdateWindow(g_win); SetForegroundWindow(g_win);
     if (g_env) { EnvH_Invoke(&g_envH, S_OK, g_env); return; }
-    g_envH.lpVtbl = &g_envV;
-    HRESULT hr = CreateCoreWebView2EnvironmentWithOptions(NULL, g_udf, NULL, &g_envH);
-    if (FAILED(hr)) wv_fallback("start", hr);
+    ensure_env();                                // (already starting for a widget ⇒ its answer opens this window too)
 }
+
+// ───────────────────────────── 🖥️ 2.1 (v3.36.72): the desktop widgets — the phone's two, drawn by the dashboard's /widget page
+//   a frameless tool window each (not on the taskbar) · rounded like the phone's · the rim resizes it · a drag moves it · where it was and
+//   its size stay in holy.ini · on top of the other windows if you want · the page refreshes every minute · display only
+typedef struct { ICoreWebView2CreateCoreWebView2ControllerCompletedHandlerVtbl *lpVtbl; int i; } WCtlH;
+typedef struct { ICoreWebView2WebMessageReceivedEventHandlerVtbl *lpVtbl; int i; } WMsgH;
+typedef struct { const char *key, *on, *name; const WCHAR *kind, *title; int dw, dh; HWND h; ICoreWebView2Controller *ctl; ICoreWebView2 *wv; int pend; } Wg;
+static Wg g_wg[WG_N] = { { "wg_bots", "wg_bots_on", "bots", L"bots", L"Holy", 330, 200 }, { "wg_px", "wg_px_on", "px", L"px", L"Holy · الأسعار", 340, 236 } };
+static int g_wgTop = 1;
+static HBRUSH g_wgBrush;
+static WCtlH g_wctl[WG_N]; static WMsgH g_wmsg[WG_N];
+static void wg_show(int i, int on, int save);
+static void post_hw(void) {                      // the 💻 panel shows what is on
+    if (!g_wv) return; WCHAR j[120];
+    _snwprintf_s(j, 120, _TRUNCATE, L"{\"t\":\"hw\",\"bots\":%d,\"px\":%d,\"top\":%d}", g_wg[0].h != NULL, g_wg[1].h != NULL, g_wgTop);
+    ICoreWebView2_PostWebMessageAsJson(g_wv, j);
+}
+static int wg_of(HWND h) { for (int i = 0; i < WG_N; i++) if (h && g_wg[i].h == h) return i; return -1; }
+static void wg_fit(int i) {
+    Wg *w = &g_wg[i]; if (!w->h) return; RECT r; GetClientRect(w->h, &r); int d = dpi_of(w->h);
+    int rad = MulDiv(40, d, 96); SetWindowRgn(w->h, CreateRoundRectRgn(0, 0, r.right + 1, r.bottom + 1, rad, rad), TRUE);   // the phone's 20 dp corners
+    if (w->ctl) { int b = MulDiv(4, d, 96); RECT q = { r.left + b, r.top + b, r.right - b, r.bottom - b }; ICoreWebView2Controller_put_Bounds(w->ctl, q); }
+}
+static void wg_save(int i) {
+    Wg *w = &g_wg[i]; if (!w->h) return; RECT r; GetWindowRect(w->h, &r); char v[80];
+    _snprintf_s(v, sizeof v, _TRUNCATE, "%ld,%ld,%ld,%ld", r.left, r.top, r.right, r.bottom); ini_load(); ini_set(w->key, v); ini_save();
+}
+static void wg_url(int i, WCHAR *u, int n) {     // the device key goes after «#» — the page reads it, it is never in a request line or a log
+    WCHAR base[640], tk[130] = L""; char t8[128];
+    EnterCriticalSection(&g_cs); wcscpy_s(base, 640, g_url); strcpy_s(t8, sizeof t8, g_tok); LeaveCriticalSection(&g_cs);
+    if (t8[0]) u8w(t8, tk, 130);
+    _snwprintf_s(u, n, _TRUNCATE, L"%s/widget?k=%s&holyapp=win&hv=" APP_VER L"%s%s", base, g_wg[i].kind, tk[0] ? L"#d=" : L"", tk);
+}
+static void wg_top(int on) {
+    g_wgTop = on ? 1 : 0; ini_load(); ini_set("wg_top", on ? "1" : "0"); ini_save();
+    for (int i = 0; i < WG_N; i++) if (g_wg[i].h) SetWindowPos(g_wg[i].h, on ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    post_hw(); hlog("widgets on top of the other windows: %s", on ? "yes" : "no");
+}
+static HRESULT STDMETHODCALLTYPE WMsgH_Invoke(MsgH *This, ICoreWebView2 *sender, ICoreWebView2WebMessageReceivedEventArgs *args) {
+    (void)sender; int i = ((WMsgH *)This)->i; LPWSTR s = NULL; HWND h = g_wg[i].h;
+    if (FAILED(ICoreWebView2WebMessageReceivedEventArgs_TryGetWebMessageAsString(args, &s)) || !s) return S_OK;
+    if (h) {
+        if (!wcscmp(s, L"hw:open")) PostMessageW(h, WM_WGOPEN, 0, 0);
+        else if (!wcscmp(s, L"hw:drag")) { POINT pt; GetCursorPos(&pt); ReleaseCapture(); PostMessageW(h, WM_NCLBUTTONDOWN, HTCAPTION, MAKELPARAM(pt.x, pt.y)); }
+        else if (!wcscmp(s, L"hw:menu")) PostMessageW(h, WM_WGMENU, 0, 0);
+        else if (wstarts(s, L"hw:drawn ")) { char a[80]; w8(s + 9, a, sizeof a); hlog("widget «%s» drawn %s", g_wg[i].name, a); }
+    }
+    CoTaskMemFree(s); return S_OK;
+}
+static ICoreWebView2WebMessageReceivedEventHandlerVtbl g_wmsgV = { MsgH_QI, MsgH_AddRef, MsgH_Release, WMsgH_Invoke };
+static HRESULT STDMETHODCALLTYPE WCtlH_Invoke(CtlH *This, HRESULT hr, ICoreWebView2Controller *ctl) {
+    int i = ((WCtlH *)This)->i; Wg *w = &g_wg[i]; w->pend = 0;
+    if (FAILED(hr) || !ctl) { hlog("widget «%s»: WebView2 failed (0x%08lx)", w->name, (unsigned long)hr); return S_OK; }
+    if (!w->h || w->ctl) { ICoreWebView2Controller_Close(ctl); return S_OK; }          // closed while it was starting
+    w->ctl = ctl; ICoreWebView2Controller_AddRef(ctl); ICoreWebView2Controller_get_CoreWebView2(ctl, &w->wv);
+    ICoreWebView2Controller2 *c2 = NULL;
+    if (SUCCEEDED(ICoreWebView2Controller_QueryInterface(ctl, &IID_ICoreWebView2Controller2, (void **)&c2)) && c2) {
+        COREWEBVIEW2_COLOR bg = { 0, 0, 0, 0 }; ICoreWebView2Controller2_put_DefaultBackgroundColor(c2, bg); ICoreWebView2Controller2_Release(c2); }   // the page's round corners
+    ICoreWebView2Settings *st = NULL;
+    if (SUCCEEDED(ICoreWebView2_get_Settings(w->wv, &st)) && st) {
+        ICoreWebView2Settings_put_AreDevToolsEnabled(st, FALSE); ICoreWebView2Settings_put_IsStatusBarEnabled(st, FALSE);
+        ICoreWebView2Settings_put_IsZoomControlEnabled(st, FALSE); ICoreWebView2Settings_put_AreDefaultContextMenusEnabled(st, FALSE);
+        ICoreWebView2Settings_Release(st); }
+    EventRegistrationToken t;
+    g_wmsg[i].lpVtbl = &g_wmsgV; g_wmsg[i].i = i; ICoreWebView2_add_WebMessageReceived(w->wv, (MsgH *)&g_wmsg[i], &t);
+    g_navH.lpVtbl = &g_navV; ICoreWebView2_add_NavigationStarting(w->wv, &g_navH, &t);          // nothing but the dashboard opens in it
+    wg_fit(i); ICoreWebView2Controller_put_IsVisible(ctl, TRUE);
+    WCHAR u[1100]; wg_url(i, u, 1100); ICoreWebView2_Navigate(w->wv, u);
+    hlog("widget «%s» on the desktop", w->name); return S_OK;
+}
+static ICoreWebView2CreateCoreWebView2ControllerCompletedHandlerVtbl g_wctlV = { CtlH_QI, CtlH_AddRef, CtlH_Release, WCtlH_Invoke };
+static void wg_attach(int i) {
+    Wg *w = &g_wg[i]; if (!w->h || w->ctl || w->pend || !g_env) return;
+    g_wctl[i].lpVtbl = &g_wctlV; g_wctl[i].i = i; w->pend = 1;
+    HRESULT hr = ICoreWebView2Environment_CreateCoreWebView2Controller(g_env, w->h, (CtlH *)&g_wctl[i]);
+    if (FAILED(hr)) { w->pend = 0; hlog("widget «%s»: create failed (0x%08lx)", w->name, (unsigned long)hr); }
+}
+static void wg_attach_all(void) { for (int i = 0; i < WG_N; i++) wg_attach(i); }
+static void wg_menu(int i) {
+    HWND h = g_wg[i].h; if (!h) return; HMENU m = CreatePopupMenu();
+    AppendMenuW(m, MF_STRING, 1, L"🖥️ افتح اللوحة"); AppendMenuW(m, MF_STRING, 2, L"🔄 حدّث الآن");
+    AppendMenuW(m, MF_STRING | (g_wgTop ? MF_CHECKED : 0), 3, L"📌 فوق كل النوافذ"); AppendMenuW(m, MF_SEPARATOR, 0, NULL);
+    AppendMenuW(m, MF_STRING, 4, L"✕ أخفِ هذا الويدجت");
+    POINT p; GetCursorPos(&p); SetForegroundWindow(h);
+    int c = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_LAYOUTRTL, p.x, p.y, 0, h, NULL); DestroyMenu(m);
+    if (c == 1) open_window(NULL); else if (c == 2 && g_wg[i].wv) ICoreWebView2_Reload(g_wg[i].wv); else if (c == 3) wg_top(!g_wgTop); else if (c == 4) wg_show(i, 0, 1);
+}
+static LRESULT CALLBACK WgProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
+    int i = wg_of(h);
+    switch (m) {
+    case WM_NCCALCSIZE: if (wp) return 0; break;             // no frame — the page is the whole widget
+    case WM_NCHITTEST: {                                      // the rim (7 px) resizes · the rest moves it (the page covers it and sends «hw:drag»)
+        POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) }; RECT r; GetWindowRect(h, &r); int b = MulDiv(7, dpi_of(h), 96);
+        int L = pt.x < r.left + b, R = pt.x >= r.right - b, T = pt.y < r.top + b, B = pt.y >= r.bottom - b;
+        if (T && L) return HTTOPLEFT; if (T && R) return HTTOPRIGHT; if (B && L) return HTBOTTOMLEFT; if (B && R) return HTBOTTOMRIGHT;
+        if (L) return HTLEFT; if (R) return HTRIGHT; if (T) return HTTOP; if (B) return HTBOTTOM; return HTCAPTION; }
+    case WM_NCACTIVATE: return DefWindowProcW(h, m, wp, -1);
+    case WM_ERASEBKGND: return 1;
+    case WM_PAINT: { PAINTSTRUCT ps; HDC dc = BeginPaint(h, &ps); RECT r; GetClientRect(h, &r); FillRect(dc, &r, g_wgBrush); EndPaint(h, &ps); return 0; }
+    case WM_SIZE: if (i >= 0) wg_fit(i); InvalidateRect(h, NULL, FALSE); return 0;
+    case WM_MOVE: case WM_MOVING: if (i >= 0 && g_wg[i].ctl) ICoreWebView2Controller_NotifyParentWindowPositionChanged(g_wg[i].ctl); break;
+    case WM_EXITSIZEMOVE: if (i >= 0) wg_save(i); return 0;
+    case WM_GETMINMAXINFO: { MINMAXINFO *mm = (MINMAXINFO *)lp; int d = dpi_of(h); mm->ptMinTrackSize.x = MulDiv(190, d, 96); mm->ptMinTrackSize.y = MulDiv(110, d, 96); return 0; }
+    case WM_DPICHANGED: { RECT *r = (RECT *)lp; SetWindowPos(h, NULL, r->left, r->top, r->right - r->left, r->bottom - r->top, SWP_NOZORDER | SWP_NOACTIVATE); return 0; }
+    case WM_WGOPEN: open_window(NULL); return 0;
+    case WM_WGMENU: if (i >= 0) wg_menu(i); return 0;
+    case WM_CLOSE: if (i >= 0) wg_show(i, 0, 1); else DestroyWindow(h); return 0;
+    case WM_DESTROY:
+        if (i >= 0) { Wg *w = &g_wg[i];
+            if (w->ctl) { ICoreWebView2Controller_Close(w->ctl); ICoreWebView2Controller_Release(w->ctl); w->ctl = NULL; }
+            if (w->wv) { ICoreWebView2_Release(w->wv); w->wv = NULL; } w->h = NULL; w->pend = 0; }
+        return 0;
+    }
+    return DefWindowProcW(h, m, wp, lp);
+}
+static void wg_show(int i, int on, int save) {
+    Wg *w = &g_wg[i];
+    if (save) { ini_load(); ini_set(w->on, on ? "1" : "0"); ini_save(); }
+    if (!on) { if (w->h) { wg_save(i); DestroyWindow(w->h); hlog("widget «%s» hidden", w->name); } post_hw(); return; }
+    if (w->h) { ShowWindow(w->h, SW_SHOWNOACTIVATE); post_hw(); return; }
+    WCHAR base[640]; EnterCriticalSection(&g_cs); wcscpy_s(base, 640, g_url); LeaveCriticalSection(&g_cs);
+    if (!base[0]) { hlog("widget «%s»: no address", w->name); return; }
+    int d = 96; { HDC dc = GetDC(NULL); d = GetDeviceCaps(dc, LOGPIXELSX); ReleaseDC(NULL, dc); }
+    RECT wa; SystemParametersInfoW(SPI_GETWORKAREA, 0, &wa, 0);
+    long W = MulDiv(w->dw, d, 96), H = MulDiv(w->dh, d, 96), gap = MulDiv(16, d, 96);
+    long x = wa.right - W - gap, y = wa.bottom - H - gap;
+    if (i == 1) y -= MulDiv(g_wg[0].dh, d, 96) + gap;        // the first time: the prices above «Holy», both near the clock
+    ini_load(); long a, b, c, e;
+    if (sscanf_s(ini_get(w->key), "%ld,%ld,%ld,%ld", &a, &b, &c, &e) == 4 && c - a >= 120 && e - b >= 70) {
+        RECT rr = { a, b, c, e }; if (MonitorFromRect(&rr, MONITOR_DEFAULTTONULL)) { x = a; y = b; W = c - a; H = e - b; } }
+    w->h = CreateWindowExW(WS_EX_TOOLWINDOW | (g_wgTop ? WS_EX_TOPMOST : 0), L"HolyWidget", w->title, WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN, x, y, W, H, NULL, NULL, g_hi, NULL);
+    if (!w->h) { hlog("widget «%s»: CreateWindow failed (%lu)", w->name, GetLastError()); return; }
+    SetWindowPos(w->h, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
+    ShowWindow(w->h, SW_SHOWNOACTIVATE); wg_fit(i);
+    if (g_env) wg_attach(i); else ensure_env();
+    post_hw();
+}
+static void wg_boot(void) {                      // with Windows (--tray) or a normal start: the widgets that were on come back
+    ini_load(); g_wgTop = strcmp(ini_get("wg_top"), "0") != 0; int on[WG_N];
+    for (int i = 0; i < WG_N; i++) on[i] = !strcmp(ini_get(g_wg[i].on), "1");
+    for (int i = 0; i < WG_N; i++) if (on[i]) wg_show(i, 1, 0);
+}
+
 
 // ───────────────────────────── the watcher (near the clock) · one per user · a second start hands over
 static void tray_menu(void) {
     HMENU m = CreatePopupMenu();
     AppendMenuW(m, MF_STRING, 1, L"🖥️ افتح اللوحة"); AppendMenuW(m, MF_STRING, 2, L"🔗 عنوان اللوحة…"); AppendMenuW(m, MF_SEPARATOR, 0, NULL);
+    AppendMenuW(m, MF_STRING | (g_wg[0].h ? MF_CHECKED : 0), 4, L"🟣 ويدجت Holy على سطح المكتب");          // 🖥️ 2.1
+    AppendMenuW(m, MF_STRING | (g_wg[1].h ? MF_CHECKED : 0), 5, L"🪙 ويدجت الأسعار على سطح المكتب");
+    AppendMenuW(m, MF_STRING | (g_wgTop ? MF_CHECKED : 0), 6, L"📌 الويدجت فوق كل النوافذ"); AppendMenuW(m, MF_SEPARATOR, 0, NULL);
     AppendMenuW(m, MF_STRING, 3, L"✕ إغلاق البرنامج (تتوقف الإشعارات)");
     POINT p; GetCursorPos(&p); SetForegroundWindow(g_tray);
     int c = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_LAYOUTRTL, p.x, p.y, 0, g_tray, NULL); DestroyMenu(m);
@@ -555,6 +726,8 @@ static void tray_menu(void) {
     else if (c == 2) { WCHAR cmd[MAX_PATH + 20]; _snwprintf_s(cmd, MAX_PATH + 20, _TRUNCATE, L"\"%s\" --setup", g_exe); STARTUPINFOW si; PROCESS_INFORMATION pi;
         memset(&si, 0, sizeof si); si.cb = sizeof si; if (CreateProcessW(NULL, cmd, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) { CloseHandle(pi.hThread); CloseHandle(pi.hProcess); } }
     else if (c == 3) { if (g_win) SendMessageW(g_win, WM_CLOSE, 0, 0); DestroyWindow(g_tray); }
+    else if (c == 4 || c == 5) wg_show(c - 4, !g_wg[c - 4].h, 1);
+    else if (c == 6) wg_top(!g_wgTop);
 }
 static LRESULT CALLBACK TrayProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     if (m == g_taskbarCreated && m) { tray_icon(NIM_ADD); return 0; }
@@ -568,6 +741,7 @@ static LRESULT CALLBACK TrayProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         }
         return 0;
     case WM_TIMER: if (wp == 2) { KillTimer(h, 2); g_showing = 0; note_next(); } return 0;
+    case WM_HWCMD: if (wp == 1 || wp == 2) wg_show((int)wp - 1, !g_wg[wp - 1].h, 1); else if (wp == 3) wg_top(!g_wgTop); else post_hw(); return 0;
     case WM_FEED: {
         Feed *f = (Feed *)lp;
         if (f->n > 4) {                                       // many at once ⇒ one notification that adds them up
@@ -585,8 +759,10 @@ static LRESULT CALLBACK TrayProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         if (!wcscmp(c, L"quit")) { hlog("a newer copy takes over"); if (g_win) SendMessageW(g_win, WM_CLOSE, 0, 0); DestroyWindow(h); return 1; }
         if (!wcscmp(c, L"cfg")) { config_load(); InterlockedIncrement(&g_gen); hlog("address changed — restarting the notifications"); return 1; }
         if (wstarts(c, L"open")) { open_window(c[4] == L'\t' ? c + 5 : NULL); return 1; }
+        if (!wcscmp(c, L"wg:bots") || !wcscmp(c, L"wg:px")) { int i = c[3] == L'b' ? 0 : 1; wg_show(i, !g_wg[i].h, 1); return 1; }   // 🖥️ --widget=…
         return 0; }
-    case WM_DESTROY: { NOTIFYICONDATAW n; memset(&n, 0, sizeof n); n.cbSize = sizeof n; n.hWnd = h; n.uID = 1; Shell_NotifyIconW(NIM_DELETE, &n); PostQuitMessage(0); return 0; }
+    case WM_DESTROY: { for (int i = 0; i < WG_N; i++) wg_save(i);   // 🖥️ the widgets keep their place (and stay on for the next start)
+        NOTIFYICONDATAW n; memset(&n, 0, sizeof n); n.cbSize = sizeof n; n.hWnd = h; n.uID = 1; Shell_NotifyIconW(NIM_DELETE, &n); PostQuitMessage(0); return 0; }
     }
     return DefWindowProcW(h, m, wp, lp);
 }
@@ -683,8 +859,9 @@ int WINAPI wWinMain(HINSTANCE hi, HINSTANCE prev, LPWSTR cmdline, int show) {
     WCHAR ld[MAX_PATH]; _snwprintf_s(ld, MAX_PATH, _TRUNCATE, L"%s\\HolyDashboard", la); CreateDirectoryW(ld, NULL);
     _snwprintf_s(g_udf, MAX_PATH, _TRUNCATE, L"%s\\WebView2", ld); _snwprintf_s(g_prof, MAX_PATH, _TRUNCATE, L"%s\\Browser", ld);
     int argc = 0; LPWSTR *argv = CommandLineToArgvW(cmdline && cmdline[0] ? GetCommandLineW() : L"x", &argc);
-    int a_setup = 0, a_tray = 0, a_restart = 0;
-    for (int i = 1; argv && i < argc; i++) { if (!_wcsicmp(argv[i], L"--setup")) a_setup = 1; else if (!_wcsicmp(argv[i], L"--tray")) a_tray = 1; else if (!_wcsicmp(argv[i], L"--restart")) a_restart = 1; }
+    int a_setup = 0, a_tray = 0, a_restart = 0, a_wg = -1;
+    for (int i = 1; argv && i < argc; i++) { if (!_wcsicmp(argv[i], L"--setup")) a_setup = 1; else if (!_wcsicmp(argv[i], L"--tray")) a_tray = 1; else if (!_wcsicmp(argv[i], L"--restart")) a_restart = 1;
+        else if (!_wcsicmp(argv[i], L"--widget=bots")) a_wg = 0; else if (!_wcsicmp(argv[i], L"--widget=px")) a_wg = 1; }      // 🖥️ 2.1: a widget on/off
     if (!a_tray && (GetKeyState(VK_SHIFT) & 0x8000)) a_setup = 1;
     g_icon = (HICON)LoadImageW(hi, MAKEINTRESOURCEW(1), IMAGE_ICON, GetSystemMetrics(SM_CXICON) * 2, GetSystemMetrics(SM_CYICON) * 2, LR_DEFAULTCOLOR);
     g_iconSm = (HICON)LoadImageW(hi, MAKEINTRESOURCEW(1), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR);
@@ -694,11 +871,15 @@ int WINAPI wWinMain(HINSTANCE hi, HINSTANCE prev, LPWSTR cmdline, int show) {
     wc.lpfnWndProc = SetupProc; wc.lpszClassName = L"HolySetup"; wc.hbrBackground = GetSysColorBrush(COLOR_WINDOW); RegisterClassExW(&wc);
     wc.lpfnWndProc = WinProc; wc.lpszClassName = L"HolyDash"; wc.hbrBackground = NULL; wc.style = CS_HREDRAW | CS_VREDRAW; RegisterClassExW(&wc);
     wc.lpfnWndProc = TrayProc; wc.lpszClassName = L"HolyTray2"; wc.style = 0; RegisterClassExW(&wc);
+    g_wgBrush = CreateSolidBrush(RGB(15, 11, 29));                 // 🖥️ 2.1: the widgets' class (the phone widget's dark purple behind the page's corners)
+    wc.lpfnWndProc = WgProc; wc.lpszClassName = L"HolyWidget"; wc.style = CS_HREDRAW | CS_VREDRAW; RegisterClassExW(&wc);
     config_load();
-    { char a[200]; w8(g_url, a, sizeof a); hlog("start v2.0.1%s%s%s · %s", a_tray ? " (with Windows)" : "", a_setup ? " (setup)" : "", a_restart ? " (restart)" : "", a[0] ? "address set" : "no address"); }
+    { char a[200]; w8(g_url, a, sizeof a); hlog("start v2.1.0%s%s%s · %s", a_tray ? " (with Windows)" : "", a_setup ? " (setup)" : "", a_restart ? " (restart)" : "", a[0] ? "address set" : "no address"); }
 
     HWND run = FindWindowW(L"HolyTray2", NULL);
+    if (a_wg >= 0 && run) { AllowSetForegroundWindow(ASFW_ANY); send_cmd(run, a_wg ? L"wg:px" : L"wg:bots"); return 0; }   // 🖥️ the running copy shows/hides it
     if (a_tray && run) return 0;                                  // Windows started it while one is running
+    if (a_wg >= 0) a_tray = 1;                                    // 🖥️ --widget with nothing running: start quietly with that widget
     if (!a_tray) {
         int changed = 0;
         if (a_setup || !g_url[0]) { if (!setup_dialog()) { hlog("address window closed — nothing opened"); return 0; } changed = 1; }
@@ -732,6 +913,8 @@ int WINAPI wWinMain(HINSTANCE hi, HINSTANCE prev, LPWSTR cmdline, int show) {
     tray_icon(NIM_ADD);
     hlog("notifications watcher running");
     CreateThread(NULL, 0, feed_thread, NULL, 0, NULL);
+    wg_boot();                                                    // 🖥️ 2.1: the widgets that were on
+    if (a_wg >= 0 && !g_wg[a_wg].h) wg_show(a_wg, 1, 1);
     if (!a_tray) open_window(NULL);
     MSG msg; while (GetMessageW(&msg, NULL, 0, 0) > 0) { TranslateMessage(&msg); DispatchMessageW(&msg); }
     if (g_env) ICoreWebView2Environment_Release(g_env);

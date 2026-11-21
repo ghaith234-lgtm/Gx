@@ -224,6 +224,47 @@ $ut = [Text.Encoding]::ASCII.GetString($up.Content); $j = $ut.IndexOf("HOLY-URL-
 $devs2 = (Invoke-RestMethod "$base/api/app/devices" -Method Post -ContentType "application/json" -Body '{"act":"list"}').devs
 Check "a copy fetched by the program keeps its key (no extra device)" ((($ut.Substring($j + 14, 560) -split [char]0)[1]) -eq $iniTok -and $devs2.Count -eq $devs.Count) "devices=$($devs2.Count)"
 
+# 7b) 🖥️ 2.1 (v3.36.72): the desktop widgets — «--widget=bots|px» hands over to the running copy ⇒ two frameless tool windows (not on the
+#     taskbar · on top) · the dashboard's /widget page draws them with the device key · a drag moves one (its place kept in holy.ini) · a click
+#     opens the dashboard · again ⇒ hidden · after a restart (with Windows) the one still on comes back
+function Wgs() { @(([W]::List() -split "`n") | Where-Object { $_ -match "\|HolyWidget\|" } | ForEach-Object { $f = $_ -split "\|"; @{ h = [IntPtr][long]$f[0]; t = $f[2]; r = ($f[4] -split ",") | ForEach-Object { [int]$_ } } }) }
+$hd = [W]::FindWindow("HolyDash", [NullString]::Value); if ($hd -ne [IntPtr]::Zero) { [W]::SendMessage($hd, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null; Start-Sleep -Seconds 2 }
+foreach ($k in @("bots", "px")) { $pw = Start-Process "$A\TheHolyDashboard.exe" -ArgumentList "--widget=$k" -PassThru; $pw.WaitForExit(15000) | Out-Null }
+$ws = @(); for ($k = 0; $k -lt 40 -and $ws.Count -lt 2; $k++) { Start-Sleep -Milliseconds 500; $ws = Wgs }
+$ex = $ws | ForEach-Object { [W]::GetWindowLong($_.h, -20) }
+Check "🖥️ --widget=bots and --widget=px ⇒ two widget windows (handed over to the running copy · still one program)" ($ws.Count -eq 2 -and (Get-Process TheHolyDashboard -ErrorAction SilentlyContinue).Count -eq 1) "widgets=$($ws.Count) $(($ws | ForEach-Object { $_.t + ' ' + ($_.r -join ',') }) -join ' ;; ')"
+Check "…frameless tool windows (not on the taskbar) · on top of the other windows" ($ex.Count -eq 2 -and @($ex | Where-Object { ($_ -band 0x80) -and ($_ -band 0x8) }).Count -eq 2) (($ex | ForEach-Object { "0x{0:X8}" -f $_ }) -join ' ')
+Check "…the dashboard's page drew both with this computer's key (the phone's drawing · data)" ((LogHas "widget «bots» drawn \d+x\d+ data" 40) -and (LogHas "widget «px» drawn \d+x\d+ data" 20)) ""
+Start-Sleep -Seconds 1; Shot "widgets"
+if ($ws.Count -eq 2) {
+  $wb = $ws | Where-Object { $_.t -eq "Holy" } | Select-Object -First 1; $wp = $ws | Where-Object { $_.t -ne "Holy" } | Select-Object -First 1
+  if ($wb) {
+    $r0 = [W]::R4($wb.h); $cx = [int](($r0[0] + $r0[2]) / 2); $cy = [int](($r0[1] + $r0[3]) / 2)
+    [W]::Down($cx, $cy); for ($s = 1; $s -le 20; $s++) { [W]::SetCursorPos($cx - 12 * $s, $cy - 6 * $s) | Out-Null; Start-Sleep -Milliseconds 30 }; Start-Sleep -Milliseconds 300; [W]::Up(); Start-Sleep -Seconds 1
+    $r1 = [W]::R4($wb.h)
+    Check "🖱️ drag a widget ⇒ it moves" ((($r0[0] - $r1[0]) -gt 120) -and (($r0[1] - $r1[1]) -gt 50)) "before=$($r0 -join ',') after=$($r1 -join ',')"
+    $ini2 = Get-Content "$env:APPDATA\HolyDashboard\holy.ini" -Raw -ErrorAction SilentlyContinue
+    Check "…its place is kept in holy.ini (wg_bots) · both are on (wg_bots_on · wg_px_on)" (($ini2 -match "wg_bots=$($r1[0]),$($r1[1]),") -and ($ini2 -match "wg_bots_on=1") -and ($ini2 -match "wg_px_on=1")) (($ini2 -replace "token=[^\r\n]*", "token=(hidden)") -replace "`r?`n", " ")
+    Shot "widget-moved"
+  }
+  if ($wp) {
+    $q = [W]::R4($wp.h); [W]::Click([int](($q[0] + $q[2]) / 2), [int](($q[1] + $q[3]) / 2))
+    $hd = [IntPtr]::Zero; for ($k = 0; $k -lt 30 -and $hd -eq [IntPtr]::Zero; $k++) { Start-Sleep -Milliseconds 500; $hd = [W]::FindWindow("HolyDash", [NullString]::Value) }
+    Check "🖱️ a click on a widget ⇒ the dashboard window opens" ($hd -ne [IntPtr]::Zero) "hwnd=$hd"
+    if ($hd -ne [IntPtr]::Zero) { Start-Sleep -Seconds 4; Shot "widget-click"; [W]::SendMessage($hd, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null; Start-Sleep -Seconds 2 }
+  }
+}
+$pw = Start-Process "$A\TheHolyDashboard.exe" -ArgumentList "--widget=bots" -PassThru; $pw.WaitForExit(15000) | Out-Null; Start-Sleep -Seconds 2
+$ws2 = Wgs; $ini3 = Get-Content "$env:APPDATA\HolyDashboard\holy.ini" -Raw -ErrorAction SilentlyContinue
+Check "--widget=bots again ⇒ «Holy» hidden (the prices stay) · remembered off" ($ws2.Count -eq 1 -and $ws2[0].t -ne "Holy" -and ($ini3 -match "wg_bots_on=0")) "widgets=$($ws2.Count)"
+$nFeed = @(Get-Content $L -ErrorAction SilentlyContinue | Select-String "feed ok").Count
+Get-Process TheHolyDashboard -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2
+$p4 = Start-Process "$A\TheHolyDashboard.exe" -ArgumentList "--tray" -PassThru
+$ws3 = @(); for ($k = 0; $k -lt 40 -and $ws3.Count -lt 1; $k++) { Start-Sleep -Milliseconds 500; $ws3 = Wgs }
+Check "after a restart (as Windows starts it · --tray) the prices widget comes back where it was · «Holy» stays hidden" ($ws3.Count -eq 1 -and $ws3[0].t -ne "Holy" -and [W]::FindWindow("HolyDash", [NullString]::Value) -eq [IntPtr]::Zero) "widgets=$($ws3.Count)"
+$fa = 0; for ($k = 0; $k -lt 60 -and $fa -le $nFeed; $k++) { Start-Sleep -Milliseconds 500; $fa = @(Get-Content $L -ErrorAction SilentlyContinue | Select-String "feed ok").Count }
+Check "…and the program watches the feed again" ($fa -gt $nFeed) "feed ok ×$nFeed ⇒ ×$fa"
+
 # 8) unlink from the dashboard ⇒ the program knows at once (and says so) · it keeps running (the window still opens the dashboard)
 if ($pc) {
   Invoke-RestMethod "$base/api/app/devices" -Method Post -ContentType "application/json" -Body (@{ act = "del"; id = $pc.id } | ConvertTo-Json) | Out-Null
