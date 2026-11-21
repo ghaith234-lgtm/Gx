@@ -48,8 +48,8 @@ const LAT = /[A-Za-z]{2,}/;
       btc: C[1] ? [...C[1].querySelectorAll('.an-rr')].map(r => r.textContent.replace(/\s+/g, ' ').trim()) : [], help: (document.querySelector('#sg_body details.ind-help') || {}).textContent || '' } });
   ok(`② 🌐 «${(m1.lines[0] || '').slice(0, 70)}…» · ${m1.lines.length} lines in plain words (no Latin)`, m1.cards[0] === '🌐 السوق الآن' && m1.lines.length >= 5
      && m1.lines[0].startsWith('اتجاه السوق') && m1.lines.every(t => !LAT.test(t)), m1);
-  ok(`② ₿ Bitcoin's range: ${m1.btc.map(t => t.slice(0, 40)).join(' | ')}`, m1.cards[1] === '₿ البيتكوين' && m1.btc.length === 3 && m1.btc[0].includes('الساعات الأربع القادمة')
-     && m1.btc[1].includes('غداً') && m1.btc[2].includes('الأسبوع القادم') && m1.btc.every(t => /–/.test(t) && t.includes('±')), m1.btc);
+  ok(`② ₿ Bitcoin's range: ${m1.btc.map(t => t.slice(0, 40)).join(' | ')}`, m1.cards[1] === '₿ البيتكوين' && m1.btc.length === 5 && m1.btc[0].includes('الساعات الأربع القادمة')
+     && m1.btc[1].includes('غداً') && m1.btc[2].includes('الأسبوع القادم') && m1.btc[3].includes('الشهر القادم') && m1.btc[4].includes('الأشهر الثلاثة القادمة') && m1.btc.every(t => /–/.test(t) && t.includes('±')), m1.btc);
   ok('② «كيف أقرأ هذه النافذة؟»: facts measured from prices · the range held 80–82% · no direction guess (it did not beat chance) · information, no orders',
      m1.help.includes('🔎 الآن') && m1.help.includes('80–82%') && m1.help.includes('لا تخمين للاتجاه') && m1.help.includes('لا تفتح أمراً'), m1.help.slice(0, 200));
   await shot('mkt_now');
@@ -67,7 +67,7 @@ const LAT = /[A-Za-z]{2,}/;
   const inside = c2.rr.every(t => { const m = t.match(/([\d.,]+)\s*–\s*([\d.,]+)/); return m && pn(m[1]) < pn(c2.px) && pn(c2.px) < pn(m[2]) });
   ok(`③ a tap opens SOL: ${c2.lines.length} facts («${(c2.lines[0] || '').slice(0, 50)}…» · vs Bitcoin · volatility · support/resistance) · three ranges around ${c2.px} (the price inside)`,
      c2.open && c2.lines.length >= 5 && c2.lines[0].startsWith('الاتجاه اليومي') && c2.lines.some(t => t.startsWith('مقابل البيتكوين')) && c2.lines.some(t => t.startsWith('التذبذب'))
-     && c2.lines.every(t => !LAT.test(t)) && c2.rr.length === 3 && inside, c2);
+     && c2.lines.every(t => !LAT.test(t)) && c2.rr.length === 5 && inside, c2);
   await shot('mkt_coins');
   // ④ 📋 the indicator tables (v3.36.73)
   await pg.evaluate(() => sgTab('ind'));
@@ -115,7 +115,7 @@ const LAT = /[A-Za-z]{2,}/;
   const l1 = await pg.evaluate(() => ({ cards: [...document.querySelectorAll('#sg_body .an-card .an-h b')].map(b => b.textContent), rr: [...document.querySelectorAll('#sg_body .an-card:first-child .an-rr')].map(r => r.textContent.replace(/\s+/g, ' ').trim()),
     txt: (document.querySelector('#sg_body') || {}).textContent || '' }));
   ok(`⑤ 📜 «${l1.cards.join(' · ')}»: the range's record per horizon (${l1.rr.length}) · the target 80% explained · the SOL notice listed with «📲 وصلك»`, l1.cards.join('|') === '📏 صدق المدى المتوقع (حي)|🔔 آخر التنبيهات'
-     && l1.rr.length === 3 && l1.txt.includes('الهدف 80%') && l1.txt.includes('SOL') && l1.txt.includes('أكثر من المتوقع') && l1.txt.includes('📲 وصلك'), l1);
+     && l1.rr.length === 5 && l1.txt.includes('الهدف 80%') && l1.txt.includes('SOL') && l1.txt.includes('أكثر من المتوقع') && l1.txt.includes('📲 وصلك'), l1);
   // ⑥ ⚙️ the notifications
   await pg.evaluate(() => sgTab('cfg'));
   await sleep(300);
@@ -170,7 +170,7 @@ const LAT = /[A-Za-z]{2,}/;
     return { top: (document.querySelector('#fc_body .fc-tdt') || {}).textContent || '', hd: c ? ((c.querySelector('.fc-rows .fc-hd') || {}).textContent || '') : '', rr,
       same: rr.length && sol.rng ? rr[0].includes(fcN(sol.rng['4h'].lo)) && rr[0].includes(fcN(sol.rng['4h'].hi)) : null } });
   ok(`⑦ 🔮 on the same basis: «🎯 الميل اليومي» on top («${f2.top.replace(/\s+/g, ' ').trim().slice(0, 70)}…») · SOL's range rows = 📈's numbers (${f2.rr.slice(0, 2).join(' | ')})`,
-     f2.top.includes('🎯 الميل اليومي') && f2.top.includes('صدق الميل') && f2.hd.includes('بين كم وكم') && f2.rr.length === 3 && f2.rr[0].includes('الساعات الأربع القادمة') && f2.same !== false, f2);
+     f2.top.includes('🎯 الميل اليومي') && f2.top.includes('صدق الميل') && f2.hd.includes('بين كم وكم') && f2.rr.length === 5 && f2.rr[0].includes('الساعات الأربع القادمة') && f2.same !== false, f2);
   if (SHOTS) { await pg.evaluate(() => { const c = [...document.querySelectorAll('#fc_body .fc-c')].find(e => e.innerText.includes('SOL')); if (c) c.click() }); await sleep(400); await shot('mkt_fc') }
   await pg.evaluate(() => document.querySelector('#fc_body .sg-go').click());
   await sleep(500);

@@ -20229,7 +20229,9 @@ AN_COOL = 6 * 3600                                                      # بطا
 
 # ───────────── 🔮 المدى المتوقع (المثبت بالفحص 14: احتوى السعر 80–82% من المرات) + سجله الحي ─────────────
 AN_FILE = os.path.join(ROOT, "Holy_Market.json")
-AN_HZ = (("4h", "c1", 4, 3600, "الساعات الأربع القادمة"), ("1d", "c4", 6, 14400, "غداً"), ("1w", "c", 7, 86400, "الأسبوع القادم"))
+AN_HZ = (("4h", "c1", 4, 3600, "الساعات الأربع القادمة"), ("1d", "c4", 6, 14400, "غداً"), ("1w", "c", 7, 86400, "الأسبوع القادم"),
+         ("1m", "c", 30, 86400, "الشهر القادم"), ("3m", "c", 90, 86400, "الأشهر الثلاثة القادمة"))     # 🔮 v3.36.76: الشهر والأشهر الثلاثة (فحص 15)
+AN_WIN = {"1m": 90, "3m": 90}                    # تذبذبهما من آخر 90 شمعة يومية (الباقي 48) — فحص 15: 82.2% · 80.7%
 AN_Z = 1.2816                                   # 80% (10% … 90%)
 _AN = {"lock": threading.Lock()}
 
@@ -20239,9 +20241,10 @@ def _an_range(cdb, sym, px):
     out = {}
     for k, sec, h, step, _nm in AN_HZ:
         rows = ((cdb.get(sec) or {}).get(sym) or {}).get("d") or []
-        if len(rows) < 60 or not px:
+        win = AN_WIN.get(k, 48)
+        if len(rows) < max(60, win + 1) or not px:
             continue
-        C = [float(r[4]) for r in rows[-49:]]
+        C = [float(r[4]) for r in rows[-(win + 1):]]
         sd = _an_sd(_an_lr(C))
         if sd <= 0:
             continue
@@ -20296,11 +20299,15 @@ def _an_grade(A, cdb, now):
 
 def _an_issue(A, P, frs, now):
     """📝 يُسجَّل المدى عند إغلاق شمعة إطاره فقط (4 ساعات ⇐ شمعة 4 ساعات · غداً ⇐ اليومية · الأسبوع ⇐ يومية الاثنين) — مدد لا تتداخل"""
-    want = {"4h": "4H" in frs, "1d": "1D" in frs, "1w": "1D" in frs and datetime.utcfromtimestamp(now).weekday() == 0}
+    d0 = datetime.utcfromtimestamp(now)
+    want = {"4h": "4H" in frs, "1d": "1D" in frs, "1w": "1D" in frs and d0.weekday() == 0,
+            "1m": "1D" in frs and d0.day == 1, "3m": "1D" in frs and d0.day == 1 and d0.month in (1, 4, 7, 10)}     # 🔮 v3.36.76
     have = {(p[0], p[1], p[4]) for p in A["pend"]}
     for s, c in (P.get("coins") or {}).items():
         for k, band in (c.get("rng") or {}).items():
-            h = {"4h": 4 * 3600, "1d": 86400, "1w": 7 * 86400}[k]
+            h = {"4h": 4 * 3600, "1d": 86400, "1w": 7 * 86400, "1m": 30 * 86400, "3m": 90 * 86400}.get(k)
+            if not h:
+                continue
             if not want.get(k):
                 continue
             t_end = int(now) // 3600 * 3600 + h

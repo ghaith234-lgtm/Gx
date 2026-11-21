@@ -97,8 +97,8 @@ ok("① SOL climbed for months (its own drift) ⇒ «صاعد» and stronger tha
 
 # ② the range
 rg = SOL["rng"]
-ok(f"② the range for 4 hours · tomorrow · the week around the price ({SOL['px']:.4g}): ±{rg['4h']['w']}% · ±{rg['1d']['w']}% · ±{rg['1w']['w']}% — wider with time",
-   set(rg) == {"4h", "1d", "1w"} and all(rg[k]["lo"] < SOL["px"] < rg[k]["hi"] for k in rg) and rg["4h"]["w"] < rg["1d"]["w"] < rg["1w"]["w"]
+ok(f"② the range for 4 hours · tomorrow · the week · the month · three months (🔮 v3.36.76) around the price ({SOL['px']:.4g}): " + " · ".join(f"±{rg[k]['w']}%" for k in ("4h", "1d", "1w", "1m", "3m") if k in rg) + " — wider with time",
+   set(rg) == {"4h", "1d", "1w", "1m", "3m"} and all(rg[k]["lo"] < SOL["px"] < rg[k]["hi"] for k in rg) and rg["4h"]["w"] < rg["1d"]["w"] < rg["1w"]["w"] < rg["1m"]["w"] < rg["3m"]["w"]
    and M.get("rng") and M["rng"]["4h"]["lo"] < M["btc"] < M["rng"]["4h"]["hi"], rg)
 
 # ③ the live record of the range
@@ -109,6 +109,14 @@ A2 = m._an_load()
 m._an_issue(A2, P, ["1D"], float(NOW))
 k1 = {p[1] for p in A2["pend"]}
 ok("③ bands are issued only at their frame's close: the 4-hour close ⇒ «4h» only · the daily close ⇒ «1d» (and «1w» on Mondays)", k4 == {"4h"} and "1d" in k1 and "4h" not in k1, (k4, k1))
+KS = {}
+for nm_, day_ in (("Jan 1 (a Monday in 2029)", "2029-01-01"), ("Feb 1", "2029-02-01"), ("Feb 2", "2029-02-02")):
+    A_ = m._an_load()
+    A_["pend"] = []
+    m._an_issue(A_, P, ["1D"], float(time.mktime(time.strptime(day_ + " 12", "%Y-%m-%d %H")) - time.timezone))
+    KS[nm_] = sorted({p[1] for p in A_["pend"]})
+ok(f"③ 🔮 the month on the 1st of every month · the three months on Jan/Apr/Jul/Oct the 1st: {KS}",
+   KS["Jan 1 (a Monday in 2029)"] == ["1d", "1m", "1w", "3m"] and KS["Feb 1"] == ["1d", "1m"] and KS["Feb 2"] == ["1d"], KS)
 t_end = T1E - 3600
 A3 = {"v": 1, "rec": {}, "pend": [["SOL-USDT", "4h", 9.0, 11.0, t_end], ["XRP-USDT", "4h", 9.0, 11.0, t_end], ["BTC-USDT", "1d", 1.0, 100.0, t_end],
                                    ["ETH-USDT", "1w", 1.0, 2.0, NOW + 86400], ["DOT-USDT", "1d", 1.0, 2.0, NOW - 5 * 86400]], "sent": {}}
@@ -270,7 +278,7 @@ ok("⑤ a strong move that keeps going (SOL +9% again the next hour) ⇒ «صع�
 # ⑥ the API · the settings
 V = m.an_view()
 ok("⑥ /api/market's data: your coins (SOL · XRP) with their lines and ranges · the market · the ranges' record · the three horizons",
-   [c["sym"] for c in V["coins"]] == ["SOL-USDT", "XRP-USDT"] and V["mkt"] and V["coins"][0]["rng"] and [h[0] for h in V["hz"]] == ["4h", "1d", "1w"], {k: V.get(k) for k in ("mine", "hz")})
+   [c["sym"] for c in V["coins"]] == ["SOL-USDT", "XRP-USDT"] and V["mkt"] and V["coins"][0]["rng"] and [h[0] for h in V["hz"]] == ["4h", "1d", "1w", "1m", "3m"], {k: V.get(k) for k in ("mine", "hz")})
 c = m.sg_cfg()
 ok("⑥ settings: each type at its default level (📲 or 👁) · the daily cap inside (12) · no daily summary", c["alv"] == {k: x[3] for k, x in m.AN_TY.items()}
    and c["cap"] == 12 and "sum" not in c, c)
