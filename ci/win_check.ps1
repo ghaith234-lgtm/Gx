@@ -76,7 +76,7 @@ for ($k = 0; $k -lt 90; $k++) { try { if ((Invoke-WebRequest "$base/" -UseBasicP
 Check "dashboard up (python $((Get-Command python).Version))" (-not $dash.HasExited) "pid=$($dash.Id)"
 # 1) the dashboard serves the app (logged in: a fresh dashboard has no password)
 $info = Invoke-RestMethod "$base/api/app/info"
-Check "the dashboard knows the Windows app 2.0.1" ($info.win.size -gt 50000 -and $info.win.name -eq "2.0.1") "size=$($info.win.size) name=$($info.win.name) apk=$($info.apk.name)"
+Check "the dashboard knows the Windows app 2.1" ($info.win.size -gt 50000 -and $info.win.name -eq "2.1") "size=$($info.win.size) name=$($info.win.name) apk=$($info.apk.name)"
 Invoke-WebRequest "$base/app/holy.exe?u=$([uri]::EscapeDataString($base))" -OutFile "$A\TheHolyDashboard.exe" -UseBasicParsing
 $bytes = [IO.File]::ReadAllBytes("$A\TheHolyDashboard.exe")
 $txt = [Text.Encoding]::ASCII.GetString($bytes)
@@ -93,7 +93,7 @@ Check "the download linked a computer (💻 · not opened yet)" (($devs0 | Where
 $sig = Get-AuthenticodeSignature "$A\TheHolyDashboard.exe"
 Write-Host "HOLYWIN ℹ️ signature: $($sig.Status) (unsigned ⇒ SmartScreen asks once)"
 $vi = (Get-Item "$A\TheHolyDashboard.exe").VersionInfo
-Check "version info" ($vi.ProductName -eq "The Holy Dashboard" -and $vi.ProductVersion -eq "2.0.1") "$($vi.ProductName) $($vi.ProductVersion)"
+Check "version info" ($vi.ProductName -eq "The Holy Dashboard" -and $vi.ProductVersion -eq "2.1.0") "$($vi.ProductName) $($vi.ProductVersion)"
 $fav = Invoke-WebRequest "$base/favicon.ico" -UseBasicParsing
 Check "favicon.ico served (no login needed)" ($fav.StatusCode -eq 200 -and $fav.RawContentLength -gt 10000) "len=$($fav.RawContentLength)"
 
@@ -230,7 +230,7 @@ Check "a copy fetched by the program keeps its key (no extra device)" ((($ut.Sub
 function Wgs() { @(([W]::List() -split "`n") | Where-Object { $_ -match "\|HolyWidget\|" } | ForEach-Object { $f = $_ -split "\|"; @{ h = [IntPtr][long]$f[0]; t = $f[2]; r = ($f[4] -split ",") | ForEach-Object { [int]$_ } } }) }
 $hd = [W]::FindWindow("HolyDash", [NullString]::Value); if ($hd -ne [IntPtr]::Zero) { [W]::SendMessage($hd, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null; Start-Sleep -Seconds 2 }
 foreach ($k in @("bots", "px")) { $pw = Start-Process "$A\TheHolyDashboard.exe" -ArgumentList "--widget=$k" -PassThru; $pw.WaitForExit(15000) | Out-Null }
-$ws = @(); for ($k = 0; $k -lt 40 -and $ws.Count -lt 2; $k++) { Start-Sleep -Milliseconds 500; $ws = Wgs }
+$ws = @(); for ($k = 0; $k -lt 40 -and $ws.Count -lt 2; $k++) { Start-Sleep -Milliseconds 500; $ws = @(Wgs) }
 $ex = $ws | ForEach-Object { [W]::GetWindowLong($_.h, -20) }
 Check "🖥️ --widget=bots and --widget=px ⇒ two widget windows (handed over to the running copy · still one program)" ($ws.Count -eq 2 -and (Get-Process TheHolyDashboard -ErrorAction SilentlyContinue).Count -eq 1) "widgets=$($ws.Count) $(($ws | ForEach-Object { $_.t + ' ' + ($_.r -join ',') }) -join ' ;; ')"
 Check "…frameless tool windows (not on the taskbar) · on top of the other windows" ($ex.Count -eq 2 -and @($ex | Where-Object { ($_ -band 0x80) -and ($_ -band 0x8) }).Count -eq 2) (($ex | ForEach-Object { "0x{0:X8}" -f $_ }) -join ' ')
@@ -255,12 +255,12 @@ if ($ws.Count -eq 2) {
   }
 }
 $pw = Start-Process "$A\TheHolyDashboard.exe" -ArgumentList "--widget=bots" -PassThru; $pw.WaitForExit(15000) | Out-Null; Start-Sleep -Seconds 2
-$ws2 = Wgs; $ini3 = Get-Content "$env:APPDATA\HolyDashboard\holy.ini" -Raw -ErrorAction SilentlyContinue
+$ws2 = @(Wgs); $ini3 = Get-Content "$env:APPDATA\HolyDashboard\holy.ini" -Raw -ErrorAction SilentlyContinue
 Check "--widget=bots again ⇒ «Holy» hidden (the prices stay) · remembered off" ($ws2.Count -eq 1 -and $ws2[0].t -ne "Holy" -and ($ini3 -match "wg_bots_on=0")) "widgets=$($ws2.Count)"
 $nFeed = @(Get-Content $L -ErrorAction SilentlyContinue | Select-String "feed ok").Count
 Get-Process TheHolyDashboard -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2
 $p4 = Start-Process "$A\TheHolyDashboard.exe" -ArgumentList "--tray" -PassThru
-$ws3 = @(); for ($k = 0; $k -lt 40 -and $ws3.Count -lt 1; $k++) { Start-Sleep -Milliseconds 500; $ws3 = Wgs }
+$ws3 = @(); for ($k = 0; $k -lt 40 -and $ws3.Count -lt 1; $k++) { Start-Sleep -Milliseconds 500; $ws3 = @(Wgs) }
 Check "after a restart (as Windows starts it · --tray) the prices widget comes back where it was · «Holy» stays hidden" ($ws3.Count -eq 1 -and $ws3[0].t -ne "Holy" -and [W]::FindWindow("HolyDash", [NullString]::Value) -eq [IntPtr]::Zero) "widgets=$($ws3.Count)"
 $fa = 0; for ($k = 0; $k -lt 60 -and $fa -le $nFeed; $k++) { Start-Sleep -Milliseconds 500; $fa = @(Get-Content $L -ErrorAction SilentlyContinue | Select-String "feed ok").Count }
 Check "…and the program watches the feed again" ($fa -gt $nFeed) "feed ok ×$nFeed ⇒ ×$fa"
