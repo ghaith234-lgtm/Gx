@@ -33161,7 +33161,7 @@ async function winOldBar(){
   let W={};try{W=(await api('/api/app/info')).win||{}}catch(e){return}
   const hv=(()=>{try{return sessionStorage.getItem('holy_win')||''}catch(e){return ''}})();
   const cur=parseFloat(hv)||1,nv=parseFloat(W.name)||0;if(!nv)return;
-  const old=cur<nv,b=document.createElement('div');b.id='winOld';b.className='winold';
+  const old=cur<2&&cur<nv/* 💻 v3.36.72: التنزيل لبرنامج 1.x فقط — 2.0 فما فوق بلا WebView2 ⇒ تنصيبه */,b=document.createElement('div');b.id='winOld';b.className='winold';
   b.innerHTML=old?`<span>💻 <b>برنامج ويندوز ${gEsc(W.name)} جاهز</b> — بلا شريط عنوان: أزرار <b dir="ltr">— ☐ ✕</b> بجانب 🔔 داخل اللوحة، وتحريك النافذة من شريطها العلوي. نسختك الحالية ${gEsc(hv||'1')}.</span>
     <button class="primary" onclick="winOldGet()">⬇️ نزّله وافتحه مرة</button><button onclick="winOldLater()">لاحقاً</button>`
     :`<span>💻 يعمل البرنامج الآن داخل نافذة Edge (بشريط عنوان) لأن <b>Microsoft Edge WebView2</b> غير منصّب على هذا الحاسوب — نصّبه من موقع Microsoft ثم افتح البرنامج من جديد لتظهر النافذة بلا شريط عنوان.</span>

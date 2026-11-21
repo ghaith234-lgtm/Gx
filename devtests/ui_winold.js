@@ -27,7 +27,7 @@ function ok(name, cond, det) {
   // ① the old 1.2 program (it opens the page with ?holyapp=win and no window.HOLYWIN)
   let { ctx, pg } = await open('?holyapp=win&hv=1.2');
   const a = await pg.evaluate(() => { const b = document.getElementById('winOld'); return b ? { t: b.textContent, btn: [...b.querySelectorAll('button')].map(x => x.textContent), top: b === document.body.firstElementChild } : null });
-  ok('① inside the old 1.2 program: a bar at the top says 2.0 is ready — no title bar, — ☐ ✕ beside 🔔 — with a one-click download', a && a.top && /2\.0/.test(a.t) && /— ☐ ✕/.test(a.t) && /1\.2/.test(a.t) && a.btn.some(x => x.includes('نزّله')), a);
+  ok('① inside the old 1.2 program: a bar at the top says the new program (2.1) is ready — no title bar, — ☐ ✕ beside 🔔 — with a one-click download', a && a.top && /2\.1/.test(a.t) && /— ☐ ✕/.test(a.t) && /1\.2/.test(a.t) && a.btn.some(x => x.includes('نزّله')), a);
   const [dl] = await Promise.all([pg.waitForEvent('download', { timeout: 15000 }).catch(() => null), pg.evaluate(() => winOldGet())]);
   const fn = dl ? dl.suggestedFilename() : '', path = dl ? await dl.path() : null;
   const head = path ? require('fs').readFileSync(path).slice(0, 2).toString() : '';
