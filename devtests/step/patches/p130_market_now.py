@@ -414,10 +414,10 @@ def _an_facts(prev, P, rng_prev, mine, types, crash, lvd=None):
             if lv.get("sup") and c["px"] < float(lv["sup"]) * 0.997 and float(lv["px"]) >= float(lv["sup"]):
                 out.append((f"lvl|{s}|s|{lv['sup']:.6g}", {"sym": s, "ty": "lvl", "t": f"🧱 {b}: كسر الدعم {_px_s(lv['sup'])}",
                             "b": f"أغلق اليوم على {_px_s(c['px'])} — تحت أدنى قاع واضح خلال الشهر"}))
-        rp = ((rng_prev or {}).get(s) or {}).get("4h")
+        rp = ((rng_prev or {}).get(s) or {}).get("4h")           # خارج المدى: مرة لكل جهة باليوم (لا كل ساعة في موجة قوية)
         if types.get("out", True) and rp and (c["px"] > rp["hi"] or c["px"] < rp["lo"]):
             up = c["px"] > rp["hi"]
-            out.append((f"out|{s}|{rp['t']}", {"sym": s, "ty": "out", "t": f"⚡ {b}: {'صعد' if up else 'نزل'} أكثر من المتوقع",
+            out.append((f"out|{s}|{'u' if up else 'd'}", {"sym": s, "ty": "out", "t": f"⚡ {b}: {'صعد' if up else 'نزل'} أكثر من المتوقع",
                         "b": f"السعر {_px_s(c['px'])} خارج المدى المتوقع للساعات الأربع ({_px_s(rp['lo'])} – {_px_s(rp['hi'])}) — حركة غير عادية"}))
         if types.get("ad", True) and c.get("ad") in ("acc", "dist") and c.get("ad") != o.get("ad"):
             out.append((f"ad|{s}|{c['ad']}", {"sym": s, "ty": "ad", "t": f"🧲 {b}: {'تجميع' if c['ad'] == 'acc' else 'تصريف'}",

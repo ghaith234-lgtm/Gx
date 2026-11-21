@@ -182,6 +182,15 @@ for s in COINS:
     CDB["c1"][s]["d"].append([last[0] + 3600, last[4], last[4] * 1.001, last[4] * 0.999, last[4] * 1.0003, 42.0])
 m.sg_tick(now=t_a + 7200)
 ok("⑤ the same event is not sent again", not any("أكثر من المتوقع" in t and "SOL" in t for t in SENT[n_sent:]), SENT[n_sent:])
+n_sent = len(SENT)
+for s in COINS:                                              # a strong move: SOL jumps 9% again an hour later (outside its new range too)
+    last = CDB["c1"][s]["d"][-1]
+    jump = 1.09 if s == "SOL-USDT" else 1.0002
+    CDB["c1"][s]["d"].append([last[0] + 3600, last[4], last[4] * jump * 1.002, last[4] * 0.999, last[4] * jump, 50.0])
+m.sg_tick(now=t_a + 3 * 3600)
+A4 = m._an_load()
+ok("⑤ a strong move that keeps going (SOL +9% again the next hour) ⇒ «صعد أكثر من المتوقع» once a day, not every hour",
+   not any("أكثر من المتوقع" in t and "SOL" in t for t in SENT[n_sent:]) and "out|SOL-USDT|u" in A4["sent"], (SENT[n_sent:], list(A4["sent"])[:6]))
 
 # ⑥ the API · the settings
 V = m.an_view()
