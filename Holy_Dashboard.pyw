@@ -33136,8 +33136,11 @@ const WINF=(()=>{try{return !!(IN_WIN&&window.HOLYWIN&&window.chrome&&chrome.web
 function winCmd(c){try{chrome.webview.postMessage('win:'+c)}catch(e){}}
 function winFree(t){return !!t&&!t.closest('button,a,input,select,textarea,label,summary,[onclick],[role=button],.st,.click,nav,#stats,.tkw,.ik')}
 function winHello(){try{const c=i=>{const r=document.getElementById(i).getBoundingClientRect();return [r.left+r.width/2,r.top+r.height/2]};
-  const w=['#top .hword','#top .brand .hwd','#top .brand'].map(q=>document.querySelector(q)).find(e=>e&&e.getBoundingClientRect().width>0),r=w.getBoundingClientRect();
-  chrome.webview.postMessage('hello '+[...c('wMin'),...c('wMax'),...c('wCls'),r.left+Math.min(40,r.width/2),r.top+r.height/2].map(v=>v.toFixed(1)).join(','))}catch(e){}}
+  const w=['#top .hword','#top .brand .hwd','#top .brand','#top'].map(q=>document.querySelector(q)).find(e=>e&&e.getBoundingClientRect().width>0);
+  if(!w)throw new Error('no top bar yet ('+(document.getElementById('splash')?'splash':'no splash')+' · '+innerWidth+'x'+innerHeight+')');
+  const r=w.getBoundingClientRect(),v=[...c('wMin'),...c('wMax'),...c('wCls'),r.left+Math.min(40,r.width/2),r.top+r.height/2];
+  if(v.some(x=>!isFinite(x)))throw new Error('buttons not laid out');
+  chrome.webview.postMessage('hello '+v.map(x=>x.toFixed(1)).join(','))}catch(e){try{chrome.webview.postMessage('hello-fail '+String(e&&e.message||e).slice(0,120))}catch(x){}}}
 function winInit(){if(!WINF)return;const R=document.documentElement;R.classList.add('winf');
   ['wMin','wMax','wCls'].forEach(i=>{const b=document.getElementById(i);if(b)b.hidden=false});
   let dn=null,ht=0;
