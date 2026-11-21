@@ -44,7 +44,7 @@ NORMAL = ["📦 [مخزن الشراء] حُجز مستوى 71.5793 | المخز
           "🟢 شراء 0.04 SOL بسعر 82.6177"]
 rows, t = [], 0
 for msg in [CUT[0], NORMAL[0], CUT[1], CUT[2], NORMAL[1], CUT[3], CUT[4], NORMAL[2]]:
-    rows.append({"time": f"2026-11-14 10:{59 - t:02d}:00", "msg": msg}); t += 1
+    rows.append({"time": time.strftime("%Y-%m-%d %H:%M:00", time.localtime(time.time() - 3600 - t * 60)), "msg": msg}); t += 1   # (relative: the journals keep 7 days — the fixed 14-11 ran out on 21-11)
 HP = os.path.join(BOT, "trade_history_SOL.json")
 json.dump(rows, open(HP, "w", encoding="utf-8"), ensure_ascii=False)
 raw0 = open(HP, "rb").read()
