@@ -1,0 +1,27 @@
+# 🔬 Holy signals check, twelfth pass (the owner 21-11: «اريدك اتسوي فحص قوي اتقوي التنبؤ … الفحص لتنبؤ اختبره على البيانات القديمة»):
+#    the analyst LIVES IN THE PAST — its proven groups are built from the history before a date only, then it runs on the next 3 months it
+#    never saw, exactly as it runs live (the owner's %, judged by target/stop) · moved forward 3 months at a time, 4 times · 40 coins ·
+#    what may make it stronger (the market's state · the two frames agreeing · the target/stop distance · the 4-hour horizon) · the same
+#    walk on shuffled prices (what luck alone gives).
+#    Results: lines HOLYSIG12. Public market data only — no keys, no orders, no notifications.
+#
+name: Holy signals check 12
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/sig_check12.py', 'ci/RUN_SIG12', '.github/workflows/holy-sig12-check.yml']
+permissions:
+  contents: read
+jobs:
+  walk-forward:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: the analyst living in the past, on real OKX prices vs shuffled prices (public data · no keys · no orders · no notifications)
+        run: |
+          pip install -q requests
+          python3 ci/sig_check12.py Holy_Dashboard.pyw
