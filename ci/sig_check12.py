@@ -144,7 +144,7 @@ def simulate(COIN, cat, t0, t1, comp, trend, q, ks=(1.0,)):
         b = base.get(f"{e['f']}|{e['s']}") or {}
         if e.get("c4") and e["nt"] and (e.get("nd") or 0 if is_mkt(e) else e["nt"]) >= 15:
             acc = e["wt"] / e["nt"] * 100.0
-            ents[e["f"]].append((e, acc, acc > float(b.get("ht") or 0) and e["mt"] > float(b.get("mt") or 0), is_mkt(e)))
+            ents[e["f"]].append((e, acc, acc > float(b.get("ht") or 0) and e["mt"] > float(b.get("mt") or 0), is_mkt(e), int(e["nt"]), int(e.get("nd") or 0)))
     msgs, rnd, mk = [], {}, {}
     for sym, (D4, E4, Dd, Ed, st) in COIN.items():
         tk, td = trend.get(sym, ([], {}))
@@ -174,7 +174,7 @@ def simulate(COIN, cat, t0, t1, comp, trend, q, ks=(1.0,)):
                 a1, a0 = A[i - i0 + 1], A[i - i0]
                 o1, o0 = opp[i - i0 + 1], opp[i - i0]
                 fired = {}
-                for e, acc, brnd, mw in ents[fr]:
+                for e, acc, brnd, mw, nt_, nd_ in ents[fr]:
                     keys = [f"{kk}:{e['s']}" for kk in e["k"]]
                     if not all(kk in a1 for kk in keys) or (not mw and (o1[0] if e["s"] > 0 else o1[1])):
                         continue
@@ -182,12 +182,12 @@ def simulate(COIN, cat, t0, t1, comp, trend, q, ks=(1.0,)):
                         continue
                     key = (e["s"], mw)
                     if acc > fired.get(key, (-1, 0))[0]:
-                        fired[key] = (acc, brnd)
+                        fired[key] = (acc, brnd, nt_, nd_)
                 day = T[i] // 86400 * 86400
                 cs = comp.get(day) or comp.get(day - 86400)
                 j = bisect.bisect_right(tk, T[i] - 86400) - 1
                 tr = td.get(tk[j]) if j >= 0 else None
-                for (side, mw), (acc, brnd) in fired.items():
+                for (side, mw), (acc, brnd, nt_, nd_) in fired.items():
                     xs = {k: m._sg_out(D["H"], D["L"], D["C"], i, h, side, sg[i] * k) for k in ks}
                     if mw:
                         mk.setdefault((fr, side, T[i]), {"acc": acc, "rnd": brnd, "cs": cs, "xs": []})["xs"].append(xs)
@@ -196,7 +196,8 @@ def simulate(COIN, cat, t0, t1, comp, trend, q, ks=(1.0,)):
                     if T[i] - last.get(kk, -10 ** 12) < gap:
                         continue
                     last[kk] = T[i]
-                    msgs.append({"fr": fr, "side": side, "acc": acc, "rnd": brnd, "cs": cs, "tr": tr, "x": xs, "t": T[i], "sym": sym, "q": q, "mw": False})
+                    msgs.append({"fr": fr, "side": side, "acc": acc, "rnd": brnd, "cs": cs, "tr": tr, "x": xs, "t": T[i], "sym": sym, "q": q, "mw": False,
+                                 "n": nt_, "nd": nd_})
     lastm = {}
     for (fr, side, t), v in sorted(mk.items(), key=lambda z: z[0][2]):
         gap = 86400 if fr == "4H" else 3 * 86400
@@ -289,6 +290,24 @@ def report(label, msgs, rnd, ks=(1.0,), frs=("4H", "1D")):
                       f"avg {mean(v) * 100:+.2f}% · random {hit(r):.0f}% {mean(r) * 100:+.2f}%")
 
 
+def report_filters(label, msgs, rnd):
+    """🔢 the owner (21-11): «اكو فلترين عددي ونسبي — انصحني ياهو الي يعطي نتيجة افضل»: the same unseen months, each message kept only if
+    its group had ≥ N cases (and ≥ N different days) in the history it was built on and its accuracy ≥ the % — which pair is truest?"""
+    for fr in ("4H", "1D"):
+        nm = "tomorrow" if fr == "4H" else "next month"
+        for side in (1, -1):
+            r = rget(rnd, fr, side, 1.0)
+            for by in ("cases", "days"):
+                for mn in (15, 30, 50, 100):
+                    for thr in (50, 55, 60, 65):
+                        mm = [x for x in msgs if x["fr"] == fr and x["side"] == side and not x["mw"] and x["rnd"] and x["acc"] >= thr
+                              and (x["n"] if by == "cases" else x["nd"]) >= mn and x["x"].get(1.0) is not None]
+                        v = [x["x"][1.0] for x in mm]
+                        beat = sum(1 for q in range(4) if [x for x in mm if x["q"] == q] and hit([x["x"][1.0] for x in mm if x["q"] == q]) > hit(rget(rnd, fr, side, 1.0, q)))
+                        P(f"{label} FILTER {nm} {'BUY ' if side > 0 else 'SELL'} ≥{mn} {by} · ≥{thr}%: {hit(v):.0f}% right n{len(v)} ({len(v) / 52:.1f}/week) avg "
+                          f"{mean(v) * 100:+.2f}% · random {hit(r):.0f}% · z {zsc(v, r):+.1f} · beat random in {beat}/4 windows")
+
+
 def causal(COIN_raw_db, syms, cuts):
     """⓪ the signals use the past only: events computed on the history cut at a date = the same events in the full history before it"""
     btc = {int(r[0]): float(r[4]) for r in ((COIN_raw_db.get("c") or {}).get("BTC-USDT") or {}).get("d") or []}
@@ -328,6 +347,7 @@ P(f"⓪ the signals look at the past only: {nchk} signal lists compared (cut his
 KS = (0.75, 1.0, 1.5)
 msgs, rnd = walk(COIN, "REAL", KS, CUTS)
 report("REAL", msgs, rnd, KS)
+report_filters("REAL", msgs, rnd)
 P(f"① – ④ done · {time.time() - T0:.0f}s")
 
 # ⑤ the 4-hour horizon: the same walk with the 4-hour frame judged after ONE candle
@@ -341,5 +361,6 @@ P(f"⑤ done · {time.time() - T0:.0f}s")
 COINS_ = prep(shuffled(cdb, 7))
 msgsS, rndS = walk(COINS_, "SHUFFLED", (1.0,), CUTS)
 report("SHUFFLED", msgsS, rndS, (1.0,))
+report_filters("SHUFFLED", msgsS, rndS)
 P(f"done in {time.time() - T0:.0f}s")
 shutil.rmtree(R, ignore_errors=True)
