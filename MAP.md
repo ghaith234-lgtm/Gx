@@ -1,9 +1,9 @@
 # 🗺️ خارطة الكود — v3.36.70
-> `sha256 9691e78ab87e25c1…` · الفهرس الآلي وأرقام أسطر اللوحة بالأقسام أدناه **مولّدة لهذي البصمة** (أُعيد ترقيمها آلياً من v3.36.67 بمطابقة الأسطر — `devtests/tools/map_remap.py`، وأقسام 🪜 مع أسطر محركه) · أرقام أقسام `reinvest.py` تخص ملفه هو (ما تغيّر) · أقسام المحركات بأسطر ملفات المحرك.
+> `sha256 3ed0fb4417d69cd8…` · الفهرس الآلي وأرقام أسطر اللوحة بالأقسام أدناه **مولّدة لهذي البصمة** (أُعيد ترقيمها آلياً من v3.36.67 بمطابقة الأسطر — `devtests/tools/map_remap.py`، وأقسام 🪜 مع أسطر محركه) · أرقام أقسام `reinvest.py` تخص ملفه هو (ما تغيّر) · أقسام المحركات بأسطر ملفات المحرك.
 
 ## 🪙 v3.36.70 — ويدجت الأسعار (التطبيق 2.3)
 
-> `p119_price_widget` — `app_widget_view` 24073 يرجّع «px» من `app_widget_px` 24171 (عملات الشريط · السعر `_wpx_s` 24129 · التغيّر · الخط 0…1000) · الخطوط بالخلفية `_wpx_refresh` 24147 (شموع 30m × 48 · كل 5 د `WPX_SP_EVERY`) · الصفحة: صف «🪙 ويدجت الأسعار» بلوحة 📱 + `appPinPrices` 32929 · `APP_APK_*` = 2.3 (الرمز 14) · التطبيق: `android/java/com/holy/dash/HolyPxWidget.java` · `WidgetArt.renderPx/badge/spark/speakPx` · `HolyWidget.any/draw` (smali) · `MainActivity$Bridge.pinPrices` · `build.py axml_add_receiver`.
+> `p119_price_widget` — `app_widget_view` 24073 يرجّع «px» من `app_widget_px` 24171 (عملات الشريط · السعر `_wpx_s` 24129 · التغيّر · الخط 0…1000) · الخطوط بالخلفية `_wpx_refresh` 24147 (شموع 30m × 48 · كل 5 د `WPX_SP_EVERY`) · الصفحة: صف «🪙 ويدجت الأسعار» بلوحة 📱 + `appPinPrices` 32929 · `APP_APK_*` = 2.3 (الرمز 14) · التطبيق: `android/java/com/holy/dash/HolyPxWidget.java` · `WidgetArt.renderPx/badge/spark/speakPx` · `HolyWidget.any/draw` (smali) · `MainActivity$Bridge.pinPrices` · `build.py axml_add_receiver`. · `p120_price_widget_fill`: المربعات لحد 96 dp إذا العملات أقل من المكان (التطبيق وحده — نفس أسطر اللوحة).
 
 
 ## 🧠 v3.36.69 — المحلل: 📊 المؤشرات هي المحلل (🎯 بداخلها) · مجموعات متفقة مثبتة بالفترات الأربع · غداً والشهر القادم
