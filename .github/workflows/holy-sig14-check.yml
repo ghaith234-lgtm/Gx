@@ -1,0 +1,26 @@
+name: Holy signals check 14
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/sig_check14.py', 'ci/RUN_SIG14', '.github/workflows/holy-sig14-check.yml']
+permissions:
+  contents: read
+jobs:
+  analyst-from-scratch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: the new analyst rebuilt from scratch — direction · vs Bitcoin · range · lead time, walk-forward on real OKX prices vs shuffled (public data · no keys · no orders · no notifications)
+        run: |
+          pip install -q requests numpy
+          python3 ci/sig_check14.py Holy_Dashboard.pyw
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: holysig14
+          path: /tmp/holysig14.json
+          if-no-files-found: ignore
