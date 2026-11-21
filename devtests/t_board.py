@@ -61,8 +61,8 @@ ok("① 70 rows numbered 1 … 70 once each · one row per indicator (the 36 sys
 ok("① every row has a neutral plain name (no Latin letters) and its plain entry (family · the two names · the two meanings)",
    not lat and all(m._sg_plain(c) and m._sg_plain(c)[1] and m._sg_plain(c)[3] for c in codes), lat or [c for c in codes if not m._sg_plain(c)])
 ok("① the frames: ⏱ الآن (the next hour) · 🕓 4 ساعات · 📅 يوم — the hour has its candles (c1 · 1H) · the analyst keeps 4H and 1D",
-   m.SB_FR == ("1H", "4H", "1D") and m.SG_BAR["1H"][0] == "c1" and m.SG_SEC["1H"] == 3600 and m.SG_FR == ("4H", "1D")
-   and m.SB_FRN["1H"][1] == "الآن", (m.SB_FR, m.SG_FR))
+   m.SB_FR == ("1H", "4H", "1D") and m.SG_BAR["1H"][0] == "c1" and m.SG_SEC["1H"] == 3600
+   and m.SB_FRN["1H"][1] == "الآن", m.SB_FR)
 
 # synthetic candles: 12 coins · 1H 420 · 4H 420 · 1D 330 · a market-wide jump on the last hour · a crash on the last 4 hours
 rnd = random.Random(7)
@@ -210,7 +210,6 @@ def fake_cache(sym, db, sec, bar, ib, maxn):
 
 
 m._fc_cache = fake_cache
-m._sg_cat = lambda: None
 json.dump({"c1": {}, "c4": {}, "c": {}}, open(m.SG_CFILE, "w"))
 m._SG.update(cidx=None, build=None)
 t_a = float(T1E + 3600 + 100)

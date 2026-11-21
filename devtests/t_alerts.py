@@ -107,11 +107,11 @@ try:
     ok(f"③ 🟢 «القاع المؤكد بالحجم» is a 🎯 signal (O-botv · the bottom ≥ 50 with the volume ≥ {m.BOT_VOL_X}×): fires on {Ev.get(('O-botv', 1))} "
        f"= the rule's own days {want} · the same crash without the volume: only «🟢 مؤشر القاع» {En.get(('O-bottom', 1))}",
        Ev.get(("O-botv", 1)) == want and want and not En.get(("O-botv", 1)) and En.get(("O-bottom", 1))
-       and m._sg_name("O-botv", 1) == "🟢 القاع المؤكد بالحجم" and m._sg_type(["O-botv"], 1) == "buy", (Ev.get(("O-botv", 1)), want, En.get(("O-bottom", 1))))
+       and m._sg_plain("O-botv")[1] == "🟢 القاع المؤكد بالحجم" and m.SB_NUM.get("O-botv") == 52, (Ev.get(("O-botv", 1)), want, En.get(("O-bottom", 1))))
 
     # ── ④ the 🔮 card
     src = open(os.path.join(R, "Holy_Dashboard.pyw"), encoding="utf-8").read()
-    js = src[src.index("function fcBot("):src.index("function fcVote(")]
+    js = src[src.index("function fcBot("):src.index("const FCK=")]
     jsf = os.path.join(R, "card.js")
     bvj = {"lv": "strong", "lbl": "🟢 قاع قوي", "score": 70, "since": 1, "vol": True, "parts": [{"on": True, "txt": "نزل", "w": 50}],
            "real": m.BOT_REAL["strong"], "normal": m.BOT_REAL["normal"], "real_v": m.BOT_REAL_V["strong"], "normal_v": m.BOT_REAL_V["normal"],

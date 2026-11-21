@@ -121,26 +121,17 @@ try:
     ok("② the 36 systems keep their measured family (trend · momentum · volatility · pattern · volume) · the professional readings their own (🏦)",
        sysg <= grp and m._sg_plain("P-tk")[0] == "pro" and m._sg_plain("M-fng")[0] == "market" and m._sg_plain("X-ad")[0] == "volume", sysg)
 
-    # ── ③ the same names everywhere
-    diff = [c for c in allc if m._sg_plain(c) and (m._sg_name(c, 1) != m._sg_plain(c)[1] or m._sg_name(c, -1) != m._sg_plain(c)[2])]
-    ok("③ the notifications · the record · the CSV use the same plain names (_sg_name = the table)", not diff, diff[:8])
+    # ── ③ the same names everywhere (🧹 v3.36.76: the old analyst's notices and catalog are gone — the tables and the tendency use the table's names)
     pa = m.sg_plain_all()
     ok("③ the window gets the whole table (/api/signals «plain» · «grp»)", all(c in pa for c in allc) and len(pa[allc[0]]) == 6
        and '"plain"], v["grp"] = sg_plain_all()' in SRC, len(pa))
     ok("③ examples: «المتوسط السريع عبر فوق الأبطأ» · «شمعة صاعدة ابتلعت الهابطة قبلها» · «📈 الاتجاه العام صاعد» · «😱 أسواق الأسهم قلقة»",
-       m._sg_name("09", 1) == "المتوسط السريع عبر فوق الأبطأ" and m._sg_name("20", 1) == "شمعة صاعدة ابتلعت الهابطة قبلها"
-       and m._sg_name("O-trend", 1) == "📈 الاتجاه العام صاعد" and m._sg_name("M-vix", -1) == "😱 أسواق الأسهم قلقة"
-       and m._sg_plain("09")[5] == L.SYS["09"][0], [m._sg_name(c, s) for c, s in (("09", 1), ("20", 1), ("O-trend", 1), ("M-vix", -1))])
-    E1 = {"id": "1D|1|35", "f": "1D", "s": 1, "k": ["35"], "ty": "up", "nl": 0, "wl": 0, "ml": 0.0, "nt": 40, "wt": 25, "mt": 0.02, "rare": False,
-          "ev": [], "c4": True}
-    E2 = dict(E1, id="1D|1|12", k=["12"])
-    m._sg_cat = lambda: {"e": [E1, E2], "idx": {"1D|1|35": E1, "1D|1|12": E2}, "base": {"1D|1": {"ht": 45.0, "mt": 0.0}}, "wk": {"1D": 40}, "coins": []}
-    m._sg_st = lambda: {}
-    f1 = m.sg_catlist({"q": ["MACD"], "side": ["1"]})
-    f2 = m.sg_catlist({"q": ["Supertrend"], "side": ["1"]})
-    f3 = m.sg_catlist({"q": ["الدفع انقلب"], "side": ["1"]})
-    ok("③ the catalog's search still finds the technical names (MACD · Supertrend) and the plain words", [r["id"] for r in f1["rows"]] == ["1D|1|35"]
-       and [r["id"] for r in f2["rows"]] == ["1D|1|12"] and [r["id"] for r in f3["rows"]] == ["1D|1|35"], (f1, f2, f3))
+       m._sg_plain("09")[1] == "المتوسط السريع عبر فوق الأبطأ" and m._sg_plain("20")[1] == "شمعة صاعدة ابتلعت الهابطة قبلها"
+       and m._sg_plain("O-trend")[1] == "📈 الاتجاه العام صاعد" and m._sg_plain("M-vix")[2] == "😱 أسواق الأسهم قلقة"
+       and m._sg_plain("09")[5] == L.SYS["09"][0], [m._sg_plain(c) for c in ("09", "20", "O-trend")])
+    ok("③ the tables and the daily tendency name each row the same neutral way (SB_NM) — no technical letters",
+       all(m.SB_NM[c] and not re.search(r"[A-Za-z]", m.SB_NM[c]) for c in m.SB_NUM), [c for c in m.SB_NUM if re.search(r"[A-Za-z]", m.SB_NM[c])])
+    ok("③ 🧹 the old catalog's browser and search are gone (no /api/signals_cat · no sg_catlist)", not hasattr(m, "sg_catlist") and "/api/signals_cat" not in SRC, "")
 
     # ── ④ one tab
     js = SRC[SRC.index("function sgRender(){"):SRC.index("function sgFcTop(")]
@@ -156,10 +147,10 @@ try:
        and "function sgIndRow(" not in SRC and "function sgIndCoin(" not in SRC and "return h+sbTable(V)" in SRC, "")
 
     # ── ⑤ one setting
-    m.app_cfg = lambda: {"sg_thr": 60, "sg_min": 3, "sg_rnd": False}
+    m.app_cfg = lambda: {"sg_thr": 60, "sg_min": 3, "sg_rnd": False, "sg_types": {"buy": False}, "sg_sum": 20}
     c = m.sg_cfg()
-    ok("⑤ one setting: the % · «أقل عدد مرات» stays 15 and «أفضل من العشوائي» stays on whatever an old config says",
-       c["thr"] == 60 and c["min"] == 15 and c["rnd"] is True, c)
+    ok("⑤ 🧹 v3.36.76: the old analyst's settings (% · count · random · types · summary) are ignored — what is left: on · your coins · the cap 12 · "
+       "quiet hours · the channel · a level per type", set(c) == {"on", "coins", "cap", "quiet", "ch", "alv", "atypes"} and c["cap"] == 12, c)
     cfgjs = SRC[SRC.index("function sgCfg(V){"):SRC.index("function sgCoinAdd(")]
     ok("⑤ ⚙️ الإشعارات (📈 v3.36.75 · 🔔 v3.36.76): the facts by group (🔴 طوارئ · 🪙 عملاتك · 🌐 السوق كله) each 📲 · 👁 · ⛔ · no % · no count · no random switch · no estimate · "
        "no daily summary · no cap", "sgSet({alv:" in cfgjs and "🪙 عملاتك" in cfgjs and "🔴 طوارئ" in cfgjs and "👁 بالنافذة" in cfgjs and "🌐 السوق كله" in cfgjs and "لا يصلك إلا ما صدق في" not in cfgjs

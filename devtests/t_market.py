@@ -212,7 +212,7 @@ ok("④ the daily cap: 12 cards of 15 + «🔕 بلغت تنبيهات السو�
    and tg4[1].startswith("⚡ البيتكوين") and sum(1 for x in st4["log"] if x["st"] == "cap") == 4, tg4)
 
 # ⑤ the tick end to end
-for f in (m.AN_FILE, m.SG_FILE, m.SB_FILE, m.SG_CAT):
+for f in (m.AN_FILE, m.SG_FILE, m.SB_FILE, os.path.join(m.SG_DIR, "catalog.json")):
     try:
         os.remove(f)
     except Exception:
@@ -241,7 +241,7 @@ SENT.clear()
 m.sg_tick(now=t_a)
 A1 = m._an_load()
 ok("⑤ the first tick: the scan carried the market now (SOL · XRP · the market) · nothing notified (nothing to compare yet) · no old catalog built",
-   A1.get("now") and "SOL-USDT" in A1["now"]["coins"] and A1["now"].get("mkt") and not SENT and m._SG.get("build") is None and not os.path.exists(m.SG_CAT),
+   A1.get("now") and "SOL-USDT" in A1["now"]["coins"] and A1["now"].get("mkt") and not SENT and m._SG.get("build") is None and not os.path.exists(os.path.join(m.SG_DIR, "catalog.json")) and not hasattr(m, "sg_build"),
    (bool(A1.get("now")), SENT[:2], m._SG.get("build")))
 for s in COINS:                                              # the next hour: SOL jumps 9% — far outside its 4-hour range
     last = CDB["c1"][s]["d"][-1]
@@ -273,7 +273,7 @@ ok("⑥ /api/market's data: your coins (SOL · XRP) with their lines and ranges 
    [c["sym"] for c in V["coins"]] == ["SOL-USDT", "XRP-USDT"] and V["mkt"] and V["coins"][0]["rng"] and [h[0] for h in V["hz"]] == ["4h", "1d", "1w"], {k: V.get(k) for k in ("mine", "hz")})
 c = m.sg_cfg()
 ok("⑥ settings: each type at its default level (📲 or 👁) · the daily cap inside (12) · no daily summary", c["alv"] == {k: x[3] for k, x in m.AN_TY.items()}
-   and c["cap"] == 12 and c["sum"] is None, c)
+   and c["cap"] == 12 and "sum" not in c, c)
 r = m.sg_set({"alv": {"vol": "view", "fng": "now", "rs": "off", "nope": "now", "trend": "loud"}})
 c2 = m.sg_cfg()
 ok(f"⑥ «{r['msg']}» — 📊 to 👁 · 😨 to 📲 · 💪 off · an unknown type or level ignored", c2["alv"]["vol"] == "view" and c2["alv"]["fng"] == "now" and c2["alv"]["rs"] == "off"

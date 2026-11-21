@@ -122,7 +122,7 @@ m.ticker_cfg = lambda: {"on": True, "coins": list(D1), "speed": 45}
 m.indic_cfg = lambda: {"on": True, "coins": list(D1)}
 m.TG_MUTED["v"] = False
 ok("③ 🔔 the old indicator alerts are gone (no ina_tick · no panel) — the bottom confirmed by volume is a 🎯 signal now",
-   not hasattr(m, "ina_tick") and not hasattr(m, "ina_view") and "O-botv" in m._sg_meta(), "")
+   not hasattr(m, "ina_tick") and not hasattr(m, "ina_view") and bool(m._sg_plain("O-botv")), "")
 
 # ── ④ the strip summary
 m.IND2.update(coins={r["sym"]: dict(r, parts=[{"k": "trend", "s": 1.0}, {"k": "st", "s": 0.8}, {"k": "rsi", "s": -0.4}, {"k": "macd", "s": 0.0}]) for r in INDROWS},

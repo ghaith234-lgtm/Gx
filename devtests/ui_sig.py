@@ -49,7 +49,6 @@ m._okx_pub = lambda p: None
 m._okx_post = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("devtests: no orders"))
 m.tg_send = lambda *a, **k: True
 m.sg_tick = lambda *a, **k: None                       # the page reads the prepared files (no new scan while the browser looks)
-m.SG_MINC, m.SG_RNDC = 5, False
 m._fc_run = lambda *a, **k: None
 m.FC.update(ts=time.time(), coins={s: {"sym": s, "base": s.split("-")[0], "px": px, "chg": 1.2, "h": {}} for s, px in (("XRP-USDT", 2.4512), ("SOL-USDT", 182.37))},
             order=["XRP-USDT", "SOL-USDT"], err="")
@@ -74,7 +73,6 @@ try:
     m.tg_send = lambda *a, **k: True
     m.app_feed_push = lambda *a, **k: True
     json.dump({"ticker_coins": ["XRP", "SOL"], "sg_thr": 55, "indic_on": True}, open(m.APP_CFG, "w"))
-    m.SG_MINC, m.SG_RNDC = 5, False                    # 🎯 v3.36.71: fixed inside — loosened for the random synthetic history
     rnd = random.Random(5)
     NOW = int(time.time())
     T1E, T4E, TDE = NOW // 3600 * 3600 - 3600, NOW // 14400 * 14400 - 14400, NOW // 86400 * 86400 - 86400
@@ -120,7 +118,7 @@ try:
     st, A = m._sg_st(), m._an_load()
     ok(f"the closed folder is ready: a scan · the market now ({len((A.get('now') or {}).get('coins') or {})} coins) · the ranges waiting for their end "
        f"({len(A.get('pend') or [])}) · the SOL notice in the log · no old catalog", (A.get("now") or {}).get("mkt") and A.get("pend")
-       and any("SOL" in x["t"] for x in st.get("log") or []) and not m._sg_cat(), {"now": bool(A.get("now")), "log": [x["t"] for x in st.get("log") or []][:3]})
+       and any("SOL" in x["t"] for x in st.get("log") or []) and not os.path.exists(os.path.join(m.SG_DIR, "catalog.json")), {"now": bool(A.get("now")), "log": [x["t"] for x in st.get("log") or []][:3]})
     B = m._sb_load()                                   # 📋 v3.36.73: SOL's table with a few results (the ranking · «قيد الاختبار» · ⏸)
     dd = NOW // 86400
     B["rec"]["SOL-USDT"] = {"20": {"4H": [40, 10, 30, dd]}, "12": {"1H": [60, 30, 40, dd]}, "5": {"1H": [3, 0, 1, dd]}}
