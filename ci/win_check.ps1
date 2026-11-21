@@ -155,7 +155,7 @@ if ($h -ne [IntPtr]::Zero) {
   Check "the window keeps Windows' minimize · maximize · close · resizable edges (taskbar · Alt+Space · snapping)" $btn ("style=0x{0:X8}" -f $st)
   Check "…opens maximized" ([W]::IsZoomed($h)) ([W]::Rect($h))
   $hz = Hello $null
-  Check "the dashboard drew — ☐ ✕ beside 🔔 and told the program where" ($hz -ne $null) $(if ($hz) { $hz.line } else { "no «page: buttons drawn» in holy.log" })
+  Check "the dashboard drew — ☐ ✕ beside 🔔 and told the program where" ($hz -ne $null) $(if ($hz) { $hz.line } else { "no «page: buttons drawn» in holy.log · page lines: " + ((Get-Content $L -ErrorAction SilentlyContinue | Select-String "page:|opened the dashboard|WebView2" | Select-Object -First 8 | ForEach-Object { $_.Line }) -join ' ;; ') })
   [W]::ShowWindow($h, 9) | Out-Null; Start-Sleep -Seconds 2
   $r = [W]::R4($h); $c = [W]::C4($h); $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
   Check "…«restore» ⇒ a smaller window" (-not [W]::IsZoomed($h) -and ($r[2] - $r[0]) -lt $b.Width) ([W]::Rect($h))

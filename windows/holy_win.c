@@ -413,6 +413,7 @@ static HRESULT STDMETHODCALLTYPE MsgH_Invoke(MsgH *This, ICoreWebView2 *sender, 
     else if (wstarts(s, L"hw:")) {               // 🖥️ 2.1: the 💻 panel's widget buttons (done on the watcher's thread — not inside this handler)
         WPARAM c = !wcscmp(s, L"hw:bots") ? 1 : !wcscmp(s, L"hw:px") ? 2 : !wcscmp(s, L"hw:top") ? 3 : !wcscmp(s, L"hw:state") ? 4 : 0;
         if (c && g_tray) PostMessageW(g_tray, WM_HWCMD, c, 0); }
+    else if (wstarts(s, L"hello-fail ")) { char a[300]; w8(s + 11, a, sizeof a); hlog("page: hello failed — %s", a); }   // (why — for the Windows check)
     else if (wstarts(s, L"hello ")) {            // the dashboard says it drew the buttons (where they are · for the Windows check)
         double v[8] = {0}; char a[400]; w8(s + 6, a, sizeof a);
         if (sscanf_s(a, "%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6], &v[7]) == 8) {
