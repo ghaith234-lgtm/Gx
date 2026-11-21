@@ -1,0 +1,26 @@
+name: Holy signals check 13
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/sig_check13.py', 'ci/RUN_SIG13', '.github/workflows/holy-sig13-check.yml']
+permissions:
+  contents: read
+jobs:
+  tables-on-the-past:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: the indicator tables living in the past · strong combos (one per family) · lead time — real OKX prices vs shuffled (public data · no keys · no orders · no notifications)
+        run: |
+          pip install -q requests numpy
+          python3 ci/sig_check13.py Holy_Dashboard.pyw
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: holysig13
+          path: /tmp/holysig13.json
+          if-no-files-found: ignore
