@@ -141,17 +141,15 @@ rng_prev = {s: c.get("rng") for s, c in prev["coins"].items()}
 cdbu = {"c1": {"BTC-USDT": {"d": [[T1E - 3600, 1, 1, 1, 100.0, 1], [T1E, 1, 1, 1, 103.5, 1]]},
                "SOL-USDT": {"d": [[T1E - 4 * 3600 + k * 3600, 1, 1, 1, 20.0 - k, 1] for k in range(5)]}}}
 SCX = {"crash": {"on": True, "t": T4E, "k": 6, "n": 12}, "c": {"BTC-USDT": {"1H": {"e1": ["W-surge:1"]}}}}
-TD = {"t": TDE, "now": {"SOL-USDT": [1, ["O-trend", "O-st"]]}, "rec": [570, 1000]}
 ALL = {k: "now" for k in m.AN_TY}
-F = m._an_facts(prev, new, rng_prev, ["SOL-USDT"], ALL, SCX, LVD, cdbu, TD)
+F = m._an_facts(prev, new, rng_prev, ["SOL-USDT"], ALL, SCX, LVD, cdbu)
 tys = sorted({f["ty"] for k, f in F})
-ok(f"④ what changed becomes a notice — all {len(tys)} types: {' · '.join(tys)}", tys == sorted(m.AN_TY), [(k, f["ln"][:40]) for k, f in F])
+ok(f"④ what changed becomes a notice — all {len(tys)} fact types (the group types 🧩 come from the groups): {' · '.join(tys)}",
+   tys == sorted(k for k in m.AN_TY if not k.startswith("g_")) and "tend" not in m.AN_TY, [(k, f["ln"][:40]) for k, f in F])
 L = {f["ty"]: f["ln"] for k, f in F}
 ok(f"④ plain words with the numbers: «{L['trend']}» · «{L['out'][:60]}…» · «{L['lvl'][:60]}…»",
    L["trend"].startswith("📈 الاتجاه اليومي أصبح صاعداً") and "صعد أكثر من المتوقع" in L["out"] and "فوق المدى المتوقع للساعات الأربع" in L["out"]
    and "اخترق المقاومة" in L["lvl"] and "بإغلاق اليوم" in L["lvl"] and "الحجم ×2.6" in L["lvl"] and "حجم تداول غير عادي: ×2.6" in L["vol"], L)
-ok(f"④ 🎯 the daily tendency (only when the champions fire): «{L['tend'].splitlines()[0]}» · the indicators by name · «ليس ضماناً»",
-   L["tend"].startswith("🎯 ميل يومي للصعود — صدق هذا الميل 57% من 1,000 مرة") and "الاتجاه العام" in L["tend"] and "ليس ضماناً" in L["tend"], L["tend"])
 ok(f"④ the market: «{L['mtrend'][:50]}…» · «{L['season'][:55]}…» · «{L['fng']}»", L["mtrend"].startswith("📉 السوق: اتجاه البيتكوين اليومي أصبح هابطاً")
    and L["season"].startswith("🪙 السيولة تتجه إلى العملات البديلة: 9 من 11 عملة") and L["fng"] == "😨 مزاج السوق: خوف شديد (18 من 100)" and L["storm"].startswith("🎢 هاج السوق"), L)
 ok(f"④ 🔴 urgent: «{L['wave'].splitlines()[0]}» (6 of 12 · Bitcoin +3.5% in an hour · your coins in 4 hours) · «{L['surge'].splitlines()[0]}» · «{L['bstorm'].splitlines()[0]}»",
@@ -160,14 +158,14 @@ ok(f"④ 🔴 urgent: «{L['wave'].splitlines()[0]}» (6 of 12 · Bitcoin +3.5% 
    and all(f["urg"] for k, f in F if f["ty"] in ("wave", "surge", "bstorm")), L)
 lat = [f["ln"] for k, f in F if re.search(r"[A-Za-z]{2,}", f["ln"].replace("SOL", ""))]
 ok("④ no Latin words in any notice (only the coin's own name)", not lat, lat)
-F0 = m._an_facts(prev, new, rng_prev, ["SOL-USDT"], {k: "off" for k in m.AN_TY}, SCX, LVD, cdbu, TD)
-FV = m._an_facts(prev, new, rng_prev, ["SOL-USDT"], {}, SCX, LVD, cdbu, TD)
+F0 = m._an_facts(prev, new, rng_prev, ["SOL-USDT"], {k: "off" for k in m.AN_TY}, SCX, LVD, cdbu)
+FV = m._an_facts(prev, new, rng_prev, ["SOL-USDT"], {}, SCX, LVD, cdbu)
 lvd = {f["ty"]: f["lv"] for k, f in FV}
-ok("④ ⛔ every type off ⇒ nothing at all · the defaults: 📲 for the trend, breakouts, out of range, volume, the tendency, the market's trend and storms, the urgent · "
+ok("④ ⛔ every type off ⇒ nothing at all · the defaults: 📲 for the trend, breakouts, out of range, volume, the market's trend and storms, the urgent · "
    "👁 for vs Bitcoin, accumulation, money between Bitcoin and the alts, fear & greed", F0 == [] and lvd["rs"] == lvd["ad"] == lvd["season"] == lvd["fng"] == "view"
-   and all(lvd[k] == "now" for k in ("trend", "lvl", "out", "vol", "tend", "mtrend", "storm", "wave", "surge", "bstorm")), lvd)
-Fh = m._an_facts(prev, new, rng_prev, ["SOL-USDT"], ALL, None, None, cdbu, None)
-ok("④ a breakout counts only on the daily close (yesterday's levels) · no tendency outside the daily close", not any(f["ty"] in ("lvl", "tend") for k, f in Fh), [f["ty"] for k, f in Fh])
+   and all(lvd[k] == "now" for k in ("trend", "lvl", "out", "vol", "mtrend", "storm", "wave", "surge", "bstorm")), lvd)
+Fh = m._an_facts(prev, new, rng_prev, ["SOL-USDT"], ALL, None, None, cdbu)
+ok("④ a breakout counts only on the daily close (yesterday's levels)", not any(f["ty"] == "lvl" for k, f in Fh), [f["ty"] for k, f in Fh])
 
 # ④ delivery — cards
 CFG = dict(m.sg_cfg(), quiet=None, ch="both", cap=12, on=True)
@@ -220,7 +218,7 @@ ok("④ the daily cap: 12 cards of 15 + «🔕 بلغت تنبيهات السو�
    and tg4[1].startswith("⚡ البيتكوين") and sum(1 for x in st4["log"] if x["st"] == "cap") == 4, tg4)
 
 # ⑤ the tick end to end
-for f in (m.AN_FILE, m.SG_FILE, m.SB_FILE, os.path.join(m.SG_DIR, "catalog.json")):
+for f in (m.AN_FILE, m.SG_FILE, m.GP_FILE, os.path.join(m.SG_DIR, "catalog.json")):
     try:
         os.remove(f)
     except Exception:

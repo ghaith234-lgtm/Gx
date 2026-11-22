@@ -129,8 +129,9 @@ try:
        m._sg_plain("09")[1] == "المتوسط السريع عبر فوق الأبطأ" and m._sg_plain("20")[1] == "شمعة صاعدة ابتلعت الهابطة قبلها"
        and m._sg_plain("O-trend")[1] == "📈 الاتجاه العام صاعد" and m._sg_plain("M-vix")[2] == "😱 أسواق الأسهم قلقة"
        and m._sg_plain("09")[5] == L.SYS["09"][0], [m._sg_plain(c) for c in ("09", "20", "O-trend")])
-    ok("③ the tables and the daily tendency name each row the same neutral way (SB_NM) — no technical letters",
-       all(m.SB_NM[c] and not re.search(r"[A-Za-z]", m.SB_NM[c]) for c in m.SB_NUM), [c for c in m.SB_NUM if re.search(r"[A-Za-z]", m.SB_NM[c])])
+    _cd = m._gp_codes()
+    ok(f"③ 🧩 every indicator ({len(_cd)}) has one neutral name (GP_NM — the groups, the notices and 🔮 use it) — no technical letters",
+       all(m.GP_NM.get(c) and not re.search(r"[A-Za-z]", m.GP_NM[c]) for c in _cd), [c for c in _cd if not m.GP_NM.get(c) or re.search(r"[A-Za-z]", m.GP_NM[c])])
     ok("③ 🧹 the old catalog's browser and search are gone (no /api/signals_cat · no sg_catlist)", not hasattr(m, "sg_catlist") and "/api/signals_cat" not in SRC, "")
 
     # ── ④ one tab
@@ -141,10 +142,10 @@ try:
        and "📈 المؤشرات العشرة" not in js and "الإشارات الشغّالة" not in js, js[:400])
     ok("④ the old parts are gone (sgNow · sgCoin · indRender · indTog · indLoad · sgAn · sgCatUI) — the old names open the new tabs (now → 🪙 · an → 🌐 · cat → 📋)",
        not any(f"function {f}(" in SRC for f in ("sgNow", "sgCoin", "indRender", "indTog", "indLoad", "sgAn", "sgCatUI")) and "({now:'coins',an:'mkt',cat:'ind'})" in SRC, "")
-    ok("④ the tab is the tables (📋 v3.36.73): «🌐 السوق» + a table per coin · each row its plain name and job · the coin table keeps "
-       "«📊 اتجاه المؤشرات الآن» («ليس توقعاً») · the old per-coin cards with the history records are gone",
-       "اتجاه المؤشرات الآن" in SRC and "وصف لحال المؤشرات العشرة الآن — ليس توقعاً" in SRC and "function sbTable(" in SRC and "if(I)h+=sgIndAvg(I)" in SRC
-       and "function sgIndRow(" not in SRC and "function sgIndCoin(" not in SRC and "return h+sbTable(V)" in SRC, "")
+    ok("④ the tab is the groups (🧩 v3.36.77): 🪙 العملات · 🌐 السوق · a card per group · a chosen coin keeps «📊 اتجاه المؤشرات الآن» («ليس توقعاً») · "
+       "the old tables and per-coin cards are gone",
+       "اتجاه المؤشرات الآن" in SRC and "وصف لحال المؤشرات العشرة الآن — ليس توقعاً" in SRC and "function gpTab(" in SRC and "if(I)h+=sgIndAvg(I)" in SRC
+       and "function sbTable(" not in SRC and "function sgIndRow(" not in SRC and "function sgIndCoin(" not in SRC and "return h+gpTab(V)" in SRC, "")
 
     # ── ⑤ one setting
     m.app_cfg = lambda: {"sg_thr": 60, "sg_min": 3, "sg_rnd": False, "sg_types": {"buy": False}, "sg_sum": 20}
@@ -152,8 +153,9 @@ try:
     ok("⑤ 🧹 v3.36.76: the old analyst's settings (% · count · random · types · summary) are ignored — what is left: on · your coins · the cap 12 · "
        "quiet hours · the channel · a level per type", set(c) == {"on", "coins", "cap", "quiet", "ch", "alv", "atypes"} and c["cap"] == 12, c)
     cfgjs = SRC[SRC.index("function sgCfg(V){"):SRC.index("function sgCoinAdd(")]
-    ok("⑤ ⚙️ الإشعارات (📈 v3.36.75 · 🔔 v3.36.76): the facts by group (🔴 طوارئ · 🪙 عملاتك · 🌐 السوق كله) each 📲 · 👁 · ⛔ · no % · no count · no random switch · no estimate · "
-       "no daily summary · no cap", "sgSet({alv:" in cfgjs and "🪙 عملاتك" in cfgjs and "🔴 طوارئ" in cfgjs and "👁 بالنافذة" in cfgjs and "🌐 السوق كله" in cfgjs and "لا يصلك إلا ما صدق في" not in cfgjs
+    ok("⑤ ⚙️ الإشعارات (🔔 v3.36.76 · 🧩 v3.36.77): 🔴 طوارئ · 🪙 the coin groups and facts · 🌐 the market groups and facts — each 📲 · 👁 · ⛔ · each group with its record · "
+       "no % setting · no count · no random switch · no estimate · no daily summary · no cap", "sgSet({alv:" in cfgjs and "🪙 العملة — المجاميع" in cfgjs and "🔴 طوارئ" in cfgjs
+       and "👁 بالنافذة" in cfgjs and "🌐 السوق — المجاميع" in cfgjs and "🪙 العملة — حقائق الآن" in cfgjs and "gp-rc" in cfgjs and "لا يصلك إلا ما صدق في" not in cfgjs
        and 'id="sg_min"' not in cfgjs and "rnd:" not in cfgjs and "sg_est" not in cfgjs and "sum:" not in cfgjs and "cap:" not in cfgjs, cfgjs[:300])
 finally:
     os.chdir(H)

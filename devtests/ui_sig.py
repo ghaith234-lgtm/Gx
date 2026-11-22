@@ -1,9 +1,9 @@
 # 📈 v3.36.75 — the market window in a real browser (p130 · before it 🎯 v3.36.66 p112). The owner (21-11): «اريد يقلي شديصير بالسوق بالحاضر
 #   وشراح يصير للسوق بشكل عام وبالعملات بشكل خاص».
 #   A closed folder (no network · no keys): synthetic candles for 12 coins (1 hour · 4 hours · a day, all ending at the same price) → the
-#   dashboard's own scan, market layer and tables (the functions t_market.py / t_board.py check) → a second hour where SOL jumps (a notice) →
+#   dashboard's own scan, market layer and groups (the functions t_market.py / t_groups.py check) → a second hour where SOL jumps (a notice) →
 #   the page (ui_sig.js): «📈 السوق — الآن والمتوقع» and its 5 tabs · 🌐 the market now + Bitcoin's range · 🪙 your coins open to their facts
-#   and ranges · 📋 the tables · 📜 the range record and the last notices · ⚙️ the facts types and coins · 🔮 · ⚙️ · the ticker · a
+#   and ranges · 📋 the groups (🪙 · 🌐) · 📜 the range record and the last notices · ⚙️ the groups and facts and coins · 🔮 · ⚙️ · the ticker · a
 #   notification tap · settings saved · a phone width.
 #   python3 devtests/ui_sig.py [Holy_Dashboard.pyw] [-q] [--shots DIR]        (run with `unset TMPDIR`)
 import importlib.machinery, importlib.util, json, math, os, random, shutil, socket, subprocess, sys, tempfile, time, urllib.request
@@ -119,12 +119,24 @@ try:
     ok(f"the closed folder is ready: a scan · the market now ({len((A.get('now') or {}).get('coins') or {})} coins) · the ranges waiting for their end "
        f"({len(A.get('pend') or [])}) · the SOL notice in the log · no old catalog", (A.get("now") or {}).get("mkt") and A.get("pend")
        and any("SOL" in x["t"] for x in st.get("log") or []) and not os.path.exists(os.path.join(m.SG_DIR, "catalog.json")), {"now": bool(A.get("now")), "log": [x["t"] for x in st.get("log") or []][:3]})
-    B = m._sb_load()                                   # 📋 v3.36.73: SOL's table with a few results (the ranking · «قيد الاختبار» · ⏸)
-    dd = NOW // 86400
-    B["rec"]["SOL-USDT"] = {"20": {"4H": [40, 10, 30, dd]}, "12": {"1H": [60, 30, 40, dd]}, "5": {"1H": [3, 0, 1, dd]}}
-    B["off"]["SOL-USDT"] = [33]
-    m.save_json_atomic(m.SB_FILE, B)
-    ok(f"📋 the tables are fed by the same scan ({len(B['pend'])} predictions waiting for their candle)", B["pend"], len(B["pend"]))
+    G = m.gp_load()                                    # 🧩 v3.36.77: the first tick built the groups — one champion planted on SOL's 4-hour trend (to see it fire)
+    ok(f"🧩 the first tick built the groups on the same candles (frames {sorted((G or {}).get('f') or {})} · your coins {(G or {}).get('keep')})",
+       G and sorted(G["f"]) == ["1D", "1H", "4H"] and G.get("keep") == ["XRP-USDT", "SOL-USDT"], G and G.get("n"))
+    g4 = G["f"]["4H"]["coin"]["g"]["c_trend"]
+    key = next(x[0] for x in g4["m"] if "+" not in x[0])
+    for x in g4["m"]:
+        if x[0] == key:
+            x[1], x[2], x[3], x[4], x[5] = 630, 370, 120, 2, 0.5
+        elif x[4] == 2:
+            x[4] = 1                                   # (the only champion now: the planted one)
+    g4["ch"], g4["rec"] = [key], [600, 1000, 500.0]
+    g4["coin"].setdefault("SOL-USDT", {"rec": [0, 0, 0.0], "m": {}})["rec"] = [70, 120, 60.0]
+    gm = G["f"]["1D"]["mkt"]["g"]["m_trend"]
+    mkey = next(x[0] for x in gm["m"] if "+" not in x[0])
+    m.save_json_atomic(m.GP_FILE, G)
+    st = m._sg_st()
+    st["gpn"] = {"1H": {}, "4H": {"coin": {"c_trend": {"SOL-USDT": [1, [key], T4E]}}}, "1D": {"mkt": {"m_trend": {"BTC-USDT": [-1, [mkey], TDE]}}}}
+    m._sg_save(st)
     P1 = port()
     open(os.path.join(R, "_l.py"), "w").write(LAUNCH)
     d = subprocess.Popen([sys.executable, os.path.join(R, "_l.py"), R, str(P1)], stdout=subprocess.PIPE, text=True, env=env)
@@ -137,9 +149,7 @@ try:
     ok("after the browser: the buttons saved the settings (📊 unusual volume → 👁 · 🌙 quiet hours on · coins back to the ticker)",
        (cfg.get("an_lv") or {}).get("vol") == "view" and "trend" not in (cfg.get("an_lv") or {}) and cfg.get("sg_quiet") == [0, 8]
        and "sg_coins" not in cfg, {k: v for k, v in cfg.items() if k.startswith(("sg_", "an_"))})
-    Bo = json.load(open(m.SB_FILE, encoding="utf-8"))
-    ok("after the browser: ⏸ row 7 is off in SOL's table (with 33) — not in the market's", sorted(Bo["off"].get("SOL-USDT") or []) == [7, 33]
-       and 7 not in (Bo["off"].get("MKT") or []), Bo.get("off"))
+    ok("after the browser: the group «⚡ قوة الحركة» is 📲 (saved as an exception to its 👁 default)", (cfg.get("an_lv") or {}).get("g_c_mom") == "now", cfg.get("an_lv"))
     ok("the browser part", r.returncode == 0)
     rc = 0 if res and all(res) else 1
 finally:

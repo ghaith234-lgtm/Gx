@@ -206,9 +206,9 @@ const { chromium } = require('playwright');
   o.det = await pg.evaluate(() => { const c = [...document.querySelectorAll('#fc_body .fc-c')].find(e => e.innerText.includes('ETH')); return c ? c.innerText : '' });
   o.order = await pg.evaluate(() => { const c = [...document.querySelectorAll('#fc_body .fc-c')].find(e => e.innerText.includes('ETH'));
     return c ? [...c.querySelectorAll('.ind-row .fb')].map(x => x.className.replace('fb ', '')) : [] });
-  await pg.evaluate(() => { hideModal(); SBS = 'ETH-USDT'; SBV = null; openInd('ind') }); await pg.waitForTimeout(2200);      // 📋 v3.36.73: ETH's table
-  o.ind = await pg.evaluate(() => ({ s: SBV && SBV.s, rows: document.querySelectorAll('#sg_body .sb-r').length, top: (document.querySelector('#sg_body .sb-top') || {}).innerText || '',
-    cells: [...document.querySelectorAll('#sg_body .sb-r .sb-cell .sb-fh')].slice(0, 3).map(x => x.innerText) }));
+  await pg.evaluate(() => { hideModal(); GPS = 'coin'; GPC = 'ETH-USDT'; openInd('ind') }); await pg.waitForTimeout(2200);      // 🧩 v3.36.77: ETH in the groups
+  o.ind = await pg.evaluate(() => ({ secs: [...document.querySelectorAll('#sg_body .gp-secs button')].map(b => b.innerText), on: (document.querySelector('#sg_body .sb-tabs button.on') || {}).innerText || '',
+    top: (document.querySelector('#sg_body .sb-top') || {}).innerText || '', wait: (document.querySelector('#sg_body .sg-empty') || {}).innerText || '' }));
   o.inda = await pg.evaluate(() => (document.querySelector('#sg_body .ind-avg') || {}).innerText || '');
   o.indh = await pg.evaluate(() => (document.querySelector('#modal h2') || {}).innerText || '');
   o.errs = errs; console.log(JSON.stringify(o)); await br.close();
@@ -242,10 +242,10 @@ rk = {"g": 0, "y": 1, "n": 2, "short": 3, "r": 4}
 od = [rk.get(c.split()[0], 3) for c in U.get("order") or []]
 ok(f"… the indicators under the horizon truthful first ({U.get('order')})", od and od == sorted(od), U.get("order"))
 ind_ = U.get("ind") or {}
-ok(f"⑥ 🎯 المؤشرات = the tables (📋 v3.36.73): ETH's own table — 70 rows · ⏱ الآن · 🕓 4 ساعات · 📅 يوم · «{(ind_.get('top') or '')[:60]}…» · «{U.get('indh')}»",
-   ind_.get("s") == "ETH-USDT" and ind_.get("rows") == 70 and "جدول ETH" in (ind_.get("top") or "") and len(ind_.get("cells") or []) == 3
-   and "الآن" in ind_["cells"][0] and "📈 السوق — الآن والمتوقع" in (U.get("indh") or ""), {k: U.get(k) for k in ("ind", "indh")})
-ok(f"⑥ the coin table: «📊 اتجاه المؤشرات الآن» — the ten's average as one line, «ليس توقعاً» ({(U.get('inda') or '')[:90]}…)",
+ok(f"⑥ 📋 المؤشرات = the groups (🧩 v3.36.77): «{' · '.join(ind_.get('secs') or [])}» · ETH chosen («{(ind_.get('top') or '')[:50]}…») · before the first build: «{(ind_.get('wait') or '')[:50]}…» · «{U.get('indh')}»",
+   (ind_.get("secs") or []) == ["🪙 العملات", "🌐 السوق"] and ind_.get("on") == "ETH" and "ETH" in (ind_.get("top") or "") and "يُبنى سجل المجاميع" in (ind_.get("wait") or "")
+   and "📈 السوق — الآن والمتوقع" in (U.get("indh") or ""), {k: U.get(k) for k in ("ind", "indh")})
+ok(f"⑥ the coin keeps «📊 اتجاه المؤشرات الآن» — the ten's average as one line, «ليس توقعاً» ({(U.get('inda') or '')[:90]}…)",
    "اتجاه المؤشرات الآن" in (U.get("inda") or "") and "ليس توقعاً" in (U.get("inda") or ""), U.get("inda"))
 tp = " | ".join(U.get("tape") or [])
 ok(f"⑥ 🎞️ the strip in words: «{tp[:160]}»", "صاعدة بقوة" in tp and "هابطة بقوة" in tp and "/4" in tp and "قاع قوي" in tp and "RSI" not in tp, U.get("tape"))

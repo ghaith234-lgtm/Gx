@@ -69,46 +69,43 @@ const LAT = /[A-Za-z]{2,}/;
      c2.open && c2.lines.length >= 5 && c2.lines[0].startsWith('الاتجاه اليومي') && c2.lines.some(t => t.startsWith('مقابل البيتكوين')) && c2.lines.some(t => t.startsWith('التذبذب'))
      && c2.lines.every(t => !LAT.test(t)) && c2.rr.length === 5 && inside, c2);
   await shot('mkt_coins');
-  // ④ 📋 the indicator tables (v3.36.73)
+  // ④ 📋 the indicator groups (🧩 v3.36.77)
   await pg.evaluate(() => sgTab('ind'));
-  await pg.waitForFunction(() => document.querySelector('#sg_body .sb-r'), null, { timeout: 20000 }).catch(() => {});
-  const w2a = await pg.evaluate(() => ({ sb: [...document.querySelectorAll('#sg_body .sb-tabs button')].map(b => b.textContent), on: (document.querySelector('#sg_body .sb-tabs button.on') || {}).textContent || '',
-    rows: document.querySelectorAll('#sg_body .sb-r').length, top: (document.querySelector('#sg_body .sb-top') || {}).textContent || '' }));
-  ok(`④ 📋 the tables: «${w2a.sb.join(' · ')}» — «🌐 السوق» first and open · its 70 rows · «${w2a.top.replace(/\s+/g, ' ').trim().slice(0, 90)}…»`,
-     w2a.sb[0] === '🌐 السوق' && w2a.on === '🌐 السوق' && w2a.sb.includes('SOL') && w2a.sb.includes('XRP') && w2a.rows === 70 && w2a.top.includes('جدول السوق كله')
-     && w2a.top.includes('العدّ بدأ'), w2a);
-  await pg.evaluate(() => sbLoad('SOL-USDT'));
-  await pg.waitForFunction(() => SBV && SBV.s === 'SOL-USDT' && document.querySelector('#sg_body .sb-r'), null, { timeout: 15000 }).catch(() => {});
-  const w2 = await pg.evaluate(() => { const R = [...document.querySelectorAll('#sg_body .sb-r')];
-    const secs = [...document.querySelectorAll('#sg_body .sb-sec')].map(x => x.textContent);
-    const first = R[0], cells = first ? [...first.querySelectorAll('.sb-cell')].map(c => c.textContent.replace(/\s+/g, ' ').trim()) : [];
-    return { on: (document.querySelector('#sg_body .sb-tabs button.on') || {}).textContent || '', order: R.map(r => +r.dataset.n), secs, cells,
-      nm: R.map(r => (r.querySelector('.sb-nm b') || {}).textContent || ''), job: first ? (first.querySelector('.sb-job') || {}).textContent : '',
-      off: R.filter(r => r.classList.contains('off')).map(r => +r.dataset.n), avg: !!document.querySelector('#sg_body .ind-avg'),
-      ten: !!((INDV && INDV.rows) || []).find(r => r.sym === 'SOL-USDT') } });
-  J.board = w2.order.slice(0, 6);
-  ok(`④ SOL's table: the truest first — 20 (40 ✅ · 10 ❌ on 🕓) before 12 (60 · 30 on ⏱) · 5 (3 of 3) stays «قيد الاختبار» · ⏸ 33 at the bottom (${w2.order.slice(0, 4).join(' · ')} … ${w2.order.slice(-2).join(' · ')})`,
-     w2.on === 'SOL' && w2.order[0] === 20 && w2.order[1] === 12 && w2.order.indexOf(5) > 1 && w2.order[w2.order.length - 1] === 33 && w2.off.join() === '33'
-     && w2.secs.length === 3 && w2.secs[0].includes('لها نتائج كافية') && w2.secs[1].includes('قيد الاختبار') && w2.secs[2].includes('موقوفة'), w2);
-  ok(`④ each row: its number · plain name (no Latin) · its job («${w2.job}») · ⏱ الآن · 🕓 4 ساعات · 📅 يوم with ✅ ❌ and % («${w2.cells.join(' | ')}»)`,
-     w2.nm.length === 70 && w2.nm.every(t => t && !/[A-Za-z]/.test(t)) && w2.job.trim() && w2.cells.length === 3 && w2.cells[0].includes('⏱ الآن')
-     && w2.cells[1].includes('🕓 4 ساعات') && w2.cells[1].includes('✅ 40') && w2.cells[1].includes('❌ 10') && w2.cells[1].includes('80%') && w2.cells[2].includes('📅 يوم'), w2);
-  ok(`④ the coin table keeps «📊 اتجاه المؤشرات الآن» when the ten indicators have SOL (${w2.ten ? 'they have' : 'not in this closed folder'})`, w2.avg === w2.ten, w2);
-  await pg.evaluate(() => sbSort('n'));
-  await sleep(200);
-  ok('④ «# الرقم» ⇒ every working row by its number (1 · 2 · 3 …) · no sections', await pg.evaluate(() => [...document.querySelectorAll('#sg_body .sb-r:not(.off)')].slice(0, 3).map(r => +r.dataset.n).join() === '1,2,3'
-     && document.querySelectorAll('#sg_body .sb-sec').length === 1), '');
-  await pg.evaluate(() => sbSort('best'));
-  await pg.evaluate(() => { document.querySelector('#sg_body .sb-r[data-n="12"] .sb-h').click() });
+  await pg.waitForFunction(() => document.querySelector('#sg_body .gp-g'), null, { timeout: 20000 }).catch(() => {});
+  const w2a = await pg.evaluate(() => ({ secs: [...document.querySelectorAll('#sg_body .gp-secs button')].map(b => b.textContent), on: (document.querySelector('#sg_body .gp-secs button.on') || {}).textContent || '',
+    chips: [...document.querySelectorAll('#sg_body .sb-tabs button')].map(b => b.textContent), cards: [...document.querySelectorAll('#sg_body .gp-g')].map(g => g.dataset.g),
+    cells: [...document.querySelectorAll('#sg_body .gp-g[data-g="c_trend"] .gp-cell')].map(c => c.textContent.replace(/\s+/g, ' ').trim()),
+    live: ((document.querySelector('#sg_body .gp-g[data-g="c_trend"] .gp-nw') || {}).textContent || '').replace(/\s+/g, ' ').trim(),
+    ch: ((document.querySelector('#sg_body .gp-g[data-g="c_trend"] .ind-sub') || {}).textContent || '').replace(/\s+/g, ' ').trim(),
+    job: ((document.querySelector('#sg_body .gp-g[data-g="c_trend"] .gp-nm small') || {}).textContent || '') }));
+  ok(`④ 📋 two sub-tabs «${w2a.secs.join(' · ')}» (🪙 open) · «${w2a.chips.join(' · ')}» · ${w2a.cards.length} coin groups · 📈 الاتجاه: «${w2a.job}» · ${w2a.cells.join(' | ')}`,
+     w2a.secs.join('|') === '🪙 العملات|🌐 السوق' && w2a.on === '🪙 العملات' && w2a.chips.join('|') === 'كل العملات معاً|XRP|SOL' && w2a.cards.length === 8 && w2a.cards[0] === 'c_trend'
+     && w2a.job.includes('الجهة') && w2a.cells.length === 3 && w2a.cells[0].includes('⏱ ساعة') && w2a.cells[1].includes('🕓 4 ساعات') && w2a.cells[1].includes('60%')
+     && w2a.cells[1].includes('✅') && w2a.cells[1].includes('العادي 50%') && w2a.cells[2].includes('📅 يوم'), w2a);
+  ok(`④ 🔔 what fired now on your coins: «${w2a.live}» · ⭐ «${w2a.ch.slice(0, 80)}»`, w2a.live.includes('SOL') && w2a.live.includes('يُتوقع أن يكمل الصعود') && w2a.ch.startsWith('⭐ الأبطال: 🕓'), w2a);
+  await pg.evaluate(() => gpCoin('SOL-USDT'));
   await sleep(250);
-  const w3 = await pg.evaluate(() => (document.querySelector('#sg_body .sb-r[data-n="12"] .sb-det') || {}).textContent || '');
-  ok(`④ a tap opens the row: both meanings and the technical name («${w3.replace(/\s+/g, ' ').trim().slice(0, 80)}…»)`, w3.includes('⬆️') && w3.includes('⬇️'), w3);
-  await pg.evaluate(() => { document.querySelector('#sg_body .sb-r[data-n="7"] .sb-sw').click() });
-  await pg.waitForFunction(() => SBV && (SBV.rows.find(r => r.n === 7) || {}).off, null, { timeout: 10000 }).catch(() => {});
-  const w4 = await pg.evaluate(() => { const R = [...document.querySelectorAll('#sg_body .sb-r')]; return { last2: R.slice(-2).map(r => +r.dataset.n), sw: (document.querySelector('#sg_body .sb-r[data-n="7"] .sb-sw') || {}).textContent } });
-  ok(`④ ▶️ → ⏸ turns row 7 off in SOL's table (it sinks to the bottom: ${w4.last2.join(' · ')})`, w4.last2.includes(7) && (w4.sw || '').includes('⏸'), w4);
-  J.off7 = true;
-  await shot('mkt_tables');
+  const w2 = await pg.evaluate(() => ({ on: (document.querySelector('#sg_body .sb-tabs button.on') || {}).textContent || '', top: ((document.querySelector('#sg_body .sb-top') || {}).textContent || '').replace(/\s+/g, ' ').trim(),
+    cell: ((document.querySelectorAll('#sg_body .gp-g[data-g="c_trend"] .gp-cell')[1]) || {}).textContent.replace(/\s+/g, ' ').trim(), avg: !!document.querySelector('#sg_body .ind-avg'),
+    ten: !!((INDV && INDV.rows) || []).find(r => r.sym === 'SOL-USDT') }));
+  ok(`④ SOL alone: «${w2.top.slice(0, 60)}» · 🕓 on SOL «${w2.cell}» · «📊 اتجاه المؤشرات الآن» when the ten have SOL (${w2.ten ? 'they have' : 'not in this folder'})`,
+     w2.on === 'SOL' && w2.top.includes('SOL') && w2.cell.includes('58%') && w2.cell.includes('من 120') && w2.avg === w2.ten, w2);
+  await pg.evaluate(() => document.querySelector('#sg_body .gp-g[data-g="c_trend"] .gp-h').click());
+  await sleep(300);
+  const w3 = await pg.evaluate(() => { const M = [...document.querySelectorAll('#sg_body .gp-g[data-g="c_trend"] .gp-m')];
+    return { n: M.length, frs: [...document.querySelectorAll('#sg_body .gp-g[data-g="c_trend"] .gp-det .sb-tabs button')].map(b => b.textContent), on: (document.querySelector('#sg_body .gp-g[data-g="c_trend"] .gp-det .sb-tabs button.on') || {}).textContent || '',
+      champ: M.filter(m => m.classList.contains('s2')).map(m => m.textContent.replace(/\s+/g, ' ').trim()), names: M.map(m => (m.querySelector('.gp-mn') || {}).textContent || ''),
+      test: M.filter(m => m.classList.contains('s0')).length } });
+  ok(`④ a tap opens the group: «${w3.frs.join(' · ')}» (🕓 open) · ${w3.n} members (indicators + combos) · ⭐ «${(w3.champ[0] || '').slice(0, 70)}» · 🧪 ${w3.test} · plain names (no Latin)`,
+     w3.frs.length === 3 && w3.on.includes('🕓') && w3.n >= 18 && w3.champ.length === 1 && w3.champ[0].includes('⭐ بطل') && w3.champ[0].includes('63%') && w3.names.every(t => t && !LAT.test(t)), w3);
+  await pg.evaluate(() => gpSec('mkt'));
+  await sleep(250);
+  const w4 = await pg.evaluate(() => ({ cards: [...document.querySelectorAll('#sg_body .gp-g')].map(g => g.dataset.g), top: ((document.querySelector('#sg_body .sb-top') || {}).textContent || '').replace(/\s+/g, ' ').trim(),
+    live: ((document.querySelector('#sg_body .gp-g[data-g="m_trend"] .gp-nw') || {}).textContent || '').replace(/\s+/g, ' ').trim(), chips: document.querySelectorAll('#sg_body > .sb-tabs').length }));
+  ok(`④ 🌐 السوق: ${w4.cards.length} groups («${w4.top.slice(0, 50)}…») · 🔔 «${w4.live}» · no coin chips`, w4.cards.length === 7 && w4.cards[0] === 'm_trend' && w4.top.includes('البيتكوين')
+     && w4.live.includes('يُتوقع هبوط السوق') && w4.chips === 0, w4);
+  await pg.evaluate(() => gpSec('coin'));
+  await shot('mkt_groups');
   // ⑤ 📜 the log
   await pg.evaluate(() => sgTab('log'));
   await sleep(400);
@@ -124,10 +121,16 @@ const LAT = /[A-Za-z]{2,}/;
     btn: [...document.querySelectorAll('#sg_body .an-ty[data-k="vol"] .an-seg button')].map(b => b.textContent.trim()),
     thr: !!document.getElementById('sg_thr'), est: !!document.getElementById('sg_est'), min: !!document.getElementById('sg_min') }));
   const lv = Object.fromEntries(g0.rows.map(x => x.split(':')));
-  ok(`⑥ ⚙️ ${g0.heads.slice(0, 3).join(' · ')} — ${g0.rows.length} types, each with «${g0.btn.join(' · ')}» · 📲 by default for the trend, breakouts, volume, the urgent · 👁 for vs Bitcoin, accumulation, fear & greed · no % · no estimate`,
-     g0.heads[0].startsWith('🔴 طوارئ') && g0.heads[1] === '🪙 عملاتك' && g0.heads[2] === '🌐 السوق كله' && g0.rows.length === 14 && g0.btn.join('|') === '📲 فوري|👁 بالنافذة|⛔ متوقف'
-     && ['wave', 'surge', 'bstorm', 'trend', 'lvl', 'out', 'vol', 'tend', 'mtrend', 'storm'].every(k => lv[k] === 'now') && ['rs', 'ad', 'season', 'fng'].every(k => lv[k] === 'view')
+  const grc = await pg.evaluate(() => ((document.querySelector('#sg_body .an-ty[data-k="g_c_trend"] .gp-rc') || {}).textContent || '').trim());
+  ok(`⑥ ⚙️ ${g0.heads.slice(0, 5).map(h => h.slice(0, 22)).join(' · ')} — ${g0.rows.length} types (13 facts + 15 groups), each with «${g0.btn.join(' · ')}» · each group with its record («${grc}») · no % setting · no estimate`,
+     g0.heads[0].startsWith('🔴 طوارئ') && g0.heads[1].startsWith('🪙 العملة — المجاميع') && g0.heads[2] === '🪙 العملة — حقائق الآن' && g0.heads[3].startsWith('🌐 السوق — المجاميع')
+     && g0.heads[4] === '🌐 السوق — حقائق الآن' && g0.rows.length === 28 && g0.btn.join('|') === '📲 فوري|👁 بالنافذة|⛔ متوقف' && grc.includes('🕓 60%') && grc.includes('⏱')
+     && ['wave', 'surge', 'bstorm', 'trend', 'lvl', 'out', 'vol', 'mtrend', 'storm', 'g_c_trend', 'g_c_big', 'g_c_rev', 'g_m_trend', 'g_m_shock', 'g_m_vol'].every(k => lv[k] === 'now')
+     && ['rs', 'ad', 'season', 'fng', 'g_c_mom', 'g_c_brk', 'g_c_flow', 'g_c_rs', 'g_c_pro', 'g_m_mom', 'g_m_mood', 'g_m_macro', 'g_m_pro'].every(k => lv[k] === 'view') && !('tend' in lv)
      && !g0.thr && !g0.est && !g0.min, g0);
+  await pg.evaluate(() => document.querySelector('#sg_body .an-ty[data-k="g_c_mom"] button[data-l="now"]').click());
+  await sleep(900);
+  ok('⑥ a tap moves the group «⚡ قوة الحركة» to 📲 فوري — saved', await pg.evaluate(() => SGV.cfg.alv.g_c_mom === 'now'), '');
   await pg.evaluate(() => document.querySelector('#sg_body .an-ty[data-k="vol"] button[data-l="view"]').click());
   await sleep(900);
   const g1 = await pg.evaluate(() => ({ vol: SGV.cfg.alv.vol, trend: SGV.cfg.alv.trend, on: ((document.querySelector('#sg_body .an-ty[data-k="vol"] .an-seg button.on') || {}).dataset || {}).l }));
@@ -167,10 +170,11 @@ const LAT = /[A-Za-z]{2,}/;
   const f2 = await pg.evaluate(() => { const c = [...document.querySelectorAll('#fc_body .fc-c')].find(e => e.innerText.includes('SOL'));
     const rr = c ? [...c.querySelectorAll('.fc-rows .fc-r:not(.fc-hd)')].map(x => x.textContent.replace(/\s+/g, ' ').trim()) : [];
     const sol = ((ANV && ANV.coins) || []).find(x => x.sym === 'SOL-USDT') || {};
-    return { top: (document.querySelector('#fc_body .fc-tdt') || {}).textContent || '', hd: c ? ((c.querySelector('.fc-rows .fc-hd') || {}).textContent || '') : '', rr,
+    return { old: !!document.querySelector('#fc_body .fc-tdt'), gp: c ? ((c.querySelector('.fc-td') || {}).textContent || '').replace(/\s+/g, ' ').trim() : '', hd: c ? ((c.querySelector('.fc-rows .fc-hd') || {}).textContent || '') : '', rr,
       same: rr.length && sol.rng ? rr[0].includes(fcN(sol.rng['4h'].lo)) && rr[0].includes(fcN(sol.rng['4h'].hi)) : null } });
-  ok(`⑦ 🔮 on the same basis: «🎯 الميل اليومي» on top («${f2.top.replace(/\s+/g, ' ').trim().slice(0, 70)}…») · SOL's range rows = 📈's numbers (${f2.rr.slice(0, 2).join(' | ')})`,
-     f2.top.includes('🎯 الميل اليومي') && f2.top.includes('صدق الميل') && f2.hd.includes('بين كم وكم') && f2.rr.length === 5 && f2.rr[0].includes('الساعات الأربع القادمة') && f2.same !== false, f2);
+  ok(`⑦ 🔮 on the same basis: no 🎯 tendency block · SOL's 🧩 group call «${f2.gp.slice(0, 90)}» · SOL's range rows = 📈's numbers (${f2.rr.slice(0, 2).join(' | ')})`,
+     !f2.old && f2.gp.startsWith('🧩 📈 🕓 4 ساعات: يُتوقع أن يكمل الصعود') && f2.gp.includes('صدق 63% من 1,000') && f2.hd.includes('بين كم وكم') && f2.rr.length === 5
+     && f2.rr[0].includes('الساعات الأربع القادمة') && f2.same !== false, f2);
   if (SHOTS) { await pg.evaluate(() => { const c = [...document.querySelectorAll('#fc_body .fc-c')].find(e => e.innerText.includes('SOL')); if (c) c.click() }); await sleep(400); await shot('mkt_fc') }
   await pg.evaluate(() => document.querySelector('#fc_body .sg-go').click());
   await sleep(500);

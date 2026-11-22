@@ -16,8 +16,10 @@
 #   ⑪ the live check (gp_now) gives exactly what the history walk would have sent on the last candle (one function for both)
 #   ⑫ open to new members: a new indicator of the «trend» family joins «📈 الاتجاه» by itself, is tested, and becomes a champion when it earns it
 #   ⑬ gp_build end to end (three frames · 🪙 + 🌐 · market-wide readings on the whole history) · no network · no orders
+#   ⑭ the notices (text · your coins only · the market · 📲 only for a proven group · ⛔ · dedupe key) · one notice type per group
+#   ⑮ the tick end to end (the first tick builds · the next hour does not · a new coin needs a build · /api/groups · ⚙️ · 🔮)
 #   python3 devtests/t_groups.py [Holy_Dashboard.pyw] [-q]
-import importlib.machinery, importlib.util, json, math, os, random, shutil, sys, tempfile, time
+import importlib.machinery, importlib.util, json, math, os, random, re, shutil, sys, tempfile, time
 
 H = os.path.dirname(os.path.abspath(__file__))
 Q = "-q" in sys.argv
@@ -326,6 +328,91 @@ ok(f"⑬ gp_build: three frames · 🪙 + 🌐 in each · market-wide readings g
    and list(GB["f"]["1D"]["coin"]["g"]["c_trend"]["coin"]) == [COINS[0]], (sorted(GB["f"]), GB["n"], wide))
 json.dumps(GB)
 ok(f"⑬ the build is plain JSON ({len(json.dumps(GB)) // 1024} KB)", len(json.dumps(GB)) < 1500 * 1024, len(json.dumps(GB)))
+
+# ── ⑭ the notices from the groups (_gp_facts): text · only your coins · the market as «السوق» · 📲 only for a proven group · ⛔ · one key per side
+Gf = {"v": m.GP_VER, "f": {"4H": {"coin": {"g": {"c_trend": {"rec": [600, 1000, 500.0], "m": [["O-trend", 63, 37, 80, 2, 0.5], ["O-st", 70, 30, 40, 2, 0.51]]},
+                                                "c_mom": {"rec": [10, 20, 10.0], "m": [["O-macd", 30, 10, 40, 2, 0.5]]}}},
+                                  "mkt": {"g": {"m_shock": {"rec": [70, 100, 50.0], "m": [["W-crash", 70, 30, 60, 2, 0.5]]}}}}}}
+gpn = {"4H": {"coin": {"c_trend": {"SOL-USDT": [1, ["O-trend", "O-st"], 1], "DOGE-USDT": [-1, ["O-trend"], 1]}, "c_mom": {"SOL-USDT": [-1, ["O-macd"], 1]}},
+              "mkt": {"m_shock": {"BTC-USDT": [1, ["W-crash"], 1]}}}}
+ALLN = {k: "now" for k in m.AN_TY}
+FX = m._gp_facts(gpn, Gf, ["SOL-USDT"], ALLN, ["4H"])
+D_ = {f["ty"] + "|" + f["sym"]: f for k, f in FX}
+tr, mo, sh = D_.get("g_c_trend|SOL-USDT"), D_.get("g_c_mom|SOL-USDT"), D_.get("g_m_shock|السوق")
+ok(f"⑭ the notice: «{tr and tr['ln']}» — what will happen within the frame · the member's record and the usual · its name (the best champion that fired)",
+   tr and tr["ln"] == "📈 🕓 يُتوقع أن يكمل الصعود خلال الساعات الأربع القادمة\nلون خط الاتجاه — صدق 70% من 100 مرة (العادي 51%)" and tr["lv"] == "now"
+   and tr["dup"] == 12 * 3600 and tr["t"].startswith("SOL: 📈 🕓"), FX)
+ok("⑭ only your coins (DOGE is not yours) · the market's groups speak as «السوق» · a group whose own record is not proven (20 results) ⇒ 👁 with a note",
+   "g_c_trend|DOGE-USDT" not in D_ and sh and sh["ln"].startswith("🌊 🕓 بعد الصدمة: يُتوقع صعود خلال الساعات الأربع القادمة") and sh["lv"] == "now"
+   and mo and mo["lv"] == "view" and "لم يثبت بعد" in mo["ln"] and mo["ln"].startswith("⚡ 🕓 يُتوقع اندفاع هابط"), D_)
+ok("⑭ ⛔ a group turned off ⇒ nothing from it · the dedupe key is per group · frame · coin · side", not m._gp_facts(gpn, Gf, ["SOL-USDT"], dict(ALLN, g_c_trend="off", g_c_mom="off", g_m_shock="off"), ["4H"])
+   and sorted(k for k, f in FX) == ["g|c_mom|4H|SOL-USDT|-1", "g|c_trend|4H|SOL-USDT|1", "g|m_shock|4H|BTC-USDT|1"], [k for k, f in FX])
+lat = [f["ln"] for k, f in FX if re.search(r"[A-Za-z]{2,}", f["ln"])]
+ok("⑭ no Latin words in a group notice", not lat, lat)
+ok(f"⑭ one notice type per group ({sum(1 for k in m.AN_TY if k.startswith('g_'))}) in ⚙️ with 📲/👁/⛔ · the old 🎯 tendency type is gone · defaults: 📲 "
+   f"{sorted(k[2:] for k, x in m.AN_TY.items() if k.startswith('g_') and x[3] == 'now')}",
+   sum(1 for k in m.AN_TY if k.startswith("g_")) == len(m.GP_GROUPS) and "tend" not in m.AN_TY and all(m.AN_TY["g_" + g][2] == "g" + x["sec"] for g, x in m.GP_GROUPS.items()),
+   [k for k in m.AN_TY])
+
+# ── ⑮ the tick end to end: the first tick builds Holy_Groups.json (no file yet) · «gpn» per frame · the old tables' file is removed · the next
+#    hour does not rebuild · the scan carries what fired now · /api/groups · ⚙️ records · 🔮 calls
+NOWT = (int(time.time()) // DAY) * DAY + 600
+U = ["BTC-USDT"] + COINS[:11]
+CD = {"c": {}, "c4": {}, "c1": {}}
+for sec, dx, n in (("c", DAY, 520), ("c4", 14400, 520), ("c1", 3600, 520)):
+    tend = NOWT // dx * dx - dx
+    for j, s in enumerate(U):
+        p, rows = 10.0 + j, []
+        for i in range(n):
+            r = rnd.gauss(0.0003, 0.02 if sec == "c" else 0.008)
+            o, c = p, p * math.exp(r)
+            rows.append([tend - (n - 1 - i) * dx, o, max(o, c) * 1.004, min(o, c) * 0.996, c, 1000 + rnd.random() * 500])
+            p = c
+        CD[sec][s] = {"d": rows}
+m.MKT_COINS, m.SG_UNI = tuple(U), len(U)
+json.dump({"ticker_coins": ["C0", "C1"]}, open(m.APP_CFG, "w"))
+os.makedirs(m.SG_DIR, exist_ok=True)
+json.dump(CD, open(m.SG_CFILE, "w"))
+m._sg_refresh = lambda uni, frs, cdb, prog=None: []
+m._SG.update(cidx=None)
+os.environ["HOLY_SIG_THREAD"] = "1"
+json.dump({"v": 1, "rec": {}}, open(os.path.join(m.ROOT, "Holy_Board.json"), "w"))
+t1 = time.time()
+m.sg_tick(now=float(NOWT), send=False)
+G1 = m.gp_load()
+st1 = m._sg_st()
+ok(f"⑮ the first tick builds the groups ({time.time() - t1:.0f}s): Holy_Groups.json with the three frames · your coins kept {G1 and G1.get('keep')} · "
+   f"«gpn» for {sorted(st1.get('gpn') or {})} · the old tables' file is gone",
+   G1 and sorted(G1["f"]) == ["1D", "1H", "4H"] and G1.get("keep") == ["C0-USDT", "C1-USDT"] and sorted(st1.get("gpn") or {}) == ["1D", "1H", "4H"]
+   and not os.path.exists(os.path.join(m.ROOT, "Holy_Board.json")) and st1.get("b_1D") == NOWT // DAY * DAY - DAY, (G1 and sorted(G1), st1.get("gpn"), st1.get("err")))
+mt1 = os.path.getmtime(m.GP_FILE)
+m.sg_tick(now=float(NOWT + 3600), send=False)
+ok("⑮ the next hour scans again but does not rebuild (the build is daily · fresh · your coins covered)", os.path.getmtime(m.GP_FILE) == mt1 and m._sg_st().get("b_1H") == NOWT // 3600 * 3600,
+   (os.path.getmtime(m.GP_FILE), mt1, m._sg_st().get("b_1H")))
+cfgx = json.load(open(m.APP_CFG))
+cfgx["sg_coins"] = ["C0-USDT", "C1-USDT", "C2-USDT"]
+json.dump(cfgx, open(m.APP_CFG, "w"))
+st_ = m._sg_st()
+st_.pop("gp_try", None)
+m._sg_save(st_)
+ok("⑮ a new coin of yours (with candles) ⇒ a build is needed (at most every 6 hours)", m._gp_need(m._sg_st(), float(NOWT + 3600), ["C0-USDT", "C1-USDT", "C2-USDT"])
+   and not m._gp_need({"gp_try": NOWT}, float(NOWT + 3600), ["C0-USDT", "C1-USDT", "C2-USDT"]), "")
+V = m.gp_view()
+ok(f"⑮ /api/groups: {len(V['groups'])} groups (🪙 {sum(1 for x in V['groups'].values() if x['sec'] == 'coin')} · 🌐 {sum(1 for x in V['groups'].values() if x['sec'] == 'mkt')}) · "
+   f"the build · names for every indicator · each group's notice level · what fired now",
+   V["ok"] and len(V["groups"]) == len(m.GP_GROUPS) and sorted(V["f"]) == ["1D", "1H", "4H"] and all(V["names"].get(c) for c in m._gp_codes())
+   and set(V["lv"]) == set(m.GP_GROUPS) and sorted(V["now"]) == ["1D", "1H", "4H"] and V["frs"]["4H"][1] == "4 ساعات", {k: V[k] for k in ("ts", "n", "lv")})
+SV = m.sg_view()
+ok("⑮ ⚙️ gets each group's record per frame (what would have been sent)", all(sorted(SV["gpr"].get("g_" + g, {})) == ["1D", "1H", "4H"] for g in m.GP_GROUPS)
+   and all(len(x) == 3 for y in SV["gpr"].values() for x in y.values()), list(SV["gpr"].items())[:2])
+fake = {"1D": {"coin": {"c_trend": {"C0-USDT": [1, [x[0] for x in G1["f"]["1D"]["coin"]["g"]["c_trend"]["m"][:1]], 1]}}}}
+st_ = m._sg_st()
+st_["gpn"] = fake
+m._sg_save(st_)
+CN = m.gp_coin_now(["C0-USDT", "C1-USDT"])
+ok(f"⑮ 🔮 the coin's group calls (frame · group · side · the member's name and record): {CN.get('C0-USDT')}",
+   list(CN) == ["C0-USDT"] and CN["C0-USDT"][0][:3] == ["1D", "c_trend", 1] and isinstance(CN["C0-USDT"][0][3], str) and len(CN["C0-USDT"][0]) == 8, CN)
+ok("⑮ no order was ever sent", not ORD, ORD)
 
 shutil.rmtree(R, ignore_errors=True)
 print(f"{'✅' if all(res) else '❌'} t_groups: {sum(res)}/{len(res)} (the indicator groups)")

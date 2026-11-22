@@ -107,7 +107,7 @@ try:
     ok(f"③ 🟢 «القاع المؤكد بالحجم» is a 🎯 signal (O-botv · the bottom ≥ 50 with the volume ≥ {m.BOT_VOL_X}×): fires on {Ev.get(('O-botv', 1))} "
        f"= the rule's own days {want} · the same crash without the volume: only «🟢 مؤشر القاع» {En.get(('O-bottom', 1))}",
        Ev.get(("O-botv", 1)) == want and want and not En.get(("O-botv", 1)) and En.get(("O-bottom", 1))
-       and m._sg_plain("O-botv")[1] == "🟢 القاع المؤكد بالحجم" and m.SB_NUM.get("O-botv") == 52, (Ev.get(("O-botv", 1)), want, En.get(("O-bottom", 1))))
+       and m._sg_plain("O-botv")[1] == "🟢 القاع المؤكد بالحجم" and "O-botv" in m.gp_members("c_rev") and m.GP_NM.get("O-botv") == "القاع المؤكد بالحجم", (Ev.get(("O-botv", 1)), want, En.get(("O-bottom", 1))))
 
     # ── ④ the 🔮 card
     src = open(os.path.join(R, "Holy_Dashboard.pyw"), encoding="utf-8").read()
