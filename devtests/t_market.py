@@ -144,8 +144,8 @@ SCX = {"crash": {"on": True, "t": T4E, "k": 6, "n": 12}, "c": {"BTC-USDT": {"1H"
 ALL = {k: "now" for k in m.AN_TY}
 F = m._an_facts(prev, new, rng_prev, ["SOL-USDT"], ALL, SCX, LVD, cdbu)
 tys = sorted({f["ty"] for k, f in F})
-ok(f"④ what changed becomes a notice — all {len(tys)} fact types (the group types 🧩 come from the groups): {' · '.join(tys)}",
-   tys == sorted(k for k in m.AN_TY if not k.startswith("g_")) and "tend" not in m.AN_TY, [(k, f["ln"][:40]) for k, f in F])
+ok(f"④ what changed becomes a notice — all {len(tys)} fact types (the group types 🧩 come from the groups · 🗓️ from the calendar): {' · '.join(tys)}",
+   tys == sorted(k for k in m.AN_TY if not k.startswith("g_") and k != "cal") and "tend" not in m.AN_TY, [(k, f["ln"][:40]) for k, f in F])
 L = {f["ty"]: f["ln"] for k, f in F}
 ok(f"④ plain words with the numbers: «{L['trend']}» · «{L['out'][:60]}…» · «{L['lvl'][:60]}…»",
    L["trend"].startswith("📈 الاتجاه اليومي أصبح صاعداً") and "صعد أكثر من المتوقع" in L["out"] and "فوق المدى المتوقع للساعات الأربع" in L["out"]

@@ -122,9 +122,9 @@ const LAT = /[A-Za-z]{2,}/;
     thr: !!document.getElementById('sg_thr'), est: !!document.getElementById('sg_est'), min: !!document.getElementById('sg_min') }));
   const lv = Object.fromEntries(g0.rows.map(x => x.split(':')));
   const grc = await pg.evaluate(() => ((document.querySelector('#sg_body .an-ty[data-k="g_c_trend"] .gp-rc') || {}).textContent || '').trim());
-  ok(`⑥ ⚙️ ${g0.heads.slice(0, 5).map(h => h.slice(0, 22)).join(' · ')} — ${g0.rows.length} types (13 facts + 15 groups), each with «${g0.btn.join(' · ')}» · each group with its record («${grc}») · no % setting · no estimate`,
+  ok(`⑥ ⚙️ ${g0.heads.slice(0, 5).map(h => h.slice(0, 22)).join(' · ')} — ${g0.rows.length} types (14 facts with 🗓️ + 15 groups), each with «${g0.btn.join(' · ')}» · each group with its record («${grc}») · no % setting · no estimate`,
      g0.heads[0].startsWith('🔴 طوارئ') && g0.heads[1].startsWith('🪙 العملة — المجاميع') && g0.heads[2] === '🪙 العملة — حقائق الآن' && g0.heads[3].startsWith('🌐 السوق — المجاميع')
-     && g0.heads[4] === '🌐 السوق — حقائق الآن' && g0.rows.length === 28 && g0.btn.join('|') === '📲 فوري|👁 بالنافذة|⛔ متوقف' && grc.includes('🕓 60%') && grc.includes('⏱')
+     && g0.heads[4] === '🌐 السوق — حقائق الآن' && g0.rows.length === 29 && lv.cal === 'now' && g0.btn.join('|') === '📲 فوري|👁 بالنافذة|⛔ متوقف' && grc.includes('🕓 60%') && grc.includes('⏱')
      && ['wave', 'surge', 'bstorm', 'trend', 'lvl', 'out', 'vol', 'mtrend', 'storm', 'g_c_trend', 'g_c_big', 'g_c_rev', 'g_m_trend', 'g_m_shock', 'g_m_vol'].every(k => lv[k] === 'now')
      && ['rs', 'ad', 'season', 'fng', 'g_c_mom', 'g_c_brk', 'g_c_flow', 'g_c_rs', 'g_c_pro', 'g_m_mom', 'g_m_mood', 'g_m_macro', 'g_m_pro'].every(k => lv[k] === 'view') && !('tend' in lv)
      && !g0.thr && !g0.est && !g0.min, g0);
