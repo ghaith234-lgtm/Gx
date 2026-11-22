@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.76"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.77"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -21191,7 +21191,7 @@ def sg_test():
         return {"ok": False, "msg": "🔕 الكتم مفعّل (زر 🔔 في الأعلى) — لن يُرسَل شيء حتى تلغيه"}
     sym = (sg_coins(cfg) or ["BTC-USDT"])[0]
     text = (f"🧪 تجربة: هكذا تصلك تنبيهات السوق\n📈 {sym.split('-')[0]} — حدث الآن\n🧱 اخترق المقاومة بإغلاق اليوم\n"
-            f"بطاقة واحدة لكل عملة · والطارئ فوراً حتى في ساعات الهدوء — لا توقّع اتجاه ولا أوامر\n⚙️ {SG_CH[cfg['ch']]}")
+            f"بطاقة واحدة لكل عملة · والطارئ فوراً حتى في ساعات الهدوء — احتمالات لا ضمانات · لا أوامر\n⚙️ {SG_CH[cfg['ch']]}")
     ok = _sg_tg(text, cfg)
     return {"ok": True, "msg": "🧪 أُرسلت التجربة" + ("" if ok or cfg["ch"] == "app" else " — لم يستلمها تيليغرام (تأكد من التوكن ومن Chat ID)")}
 
@@ -31717,7 +31717,7 @@ function openSettings(){
    ${G('🔔 الإشعارات',
       T('✈️','تنبيهات تيليغرام',"g('mute');setTimeout(openSettings,700)",'sMute',!d.muted,'تعمل — تصل إلى تيليغرام','مكتومة — لا تصل')
      +L('📈','شريط الأسعار وإشعاراته','openTicker()','العملات في الشريط · إشعارات الأسعار')
-     +L('📈','تنبيهات السوق',"openSig('cfg')",'الاتجاه · الحجم · كسر المستويات · الحركة خارج المدى · السوق'))}
+     +L('📈','تنبيهات السوق',"openSig('cfg')",'المجاميع · الاتجاه · الحجم · كسر المستويات · الحركة خارج المدى · الأخبار الأمريكية'))}
    ${G('🔊 الأصوات — لهذا الجهاز',
       T('🎵','صوت الربح',"toggleSound();openSettings()",'sSound',soundOn(),'يعمل — نغمة مع كل ربح','متوقف')
      +T('🔊','صوت فتح القفل','uiUnlockToggle()','bUnl',uiUnlockOn(),'يعمل — نغمة عند فتح القفل','متوقف')
@@ -32019,9 +32019,9 @@ function sgRender(){const el=$('#sg_body'),tb=$('#sg_tabs');if(!el)return;const 
   el.style.cssText='text-align:right';
   el.innerHTML=SGTAB==='mkt'?anMkt():SGTAB==='coins'?anCoins():SGTAB==='log'?anLog(V):SGTAB==='cfg'?sgCfg(V):sgInd(V)}
 function sgFcTop(S){return `<button class="sg-go" onclick="openInd('coins')">📈 <b>السوق الآن</b> — الحقائق والمدى المتوقع لكل عملة ←</button>`}     // 📈 v3.36.75
-function sgMini(){return `<div class="ind-al" style="margin-top:10px"><div class="ind-al-h"><b>🔔 تنبيهات السوق — الاتجاه · الحجم · كسر المستويات · الحركة خارج المدى · السوق</b>
+function sgMini(){return `<div class="ind-al" style="margin-top:10px"><div class="ind-al-h"><b>🔔 تنبيهات السوق — المجاميع · الاتجاه · الحجم · كسر المستويات · الحركة خارج المدى · الأخبار الأمريكية</b>
   <span style="display:flex;gap:6px"><button onclick="openSig('cfg')">⚙️ الإعدادات</button><button onclick="openInd('mkt')">📈 السوق</button></span></div>
-  <div class="ind-sub" style="margin-top:6px">تنبيهات بما يحدث فعلاً بالأرقام — لا توقّع اتجاه ولا أوامر · كل حدث مرة واحدة · لعملاتك وللسوق كله</div></div>`}
+  <div class="ind-sub" style="margin-top:6px">حقائق الآن بالأرقام · وتنبؤات المجاميع التي ثبت سجلها على التاريخ — احتمالات لا ضمانات · لا أوامر · كل حدث مرة واحدة · لعملاتك وللسوق كله</div></div>`}
 /* 🔮 v3.29.0: التوقعات — نفس مؤشرات 📊 على شموع أطول (يوم ← 4 ساعات · أسبوع ← يوم · شهر ← 3 أيام · 3 أشهر ← أسبوع) + 4 إضافات ·
    دائماً «شنو تكول المؤشرات» ويمها شارة صدقها على نفس العملة · النطاق 80% · الدعم والمقاومة · بلا إشعارات */
 let FCV=null,FCT=null;const FCO={},FCS={};
