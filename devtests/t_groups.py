@@ -18,6 +18,7 @@
 #   ⑬ gp_build end to end (three frames · 🪙 + 🌐 · market-wide readings on the whole history) · no network · no orders
 #   ⑭ the notices (text · your coins only · the market · 📲 only for a proven group · ⛔ · dedupe key) · one notice type per group
 #   ⑮ the tick end to end (the first tick builds · the next hour does not · a new coin needs a build · /api/groups · ⚙️ · 🔮)
+#   ⑯ a daily derivatives reading is read only after its day has closed (no hourly candle peeks at it)
 #   python3 devtests/t_groups.py [Holy_Dashboard.pyw] [-q]
 import importlib.machinery, importlib.util, json, math, os, random, re, shutil, sys, tempfile, time
 
@@ -413,6 +414,35 @@ CN = m.gp_coin_now(["C0-USDT", "C1-USDT"])
 ok(f"⑮ 🔮 the coin's group calls (frame · group · side · the member's name and record): {CN.get('C0-USDT')}",
    list(CN) == ["C0-USDT"] and CN["C0-USDT"][0][:3] == ["1D", "c_trend", 1] and isinstance(CN["C0-USDT"][0][3], str) and len(CN["C0-USDT"][0]) == 8, CN)
 ok("⑮ no order was ever sent", not ORD, ORD)
+
+# ── ⑯ a daily derivatives reading waits for its day to close (p141 · found by check 16): the day-D spike of the long/short accounts is read by
+#    the daily candle of day D (it closes when the day closes) and by the hourly candle that closes at the day's end — never by an earlier hour
+DD = (int(time.time()) // DAY) * DAY - DAY                       # the last closed day's start
+DS = DD - 5 * DAY                                                # the spike day
+lsd = {str(DS - k * DAY): round(1.0 + 0.001 * k, 4) for k in range(1, 70)}      # slowly falling (each new day is low ⇒ never «crowded»)
+lsd[str(DS)] = 3.0                                                               # the spike: the most crowded day ⇒ a reverse reading
+for k in range(1, 6):
+    lsd[str(DS + k * DAY)] = round(0.9 - 0.001 * k, 4)
+PDB = {"ls": {"ZZ": {"d": lsd}}}
+
+
+def candles(t_end, dx, n, p0=10.0):
+    p, rows = p0, []
+    for i in range(n):
+        c = p * (1 + 0.004 * math.sin(i / 7.0))
+        rows.append([t_end - (n - 1 - i) * dx, p, max(p, c) * 1.002, min(p, c) * 0.998, c, 1000.0])
+        p = c
+    return rows
+drows = candles(DD, DAY, 320)
+hrows = candles(DD + DAY - 3600, 3600, 400)
+ctx = m._sg_ctx("ZZ-USDT", drows, PDB, {}, None, {})
+Dd, Ed = m._sg_events(drows, True, ctx, t0=210, dx=DAY)
+Dh, Eh = m._sg_events(hrows, False, ctx, t0=210, dx=3600)
+fd = [Dd["T"][i] for i in Ed.get(("P-ls", -1), [])]
+fh = [Dh["T"][i] for i in Eh.get(("P-ls", -1), [])]
+ok(f"⑯ a daily derivatives reading waits for its day to close: the daily candle of the spike day fires ({[time.strftime('%m-%d', time.gmtime(t)) for t in fd]}) · "
+   f"the first hourly firing is the hour that closes the day ({[time.strftime('%m-%d %H:00', time.gmtime(t)) for t in fh[:1]]}) — no earlier hour",
+   fd == [DS] and fh and fh[0] == DS + 23 * 3600 and all(t >= DS + 23 * 3600 for t in fh), (fd, fh[:3], DS))
 
 shutil.rmtree(R, ignore_errors=True)
 print(f"{'✅' if all(res) else '❌'} t_groups: {sum(res)}/{len(res)} (the indicator groups)")

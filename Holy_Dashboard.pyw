@@ -18662,6 +18662,7 @@ SG_EVERY = 300
 SG_FEE = 0.002
 SG_BEAM, SG_TOPS, SG_KEEP, SG_RAREK = 40, 40, 25, 40
 SG_MLAG = {"fng": 0, "vix": 1, "dxy": 1, "us10": 1, "epu": 2, "gpr": 8, "tone": 1}
+SG_PLAG = 86400 - 1                         # ⚖️ v3.36.77: قراءة العقود اليومية (مفتاحها بداية يومها) تُقرأ بعد إغلاق يومها فقط (الفحص 16)
 #   🗞️ أيام تأخر النشر (ci/sig_lagdates.py يوم 20-11 13:23 UTC: VIX والدولار والسندات وعدم اليقين آخرها 19-11 · المخاطر الجيوسياسية 16-11 (تُحدَّث
 #   أسبوعياً ⇒ حتى 8 أيام) · الخوف والطمع 20-11) — قيمة اليوم t لا تُستعمل قبل t + التأخير · ci/sig_check10.py: إشارات المخاطر الجيوسياسية للبيع
 #   صمدت بتأخير 1–3 أيام وضعفت بعد أسبوع ⇒ سجلها هنا هو سجلها الصادق بتأخيرها الحقيقي
@@ -19033,7 +19034,7 @@ def _sg_ctx(sym, drows, pdb, mkt, fng, btc):
         if isinstance(e_, dict) and e_.get("d"):
             ks, vs = _pro_sorted(e_)
             if len(vs) >= 30:
-                pro[k] = (ks, vs)
+                pro[k] = ([x + SG_PLAG for x in ks], vs)
     return {"sym": sym, "drows": drows, "fng": fng, "btc": btc, "mkt": mkt, "pro": pro}
 
 
