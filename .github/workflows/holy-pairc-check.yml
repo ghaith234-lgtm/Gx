@@ -1,0 +1,26 @@
+name: Holy pair market calibration
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/pair_calib.py', 'ci/RUN_PAIRC', '.github/workflows/holy-pairc-check.yml']
+permissions:
+  contents: read
+jobs:
+  pairc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: «شبكة عملتين» — how XRP · SUI · SOL · ASTER · XLM really move (prices in XRP and in dollars · 1-minute 30 days · 15-minute a year · daily 3 years · 1.5% round trips) — public data, no keys, no orders
+        run: |
+          pip install -q requests
+          python3 ci/pair_calib.py Holy_Dashboard.pyw
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: holypairc
+          path: /tmp/holypairc.json
+          if-no-files-found: ignore
