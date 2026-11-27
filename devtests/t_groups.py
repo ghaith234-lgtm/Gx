@@ -19,6 +19,8 @@
 #   ⑭ the notices (text · your coins only · the market · 📲 only for a proven group · ⛔ · dedupe key) · one notice type per group
 #   ⑮ the tick end to end (the first tick builds · the next hour does not · a new coin needs a build · /api/groups · ⚙️ · 🔮)
 #   ⑯ a daily derivatives reading is read only after its day has closed (no hourly candle peeks at it)
+#   ⑰ v3.36.78: the rule per frame (check 18) · the horizon in words · the path gates 📲 · the notice with horizon, helper name and path ·
+#     the live check with helpers = the history walk
 #   python3 devtests/t_groups.py [Holy_Dashboard.pyw] [-q]
 import importlib.machinery, importlib.util, json, math, os, random, re, shutil, sys, tempfile, time
 
@@ -443,6 +445,32 @@ fh = [Dh["T"][i] for i in Eh.get(("P-ls", -1), [])]
 ok(f"⑯ a daily derivatives reading waits for its day to close: the daily candle of the spike day fires ({[time.strftime('%m-%d', time.gmtime(t)) for t in fd]}) · "
    f"the first hourly firing is the hour that closes the day ({[time.strftime('%m-%d %H:00', time.gmtime(t)) for t in fh[:1]]}) — no earlier hour",
    fd == [DS] and fh and fh[0] == DS + 23 * 3600 and all(t >= DS + 23 * 3600 for t in fh), (fd, fh[:3], DS))
+
+# ── ⑰ v3.36.78 · p145 — the rule per frame chosen by check 18 · the horizon and the path in the notice · the path gates 📲 · helpers by name
+ok(f"⑰ the rule per frame (check 18): ⏱ graded over 4 hours {GB['f']['1H']['coin']['p'].get('h')} · 🕓 helpers {GB['f']['4H']['coin']['p'].get('help')} and strict pairs "
+   f"{GB['f']['4H']['coin']['p'].get('combo')} · 📅 as before", GB["f"]["1H"]["coin"]["p"]["h"] == 4 and GB["f"]["4H"]["coin"]["p"]["help"] == 1
+   and GB["f"]["4H"]["coin"]["p"]["combo"] == 2 and GB["f"]["1D"]["coin"]["p"]["h"] == 1 and not GB["f"]["1D"]["coin"]["p"]["help"]
+   and all("px" in GB["f"][fr]["coin"]["g"]["c_trend"] for fr in GB["f"]), {fr: GB["f"][fr]["coin"]["p"] for fr in GB["f"]})
+ok("⑰ the horizon in words: «خلال الساعات الأربع القادمة» (the hour × 4) · «خلال اليوم القادم» · «خلال الأيام الثلاثة القادمة»",
+   m.gp_hz("1H", 4) == "خلال الساعات الأربع القادمة" and m.gp_hz("4H", 1) == "خلال الساعات الأربع القادمة" and m.gp_hz("1D", 1) == "خلال اليوم القادم"
+   and m.gp_hz("1D", 3) == "خلال الأيام الثلاثة القادمة" and m.gp_hz("1H", 1) == "خلال الساعة القادمة", "")
+ok("⑰ 📲 needs a positive average move too (a direction group right 60% whose calls lose on average stays 👁) · fewer than 30 paths ⇒ the record alone",
+   not m.gp_proven([600, 1000, 500.0], [120, -0.05, -1.2, 0.9, 10.0]) and m.gp_proven([600, 1000, 500.0], [120, 0.4, -1.0, 1.5, 9.0])
+   and m.gp_proven([600, 1000, 500.0], [10, -1.0, -2.0, 0.1, 50.0]) and m.gp_proven([600, 1000, 500.0]), "")
+G1H = {"v": m.GP_VER, "f": {"1H": {"coin": {"p": {"h": 4}, "g": {"c_trend": {"rec": [600, 1000, 500.0], "px": [400, 0.97, -1.03, 2.03, 13.0],
+                                                                            "m": [["O-trend+S-comp", 63, 37, 80, 2, 0.5]]}}}}}}
+FX2 = m._gp_facts({"1H": {"coin": {"c_trend": {"SOL-USDT": [1, ["O-trend+S-comp"], 1]}}}}, G1H, ["SOL-USDT"], {"g_c_trend": "now"}, ["1H"])
+ln2 = FX2[0][1]["ln"] if FX2 else ""
+ok(f"⑰ the hourly notice says the real horizon, the member «with the market's compass» in plain words and the path: «{ln2}»",
+   ln2.startswith("📈 ⏱ يُتوقع أن يكمل الصعود خلال الساعات الأربع القادمة") and "بوصلة السوق بالجهة نفسها" in ln2 and "متوسط الحركة +0.97%" in ln2
+   and "أسوأ عكس قبلها -1.03%" in ln2 and not re.search(r"[A-Za-z]", ln2) and FX2[0][1]["lv"] == "now", FX2)
+Wh = m.gp_walk(FC, "coin", "1D", p={"help": 1}, S=m._gp_states(FC, "1D", None))
+Gh = {"f": {"1D": {"coin": m.gp_pack(Wh)}}}
+NWh = m.gp_now({"1D": FC}, Gh)
+liveh = {s_: x[:2] for s_, x in ((NWh.get("1D") or {}).get("coin") or {}).get("c_trend", {}).items()}
+hk = sorted({k for k in Wh["rec"]["c_trend"] if "+S-" in k})
+ok(f"⑰ helpers: «member + helper» keys are graded ({hk[:3]}) · the live check with helpers = the history walk on the last candle ({len(liveh)} coins)",
+   hk and liveh == Wh["now"]["c_trend"], (hk[:5], liveh, Wh["now"]["c_trend"]))
 
 shutil.rmtree(R, ignore_errors=True)
 print(f"{'✅' if all(res) else '❌'} t_groups: {sum(res)}/{len(res)} (the indicator groups)")

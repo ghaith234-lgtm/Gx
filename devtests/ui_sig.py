@@ -130,6 +130,7 @@ try:
         elif x[4] == 2:
             x[4] = 1                                   # (the only champion now: the planted one)
     g4["ch"], g4["rec"] = [key], [600, 1000, 500.0]
+    g4["px"] = [400, 0.5, -1.0, 1.6, 10.0]                # 🎯 v3.36.78: the path of its calls (a positive average move ⇒ ✅)
     g4["coin"].setdefault("SOL-USDT", {"rec": [0, 0, 0.0], "m": {}})["rec"] = [70, 120, 60.0]
     gm = G["f"]["1D"]["mkt"]["g"]["m_trend"]
     mkey = next(x[0] for x in gm["m"] if "+" not in x[0])

@@ -81,7 +81,7 @@ const LAT = /[A-Za-z]{2,}/;
   ok(`④ 📋 two sub-tabs «${w2a.secs.join(' · ')}» (🪙 open) · «${w2a.chips.join(' · ')}» · ${w2a.cards.length} coin groups · 📈 الاتجاه: «${w2a.job}» · ${w2a.cells.join(' | ')}`,
      w2a.secs.join('|') === '🪙 العملات|🌐 السوق' && w2a.on === '🪙 العملات' && w2a.chips.join('|') === 'كل العملات معاً|XRP|SOL' && w2a.cards.length === 8 && w2a.cards[0] === 'c_trend'
      && w2a.job.includes('الجهة') && w2a.cells.length === 3 && w2a.cells[0].includes('⏱ ساعة') && w2a.cells[1].includes('🕓 4 ساعات') && w2a.cells[1].includes('60%')
-     && w2a.cells[1].includes('✅') && w2a.cells[1].includes('العادي 50%') && w2a.cells[2].includes('📅 يوم'), w2a);
+     && w2a.cells[1].includes('✅') && w2a.cells[1].includes('العادي 50%') && w2a.cells[1].includes('+0.50% · عكس -1.00%') && w2a.cells[2].includes('📅 يوم'), w2a);
   ok(`④ 🔔 what fired now on your coins: «${w2a.live}» · ⭐ «${w2a.ch.slice(0, 80)}»`, w2a.live.includes('SOL') && w2a.live.includes('يُتوقع أن يكمل الصعود') && w2a.ch.startsWith('⭐ الأبطال: 🕓'), w2a);
   await pg.evaluate(() => gpCoin('SOL-USDT'));
   await sleep(250);

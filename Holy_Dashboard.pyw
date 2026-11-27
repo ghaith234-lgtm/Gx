@@ -41,7 +41,7 @@ def _pick_python():
 PYTHON_EXE, PY_CANDS = _pick_python()
 APP_CFG = os.path.join(ROOT, "monitor_config.json")      # نفس ملف المونيتر القديم: المحافظ + تيليغرام (استمرارية كاملة)
 DASH_CFG = os.path.join(ROOT, "dashboard_config.json")   # اختياري: pin/port
-APP_VERSION = "3.36.77"     # 🏷️ نفس الرقم المكتوب بملف الضغط
+APP_VERSION = "3.36.78"     # 🏷️ نفس الرقم المكتوب بملف الضغط
 FEE_RATE_DEFAULT = 0.0008   # 🧾 صانع OKX 0.080% — بوت الجرد ينشر أوامر تنتظر
 #    التنفيذ، وهذا تعريف الصانع. (الآخذ 0.100% يخص من ياخذ سعر السوق فوراً)
 LEDGER = os.path.join(ROOT, "Holy_Ledger.json")          # نفس سجل الأرباح القديم
@@ -20023,6 +20023,10 @@ GP_NM = {   # 🧩 v3.36.77: كل مؤشر باسم محايد واضح (بلا 
     'W-breadth': 'عدد العملات الصاعدة',
     'W-comp': 'بوصلة السوق',
     'P-fund': 'رسوم التمويل في العقود',
+    'S-comp': 'بوصلة السوق بالجهة نفسها',
+    'S-brd': 'أغلب العملات بالجهة نفسها',
+    'S-btc': 'اتجاه البيتكوين بالجهة نفسها',
+    'S-vol': 'حجم كبير بالجهة نفسها',
     'P-oi': 'العقود المفتوحة مع حركة السعر',
     'P-top': 'مراكز كبار المتداولين',
     'P-basis': 'علاوة العقود الفصلية',
@@ -20647,6 +20651,7 @@ GP_MV = 0.002                                            # حركة أصغر م�
 GP_BIGX = 1.5                                            # «حركة كبيرة» = ≥ 1.5 × وسيط حركة آخر 20 شمعة
 GP_P = {"dmin": 30, "lift": 0.05, "gap": 0.02, "cap": 2, "combo": 1, "h": 1, "win": 0, "help": 0, "grade": "close"}
 GP_TPX = 1.0                                             # «الهدف قبل الوقف»: الهدف والوقف = المعتاد × √المدة
+GP_PF = {"1H": {"h": 4}, "4H": {"help": 1, "combo": 2}, "1D": {}}   # 🎯 v3.36.78: قواعد كل إطار — الفائزة بفحص 18 على النصف الذي لم تره
 from collections import deque as _GPdq
 GP_SAY = 0.03                                            # 📲 يصل فوراً فقط إذا كان سجل المجموعة نفسه (ما كان سيصل) ≥ العادي + 3% على 30 مرة فأكثر
 GP_ONE = {"W-crash": -1, "W-surge": 1}                   # أحداث تُقرأ بجهة واحدة
@@ -21145,9 +21150,10 @@ def gp_build(cdb, coins, keep, pdb, fdb, prog=None, p=None):
         _gp_wide({fr: F}, full=True)
         Db = F["BTC-USDT"][0]
         B = {Db["T"][i]: Db["C"][i] for i in range(Db["n"])}
-        S = _safe(_gp_states, F, fr, cdb, default=None) if out["p"].get("help") else None     # 🤝 حال السوق (للمساعدين)
-        out["f"][fr] = {"coin": gp_pack(gp_walk(F, "coin", fr, B=B, p=p, keep=[s for s in keep if s in F], codes=codes, S=S)),
-                        "mkt": gp_pack(gp_walk({"BTC-USDT": F["BTC-USDT"]}, "mkt", fr, p=p, codes=codes, S=S))}
+        pf = dict(GP_PF.get(fr) or {}, **(p or {}))           # 🎯 v3.36.78: قاعدة الإطار (فحص 18) — وما يُمرَّر صراحةً يغلبها
+        S = _safe(_gp_states, F, fr, cdb, default=None) if dict(GP_P, **pf).get("help") else None     # 🤝 حال السوق (للمساعدين)
+        out["f"][fr] = {"coin": gp_pack(gp_walk(F, "coin", fr, B=B, p=pf, keep=[s for s in keep if s in F], codes=codes, S=S)),
+                        "mkt": gp_pack(gp_walk({"BTC-USDT": F["BTC-USDT"]}, "mkt", fr, p=pf, codes=codes, S=S))}
         out["n"][fr] = [len(F), min(D["T"][0] for D, E in F.values()), Db["T"][-1]]
         F = None
     return out
@@ -21156,11 +21162,14 @@ def gp_build(cdb, coins, keep, pdb, fdb, prog=None, p=None):
 def gp_now(FF, G, p=None, cdb=None):
     """🔔 الفحص الحي (كل شمعة مغلقة): على آخر شمعة لكل عملة وإطار ⇒ ما انطلق من أبطال كل مجموعة (المحفوظين في آخر بناء) بجهة واحدة
     ⇒ {الإطار: {القسم: {المجموعة: {العملة: [الجهة, الأبطال]}}}} — الدالة نفسها (_gp_keys) التي يُبنى بها السجل · بقواعد البناء نفسه (G["p"])"""
-    p = dict(GP_P, **((G or {}).get("p") or {}), **(p or {}))
+    p0 = p
     codes = _gp_codes()
     out = {}
     for fr, F in (FF or {}).items():
         Gf = ((G or {}).get("f") or {}).get(fr) or {}
+        p = dict(GP_P)                                        # 🎯 قاعدة بناء هذا الإطار (ثم ما يُمرَّر صراحةً)
+        for x_ in ((G or {}).get("p"), (Gf.get("coin") or {}).get("p") or GP_PF.get(fr), p0):
+            p.update(x_ or {})
         S = (_safe(_gp_states, F, fr, cdb, default=None) or {}) if p.get("help") else None
         for sec in ("coin", "mkt"):
             Gs = (Gf.get(sec) or {}).get("g") or {}
@@ -21232,10 +21241,26 @@ def _gp_best(Gg, keys):
     return max(rows, key=lambda x: (x[1] / (x[1] + x[2]) - x[5], x[1] + x[2])) if rows else None
 
 
-def gp_proven(rec):
-    """📲 للمجموعة على هذا الإطار؟ سجلها نفسه (ما كان سيصل) ≥ العادي + GP_SAY على 30 مرة فأكثر"""
+def gp_proven(rec, px=None):
+    """📲 للمجموعة على هذا الإطار؟ سجلها نفسه (ما كان سيصل) ≥ العادي + GP_SAY على 30 مرة فأكثر · 🎯 v3.36.78: ولمجاميع الجهة —
+    متوسط الحركة بعد التنبؤ بجهته فوق الصفر (px من gp_pathst · على 30 تنبؤاً فأكثر)"""
     w, n, b = (list(rec or []) + [0, 0, 0.0])[:3]
+    if px and len(px) >= 2 and px[0] >= 30 and px[1] <= 0:
+        return False
     return n >= 30 and w / n >= b / n + GP_SAY
+
+
+def gp_hz(fr, h=1):
+    """المدة بكلام واضح: الإطار × عدد الشموع ⇒ «خلال الساعة القادمة» · «خلال الساعات الأربع القادمة» · «خلال اليوم القادم» …"""
+    hrs = SG_SEC.get(fr, 3600) * max(1, int(h or 1)) // 3600
+    return {1: "خلال الساعة القادمة", 2: "خلال الساعتين القادمتين", 3: "خلال الساعات الثلاث القادمة", 4: "خلال الساعات الأربع القادمة",
+            8: "خلال الساعات الثماني القادمة", 12: "خلال الساعات الاثنتي عشرة القادمة", 24: "خلال اليوم القادم", 48: "خلال اليومين القادمين",
+            72: "خلال الأيام الثلاثة القادمة", 168: "خلال الأسبوع القادم"}.get(hrs, f"خلال {hrs} ساعة القادمة" if hrs < 24 else f"خلال {hrs // 24} أيام قادمة")
+
+
+def _gp_pxln(px):
+    """سطر المسار: متوسط الحركة بعد المدة · أسوأ عكس قبلها (على 30 تنبؤاً فأكثر)"""
+    return f"بعد المدة: متوسط الحركة {px[1]:+.2f}% · أسوأ عكس قبلها {px[2]:+.2f}% (من {px[0]:,})" if px and px[0] >= 30 else ""
 
 
 def _gp_facts(gpn, G, mine, lv, frs):
@@ -21251,7 +21276,9 @@ def _gp_facts(gpn, G, mine, lv, frs):
                 if L not in ("now", "view"):
                     continue
                 X, Gg = GP_GROUPS[g], _gp_grp(G, fr, sec, g)
-                ok = gp_proven(Gg.get("rec"))
+                px = Gg.get("px") if X["job"] == "dir" else None
+                ok = gp_proven(Gg.get("rec"), px)
+                hz = gp_hz(fr, ((((((G or {}).get("f") or {}).get(fr) or {}).get(sec) or {}).get("p") or GP_PF.get(fr) or {}).get("h") or 1))
                 for sym, x in (by or {}).items():
                     if sec == "coin" and sym not in mine:
                         continue
@@ -21261,8 +21288,10 @@ def _gp_facts(gpn, G, mine, lv, frs):
                         continue
                     n_ = best[1] + best[2]
                     fi = GP_FRN[fr]
-                    ln = (f"{X['ic']} {fi[0]} {X['say'][0 if s > 0 else 1]} {fi[2]}\n"
+                    ln = (f"{X['ic']} {fi[0]} {X['say'][0 if s > 0 else 1]} {hz}\n"
                           f"{gp_name(best[0])} — صدق {round(100.0 * best[1] / n_)}% من {n_:,} مرة (العادي {round(100.0 * best[5])}%)")
+                    if _gp_pxln(px):
+                        ln += "\n" + _gp_pxln(px)
                     if not ok:
                         ln += "\nسجل هذه المجموعة لم يثبت بعد — في النافذة فقط"
                     sy = sym if sec == "coin" else "السوق"
@@ -21296,7 +21325,8 @@ def gp_coin_now(syms):
                 x = (by or {}).get(sym)
                 best = _gp_best(Gg, list(x[1] or [])) if x else None
                 if best:
-                    out.setdefault(sym, []).append([fr, g, int(x[0]), gp_name(best[0]), best[1], best[1] + best[2], best[5], gp_proven(Gg.get("rec"))])
+                    out.setdefault(sym, []).append([fr, g, int(x[0]), gp_name(best[0]), best[1], best[1] + best[2], best[5],
+                                                    gp_proven(Gg.get("rec"), Gg.get("px") if GP_GROUPS[g]["job"] == "dir" else None)])
     return out
 
 
@@ -21309,8 +21339,11 @@ def gp_view():
             "groups": {g: {"sec": x["sec"], "ic": x["ic"], "nm": x["nm"], "job": x["job"], "say": list(x["say"]), "mem": gp_members(g, codes)}
                        for g, x in GP_GROUPS.items()},
             "jobs": {k: list(v) for k, v in GP_JOBS.items()}, "frs": {k: list(v) for k, v in GP_FRN.items()}, "secn": {k: list(v) for k, v in GP_SECN.items()},
-            "names": {c: gp_name(c) for c in codes}, "plain": sg_plain_all(), "mine": sg_coins(cfg), "lv": {g: cfg["alv"].get("g_" + g) for g in GP_GROUPS},
-            "say": GP_SAY, "busy": {"phase": _SG.get("phase") or "", "pct": int(_SG.get("pct") or 0), "msg": _SG.get("msg") or ""}, "err": _SG.get("err") or ""}
+            "names": dict({c: gp_name(c) for c in codes}, **{c: GP_NM[c] for c in ("S-comp", "S-brd", "S-btc", "S-vol")}), "plain": sg_plain_all(), "mine": sg_coins(cfg),
+            "lv": {g: cfg["alv"].get("g_" + g) for g in GP_GROUPS},
+            "say": GP_SAY, "busy": {"phase": _SG.get("phase") or "", "pct": int(_SG.get("pct") or 0), "msg": _SG.get("msg") or ""}, "err": _SG.get("err") or "",
+            "hz": {fr: gp_hz(fr, (((((G.get("f") or {}).get(fr) or {}).get("coin") or {}).get("p") or GP_PF.get(fr) or {}).get("h") or 1)) for fr in GP_FR},
+            "helpers": {c: GP_NM[c] for c in ("S-comp", "S-brd", "S-btc", "S-vol")}}
 
 
 def sg_loop():
@@ -28677,7 +28710,7 @@ i.fb{font-style:normal;font-weight:600;margin:0 7px;font-size:11px;direction:ltr
 .gp-g{border:1px solid var(--bd);border-radius:12px;padding:8px 10px;margin:8px 0;background:var(--bg1)}.gp-g.live{border-color:var(--cyan)}
 .gp-h{display:flex;gap:8px;align-items:center;cursor:pointer}.gp-ic{font-size:20px}.gp-nm{flex:1;display:flex;flex-direction:column;gap:1px;min-width:0}.gp-nm small{color:var(--mut);font-size:11px}.gp-lv{font-size:15px}
 .gp-cells{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:6px}.gp-cell{border:1px solid var(--bd);border-radius:9px;padding:4px 2px;text-align:center;font-size:11.5px;line-height:1.5}.gp-cell.ok{border-color:var(--green)}.gp-fh{color:var(--mut);font-size:11px}.gp-p b{font-size:14px}.gp-cell small{color:var(--mut2);font-size:10.5px}
-.gp-nw{font-size:12.5px;margin:5px 0 0;padding:3px 8px;border-radius:9px}.gp-nw.up{border-inline-start:3px solid var(--green)}.gp-nw.dn{border-inline-start:3px solid var(--red)}.gp-rc{color:var(--mut2);font-weight:400}
+.gp-nw{font-size:12.5px;margin:5px 0 0;padding:3px 8px;border-radius:9px}.gp-nw.up{border-inline-start:3px solid var(--green)}.gp-nw.dn{border-inline-start:3px solid var(--red)}.gp-rc{color:var(--mut2);font-weight:400}.gp-px{display:block;color:var(--mut2);font-size:10px}
 .gp-det{margin-top:6px;border-top:1px dashed var(--bd);padding-top:6px}.gp-m{display:grid;grid-template-columns:1fr auto;gap:0 8px;padding:4px 0;border-bottom:1px dashed var(--bd);font-size:12.5px}.gp-m small{color:var(--mut);font-size:11px}.gp-m .gp-st{font-size:11px;color:var(--mut)}.gp-m.s2 .gp-mn{font-weight:700;color:var(--tx)}.gp-m.s-1{opacity:.7}
 .sg-pl{border-top:1px solid var(--bd);padding:6px 2px}.sg-pl .sg-plh{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .sg-pl .sg-plh b{color:var(--tx);font-size:13px}.sg-pl .sg-fr{margin-inline-start:auto}.sg-pl.ten{cursor:pointer}.sg-pl.flat{opacity:.75}
@@ -32057,13 +32090,15 @@ async function gpLoad(){clearTimeout(GPT);try{GPV=await api('/api/groups')}catch
 function gpSec(s){GPS=s;sgRender()}
 function gpCoin(s){GPC=s;sgRender()}
 function gpNm(k){const N=(GPV&&GPV.names)||{};return String(k).split('+').map(c=>N[c]||c).join(' + ')}
-function gpG(fr,sec,g){return (((((GPV&&GPV.f)||{})[fr]||{})[sec]||{}).g||{})[g]||null}
+function gpG(fr,sec,g){const x=(((((GPV&&GPV.f)||{})[fr]||{})[sec]||{}).g||{})[g]||null;if(x)x.__g=g;return x}
 function gpRec(G,coin){const c=coin&&G&&(G.coin||{})[coin];return c?[c.rec||[0,0,0],true]:[(G&&G.rec)||[0,0,0],false]}
 function gpCell(fr,G,coin){const F=((GPV&&GPV.frs)||{})[fr]||['',fr,''];
   if(!G)return `<div class="gp-cell"><div class="gp-fh">${F[0]} ${gEsc(F[1])}</div><div class="gp-p">—</div><small>لم يُبنَ بعد</small></div>`;
-  const [r,own]=gpRec(G,coin),p=r[1]?Math.round(100*r[0]/r[1]):null,b=r[1]?Math.round(100*r[2]/r[1]):null,ok=r[1]>=30&&r[0]/r[1]>=r[2]/r[1]+(+GPV.say||0.03);
+  const [r,own]=gpRec(G,coin),p=r[1]?Math.round(100*r[0]/r[1]):null,b=r[1]?Math.round(100*r[2]/r[1]):null,X_=(GPV.groups||{})[G.__g]||{},px=X_.job==='dir'?(G.px||[0]):[0];
+  const ok=r[1]>=30&&r[0]/r[1]>=r[2]/r[1]+(+GPV.say||0.03)&&!(px[0]>=30&&px[1]<=0);
   return `<div class="gp-cell${ok?' ok':''}" title="ما كان سيصل من هذه المجموعة على هذا الإطار${coin?(own?' على هذه العملة':' (كل العملات معاً — لا سجل لهذه العملة بعد)'):' (كل العملات معاً)'} وصدقه · العادي: ما يصيبه تنبؤ عشوائي بالجهات نفسها على الشموع نفسها">
-    <div class="gp-fh">${F[0]} ${gEsc(F[1])}</div><div class="gp-p">${p!=null?`<b>${p}%</b>`:'—'}${ok?' ✅':''}</div><small>${r[1]?`من ${r[1].toLocaleString('en-US')} · العادي ${b}%`:'لا تنبؤات بعد'}</small></div>`}
+    <div class="gp-fh">${F[0]} ${gEsc(F[1])}</div><div class="gp-p">${p!=null?`<b>${p}%</b>`:'—'}${ok?' ✅':''}</div><small>${r[1]?`من ${r[1].toLocaleString('en-US')} · العادي ${b}%`:'لا تنبؤات بعد'}</small>
+    ${px[0]>=30?`<small class="gp-px" title="بعد المدة ${gEsc(((GPV.hz||{})[fr])||'')}: متوسط الحركة بجهة التنبؤ · أسوأ عكس قبلها">${px[1]>=0?'+':''}${(+px[1]).toFixed(2)}% · عكس ${(+px[2]).toFixed(2)}%</small>`:''}</div>`}
 function gpNow(g,X,coin){const out=[];['1H','4H','1D'].forEach(fr=>{const by=((((GPV.now||{})[fr]||{})[X.sec]||{})[g])||{},F=(GPV.frs||{})[fr]||['',''];
     const who=X.sec==='mkt'?['BTC-USDT']:coin?[coin]:(GPV.mine||[]);
     who.forEach(s=>{const x=by[s];if(x)out.push(`<div class="gp-nw ${x[0]>0?'up':'dn'}">🔔 ${X.sec==='coin'&&!coin?`<b>${gEsc(s.split('-')[0])}</b> `:''}${F[0]} ${gEsc(F[1])}: ${gEsc(X.say[x[0]>0?0:1])} <small>— ${gEsc(gpNm((x[1]||[])[0]||''))}</small></div>`)})});
@@ -32074,7 +32109,7 @@ function gpDet(g,X,coin){const G=gpG(GPF,X.sec,g)||{},M=G.m||[],CM=coin?(((G.coi
     return `<div class="gp-m s${x[4]}"><span class="gp-mn">${x[0].includes('+')?'🤝 ':''}${gEsc(gpNm(x[0]))}</span><b>${p!=null?p+'%':'—'}</b>
       <small>${n?`من ${n.toLocaleString('en-US')} · العادي ${Math.round(100*x[5])}% · ${x[3]} يوماً`:'لم ينطلق بعد'}${cn?` · على ${gEsc(coin.split('-')[0])}: ${Math.round(100*c[0]/cn)}% من ${cn}`:''}</small><span class="gp-st">${ST[String(x[4])]||''}</span></div>`}).join('');
   return `<div class="gp-det" onclick="event.stopPropagation()"><div class="sb-tabs">${['1H','4H','1D'].map(fr=>{const F=(GPV.frs||{})[fr]||['',fr];return `<button class="${GPF===fr?'on':''}" onclick="GPF='${fr}';sgRender()">${F[0]} ${gEsc(F[1])}</button>`}).join('')}</div>
-    <div class="ind-sub">${X.mem.length} مؤشراً في هذه المجموعة + التوليفات (كل اثنين منها انطلقا معاً بالجهة نفسها) · البطل: ${P.dmin||30} يوماً من النتائج على الأقل وصدقه أعلى من العادي بـ${Math.round(100*(P.lift||0.05))}% فأكثر — ويبقى حتى ينزل قرب العادي · ${P.cap||2} أبطال على الأكثر</div>
+    <div class="ind-sub">⏳ يُحكم ${gEsc(((GPV.hz||{})[GPF])||'')} · ${X.mem.length} مؤشراً في هذه المجموعة + التوليفات (كل اثنين منها انطلقا معاً بالجهة نفسها${((((GPV.f||{})[GPF]||{}).coin||{}).p||{}).help?' · ومع 🤝 حال السوق: البوصلة · أغلب العملات · اتجاه البيتكوين · الحجم':''}) · البطل: ${P.dmin||30} يوماً من النتائج على الأقل وصدقه أعلى من العادي بـ${Math.round(100*(P.lift||0.05))}% فأكثر — ويبقى حتى ينزل قرب العادي · ${P.cap||2} أبطال على الأكثر</div>
     ${rows||'<div class="ind-sub">لا أعضاء بنتائج بعد على هذا الإطار</div>'}</div>`}
 function gpCard(g,X){const op=!!GPO[g],J=(GPV.jobs||{})[X.job]||['',''],coin=X.sec==='coin'?GPC:'',lv=(GPV.lv||{})[g]||'view';
   const ch=['1H','4H','1D'].map(fr=>{const G=gpG(fr,X.sec,g),F=(GPV.frs||{})[fr]||[''];return G&&(G.ch||[]).length?`${F[0]} ${G.ch.map(k=>gEsc(gpNm(k))).join(' · ')}`:''}).filter(Boolean);
@@ -32103,6 +32138,7 @@ function gpTab(V){let h=`<div class="gp-secs">${[['coin','🪙 العملات'],
     <div>• أعضاؤها مؤشرات من نوعها و<b>توليفات</b> (اثنان منها انطلقا معاً بالجهة نفسها). كل عضو يُحكم على شغل مجموعته بالشمعة التالية من إطاره: <b>⏱ ساعة · 🕓 4 ساعات · 📅 يوم</b> — على تاريخ الأسعار كله بترتيب الزمن.</div>
     <div>• <b>⭐ البطل</b>: عضو صدقه أعلى من العادي بفارق واضح على عدد كافٍ من الأيام (بما عُرف وقتها فقط). الإشعار يأتي من الأبطال وحدهم ويذكر اسم العضو وصدقه والعادي.</div>
     <div>• <b>العادي</b>: ما يصيبه تنبؤ عشوائي بالجهات نفسها على الشموع نفسها — يزيل أثر صعود السوق الطويل. النسبة في الخانة = صدق ما كان سيصل من المجموعة (لا أفضل عضو وحده).</div>
+    <div>• <b>المدة</b>: إشارة الساعة تُحكم على الساعات الأربع التالية · الأربع ساعات على الأربع التالية ومعها 🤝 حال السوق · اليوم على اليوم التالي — هكذا صدقت أكثر على تاريخ لم تره (فحص 18) · تحت النسبة: <b>متوسط الحركة</b> بعد المدة بجهة التنبؤ و<b>أسوأ عكس</b> قبلها.</div>
     <div>• مؤشر جديد يُضاف إلى مجموعته بحسب نوعه ويُختبر على التاريخ قبل أن يتكلم (🧪 قيد الاختبار حتى تكفي نتائجه).</div>
     <div style="color:var(--amber);margin-top:6px">⚠️ احتمالات لا ضمانات · اللوحة تقرأ وتنبّه فقط: لا تفتح أمراً ولا تغلقه.</div></details>`;
   return h}
