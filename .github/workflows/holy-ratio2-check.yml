@@ -1,0 +1,26 @@
+name: Holy ratio check 2
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/ratio_check2.py', 'ci/RUN_RATIO2', '.github/workflows/holy-ratio2-check.yml']
+permissions:
+  contents: read
+jobs:
+  ratio2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: XRP against ETH · BTC · XLM · SOL · LINK (200$ each side · profit half and half or all to XRP · time each coin stays at or above its start · real OKX candles 1H 3 years · 15m 1 year · 5m 90 days) — public data, no keys, no orders
+        run: |
+          pip install -q requests numpy
+          python3 ci/ratio_check2.py Holy_Dashboard.pyw
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: holyratio2
+          path: /tmp/holyratio2.json
+          if-no-files-found: ignore
