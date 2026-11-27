@@ -1,112 +1,117 @@
-# 🗺️ خارطة الكود — v3.36.77
-> `sha256 bf44dc9f6a22d9c3…` · الفهرس الآلي وأرقام أسطر اللوحة بالأقسام أدناه **مولّدة لهذي البصمة** (أُعيد ترقيمها آلياً من v3.36.76 بمطابقة الأسطر — `devtests/tools/map_remap.py`، وأقسام 🪜 مع أسطر محركه) · أرقام أقسام `reinvest.py` تخص ملفه هو (ما تغيّر) · أقسام المحركات بأسطر ملفات المحرك.
+# 🗺️ خارطة الكود — v3.36.78
+> `sha256 a398cb8321389f43…` · الفهرس الآلي وأرقام أسطر اللوحة بالأقسام أدناه **مولّدة لهذي البصمة** (أُعيد ترقيمها آلياً من v3.36.77 بمطابقة الأسطر — `devtests/tools/map_remap.py`، وأقسام 🪜 مع أسطر محركه) · أرقام أقسام `reinvest.py` تخص ملفه هو (ما تغيّر) · أقسام المحركات بأسطر ملفات المحرك.
+
+## 🎯 v3.36.78 — الإشارة الصحيحة (فحص 18): الساعة على الأربع التالية · الأربع ساعات ويّا 🤝 حال السوق · اليوم كما هو · 📏 مسار كل إشارة
+> `p144_engine_options` (+ `p144_engine_v2.txt`) — `GP_P` (+ h · win · help · grade) · `GP_TPX` 20653 · `_GPdq` 20655 · `_gp_keys` 20732 (+ combo 2 الصارمة · «عضو + مساعد» st) · `_gp_outs` 20766 (h · «tp») · `_gp_pb` 20806 (العادي بالجهتين) · `_gp_states` 20814 (S-comp · S-brd · S-btc) · `_gp_svol` 20859 (S-vol) · `gp_walk` 20872 (h · win بنافذة للنتائج والعادي · combo · help + S · `path` · `U2`) · `_gp_path` 21011 · `gp_pathst` 21022 · `gp_pack` 21044 (+ «U2» · «px» · «px1») · `gp_build` 21129 (`_gp_states` للمساعدين) · `gp_now` 21162 (+ cdb · المساعدون بالحي).
+> `p145_right_signal` — `GP_PF` 20654 (`1H` h 4 · `4H` help + combo 2 · `1D` كما هو) · `gp_build` (قاعدة كل إطار `pf`) · `gp_now` (قاعدة بناء الحزمة) · `gp_proven` 21244 (+ متوسط الحركة > 0 لمجاميع الجهة) · `gp_hz` 21253 (المدة بالكلام) · `_gp_pxln` 21261 (سطر المسار) · `_gp_facts` 21266 (المدة الحقيقية · المسار · الشرط) · `gp_coin_now` 21315 · `gp_view` 21333 (+ «hz» · «helpers» · أسماء المساعدين) · `GP_NM` 19954 (+ S-comp · S-brd · S-btc · S-vol) · `gpG` 32093 · `gpCell` 32095 (المسار تحت النسبة · ✅ بالشرط نفسه) · `gpDet` 32106 (⏳ المدة · 🤝) · `gpTab` 32122 (سطر شرح المدة) · `.gp-px` 28713 · `APP_VERSION` 3.36.78.
+> الفحص: `devtests/t_groups.py` (36 — ⑰) · `ui_sig` (35 + 5) · `ci/sig_check18.py` (كل خيار على الأسعار الحقيقية — HANDOFF §٧ر١٦٥).
 
 ## 🧩 v3.36.77 — المؤشرات من جديد: مجاميع للعملة وللسوق · 🏦 بيانات العقود · 🇺🇸 كوينبيس · 💵 العملات المستقرة · 🗓️ الأخبار الأمريكية · 🧹 الجداول والميل انشالوا
-> `p138_group_engine` — **🧩 المحرّك**: `GP_FR` 20643 · `GP_FRN` 20644 · `GP_HIST` 20645 (ساعة 2160 · 4 ساعات 3000 · يوم 2600) · `GP_MV` 20646 · `GP_BIGX` 20647 · `GP_P` 20648 (dmin 30 · lift 5% · gap 2% · cap 2 · combo) · `GP_SAY` 20649 (📲 للمجموعة المثبتة: ≥ العادي + 3% على 30) · `GP_ONE` 20650 · `GP_JOBS` 20651 (dir · big · rs) · `GP_GROUPS` 20656 (🪙 8 · 🌐 7: القسم · الأيقونة · الاسم · الشغل · ما يقوله الإشعار · fam/add/no · المستوى) · `GP_SECN` 20687 · `GP_MKTWIDE` 20688 · `GP_FILE` 20689 (`Holy_Groups.json`) · `GP_VER` 20690 · `_gp_codes` 20693 · `gp_members` 20704 · `_gp_fires` 20713 · `_gp_keys` 20725 (المؤشرات + التوليفات — نفسها للتاريخ وللحي) · `_gp_med` 20743 · `_gp_outs` 20753 (نتيجة كل شمعة لكل شغل) · `_gp_pb` 20777 (العادي) · `gp_walk` 20783 (بترتيب الزمن · الأبطال · ما كان سيصل) · `gp_score` 20880 · `gp_pack` 20892 · `_gp_surge` 20920 · `_gp_wide` 20929 (🌊 🚀 📊 🧭 على التاريخ أو آخر الشموع) · `gp_build` 20975 (البناء اليومي بالعامل) · `gp_now` 21006 (الفحص الحي).
-> `p139_groups_wired` — `SG_N` 18935 (الساعة 2160) · `sg_scan_calc` 19429 (آخر الشموع · `_gp_wide` · `build` ⇒ `gp_build` · `gpn` ⇒ `gp_now`) · `sg_tick` 19867 (`_gp_need` · `Holy_Groups.json` · `st["gpn"]` · يمسح `Holy_Board.json`) · `GP_NM` 19954 (الأسماء المحايدة — بدل `SB_ROWS` · + P-fund) · `AN_TY` 20320 (بلا «tend») · `_an_facts` 20503 (بلا الميل) · `an_feed` 20582 (+ `_gp_facts` · `dup` لكل إشعار) · `AN_TY.update` 21031 (نوع `g_<المجموعة>` لكل مجموعة) · `GP_DUP` 21032 · `gp_load` 21036 · `_gp_need` 21048 · `gp_name` 21056 · `_gp_grp` 21066 · `_gp_best` 21070 · `gp_proven` 21076 · `_gp_facts` 21082 (النص · عملاتك بس · السوق · 📲 للمثبتة) · `gp_recs` 21117 (⚙️) · `gp_coin_now` 21127 (🔮) · `gp_view` 21144 (`/api/groups`) · `sg_view` 21172 (+ `gpr` · `frs`) · `fc_api` 18290 (`gp`) · **انشال:** `SB_*` · `_sb_*` · `sb_feed` · `sb_view` · `sb_off` · `/api/board` · `TD_P` · `td_walk` · `td_score` · `td_prep` · `td_pack`.
-> `p140_groups_tab` — `.gp-secs` … 28517 (CSS بمتغيرات المظهر) · `GPV` 31895 · `gpLoad` · `gpSec` · `gpCoin` · `gpNm` · `gpG` · `gpRec` · `gpCell` 31903 · `gpNow` 31908 · `gpDet` 31912 · `gpCard` 31920 · `gpTab` 31928 (🪙 العملات · 🌐 السوق) · `sgCfg` 31990 (🔴 · 🪙 المجاميع بنسبها · 🪙 الحقائق · 🌐 المجاميع · 🌐 الحقائق) · `fcGp` 32071 (🔮 سطر 🧩) · **انشال:** `sbLoad` · `sbTable` · `sbRow` · `sbCell` · `fcTdTop` · `fcTd` وCSS `.sb-*` (بقى `.sb-tabs` · `.sb-top`).
+> `p138_group_engine` — **🧩 المحرّك**: `GP_FR` 20647 · `GP_FRN` 20648 · `GP_HIST` 20649 (ساعة 2160 · 4 ساعات 3000 · يوم 2600) · `GP_MV` 20650 · `GP_BIGX` 20651 · `GP_P` 20652 (dmin 30 · lift 5% · gap 2% · cap 2 · combo) · `GP_SAY` 20656 (📲 للمجموعة المثبتة: ≥ العادي + 3% على 30) · `GP_ONE` 20657 · `GP_JOBS` 20658 (dir · big · rs) · `GP_GROUPS` 20663 (🪙 8 · 🌐 7: القسم · الأيقونة · الاسم · الشغل · ما يقوله الإشعار · fam/add/no · المستوى) · `GP_SECN` 20694 · `GP_MKTWIDE` 20695 · `GP_FILE` 20696 (`Holy_Groups.json`) · `GP_VER` 20697 · `_gp_codes` 20700 · `gp_members` 20711 · `_gp_fires` 20720 · `_gp_keys` 20732 (المؤشرات + التوليفات — نفسها للتاريخ وللحي) · `_gp_med` 20756 · `_gp_outs` 20766 (نتيجة كل شمعة لكل شغل) · `_gp_pb` 20806 (العادي) · `gp_walk` 20814 (بترتيب الزمن · الأبطال · ما كان سيصل) · `gp_score` 21032 · `gp_pack` 21044 · `_gp_surge` 21074 · `_gp_wide` 21083 (🌊 🚀 📊 🧭 على التاريخ أو آخر الشموع) · `gp_build` 21129 (البناء اليومي بالعامل) · `gp_now` 21162 (الفحص الحي).
+> `p139_groups_wired` — `SG_N` 18935 (الساعة 2160) · `sg_scan_calc` 19429 (آخر الشموع · `_gp_wide` · `build` ⇒ `gp_build` · `gpn` ⇒ `gp_now`) · `sg_tick` 19867 (`_gp_need` · `Holy_Groups.json` · `st["gpn"]` · يمسح `Holy_Board.json`) · `GP_NM` 19954 (الأسماء المحايدة — بدل `SB_ROWS` · + P-fund) · `AN_TY` 20324 (بلا «tend») · `_an_facts` 20507 (بلا الميل) · `an_feed` 20586 (+ `_gp_facts` · `dup` لكل إشعار) · `AN_TY.update` 21199 (نوع `g_<المجموعة>` لكل مجموعة) · `GP_DUP` 21200 · `gp_load` 21204 · `_gp_need` 21216 · `gp_name` 21224 · `_gp_grp` 21234 · `_gp_best` 21238 · `gp_proven` 21244 · `_gp_facts` 21266 (النص · عملاتك بس · السوق · 📲 للمثبتة) · `gp_recs` 21305 (⚙️) · `gp_coin_now` 21315 (🔮) · `gp_view` 21333 (`/api/groups`) · `sg_view` 21364 (+ `gpr` · `frs`) · `fc_api` 18290 (`gp`) · **انشال:** `SB_*` · `_sb_*` · `sb_feed` · `sb_view` · `sb_off` · `/api/board` · `TD_P` · `td_walk` · `td_score` · `td_prep` · `td_pack`.
+> `p140_groups_tab` — `.gp-secs` … 28709 (CSS بمتغيرات المظهر) · `GPV` 32087 · `gpLoad` · `gpSec` · `gpCoin` · `gpNm` · `gpG` · `gpRec` · `gpCell` 32095 · `gpNow` 32102 · `gpDet` 32106 · `gpCard` 32114 · `gpTab` 32122 (🪙 العملات · 🌐 السوق) · `sgCfg` 32185 (🔴 · 🪙 المجاميع بنسبها · 🪙 الحقائق · 🌐 المجاميع · 🌐 الحقائق) · `fcGp` 32266 (🔮 سطر 🧩) · **انشال:** `sbLoad` · `sbTable` · `sbRow` · `sbCell` · `fcTdTop` · `fcTd` وCSS `.sb-*` (بقى `.sb-tabs` · `.sb-top`).
 > `p141_pro_no_lookahead` — `SG_PLAG` 18941 (قراءة العقود بعد يومها) · `_sg_ctx` (مفاتيح العقود + `SG_PLAG`).
-> `p142_new_data` — `PRO_EVERY` (+ oi · top · fund · basis · cbp · stb) · `pro_tick` (كل عملات المجاميع) · `_pro_q` 16242 · `_pro_top_sig` 16248 · `_pro_fund_sig` 16254 · `_pro_basis_sig` 16260 · `_pro_oi_sig` 16266 · `_mkt_cbp_sig` 16278 · `_mkt_stb_sig` 16284 · `_SG_PSF` 16295 · `_SG_MSF` 16297 · `_sg_oi_px` 16300 · `_sg_mkt2` 16314 (العلاوة مقابل إغلاق OKX · المستقرة · مواعيد الأخبار) · `_sg_cal_ev` 16333 (M-cal) · `_pro_page` 16553 · `_pro_rubik` 16571 · `_pro_oi` 16598 · `_pro_top` 16603 · `_pro_fund` 16608 · `_pro_basis` 16637 · `_pro_cbp` 16669 · `_pro_stb` 16700 · `_SG_XNM` (+ P-oi · P-top · P-basis · M-cbp · M-stb · M-cal) · `_sg_mkt` (+ `cdb`) · `_an_newdata` 20362 (أسطر 📈) · `_cal_facts` 20398 (🗓️ قبل نص ساعة) · `AN_TY["cal"]` · `p143_version_words` — `APP_VERSION` 3.36.77 · نص التجربة و⚙️ واللوحة المصغرة.
+> `p142_new_data` — `PRO_EVERY` (+ oi · top · fund · basis · cbp · stb) · `pro_tick` (كل عملات المجاميع) · `_pro_q` 16242 · `_pro_top_sig` 16248 · `_pro_fund_sig` 16254 · `_pro_basis_sig` 16260 · `_pro_oi_sig` 16266 · `_mkt_cbp_sig` 16278 · `_mkt_stb_sig` 16284 · `_SG_PSF` 16295 · `_SG_MSF` 16297 · `_sg_oi_px` 16300 · `_sg_mkt2` 16314 (العلاوة مقابل إغلاق OKX · المستقرة · مواعيد الأخبار) · `_sg_cal_ev` 16333 (M-cal) · `_pro_page` 16553 · `_pro_rubik` 16571 · `_pro_oi` 16598 · `_pro_top` 16603 · `_pro_fund` 16608 · `_pro_basis` 16637 · `_pro_cbp` 16669 · `_pro_stb` 16700 · `_SG_XNM` (+ P-oi · P-top · P-basis · M-cbp · M-stb · M-cal) · `_sg_mkt` (+ `cdb`) · `_an_newdata` 20366 (أسطر 📈) · `_cal_facts` 20402 (🗓️ قبل نص ساعة) · `AN_TY["cal"]` · `p143_version_words` — `APP_VERSION` 3.36.77 · نص التجربة و⚙️ واللوحة المصغرة.
 > الفحص: `devtests/t_groups.py` (31) · `t_newdata.py` (19) · `t_market` (32) · `t_plain` (14) · `ui_sig` (35 + 5) · `ci/sig_check16.py` (المجاميع على الأسعار الحقيقية) · `ci/sig_check17.py` (البيانات الجديدة) — HANDOFF §٧ر١٦٤.
 
 ## 🔔 v3.36.76 — الإشعارات منظّمة · 🎯 الميل اليومي · 🔮 على نفس الأساس · 🧹 كود المحلل القديم انشال
-> `p131_tendency_engine` — **🎯 الميل اليومي**: `TD_P` 20637 (dmin 50 · up 0.60 · dn 0.52 · dec 1.0 · cap 2 · k 1 · mv 0.002 — فحص 15 ثبّتها) · `_td_fires` 20693 (قاعدة الجداول: الجهتان معاً ⇒ لا شيء) · `_td_fam` · `td_walk` 20743 (بترتيب الزمن: سجل كل صف للعملات معاً · الأبطال بما عُرف وقتها · فجوة الأمان · بطلان من كل أسرة · ميل العملة وحكمه) · `td_score` 20880 · `td_prep` 20892 (كل عملة بكامل تاريخها اليومي — يستعمله ci/sig_check15.py) · `td_pack` 20920 · `sg_scan_calc` 19429 (اليومي بكامل تاريخه ⇒ «td»).
-> `p132_grade_move` — `SB_MV` 19968 = 0.2% · `_sb_grade` 20121 (أصغر منها لا يُحسب) · `p133_poc_hourly` — `_an_levels` 20104 (`h1`: 720 شمعة ساعة · السعر النموذجي × الحجم · 40 خانة).
-> `p134_notify_cards` — `AN_TY` 20320 (14 نوعاً: الأيقونة · الاسم · المجموعة urgent/coin/mkt · المستوى الافتراضي) · `AN_LV` · `AN_DUP` (bstorm 6 س · wave/surge 12 س) · `AN_COOL` 6 س · `_an_lv_cfg` 19557 (an_lv · القديم an_types) · `_an_mv`/`_an_mine_mv` 20488 · `_an_facts` 20503 (سطور البطاقات · 🎯 · 🪙 · 🔴 🌊 🚀 ⚡) · `an_feed` 20582 (`A["td"]` · سطر 🔮 الغد) · `_sg_deliver` 19708 (المستويات · الطارئ يوقف البطاقات · بطاقة لكل عملة · `st["cool"]` · الحد 12 · الهدوء) · `_sg_flush` 19778 · الصفحة: `sgCfg` 31990 (📲 · 👁 · ⛔ لكل نوع) · `anLog` 31984 (وصلك/بالنافذة/…) · `.an-ty`/`.an-seg`/`.an-tag` 28513.
-> `p135_cleanup_catalog` — انشال: `sg_build` · `_sg_search` · `_sg_compass_hist` · `sg_catlist` · `sg_record` · `sg_rebuild` · `sg_est`/`sg_estimate` · `sg_fc` · `_sg_process` · `_sg_analyst` · `_sg_rec` … (39 دالة · 20 ثابتاً · 12 دالة صفحة) · `sg_cfg` 19564 (on · coins · cap 12 · quiet · ch · alv) · `sg_set` 19599 · `sg_view` 21172 · `sg_api` 21199 · `sg_tick` 19867 (بلا دليل · ينظّف بقايا الحالة وcatalog.json مرة).
-> `p136_fc_same_basis` — `fc_api` 18290 (`an` · `rec` · `hz2` · `td`) · `fcTdTop` 32071 · `fcTd` 32076 · `fcRng` 32075 · `fcRender` 32079 · `.fc-tdt`/`.fc-td` 28514 · `p137_range_month` — `AN_HZ` 20337 (+ «1m» · «3m») · `AN_WIN` 20339 (90 شمعة) · `_an_range` 20344 · `_an_issue` 20470 (الشهر يوم 1 · الأشهر الثلاثة يناير/أبريل/يوليو/أكتوبر).
+> `p131_tendency_engine` — **🎯 الميل اليومي**: `TD_P` 20641 (dmin 50 · up 0.60 · dn 0.52 · dec 1.0 · cap 2 · k 1 · mv 0.002 — فحص 15 ثبّتها) · `_td_fires` 20700 (قاعدة الجداول: الجهتان معاً ⇒ لا شيء) · `_td_fam` · `td_walk` 20756 (بترتيب الزمن: سجل كل صف للعملات معاً · الأبطال بما عُرف وقتها · فجوة الأمان · بطلان من كل أسرة · ميل العملة وحكمه) · `td_score` 21032 · `td_prep` 21044 (كل عملة بكامل تاريخها اليومي — يستعمله ci/sig_check15.py) · `td_pack` 21074 · `sg_scan_calc` 19429 (اليومي بكامل تاريخه ⇒ «td»).
+> `p132_grade_move` — `SB_MV` 19968 = 0.2% · `_sb_grade` 20125 (أصغر منها لا يُحسب) · `p133_poc_hourly` — `_an_levels` 20108 (`h1`: 720 شمعة ساعة · السعر النموذجي × الحجم · 40 خانة).
+> `p134_notify_cards` — `AN_TY` 20324 (14 نوعاً: الأيقونة · الاسم · المجموعة urgent/coin/mkt · المستوى الافتراضي) · `AN_LV` · `AN_DUP` (bstorm 6 س · wave/surge 12 س) · `AN_COOL` 6 س · `_an_lv_cfg` 19557 (an_lv · القديم an_types) · `_an_mv`/`_an_mine_mv` 20492 · `_an_facts` 20507 (سطور البطاقات · 🎯 · 🪙 · 🔴 🌊 🚀 ⚡) · `an_feed` 20586 (`A["td"]` · سطر 🔮 الغد) · `_sg_deliver` 19708 (المستويات · الطارئ يوقف البطاقات · بطاقة لكل عملة · `st["cool"]` · الحد 12 · الهدوء) · `_sg_flush` 19778 · الصفحة: `sgCfg` 32185 (📲 · 👁 · ⛔ لكل نوع) · `anLog` 32179 (وصلك/بالنافذة/…) · `.an-ty`/`.an-seg`/`.an-tag` 28705.
+> `p135_cleanup_catalog` — انشال: `sg_build` · `_sg_search` · `_sg_compass_hist` · `sg_catlist` · `sg_record` · `sg_rebuild` · `sg_est`/`sg_estimate` · `sg_fc` · `_sg_process` · `_sg_analyst` · `_sg_rec` … (39 دالة · 20 ثابتاً · 12 دالة صفحة) · `sg_cfg` 19564 (on · coins · cap 12 · quiet · ch · alv) · `sg_set` 19599 · `sg_view` 21364 · `sg_api` 21391 · `sg_tick` 19867 (بلا دليل · ينظّف بقايا الحالة وcatalog.json مرة).
+> `p136_fc_same_basis` — `fc_api` 18290 (`an` · `rec` · `hz2` · `td`) · `fcTdTop` 32266 · `fcTd` 32271 · `fcRng` 32270 · `fcRender` 32274 · `.fc-tdt`/`.fc-td` 28706 · `p137_range_month` — `AN_HZ` 20341 (+ «1m» · «3m») · `AN_WIN` 20343 (90 شمعة) · `_an_range` 20348 · `_an_issue` 20474 (الشهر يوم 1 · الأشهر الثلاثة يناير/أبريل/يوليو/أكتوبر).
 > الفحص: `devtests/t_tendency.py` (11) · `t_market` (33) · `t_board` (26) · `t_sigs` (26 — الحي فقط) · `ui_sig` (36 + 5) · `ci/sig_check15.py` (الميل والمدى — HANDOFF §٧ر١٦٣).
 
 ## 📈 v3.36.75 — السوق: الآن والمتوقع (المحلل من الصفر كخبير تداول · بعد فحصي 13 و14)
-> `p130_market_now` — **🔎 الحاضر** (بعامل الفحص): `AN_TREND` 20039 · `_an_ema` 20042 · `_an_sd` · `_an_lr` · `_an_trend_seq` 20061 (صاعد/نازل/عرضي يتأكد بيومين) · `_an_since` · `_an_volstate` 20093 (تذبذب 30 يوم مقابل السنة: هادئ < 25 · هائج > 75) · `_an_levels` 20104 (قمم وقيعان 30 يوم + منطقة أكثر تداول) · `_an_rsi` · `_an_coin` 20153 (سطور العملة: الاتجاه · القصير · مقابل البيتكوين وترتيبها · التذبذب · الحجم ×24 ساعة/معدل 20 يوم · الدعم والمقاومة · السيولة · التشبّع) · `an_present` 20235 (السوق: البيتكوين · كم فوق متوسط 50 · موسم البيتكوين/البديلة · الحركة · المزاج · أكثر حركة) · `sg_scan_calc` 19429 يرجّع `"an"` (`an_scan`).
-> **🔮 المدى وسجله**: `AN_TY` 20320 (العشرة: trend · rs · vol · lvl · out · ad للعملة · mtrend · storm · wave · fng للسوق) · `AN_FILE` (`Holy_Market.json`) · `AN_HZ` 20337 (4h ⇐ `c1`×√4 · 1d ⇐ `c4`×√6 · 1w ⇐ `c`×√7) · `AN_Z` 1.2816 · `_an_range` 20344 · `an_scan` 20426 · `_an_load` 20436 · `_an_grade` 20446 (بنهايته من إغلاقات الساعة · البيتكوين وحده `btc_*` · 3 أيام بلا شمعة ⇒ ينشال) · `_an_issue` 20470 (بإغلاق إطاره بس · 1w يوم الاثنين) · `_an_facts` 20488 (ما تغيّر · كل نوع بزره · الكسر من `lvd` = مستويات إغلاق أمس) · `an_feed` 20582 (يحفظ · يحكم · يصدر · `lvd` بإغلاق اليوم · مرة كل 20 ساعة) · `an_view` 20620 ⇐ `/api/market` 26508.
+> `p130_market_now` — **🔎 الحاضر** (بعامل الفحص): `AN_TREND` 20043 · `_an_ema` 20046 · `_an_sd` · `_an_lr` · `_an_trend_seq` 20065 (صاعد/نازل/عرضي يتأكد بيومين) · `_an_since` · `_an_volstate` 20097 (تذبذب 30 يوم مقابل السنة: هادئ < 25 · هائج > 75) · `_an_levels` 20108 (قمم وقيعان 30 يوم + منطقة أكثر تداول) · `_an_rsi` · `_an_coin` 20157 (سطور العملة: الاتجاه · القصير · مقابل البيتكوين وترتيبها · التذبذب · الحجم ×24 ساعة/معدل 20 يوم · الدعم والمقاومة · السيولة · التشبّع) · `an_present` 20239 (السوق: البيتكوين · كم فوق متوسط 50 · موسم البيتكوين/البديلة · الحركة · المزاج · أكثر حركة) · `sg_scan_calc` 19429 يرجّع `"an"` (`an_scan`).
+> **🔮 المدى وسجله**: `AN_TY` 20324 (العشرة: trend · rs · vol · lvl · out · ad للعملة · mtrend · storm · wave · fng للسوق) · `AN_FILE` (`Holy_Market.json`) · `AN_HZ` 20341 (4h ⇐ `c1`×√4 · 1d ⇐ `c4`×√6 · 1w ⇐ `c`×√7) · `AN_Z` 1.2816 · `_an_range` 20348 · `an_scan` 20430 · `_an_load` 20440 · `_an_grade` 20450 (بنهايته من إغلاقات الساعة · البيتكوين وحده `btc_*` · 3 أيام بلا شمعة ⇒ ينشال) · `_an_issue` 20474 (بإغلاق إطاره بس · 1w يوم الاثنين) · `_an_facts` 20492 (ما تغيّر · كل نوع بزره · الكسر من `lvd` = مستويات إغلاق أمس) · `an_feed` 20586 (يحفظ · يحكم · يصدر · `lvd` بإغلاق اليوم · مرة كل 20 ساعة) · `an_view` 20624 ⇐ `/api/market` 26700.
 > **الجولة والتسليم**: `sg_tick` 19867 (`build_now = False` — الدليل القديم ما ينبني · `an_feed` بدل إشعارات المحلل) · `sg_cfg` 19564 (`cap` 12 داخلي · `sum` None · `atypes` من `an_types`) · `sg_set` 19599 (`atypes` + رسائل «📈 تنبيهات السوق») · `_sg_deliver` 19708 («📈 السوق — تنبيهات جديدة» · «🔕 وصلت حد تنبيهات السوق اليوم») · `_sg_flush` 19778 («🌙 تنبيهات السوق أثناء ساعات الهدوء»).
-> **الصفحة**: `.an-card` 28507 (+ `.an-l` · `.an-rng` · `.an-rr` · `.an-mv`) · `openInd` 31874 («📈 السوق — الآن والمتوقع» · `now`⇒🪙 · `an`⇒🌐 · `cat`⇒📋) · `sgTab` 31884 · `ANV`/`ANO` 31956 · `anLoad` 31957 · `anLines` · `anRng` 31960 · `anHelp` 31963 · `anMkt` 31969 · `anCoin` 31976 · `anCoins` 31980 · `anLog` 31984 · `sgSet` 31989 · `sgCfg` 31990 (🪙 عملاتك · 🌐 السوق كله · العملات · الهدوء · القناة) · `sgRender` 32016 (🌐 · 🪙 · 📋 · 📜 · ⚙️) · `sgFcTop` 32021 («📈 السوق الآن» بـ🔮) · `sgFcAn`/`sgFc`/`fcAn` ترجّع فاضي · `sgMini` 32022 (لوحة الشريط) · `holyGoNow` 33554 (`sig` ⇒ 🪙) · انشالت: `sgAn` · `sgCatUI` · `sgCat` · `sgLog` · `sgEst` · `sgRecDl` · `sgRow` · `sgHead` · `SGCOMP` · **ميت للإصدار B**: `_sg_build` · `sg_catlist` · `sg_fc` · `/api/signals_cat`.
+> **الصفحة**: `.an-card` 28699 (+ `.an-l` · `.an-rng` · `.an-rr` · `.an-mv`) · `openInd` 32066 («📈 السوق — الآن والمتوقع» · `now`⇒🪙 · `an`⇒🌐 · `cat`⇒📋) · `sgTab` 32076 · `ANV`/`ANO` 32151 · `anLoad` 32152 · `anLines` · `anRng` 32155 · `anHelp` 32158 · `anMkt` 32164 · `anCoin` 32171 · `anCoins` 32175 · `anLog` 32179 · `sgSet` 32184 · `sgCfg` 32185 (🪙 عملاتك · 🌐 السوق كله · العملات · الهدوء · القناة) · `sgRender` 32211 (🌐 · 🪙 · 📋 · 📜 · ⚙️) · `sgFcTop` 32216 («📈 السوق الآن» بـ🔮) · `sgFcAn`/`sgFc`/`fcAn` ترجّع فاضي · `sgMini` 32217 (لوحة الشريط) · `holyGoNow` 33749 (`sig` ⇒ 🪙) · انشالت: `sgAn` · `sgCatUI` · `sgCat` · `sgLog` · `sgEst` · `sgRecDl` · `sgRow` · `sgHead` · `SGCOMP` · **ميت للإصدار B**: `_sg_build` · `sg_catlist` · `sg_fc` · `/api/signals_cat`.
 > الفحص: `devtests/t_market.py` (20) · `ui_sig` (انكتب من جديد — 35 + 5) · `ci/sig_check13.py` · `ci/sig_check14.py` (الدليل — HANDOFF §٧ر١٦٢).
 
 ## ⏳ v3.36.74 — وقف الشراء المؤقت: العدد يلحق السعر
-> `p129_tp_follow` — `_tp_split` 10288 (الفايتة ≥ السعر · والتي تحته) · سجل الرقابة بـ`_cash_watch` 10592 (`n` الفايتة · `w` تنتظر · `k` يغطيه الدولار) · `_cw_card` 10719 (+`w`) · `_tp_open` 10539 (`na` · `nw` · `ka` · `kw` · الرسائل) · الصفحة: `accChipsOf` 30051 (⏳ و📦 من `accx` الحي للمؤقت) · `tempOpen` 30039 (الفايتة · والتي تنتظر).
+> `p129_tp_follow` — `_tp_split` 10288 (الفايتة ≥ السعر · والتي تحته) · سجل الرقابة بـ`_cash_watch` 10592 (`n` الفايتة · `w` تنتظر · `k` يغطيه الدولار) · `_cw_card` 10719 (+`w`) · `_tp_open` 10539 (`na` · `nw` · `ka` · `kw` · الرسائل) · الصفحة: `accChipsOf` 30243 (⏳ و📦 من `accx` الحي للمؤقت) · `tempOpen` 30231 (الفايتة · والتي تنتظر).
 > الفحص: `devtests/t_temp_follow.py` (♾️ ➕ 🎚️ بقصة SUI).
 
 ## 📋 v3.36.73 — جداول المؤشرات (السوق · كل عملة) · كل صف يتنبأ ويُحكم من الصفر
 > `p127_board_engine` — الإطارات: `SG_BAR` 18931 (+ «1H» = `c1` · `SG_SEC`/`SG_LK`/`SG_HZ`/`SG_N` 720/`SG_MIN`/`SG_FN`/`SG_NST_AGE` بالساعة) · `_fc_cache` (خطوة الساعة) · `_sg_events`/`_sg_extra` بـ`dx` (لا `F-` على الساعة) · الفحص `sg_scan_calc` يحسب `SB_FR` ويرجّع «e1» 19472 (ما انطلق على الشمعة نفسها) + `_sb_surge`/`_sb_wide` · `sg_tick`: `due` بعلامتين (`b_` للجداول كل شمعة · `t_` للمحلل حين يجهز دليله — 19926) · `sb_feed` بعد كل فحص 19930 · المحلل يأخذ 4H و1D بس · الجلب الجزئي ما يمحو ⚠️.
-> الجداول: `SB_FR` 19962 · `SB_FRN` · `SB_FILE` (`Holy_Board.json`) · `SB_MKT` «MKT» · `SB_ALL` «*» · `SB_MINN` 10 · `SB_ONE` · `SB_ROWS` 19970 (70 صفاً — الرقم ثابت · اسم محايد) · `SB_NUM`/`SB_NM` · `SB_COMBOS` 20044 (101+ — فاضية لحد فحص 13) · `_sb_load` 20048 · `_sb_surge` 20058 (🚀) · `_sb_wide` 20067 (🌊 الساعة · 📊 عدد العملات بتخلّف · 🧭 البوصلة) · `_sb_count` 20111 ([✅ · ❌ · أيام مختلفة · آخر يوم]) · `_sb_grade` 20121 (الشمعة الجاية من نفس الإطار · ما تحرك ⇒ ما ينحسب · قديم ينشال) · `_sb_fired` 20153 (المؤشرات + التوليفات: الاتفاق يبدأ الآن) · `sb_feed` 20176 · `sb_view` 20210 (`/api/board?s=` 26506) · `sb_off` 20234 (`act == "sb_off"` 26892) · قراءات جديدة بـ`_SG_XNM` 19063 (`W-surge` · `W-breadth` · `W-comp`).
-> `p128_board_page` — تبويب «🎯 المؤشرات»: `SBV`/`SBS`/`SBSORT`/`SBO` 31895 · `sbLoad` 31896 (كل دقيقة) · `sbOff` · `sbSort` · `sbScore` 31902 (ويلسون لمن له ≥ 10) · `sbCell` 31904 · `sbRow` 31909 · `sbTable` 31915 (🌐 السوق + عملاتك · ⭐ · 🧪 قيد الاختبار · ⏸ موقوفة · «📊 اتجاه المؤشرات الآن» للعملة) · `sgInd` 31950 · CSS `.sb-*` 28516 · انشالت `sgIndCoin`/`sgIndRow`/`sgIndTen`.
+> الجداول: `SB_FR` 19962 · `SB_FRN` · `SB_FILE` (`Holy_Board.json`) · `SB_MKT` «MKT» · `SB_ALL` «*» · `SB_MINN` 10 · `SB_ONE` · `SB_ROWS` 19970 (70 صفاً — الرقم ثابت · اسم محايد) · `SB_NUM`/`SB_NM` · `SB_COMBOS` 20048 (101+ — فاضية لحد فحص 13) · `_sb_load` 20052 · `_sb_surge` 20062 (🚀) · `_sb_wide` 20071 (🌊 الساعة · 📊 عدد العملات بتخلّف · 🧭 البوصلة) · `_sb_count` 20115 ([✅ · ❌ · أيام مختلفة · آخر يوم]) · `_sb_grade` 20125 (الشمعة الجاية من نفس الإطار · ما تحرك ⇒ ما ينحسب · قديم ينشال) · `_sb_fired` 20157 (المؤشرات + التوليفات: الاتفاق يبدأ الآن) · `sb_feed` 20180 · `sb_view` 20214 (`/api/board?s=` 26698) · `sb_off` 20238 (`act == "sb_off"` 27084) · قراءات جديدة بـ`_SG_XNM` 19063 (`W-surge` · `W-breadth` · `W-comp`).
+> `p128_board_page` — تبويب «🎯 المؤشرات»: `SBV`/`SBS`/`SBSORT`/`SBO` 32087 · `sbLoad` 32088 (كل دقيقة) · `sbOff` · `sbSort` · `sbScore` 32094 (ويلسون لمن له ≥ 10) · `sbCell` 32096 · `sbRow` 32103 · `sbTable` 32109 (🌐 السوق + عملاتك · ⭐ · 🧪 قيد الاختبار · ⏸ موقوفة · «📊 اتجاه المؤشرات الآن» للعملة) · `sgInd` 32145 · CSS `.sb-*` 28708 · انشالت `sgIndCoin`/`sgIndRow`/`sgIndTen`.
 > الفحص: `devtests/t_board.py` (26) · `ui_sig` (الجداول بالمتصفح) · `ci/sig_check13.py` (الجداول بالماضي · التوليفات · وقت التنبيه).
 
 ## 🖥️ v3.36.72 — ويدجت الحاسوب (نفس ويدجتي الموبايل) · برنامج ويندوز 2.1
-> `p123_desktop_widgets` — `WIDGET_PAGE` 24927 (صفحة `/widget?k=bots|px` بلا بيانات: canvas ينقل `WidgetArt.render`/`renderPx` من التطبيق 2.3 · المفتاح من `#d=` ⇒ ترويسة `X-Holy-Device` لـ`/api/app/widget` · وإلا `/api/widget` بـ`X-Dash-Pin` · كل 60 ث · الضغط يفتح `holy_main`) · الطريق `/widget` 26444 (قبل حارس الدخول) · `/api/widget` 26502 (بعد الدخول والـPIN = `app_widget_view`) · الصفحة: `winWgSec` 33755 (💻 «🖥️ ويدجت سطح المكتب» / «🖥️ ويدجت لأي حاسوب») · `winHw` 33762 (`hw:bots` · `hw:px` · `hw:top` · `hw:state`) · `wgSync` 33763 · `wgPop` 33764.
-> `p124_win_hello` · `p125_win_hello_diag` — `winHello` 33690 (يعاد بـ4.2 و8 ث بعد شاشة الافتتاح · «hello-fail …» يقول ليش · `#top .brand` · `#top`) · `p126_winold_21` — `winOldBar` 33710 (`cur<2`: التنزيل لبرنامج 1.x بس · 2.0 بلا WebView2 ⇒ نصّب WebView2).
-> البرنامج المدمج: `WIN_EXE_CODE` 42274 = 6 · `WIN_EXE_NAME` 42275 = "2.1" (`windows/embed.py`) · المصدر `windows/holy_win.c` 2.1.0 (build 210): صنف «HolyWidget» (WS_POPUP|WS_THICKFRAME · أداة بلا شريط مهام · زوايا 20 · الحافة 7 · `wg_bots`/`wg_px`/`wg_bots_on`/`wg_px_on`/`wg_top` بـholy.ini · قائمة الأيقونة · `--widget=bots|px` · `ensure_env` بيئة WebView2 وحدة) · فحص ويندوز `ci/win_check.ps1` 7b.
+> `p123_desktop_widgets` — `WIDGET_PAGE` 25119 (صفحة `/widget?k=bots|px` بلا بيانات: canvas ينقل `WidgetArt.render`/`renderPx` من التطبيق 2.3 · المفتاح من `#d=` ⇒ ترويسة `X-Holy-Device` لـ`/api/app/widget` · وإلا `/api/widget` بـ`X-Dash-Pin` · كل 60 ث · الضغط يفتح `holy_main`) · الطريق `/widget` 26636 (قبل حارس الدخول) · `/api/widget` 26694 (بعد الدخول والـPIN = `app_widget_view`) · الصفحة: `winWgSec` 33950 (💻 «🖥️ ويدجت سطح المكتب» / «🖥️ ويدجت لأي حاسوب») · `winHw` 33957 (`hw:bots` · `hw:px` · `hw:top` · `hw:state`) · `wgSync` 33958 · `wgPop` 33959.
+> `p124_win_hello` · `p125_win_hello_diag` — `winHello` 33885 (يعاد بـ4.2 و8 ث بعد شاشة الافتتاح · «hello-fail …» يقول ليش · `#top .brand` · `#top`) · `p126_winold_21` — `winOldBar` 33905 (`cur<2`: التنزيل لبرنامج 1.x بس · 2.0 بلا WebView2 ⇒ نصّب WebView2).
+> البرنامج المدمج: `WIN_EXE_CODE` 42469 = 6 · `WIN_EXE_NAME` 42470 = "2.1" (`windows/embed.py`) · المصدر `windows/holy_win.c` 2.1.0 (build 210): صنف «HolyWidget» (WS_POPUP|WS_THICKFRAME · أداة بلا شريط مهام · زوايا 20 · الحافة 7 · `wg_bots`/`wg_px`/`wg_bots_on`/`wg_px_on`/`wg_top` بـholy.ini · قائمة الأيقونة · `--widget=bots|px` · `ensure_env` بيئة WebView2 وحدة) · فحص ويندوز `ci/win_check.ps1` 7b.
 > الفحص: `devtests/t_desktop_widget.py` (17) · `ci/sig_check12.py` يقارن الفلترين (النتائج بـHANDOFF §٧ر١٥٩).
 
 ## 🎯 v3.36.71 — المؤشرات بكلام واضح · تبويب واحد · إعداد واحد · 🔮 على نفس المؤشرات
 > `p121_plain_indicators` — **الجدول الواحد**: `_SG_NM` 18948 (الأنظمة الـ36: اسم الصعود · اسم الهبوط · معنى كل جهة — الفني من `SYS`) · `_SG_XNM` 19022 (الباقي: الأسرة · الاسمين · المعنيين · الفني — العشرة `O-*` · `F-*` · `X-*` · `W-crash` · `M-*` · `P-*` · `P-fund` لـ🔮) · `SG_GRP` 19112 (7 أسر: المفتاح · الأيقونة · الاسم · ماذا تقيس) · `_sg_plain` 19137 (رمز ⇒ أسرة العرض · الاسمين · المعنيين · الفني — `P-*` ⇒ «pro») · `sg_plain_all` 19151 (للنافذة · محفوظ بـ`_SG["plain"]`) · `_sg_meta` يأخذ الأسماء من الجدول ⇒ `_sg_name` = الجدول بكل مكان.
-> **إعداد واحد**: `SG_MINC` 19555 = 15 · `SG_RNDC` = True (ثابتين — `sg_cfg` 19564 يتجاهل `sg_min`/`sg_rnd` القديمة · `sg_set` و`_sg_cfg_merge` ما يقبلونها) · `sg_view` 21172 يرجّع `plain` + `grp` (قبل بناء السجل أيضاً) والإشارات المفردة النشطة كلها (+ 60 مجموعة) · بحث `sg_catlist` يلقى الفني والمعنى.
-> **الصفحة**: التبويبات (`sgRender` 32016): 🧠 المحلل · 🎯 المؤشرات · 📚 المجموعات · 📜 السجل · ⚙️ الإشعارات — `sgIndLoad` 31885 (معدل العشرة `/api/indicators`) · `sgPl` 31887 · `sgIndAvg` 31888 («📊 اتجاه المؤشرات الآن» — وصف لا توقع) · `sgIndRow` 31893 (إشارة نشطة: الاسم · المعنى · «صدق … من …» · العشوائي · الفني صغير) · `sgIndTen` 31898 (أحد العشرة بحاله الآن) · `sgIndCoin` 31903 (البطاقة: المعدل · «نشطة الآن» · الأسر) · `sgInd` 31919 (التبويب · عملات العشرة تبين قبل السجل) · `sgCfg` 32015 (النسبة وحدها) · **انشالت**: `sgNow` · `sgCoin` · `indRender` · `indLoad` · `indTog` (أرقامها بالأقسام القديمة صارت تأشر للجديد) · `openSig('now')` ⇒ `ind`.
-> `p122_fc_same_indicators` — `fc_api` 18290 يرجّع `plain` · `FCK` 32067 (مفاتيح 🔮 ⇒ رموز الجدول) · `fcPl` 32068 (اسم الحال · المعنى · الفني) · `fcAn` 32071 («🧠 المحلل (غداً / الشهر القادم)» أول «يوم» و«شهر») · «📊 ميل المؤشرات … وصف لا توقع».
+> **إعداد واحد**: `SG_MINC` 19555 = 15 · `SG_RNDC` = True (ثابتين — `sg_cfg` 19564 يتجاهل `sg_min`/`sg_rnd` القديمة · `sg_set` و`_sg_cfg_merge` ما يقبلونها) · `sg_view` 21364 يرجّع `plain` + `grp` (قبل بناء السجل أيضاً) والإشارات المفردة النشطة كلها (+ 60 مجموعة) · بحث `sg_catlist` يلقى الفني والمعنى.
+> **الصفحة**: التبويبات (`sgRender` 32211): 🧠 المحلل · 🎯 المؤشرات · 📚 المجموعات · 📜 السجل · ⚙️ الإشعارات — `sgIndLoad` 32077 (معدل العشرة `/api/indicators`) · `sgPl` 32079 · `sgIndAvg` 32080 («📊 اتجاه المؤشرات الآن» — وصف لا توقع) · `sgIndRow` 32085 (إشارة نشطة: الاسم · المعنى · «صدق … من …» · العشوائي · الفني صغير) · `sgIndTen` 32090 (أحد العشرة بحاله الآن) · `sgIndCoin` 32095 (البطاقة: المعدل · «نشطة الآن» · الأسر) · `sgInd` 32113 (التبويب · عملات العشرة تبين قبل السجل) · `sgCfg` 32210 (النسبة وحدها) · **انشالت**: `sgNow` · `sgCoin` · `indRender` · `indLoad` · `indTog` (أرقامها بالأقسام القديمة صارت تأشر للجديد) · `openSig('now')` ⇒ `ind`.
+> `p122_fc_same_indicators` — `fc_api` 18290 يرجّع `plain` · `FCK` 32262 (مفاتيح 🔮 ⇒ رموز الجدول) · `fcPl` 32263 (اسم الحال · المعنى · الفني) · `fcAn` 32266 («🧠 المحلل (غداً / الشهر القادم)» أول «يوم» و«شهر») · «📊 ميل المؤشرات … وصف لا توقع».
 > الفحص: `devtests/t_plain.py` (حارس القاعدة 16) · `ci/sig_check12.py` (المحلل يعيش بالماضي — النتائج بـHANDOFF §٧ر١٥٨).
 
 ## 🪙 v3.36.70 — ويدجت الأسعار (التطبيق 2.3)
 
-> `p119_price_widget` — `app_widget_view` 24803 يرجّع «px» من `app_widget_px` 24901 (عملات الشريط · السعر `_wpx_s` 24859 · التغيّر · الخط 0…1000) · الخطوط بالخلفية `_wpx_refresh` 24877 (شموع 30m × 48 · كل 5 د `WPX_SP_EVERY`) · الصفحة: صف «🪙 ويدجت الأسعار» بلوحة 📱 + `appPinPrices` 33777 · `APP_APK_*` = 2.3 (الرمز 14) · التطبيق: `android/java/com/holy/dash/HolyPxWidget.java` · `WidgetArt.renderPx/badge/spark/speakPx` · `HolyWidget.any/draw` (smali) · `MainActivity$Bridge.pinPrices` · `build.py axml_add_receiver`. · `p120_price_widget_fill`: المربعات لحد 96 dp إذا العملات أقل من المكان (التطبيق وحده — نفس أسطر اللوحة).
+> `p119_price_widget` — `app_widget_view` 24995 يرجّع «px» من `app_widget_px` 25093 (عملات الشريط · السعر `_wpx_s` 25051 · التغيّر · الخط 0…1000) · الخطوط بالخلفية `_wpx_refresh` 25069 (شموع 30m × 48 · كل 5 د `WPX_SP_EVERY`) · الصفحة: صف «🪙 ويدجت الأسعار» بلوحة 📱 + `appPinPrices` 33972 · `APP_APK_*` = 2.3 (الرمز 14) · التطبيق: `android/java/com/holy/dash/HolyPxWidget.java` · `WidgetArt.renderPx/badge/spark/speakPx` · `HolyWidget.any/draw` (smali) · `MainActivity$Bridge.pinPrices` · `build.py axml_add_receiver`. · `p120_price_widget_fill`: المربعات لحد 96 dp إذا العملات أقل من المكان (التطبيق وحده — نفس أسطر اللوحة).
 
 
 ## 🧠 v3.36.69 — المحلل: 📊 المؤشرات هي المحلل (🎯 بداخلها) · مجموعات متفقة مثبتة بالفترات الأربع · غداً والشهر القادم
 
 > `p115_analyst_engine` — المدد `SG_HZ` 18933 (4 ساعات × 6 = غداً · يومي × 30 = الشهر القادم · `SG_HZW` · `SG_PMIN` · `SG_W`) · `SG_N` 18935 (اليومي 2600) · `_sg_sig` 19372 (تذبذب العملة قبل الدخول × √المدة ⇒ بُعد الهدف والوقف) · `_sg_out` 19390 (الحَكَم: الهدف قبل الوقف · الاثنين = خسارة · وإلا حركة السعر بعد العمولة) · `_sg_search` 19415 (جديد: اتفاق صارم بلا معاكس — 🌊 ليس «ضد» نفسه وقراءة السوق وحدها بلا فلتر · 4 فترات · `c4` = غلب العشوائي بكل فترة · `pp` لكل فترة · `nd` نوافذ مستقلة · لا 💎) · `_sg_backfill` 19813 (تاريخ أقدم مرة وحدة) من `_sg_refresh` 19832 · `sg_scan_calc` 19429 يحمل `s` و`m50`/`m200` · `_sg_grade` 19858 بالهدف/الوقف · `_sg_pass` 19627 يشترط `c4` · `SG_CAT_VER` 3.
 
-> `p116_analyst_window` — `_sg_strict_on` 21195 (المجموعة شغّالة = كل إشاراتها بجهتها ولا معاكس) بـ`_sg_process` 19925 (والإطلاق edge بنفس القاعدة · `nowv` يحفظ `s`/`m50`/`m200` · `st["nst"]` حالات «الآن في السوق» `SG_NST` 21181) · `_sg_analyst` 21205 (الكلمة buy/buyc/wait/avoid/risk · `hz` غداً/الشهر: الاتجاه · الدقة · الهدف · الوقف · لماذا من `SG_WHY` · `nst` · الاتجاه) · `sg_view` 21172 (`an` لكل عملة · `mkt`) · الصفحة: `openInd` 31874 نافذة وحدة بستة تبويبات · `openSig` 31882 اسم بديل · `sgHz` 32019 · `sgAnCoin` 32023 · `sgAnMkt` 32029 · `sgAn` 32037 · `sgRender` 32016 (تبويب 📈 يحمّل `indLoad` داخل `#ind_body`) · لا 💎 بالواجهة.
+> `p116_analyst_window` — `_sg_strict_on` 21387 (المجموعة شغّالة = كل إشاراتها بجهتها ولا معاكس) بـ`_sg_process` 19925 (والإطلاق edge بنفس القاعدة · `nowv` يحفظ `s`/`m50`/`m200` · `st["nst"]` حالات «الآن في السوق» `SG_NST` 21373) · `_sg_analyst` 21397 (الكلمة buy/buyc/wait/avoid/risk · `hz` غداً/الشهر: الاتجاه · الدقة · الهدف · الوقف · لماذا من `SG_WHY` · `nst` · الاتجاه) · `sg_view` 21364 (`an` لكل عملة · `mkt`) · الصفحة: `openInd` 32066 نافذة وحدة بستة تبويبات · `openSig` 32074 اسم بديل · `sgHz` 32214 · `sgAnCoin` 32218 · `sgAnMkt` 32224 · `sgAn` 32232 · `sgRender` 32211 (تبويب 📈 يحمّل `indLoad` داخل `#ind_body`) · لا 💎 بالواجهة.
 
-> `p117_analyst_notify` — `_sg_tyk` 19695 (المفتاح: 🌊 😨 🗞️ بنوعها · العملة 🟢 buy / 🔴 sell بالجهة) · `_sg_why` 19700 · `_sg_block` 19710 (جديد: «🟢 دخول شراء — … · غداً» · تحليل لا أسعار ولا أسماء مؤشرات) · `_sg_nst_block` 19734 (🔎 حالة جديدة · مرة باليوم) · قراءة السوق غير المثبتة لا تصل (عدا 🌊) · `sg_record` 19746 + `_sg_mon` 19764 (الإجراء `sg_rec` · 3000 محكوم) · `sg_fc` 21220 (`an` لكل عملة بـ🔮) · الصفحة: `sgLog` 31968 (📅 الشهري · 📥) · `sgCfg` 32015 (🪙 عملاتك: 🟢 · 🔴 · 🔎 · 🌐 السوق) · `sgRecDl` 32042 (`holySave` ⇒ `holy_analyst_record.csv`) · `sgFcAn` 32023 (🧠 ملخص المحلل) · `sgMini` 32027.
+> `p117_analyst_notify` — `_sg_tyk` 19695 (المفتاح: 🌊 😨 🗞️ بنوعها · العملة 🟢 buy / 🔴 sell بالجهة) · `_sg_why` 19700 · `_sg_block` 19710 (جديد: «🟢 دخول شراء — … · غداً» · تحليل لا أسعار ولا أسماء مؤشرات) · `_sg_nst_block` 19734 (🔎 حالة جديدة · مرة باليوم) · قراءة السوق غير المثبتة لا تصل (عدا 🌊) · `sg_record` 19746 + `_sg_mon` 19764 (الإجراء `sg_rec` · 3000 محكوم) · `sg_fc` 21412 (`an` لكل عملة بـ🔮) · الصفحة: `sgLog` 32163 (📅 الشهري · 📥) · `sgCfg` 32210 (🪙 عملاتك: 🟢 · 🔴 · 🔎 · 🌐 السوق) · `sgRecDl` 32237 (`holySave` ⇒ `holy_analyst_record.csv`) · `sgFcAn` 32218 (🧠 ملخص المحلل) · `sgMini` 32222.
 
 > `p118_analyst_quiet` — `SG_NST_NOTE` (🔎 يُشعَر بس بـ`X-ad` و`P-tk`) بعد `SG_NST_AGE` · عناوين الرسائل بـ`_sg_deliver`/`_sg_flush` باسم المحلل.
 
 ## 🗑️ v3.36.68 — «📊 تنبيهات المؤشرات» القديمة أُزيلت · 🎯 المكان الوحيد
 
-> `p114_remove_old_alerts` — كتلة القديمة (`ina_*` · `INA_*` · `mkt_scan` · `_mkt_rows/_at` · `MKT_REAL` · `_ina_rel/_levels/_lvtxt`) انقصّت ⇒ بقى بسطر 21425: `INA_SQ_MIN` + `_ina_sq` 21431 (الانضغاط بـ📊) + `MKT_COINS` (عملات القياس بـ🎯) · `indic_loop` و`fc_loop` بلا «أو التنبيهات» · `O-botv` (القاع المؤكد بالحجم) بـ`_sg_old` سطر 19205 + اسمه بـ`_SG_XNM` · 🌊 بـ`_sg_process`/`sg_estimate` بلا شرط القديمة · الصفحة: `pxaRender` 31870 (🔔 الأسعار + 🎯 بس) · بلا `inaPanel/inaSet/inaTest/INAV/INAO` · بلا أوامر `ina_set/ina_test` · `SG_CAT_VER` (نسخة الدليل: دليل أقدم بلا `O-botv` يُعاد بناؤه وحده · `cv` بالدليل).
+> `p114_remove_old_alerts` — كتلة القديمة (`ina_*` · `INA_*` · `mkt_scan` · `_mkt_rows/_at` · `MKT_REAL` · `_ina_rel/_levels/_lvtxt`) انقصّت ⇒ بقى بسطر 21617: `INA_SQ_MIN` + `_ina_sq` 21623 (الانضغاط بـ📊) + `MKT_COINS` (عملات القياس بـ🎯) · `indic_loop` و`fc_loop` بلا «أو التنبيهات» · `O-botv` (القاع المؤكد بالحجم) بـ`_sg_old` سطر 19205 + اسمه بـ`_SG_XNM` · 🌊 بـ`_sg_process`/`sg_estimate` بلا شرط القديمة · الصفحة: `pxaRender` 32062 (🔔 الأسعار + 🎯 بس) · بلا `inaPanel/inaSet/inaTest/INAV/INAO` · بلا أوامر `ina_set/ina_test` · `SG_CAT_VER` (نسخة الدليل: دليل أقدم بلا `O-botv` يُعاد بناؤه وحده · `cv` بالدليل).
 
 ## 🪙 v3.36.67 — عملات الإشارات بيد المالك
 
-> `p113_signal_coins` — السيرفر: `sg_set` 19599 (عملة جديدة ⇒ جولة `sg_tick` بالخلفية · رسالة «🪙 أُضيفت …») · `sg_view` يرجّع `bad` (المنصة لا تعرفها) و`short` (تاريخ قصير) بسطر 21181 · الصفحة: قسم «🪙 عملات إشعاراتك» `#sg_coins` بسطر 32027 (عملاتك بـ✕ `.sg-cn` · «➕ أضف» `#sg_cadd` · «↩️ مثل الشريط» · عملات القياس مطوية `details`) · `sgCoinAdd` 32008 (الاسم ⇒ `-USDT` · رفض الغلط · ≤ 40) · `sgCoinTog` · CSS `.sg-add` `.sg-cn`.
+> `p113_signal_coins` — السيرفر: `sg_set` 19599 (عملة جديدة ⇒ جولة `sg_tick` بالخلفية · رسالة «🪙 أُضيفت …») · `sg_view` يرجّع `bad` (المنصة لا تعرفها) و`short` (تاريخ قصير) بسطر 21373 · الصفحة: قسم «🪙 عملات إشعاراتك» `#sg_coins` بسطر 32222 (عملاتك بـ✕ `.sg-cn` · «➕ أضف» `#sg_cadd` · «↩️ مثل الشريط» · عملات القياس مطوية `details`) · `sgCoinAdd` 32203 (الاسم ⇒ `-USDT` · رفض الغلط · ≤ 40) · `sgCoinTog` · CSS `.sg-add` `.sg-cn`.
 
 ## 🎯 v3.36.66 — الإشارات: كل المؤشرات وتركيباتها بسجلها · البوصلة · إشعارات بنسبتك · داخل 🔮
 
 > `p112_signals` (+ `p112_signals_server.py` يحمل كود السيرفر) — **السيرفر** من سطر 18327: `_SG_LIB` 18327 = كتلة `ci/sig_check6.py` حرفياً (المؤشرات + الأنظمة الـ36 + `mirror` + `fwd` · `t_sigs` ① يتأكد) · الثوابت `SG_DIR` 18927 · `SG_MLAG` 18940 (تأخر النشر: الخوف والطمع 0 · VIX/الدولار/السندات/النبرة 1 · عدم اليقين 2 · المخاطر الجيوسياسية 8) · `_SG_NM` 18948 (أسماء الأنظمة بالعربي شراء/بيع) · `_SG_XNM` (القديمة · 🔮 · 🧲 · 💪 · 🌊 · 😨 · 🗞️ · 🏦).
 > **الأحداث** (نفس `ci/sig_check7.py`): `_sg_lib` 19124 (مساحة أسماء خاصة) · `_sg_meta` 19136 · `_sg_type` 19169 (🧲/🔻 فيها X-ad · 📈/📉 كلها اتجاه+زخم · 🟢/🔴 · وحدها: 🌊 😨 🗞️) · `_sg_series` 19169 · `_sg_old` 19187 (📊 العشر + الحكم + 🟢 القاع) · `_sg_extra` 19213 (🔮 · 🧲 · 💪 · 😨🗞️ مؤخّرة · 🏦) · `_sg_events` 19282 (عملة · فريم ⇒ `{(رمز, جهة): [شموع ≥ t0]}`) · `_sg_mkt` 19307 · `_sg_crash` 19355 (🌊 ≥ 30% من ≥ 10 عملات z ≤ −2.5).
-> **الدليل** (عامل منفصل · بلا شبكة): `_sg_search` 19415 (كل إشارة وحدها + شعاع 2…6 مثل `ci/sig_check9.py` · تعلّم 60% · اختبار 40% · 💎 6–30 حالة ≥ 75%) · `_sg_compass_states` 19390 (منعّمة 3 أيام) · `_sg_compass_hist` 19425 · `sg_build` 19429 ⇒ `_signals/catalog.json` · `sg_scan_calc` 19429 (آخر شمعة: الشغّالة الآن والسابقة + 🌊) · `sg_child` 19486 (بعملية: كل دوال الجلب والإرسال معطّلة · `nice`) · `_sg_spawn` 19506 (`--holy-sig` · خيط في البرنامج المجمّع أو `HOLY_SIG_THREAD=1`) · المدخل `"--holy-sig"` بسطر 42286.
+> **الدليل** (عامل منفصل · بلا شبكة): `_sg_search` 19415 (كل إشارة وحدها + شعاع 2…6 مثل `ci/sig_check9.py` · تعلّم 60% · اختبار 40% · 💎 6–30 حالة ≥ 75%) · `_sg_compass_states` 19390 (منعّمة 3 أيام) · `_sg_compass_hist` 19425 · `sg_build` 19429 ⇒ `_signals/catalog.json` · `sg_scan_calc` 19429 (آخر شمعة: الشغّالة الآن والسابقة + 🌊) · `sg_child` 19486 (بعملية: كل دوال الجلب والإرسال معطّلة · `nice`) · `_sg_spawn` 19506 (`--holy-sig` · خيط في البرنامج المجمّع أو `HOLY_SIG_THREAD=1`) · المدخل `"--holy-sig"` بسطر 42481.
 > **الإعدادات والسجل**: `sg_cfg` 19564 (`sg_on/thr/min/rnd/rare/rmin/types/fr/coins/cap/quiet/sum/ch` بـ`Holy_Settings`) · `_sg_universe` 19583 (عملاتك + الشريط + `MKT_COINS` ⇒ ≤ 34) · `_sg_cat` 19599 · `_sg_rec` 19613 (الاختبار + الحي · 💎 كل التاريخ) · `_sg_pass` 19627 · `sg_estimate` 19644 (إشعارات بالأسبوع: مجموعات عملة·نوع·شمعة من أحداث الاختبار) · `sg_set` 19599.
-> **النصوص والإرسال**: `_sg_ar` 19651 (العدد ومعدوده) · `_sg_wlb` 19658 (حد ويلسون الأدنى — ترتيب «الأصدق» و«أقواها») · `_sg_mktwide` 19669 / `_sg_days` (قراءة للسوق كله ⇒ «اختبارها في N أيام مختلفة» من `nd` · `_sg_dtxt` الأيام بالكلام · `_sg_rec` يرجّع `d` = الحالات المستقلة: أيام مختلفة لا عملات · `_sg_pass` يقارن «أقل عدد» بها) · `_sg_chunks` 19669 (تيليغرام ≤ 3800 حرف) · `_sg_block` 19710 (إشعار عملة لنوع) · `_sg_tg` 19683 (تيليغرام/التطبيق قناة `ind` تفتح `sig` · الكتم) · `_sg_deliver` 19708 (رسالة للجولة · الحد اليومي · 🌙 الهدوء · 🗓️ الملخص) · `_sg_flush` 19778 · `_sg_compass` 19792 · `_sg_comp_block` 19812 · `_sg_refresh` 19832 (`_fc_cache` بملف `_signals/candles.json` · 4400/1100) · `_sg_grade` 19858 (السجل الحي بعد 18/7 شموع صافي بعد 0.2%) · `_sg_res_block` 19905 · `_sg_process` 19925 (أُطلقت = كلها شغّالة الآن ولم تكن كلها في السابقة · مرة كل LK · لا تكرار يوم/3 أيام إلا +10 نقاط) · `_sg_mkt_block` 20016 (🌊 لا يتكرر إذا «📊 تنبيهات المؤشرات» مفعّلة) · `_sg_cidx` 19858 · `sg_tick` 19867 · `sg_loop` 21157 (كل 5 د · الخيط بسطر 41499).
-> **العرض**: `sg_view` 21172 · `sg_catlist` 21188 · `sg_test` 21188 · `sg_rebuild` 21199 · `sg_api` 21199 · `sg_fc` 21220 (🔮) · `_sg_cfg_merge` 21238 · `sg_est` 21259 · المسارات `/api/signals` و`/api/signals_cat` بسطر 26504 · أوامر `sg_set/sg_est/sg_test/sg_rebuild` بسطر 26890.
-> **الصفحة**: `openSig` 31675 (`<h2>🎯 الإشارات …` · 4 تبويبات) · `sgRow` 31887 · `sgHead` 31891 (🧭 + 60 يوماً) · `sgCoin` 31887 · `sgNow` 31918 · `sgCatUI` 31954 · `sgCat` 31965 · `sgLog` 31968 · `sgEst` 31978 (المؤشر ⇒ التقدير حياً) · `sgCfg` 32015 · `sgRender` 32016 · `sgFcTop` 32021 / `sgFc` 31798 (🔮 فوق النافذة وعلى كل عملة بسطر 32086) · `sgMini` 31802 (إعدادات الشريط) · ⚙️ صف «الإشارات وإشعاراتها» بسطر 31720 · `holyGoNow` `sig` بسطر 33566 · CSS `.sg-*` بسطر 28526.
+> **النصوص والإرسال**: `_sg_ar` 19651 (العدد ومعدوده) · `_sg_wlb` 19658 (حد ويلسون الأدنى — ترتيب «الأصدق» و«أقواها») · `_sg_mktwide` 19669 / `_sg_days` (قراءة للسوق كله ⇒ «اختبارها في N أيام مختلفة» من `nd` · `_sg_dtxt` الأيام بالكلام · `_sg_rec` يرجّع `d` = الحالات المستقلة: أيام مختلفة لا عملات · `_sg_pass` يقارن «أقل عدد» بها) · `_sg_chunks` 19669 (تيليغرام ≤ 3800 حرف) · `_sg_block` 19710 (إشعار عملة لنوع) · `_sg_tg` 19683 (تيليغرام/التطبيق قناة `ind` تفتح `sig` · الكتم) · `_sg_deliver` 19708 (رسالة للجولة · الحد اليومي · 🌙 الهدوء · 🗓️ الملخص) · `_sg_flush` 19778 · `_sg_compass` 19792 · `_sg_comp_block` 19812 · `_sg_refresh` 19832 (`_fc_cache` بملف `_signals/candles.json` · 4400/1100) · `_sg_grade` 19858 (السجل الحي بعد 18/7 شموع صافي بعد 0.2%) · `_sg_res_block` 19905 · `_sg_process` 19925 (أُطلقت = كلها شغّالة الآن ولم تكن كلها في السابقة · مرة كل LK · لا تكرار يوم/3 أيام إلا +10 نقاط) · `_sg_mkt_block` 20016 (🌊 لا يتكرر إذا «📊 تنبيهات المؤشرات» مفعّلة) · `_sg_cidx` 19858 · `sg_tick` 19867 · `sg_loop` 21349 (كل 5 د · الخيط بسطر 41694).
+> **العرض**: `sg_view` 21364 · `sg_catlist` 21380 · `sg_test` 21380 · `sg_rebuild` 21391 · `sg_api` 21391 · `sg_fc` 21412 (🔮) · `_sg_cfg_merge` 21430 · `sg_est` 21451 · المسارات `/api/signals` و`/api/signals_cat` بسطر 26696 · أوامر `sg_set/sg_est/sg_test/sg_rebuild` بسطر 27082.
+> **الصفحة**: `openSig` 31867 (`<h2>🎯 الإشارات …` · 4 تبويبات) · `sgRow` 32079 · `sgHead` 32083 (🧭 + 60 يوماً) · `sgCoin` 32079 · `sgNow` 32112 · `sgCatUI` 32149 · `sgCat` 32160 · `sgLog` 32163 · `sgEst` 32173 (المؤشر ⇒ التقدير حياً) · `sgCfg` 32210 · `sgRender` 32211 · `sgFcTop` 32216 / `sgFc` 31990 (🔮 فوق النافذة وعلى كل عملة بسطر 32281) · `sgMini` 31994 (إعدادات الشريط) · ⚙️ صف «الإشارات وإشعاراتها» بسطر 31912 · `holyGoNow` `sig` بسطر 33761 · CSS `.sg-*` بسطر 28718.
 > **الملفات**: `_signals/candles.json` (شموع عامة) · `_signals/catalog.json` (الدليل) · `_signals/job_*` (العامل) · `Holy_Signals.json` (الحي: `pend` · `rec` · `now` · `sent` · `log` · `comp`) — بلا مفاتيح · الفحوص `t_sigs` (59) · `ui_sig` (22+3) · CI `ci/sig_dash_check.py`.
 
 ## ♻️ v3.36.65 — البوت المحذوف يرجع بنموذج نشره معبّأ
 
-> `p111_redeploy` — السيرفر: `_RD_FORM` + `redeploy_info` بسطر 23262 (قراءة فقط: الإعداد المؤرشف ⇒ حقول نموذج النشر · المحفظة باسمها · الديمو بأرصدة بدايته · بلا مفاتيح) · المسار `/api/archive_redeploy` بسطر 26596 · `_delete_bot_do` يرجّع `arch`/`sym` (سطر 23383) · الصفحة: `rdSet` 29210 · `rdOffer` 29214 (بعد 🗑/💣 من `ctl` 29252) · `rdOpen` 29218 (النموذج الصحيح يتعبّى بأزراره) · زر الأرشيف بسطر 32490 · `.rdnote` · نموذج 🪜 `demoFld('st',!!pre.demo)`.
+> `p111_redeploy` — السيرفر: `_RD_FORM` + `redeploy_info` بسطر 23454 (قراءة فقط: الإعداد المؤرشف ⇒ حقول نموذج النشر · المحفظة باسمها · الديمو بأرصدة بدايته · بلا مفاتيح) · المسار `/api/archive_redeploy` بسطر 26788 · `_delete_bot_do` يرجّع `arch`/`sym` (سطر 23575) · الصفحة: `rdSet` 29402 · `rdOffer` 29406 (بعد 🗑/💣 من `ctl` 29444) · `rdOpen` 29410 (النموذج الصحيح يتعبّى بأزراره) · زر الأرشيف بسطر 32685 · `.rdnote` · نموذج 🪜 `demoFld('st',!!pre.demo)`.
 
 ## 🔒 v3.36.64 — الكرت المقفل ينفتح من سطره المختصر · 📉 زر «DCA»
 
-> `p108_lock_compact` — مستمع قفل البطاقات (الالتقاط) بسطر 36206: `if(e.target.closest('.lkbtn,.cmini'))return;` (السطر يفتح ويسد بلا فتح القفل ولا تجديد دقيقته) · CSS بسطر 27790 (`.card.lk button:not(.lkbtn):not(.cmini)` · `.card.lk>.cmini .cm-sym::after{content:" 🔒"}`) · `p109_dca_label` — زر الشريط بسطر 28987: «📉 DCA» (كان «📉 نشر DCA»). · `p110_compact_cancel` — نهاية حركة `cmpToggle` (`fin`): `finish` · `cancel` من برّا · مؤقّت `el._cmT` (340+400ms) — أول وحدة تكمّل.
+> `p108_lock_compact` — مستمع قفل البطاقات (الالتقاط) بسطر 36401: `if(e.target.closest('.lkbtn,.cmini'))return;` (السطر يفتح ويسد بلا فتح القفل ولا تجديد دقيقته) · CSS بسطر 27982 (`.card.lk button:not(.lkbtn):not(.cmini)` · `.card.lk>.cmini .cm-sym::after{content:" 🔒"}`) · `p109_dca_label` — زر الشريط بسطر 29179: «📉 DCA» (كان «📉 نشر DCA»). · `p110_compact_cancel` — نهاية حركة `cmpToggle` (`fin`): `finish` · `cancel` من برّا · مؤقّت `el._cmT` (340+400ms) — أول وحدة تكمّل.
 
 ## 📏 v3.36.63 — الكروت المختصرة
 
-> `p107_compact_cards` — صفحة بس · CSS بسطر 27796 (`.card>.cmini{display:none}` · `.card.cmp:not(.cmpo)>:not(.cmini){display:none}` · `.card.cmp{content-visibility:visible}` · `.card.cmp:not(.cmpo){align-self:start}` · `.cmini` · `.cm-*`) · مفتاح ⚙️ بسطر 31703 (`T('📏','الكروت المختصرة','uiCmpToggle()','bCmp',…)` تحت «🃏 شكل البطاقات») · النداء بـ`syncCards` (29265 `cmpApply(el,cmpBot(b),b)`) وبـ`renderAccum` (29266 `cmpApply(el,cmpAcc(a),a)`).
+> `p107_compact_cards` — صفحة بس · CSS بسطر 27988 (`.card>.cmini{display:none}` · `.card.cmp:not(.cmpo)>:not(.cmini){display:none}` · `.card.cmp{content-visibility:visible}` · `.card.cmp:not(.cmpo){align-self:start}` · `.cmini` · `.cm-*`) · مفتاح ⚙️ بسطر 31895 (`T('📏','الكروت المختصرة','uiCmpToggle()','bCmp',…)` تحت «🃏 شكل البطاقات») · النداء بـ`syncCards` (29457 `cmpApply(el,cmpBot(b),b)`) وبـ`renderAccum` (29458 `cmpApply(el,cmpAcc(a),a)`).
 
 | السطر | الدالة | الوصف |
 |---|---|---|
-| 26353 | `uiCmp` | 📏 المختصر مشغّل لهذا الجهاز؟ (`dash_cmp=on`) |
-| 26354 | `cmpAll` | يطبّق السطر على كل الكروت (`CARDS` + `ACARDS`) |
-| 26356 | `uiCmpToggle` | مفتاح ⚙️: يقلب · يسد كل المفتوح · يعيد ⚙️ · توست |
-| 26359 | `CMP_T` · `CMP_RGB` | اسم النوع ولونه (خط السطر — `--cm-rgb`؛ `--k-rgb` موجود بس مع الأشكال) |
-| 26363 | `cmpType` | نوع البوت بالسطر (⚡ DCA+ بيعي/شرائي من `b.dca.plus`) |
-| 26364 | `cmpState` | الحالة ولونها: متوقف · ⏳ مؤقت (`cashw.tp`) · 🚨 (`health.state=bad`) · ⏸ موقوف الشراء · نشط |
-| 26370 | `cmpToday` | ربح اليوم بوحدته (`b.today`: العملة لـ`dca` و`rec_sell` · $ للباقي) |
-| 26373 | `cmpBot` | نموذج سطر البوت (🧪 للديمو · السعر `JPX`→`cp`→`rec.cp`→`dca.cp`) |
-| 26376 | `cmpAcc` | نموذج سطر 🏦 المراكم: يجمع/موقوف/⏸ خارج النطاق/🚨 فشل الشراء · «الربح» = `pl` (+`pl_pct`) أو «المخزون» قبل أول عملة |
-| 26382 | `cmpApply` | يبني السطر `button.cmini` أول ابن (أيقونة العملة نسخة) ويحدّثه · `cmp`/`cmpo` حسب المفتاح و`_cmO` |
-| 26402 | `cmpMotion` | الحركة؟ لا بـ⚡ الخفيف ولا بـ«تقليل الحركة» (إلا `hwForce`) |
-| 26404 | `cmpToggle` | فتح/سد بحركة ارتفاع `el.animate` 340ms (القياس بنفس الإطار) · ضغطة أثناء السد ⇒ يفتح (`_cmC`) · `cmpa` = overflow hidden |
+| 26545 | `uiCmp` | 📏 المختصر مشغّل لهذا الجهاز؟ (`dash_cmp=on`) |
+| 26546 | `cmpAll` | يطبّق السطر على كل الكروت (`CARDS` + `ACARDS`) |
+| 26548 | `uiCmpToggle` | مفتاح ⚙️: يقلب · يسد كل المفتوح · يعيد ⚙️ · توست |
+| 26551 | `CMP_T` · `CMP_RGB` | اسم النوع ولونه (خط السطر — `--cm-rgb`؛ `--k-rgb` موجود بس مع الأشكال) |
+| 26555 | `cmpType` | نوع البوت بالسطر (⚡ DCA+ بيعي/شرائي من `b.dca.plus`) |
+| 26556 | `cmpState` | الحالة ولونها: متوقف · ⏳ مؤقت (`cashw.tp`) · 🚨 (`health.state=bad`) · ⏸ موقوف الشراء · نشط |
+| 26562 | `cmpToday` | ربح اليوم بوحدته (`b.today`: العملة لـ`dca` و`rec_sell` · $ للباقي) |
+| 26565 | `cmpBot` | نموذج سطر البوت (🧪 للديمو · السعر `JPX`→`cp`→`rec.cp`→`dca.cp`) |
+| 26568 | `cmpAcc` | نموذج سطر 🏦 المراكم: يجمع/موقوف/⏸ خارج النطاق/🚨 فشل الشراء · «الربح» = `pl` (+`pl_pct`) أو «المخزون» قبل أول عملة |
+| 26574 | `cmpApply` | يبني السطر `button.cmini` أول ابن (أيقونة العملة نسخة) ويحدّثه · `cmp`/`cmpo` حسب المفتاح و`_cmO` |
+| 26594 | `cmpMotion` | الحركة؟ لا بـ⚡ الخفيف ولا بـ«تقليل الحركة» (إلا `hwForce`) |
+| 26596 | `cmpToggle` | فتح/سد بحركة ارتفاع `el.animate` 340ms (القياس بنفس الإطار) · ضغطة أثناء السد ⇒ يفتح (`_cmC`) · `cmpa` = overflow hidden |
 
 ## 🔒 v3.36.62 — نسخة وحدة من المحرك لكل بوت
 
@@ -161,8 +166,8 @@
 | 995 | `DCA_MAX_SAFETY` | حد عدد أوامر الأمان (100) — الجدول · النشر · محفظة المسار التجريبي |
 | 18916 | `compute_dca_table` | يرفض فوق الحد · ولا قسمة على صفر (سعر خروج صفر) |
 | 18986 | `grid_up_calc` | نسبة أصغر من أن تُحسب ⇒ رسالة |
-| 22933 | `_do_POST_inner` | جسم JSON مو كائن ⇒ 400 · `value` مو كائن ⇒ فارغ · `dir` نص · `shutdown_beacon` انشال |
-| 21300 | `app_pair` | رقم نسخة التطبيق يُقرأ بأمان |
+| 23125 | `_do_POST_inner` | جسم JSON مو كائن ⇒ 400 · `value` مو كائن ⇒ فارغ · `dir` نص · `shutdown_beacon` انشال |
+| 21492 | `app_pair` | رقم نسخة التطبيق يُقرأ بأمان |
 
 ## 🔌📦 v3.36.49 — أسطر الانقطاع تبقى بملف البوت ولا تُعرض · «📦 شراء N» انفحص
 
@@ -175,7 +180,7 @@
 | 6726 | `feed_all` | 🔔 مركز الإشعارات بلاها |
 | 873 | `bot_snapshot` | `last_event` = أحدث سطر عادي |
 | 360 · 419 | `journal_ingest_bots` · `journal_query` | السجلات المفصّلة: ما تنسخ · ولا تعرض المنسوخ قبل |
-| 21671 · 21703 | `_accx_levels` · `_accx_snap` | «📦 شراء N ≈ $X» = مستويات `accum_buys` اللي قطعها السعر بأسعارها (`t_plus_count` يتأكد) |
+| 21863 · 21895 | `_accx_levels` · `_accx_snap` | «📦 شراء N ≈ $X» = مستويات `accum_buys` اللي قطعها السعر بأسعارها (`t_plus_count` يتأكد) |
 
 ## 📖🔌 v3.36.48 — زر الشرح بجانب ✕ · 🧮 مثال بالأرقام بدل المتحرك · كتابة أكثر · ولا ذكر لانقطاع الكهرباء أو الإنترنت
 
@@ -183,11 +188,11 @@
 
 | السطر | الدالة | الدور |
 |---|---|---|
-| 25573–25736 | `TUT_BTN` · `TUT_NUM` · `TUT` (لكل بوت: `t` · `idea` · `steps` · **`ex`** · `btns` · `faq`) · `TUT_FAQ` (12) | محتوى الشرح — بلا ذكر انقطاع |
-| 25737 | `openTutKind(kind, back)` | الأقسام: الفكرة · خطوة بخطوة · 🧮 مثال بالأرقام · أزرار البطاقة · أرقامها · أسئلة وأجوبة (المثال المتحرك وكوده انشالوا) |
-| 25756–25765 | `TUT_SETS` · `TUT_SEL` · **`TUT_LBL`** · **`tutX(set)`** · `tutQ` · `tutTab` · `tutBack` | زر «📖 شرح …» القصير بشريط العنوان · النافذة بتبويباتها · الرجوع |
-| 30919 · 30549 · 27028 · 30855 · 26613 | `openDeploy` · `openDeployDca` · `openDeployRec` · `openDeployStep` · `openDeployVa` | `<h2 class="tuth"><span>العنوان</span>${tutX(…)}</h2>` — الزر جنب ✕ |
-| 23709–23714 | CSS `h2.tuth` · `.tutx` · `.tutex` | العنوان flex · الزر بارتفاع ✕ · صندوق المثال |
+| 25765–25928 | `TUT_BTN` · `TUT_NUM` · `TUT` (لكل بوت: `t` · `idea` · `steps` · **`ex`** · `btns` · `faq`) · `TUT_FAQ` (12) | محتوى الشرح — بلا ذكر انقطاع |
+| 25929 | `openTutKind(kind, back)` | الأقسام: الفكرة · خطوة بخطوة · 🧮 مثال بالأرقام · أزرار البطاقة · أرقامها · أسئلة وأجوبة (المثال المتحرك وكوده انشالوا) |
+| 25948–25957 | `TUT_SETS` · `TUT_SEL` · **`TUT_LBL`** · **`tutX(set)`** · `tutQ` · `tutTab` · `tutBack` | زر «📖 شرح …» القصير بشريط العنوان · النافذة بتبويباتها · الرجوع |
+| 31111 · 30741 · 27220 · 31047 · 26805 | `openDeploy` · `openDeployDca` · `openDeployRec` · `openDeployStep` · `openDeployVa` | `<h2 class="tuth"><span>العنوان</span>${tutX(…)}</h2>` — الزر جنب ✕ |
+| 23901–23906 | CSS `h2.tuth` · `.tutx` · `.tutex` | العنوان flex · الزر بارتفاع ✕ · صندوق المثال |
 
 ## 📖 v3.36.47 — الشرح داخل نماذج النشر: زر واحد بكل نموذج ⇐ نافذة بتبويب لكل بوت · شيلنا 📖 البطاقة
 
@@ -195,10 +200,10 @@
 
 | السطر | الدالة | الدور |
 |---|---|---|
-| 25698 | `openTutKind(kind, back)` | نافذة شرح النوع (كانت `openTut(dir)` من البطاقة) · من النموذج: تبويبات `.tuttabs` لبوتاته + «↩️ رجوع إلى النموذج» · الشرح بـ`.hwb.tuthwb` جنب النموذج المخفي |
-| 25786–25794 | `TUT_SETS` · `TUT_SEL` · `TUT_STASH`/`TUT_SET` · `tutQ(ev, set)` · `tutTab` · `tutBack` | بوتات كل نموذج · النوع المختار يفتح أول · النموذج يختفي بمكانه (`display:none`) · الرجوع يرجّعه باللي انكتب وبمكان التمرير |
-| 30952 · 30580 · 27058 · 30887 · 26642 | `openDeploy` · `openDeployDca` · `openDeployRec` · `openDeployStep` · `openDeployVa` | زر واحد «📖 شرح …» (`.tutrow .tutone`) تحت العنوان |
-| 23707–23712 | CSS `.tutone` · `.tuttabs` · `.tutrow` · `.tutbk` | ألوان المظهر بس |
+| 25890 | `openTutKind(kind, back)` | نافذة شرح النوع (كانت `openTut(dir)` من البطاقة) · من النموذج: تبويبات `.tuttabs` لبوتاته + «↩️ رجوع إلى النموذج» · الشرح بـ`.hwb.tuthwb` جنب النموذج المخفي |
+| 25978–25986 | `TUT_SETS` · `TUT_SEL` · `TUT_STASH`/`TUT_SET` · `tutQ(ev, set)` · `tutTab` · `tutBack` | بوتات كل نموذج · النوع المختار يفتح أول · النموذج يختفي بمكانه (`display:none`) · الرجوع يرجّعه باللي انكتب وبمكان التمرير |
+| 31144 · 30772 · 27250 · 31079 · 26834 | `openDeploy` · `openDeployDca` · `openDeployRec` · `openDeployStep` · `openDeployVa` | زر واحد «📖 شرح …» (`.tutrow .tutone`) تحت العنوان |
+| 23899–23904 | CSS `.tutone` · `.tuttabs` · `.tutrow` · `.tutbk` | ألوان المظهر بس |
 
 ## 🧪📖 v3.36.46 — الديمو بالمحرك الحقيقي (منصة وهمية بسعر OKX الحي) · زر التعليم بكل بطاقة
 
@@ -211,10 +216,10 @@
 | 7143 | `deploy_demo` | الإعداد من دالة النشر نفسها بعملية منفصلة (`--holy-demo-cfg`) · المجلد · المحرك · المحفظة الوهمية · التشغيل |
 | 7200 · 7223 | `_demo_bal` · `_demo_cfg_child` | رصيد بطاقة الديمو وأوامرها من المحفظة الوهمية · العملية المنفصلة (بلا شبكة) |
 | 7235 | `launch` | الديمو ⇒ `holy_demo.py <script> <engine>` |
-| 20114 | `balances_once` | الديمو ⇒ `_demo_bal` |
-| 25555 · 25562 | `demoFld` · `demoMark` (`demoTgl` · `demoVal`) | «🧪 ديمو» بالنماذج الخمسة · علامة الكرت وإطاره |
-| 25573–25736 | `TUT_BTN` · `TUT_NUM` · `TUT` · `TUT_FAQ` · `openTutKind` (كانت `openTut`) · `tutInit` · `tutStep` · `tutDraw` | 📖 التعليم: النافذة والمحتوى والمثال المتحرك لكل نوع (`tutMark` انشالت بـv3.36.47) |
-| 25793 | `syncCards` | الحقيقية أولاً · خط `#demoSep` · الديمو · `demoMark` |
+| 20118 | `balances_once` | الديمو ⇒ `_demo_bal` |
+| 25747 · 25754 | `demoFld` · `demoMark` (`demoTgl` · `demoVal`) | «🧪 ديمو» بالنماذج الخمسة · علامة الكرت وإطاره |
+| 25765–25928 | `TUT_BTN` · `TUT_NUM` · `TUT` · `TUT_FAQ` · `openTutKind` (كانت `openTut`) · `tutInit` · `tutStep` · `tutDraw` | 📖 التعليم: النافذة والمحتوى والمثال المتحرك لكل نوع (`tutMark` انشالت بـv3.36.47) |
+| 25985 | `syncCards` | الحقيقية أولاً · خط `#demoSep` · الديمو · `demoMark` |
 
 ## ♾️🪜 v3.36.45 — ♾️ تصليحات البلس نفسها (بموافقة المالك) · 🪜 عدّاد الإيقاف من الخانات · 🔕 سطر «أُوقف» الكاذب
 
@@ -223,9 +228,9 @@
 | السطر | الدالة | الدور |
 |---|---|---|
 | 9500 | `_cw_pause` | 🔕 ولا سطر «⏸💵 أُوقف» لما أرضية المالك فوق السعر أصلاً (ما تغيّر شي) |
-| 21264 | `_accx_src` | مخزن الإيقاف: ♾️ ➕ 🎚️ من `accum_*` · 🪜 من خاناته (خلف الأرضية/السقف: المقطوعة + بقدر النافذة) |
-| 21302 · 21334 · 21418 | `_accx_levels` · `_accx_snap` · `_accx_tick` | العدّاد · الشارة · إشعار العبور — كلها من `_accx_src` |
-| 31665 | `_ENGINE_B64` | ♾️ المحرك (p72) |
+| 21456 | `_accx_src` | مخزن الإيقاف: ♾️ ➕ 🎚️ من `accum_*` · 🪜 من خاناته (خلف الأرضية/السقف: المقطوعة + بقدر النافذة) |
+| 21494 · 21526 · 21610 | `_accx_levels` · `_accx_snap` · `_accx_tick` | العدّاد · الشارة · إشعار العبور — كلها من `_accx_src` |
+| 31857 | `_ENGINE_B64` | ♾️ المحرك (p72) |
 
 ## ➕💵 v3.36.44 — البلس والمدى (الدولار · خطوة السعر · الأرقام) · نفاد الدولار: رسالة وحدة · ⏸ تلقائي · 🟠 الكرت
 
@@ -242,8 +247,8 @@
 | 9393–9660 | `CASHW_FILE` · `_cw_low` (9442) · `_cw_pause` (9500) · `_cw_restore` (9542) · `_cash_watch` (9562) · `_cw_release_all` (9632) · `_cw_card` (9645) | ① رسالة المحفظة · ② ⏸ الإيقاف التلقائي (فوق السعر بنص درجة · يلحق السعر · أرضية المالك · `freed` · `hands_off`) · ③ الشارة |
 | 9687 | `guard_scan` ⇐ `_cash_watch` | بكل جولة رقابة |
 | 10178 | `guard_cfg(cash_pause=…)` | المفتاح · إيقاف الرقابة/المفتاح ⇒ استئناف فوري |
-| 25303 | `accChipsOf` | «🟠 ينتظر دولار — يحتاج $X · ⏸» |
-| 27708 | `#gv_cash` | صف المفتاح بنافذة 🛡️ |
+| 25495 | `accChipsOf` | «🟠 ينتظر دولار — يحتاج $X · ⏸» |
+| 27900 | `#gv_cash` | صف المفتاح بنافذة 🛡️ |
 
 ## 🎨 v3.36.43 — مجموعتا ألوان هادئتان: ❄️ «جليدي» · 🩵 «سماوي نهاري» · 🧭 فحص النسق الثابت
 
@@ -251,11 +256,11 @@
 
 | السطر | الدالة | الدور |
 |---|---|---|
-| 22932 | `html[data-theme="sky"]{--glint}` | لمعة الشعار بالمجموعة الفاتحة |
-| 24080 · 24085 | `html[data-theme="arctic"]` · `html[data-theme="sky"]` | متغيرات المجموعتين (الفاتحة فيها `color-scheme:light` وألوان الصعود/الهبوط الأغمق) |
-| 24109–24121 | قواعد المجموعات الفاتحة | كل `html[data-theme="light"] X` صار معه `html[data-theme="sky"] X` (الأرقام المتدرجة والشريط بألوانها) |
-| 28065 · 30243 · 30430 | `pcPal` · `tvTheme`/`tvBg` · `stCol` | تسأل `lightThemes()` بدل `=== 'light'` |
-| 30032 · 30033 | `lightThemes()` · `THEMES` | قائمة المجموعات الفاتحة (دالة — `pcPal` يشتغل قبل هالسطر) · 9 مجموعات |
+| 23124 | `html[data-theme="sky"]{--glint}` | لمعة الشعار بالمجموعة الفاتحة |
+| 24272 · 24277 | `html[data-theme="arctic"]` · `html[data-theme="sky"]` | متغيرات المجموعتين (الفاتحة فيها `color-scheme:light` وألوان الصعود/الهبوط الأغمق) |
+| 24301–24313 | قواعد المجموعات الفاتحة | كل `html[data-theme="light"] X` صار معه `html[data-theme="sky"] X` (الأرقام المتدرجة والشريط بألوانها) |
+| 28257 · 30435 · 30622 | `pcPal` · `tvTheme`/`tvBg` · `stCol` | تسأل `lightThemes()` بدل `=== 'light'` |
+| 30224 · 30225 | `lightThemes()` · `THEMES` | قائمة المجموعات الفاتحة (دالة — `pcPal` يشتغل قبل هالسطر) · 9 مجموعات |
 
 ## 🗣️ v3.36.42 — كل اللي يشوفه الزبون بالفصحى · تطبيق أندرويد 2.2
 
@@ -265,10 +270,10 @@
 |---|---|---|
 | 44 | `APP_VERSION «3.36.42»` | |
 | 17514 | `_GD_TR_WARN` | العنصر الأول (يطابق سطر سجل المحرك) ما انلمس · الثالث (اللي ينقرا) فصحى |
-| 20029 · 19861 | `_app_short` | تصنيف إشعار التطبيق «تنبيه»: يعرف الصيغ الفصيحة (`لم يشتر` · `لم يستطع` · `تعذّر` · `لم يُطبَّق`) جنب القديمة |
-| 20121 | `_FATE_REQFAIL` | يطابق ردود المحرك — ما انلمس |
-| 24895 · 24896 | `applyFilter` | سطر «🔍 لا توجد عملة باسم …» ومقارنته بنفس النص |
-| 24854 | `icFor` | أيقونة الصف حسب عنوانه — يعرف `القادم` جنب `الجاي` |
+| 20033 · 19861 | `_app_short` | تصنيف إشعار التطبيق «تنبيه»: يعرف الصيغ الفصيحة (`لم يشتر` · `لم يستطع` · `تعذّر` · `لم يُطبَّق`) جنب القديمة |
+| 20125 | `_FATE_REQFAIL` | يطابق ردود المحرك — ما انلمس |
+| 25087 · 25088 | `applyFilter` | سطر «🔍 لا توجد عملة باسم …» ومقارنته بنفس النص |
+| 25046 | `icFor` | أيقونة الصف حسب عنوانه — يعرف `القادم` جنب `الجاي` |
 | 35695 | `APP_APK_CODE 13` · `APP_APK_NAME «2.2»` · `APP_APK_B64` | التطبيق 2.2 (`sha256 ed801c37…` · نفس المفتاح) |
 
 ## 💻 v3.36.41 — برنامج ويندوز 2.0 بلا شريط عنوان (الصفحة + البرنامج المدمج)
@@ -277,11 +282,11 @@
 
 | السطر | الدالة | الدور |
 |---|---|---|
-| 24240 | CSS `.wbtn` · `.mbw` · `html.winf` | أزرار النافذة (✕ أحمر عند المرور) · بالشريط المصغّر |
-| 24275 | `#wCls` · `#wMax` · `#wMin` (بمجموعة 🔔 ⛶) | — ☐ ✕ أعلى اللوحة (مخفية إلا داخل 2.0) |
-| 24329 | `#mbW` بالشريط المصغّر | نفس الأزرار لما تنزل للأسفل |
-| 28499 · 28500 · 28501 | `WINF` · `winCmd` · `winFree` | داخل 2.0؟ · `chrome.webview.postMessage('win:…')` · مكان فاضي يسحب (مو زر ولا صندوق) |
-| 28502 · 28505 | `winHello` · `winInit` | أماكن الأزرار للبرنامج (فحص ويندوز) · الضغط والتحريك 4px ⇐ `win:drag` · نقرتين ⇐ `win:max` · ☐ ⇄ ❐ |
+| 24432 | CSS `.wbtn` · `.mbw` · `html.winf` | أزرار النافذة (✕ أحمر عند المرور) · بالشريط المصغّر |
+| 24467 | `#wCls` · `#wMax` · `#wMin` (بمجموعة 🔔 ⛶) | — ☐ ✕ أعلى اللوحة (مخفية إلا داخل 2.0) |
+| 24521 | `#mbW` بالشريط المصغّر | نفس الأزرار لما تنزل للأسفل |
+| 28691 · 28692 · 28693 | `WINF` · `winCmd` · `winFree` | داخل 2.0؟ · `chrome.webview.postMessage('win:…')` · مكان فاضي يسحب (مو زر ولا صندوق) |
+| 28694 · 28697 | `winHello` · `winInit` | أماكن الأزرار للبرنامج (فحص ويندوز) · الضغط والتحريك 4px ⇐ `win:drag` · نقرتين ⇐ `win:max` · ☐ ⇄ ❐ |
 | 35692 | `WIN_EXE_CODE 4` · `WIN_EXE_NAME «2.0»` · `WIN_EXE_B64` | البرنامج 2.0 المبني والمفحوص بـGitHub (`sha256 8d88dc21…`) |
 
 ## 🔤🎬 v3.36.40 — خطوط المالك من مجلد fonts · «تقليل الحركة» يسأل مرة
@@ -290,14 +295,14 @@
 
 | السطر | الدالة | الدور |
 |---|---|---|
-| 21714 · 21722 | `_font_label` · `user_fonts` · `user_font_path` | مجلد `fonts` جنب اللوحة ⇐ القائمة (اسم الملف منظّف · المفتاح `u` + 10 حروف) |
-| 21754 · 21777 | `user_font_add` · `user_font_del` | رفع (≤ 12 MB · أول 4 بايت = خط) · حذف بالمفتاح |
-| 22039 | `GET /api/fonts` · `GET /font/<k>` | القائمة · ملف الخط (خلف الدخول · `immutable`) |
-| 22232 | `POST /api/fonts` | add / del — قبل تسجيل الأوامر (ما ينكتب بالسجلات) |
-| 22850 | `hUFonts` (رأس الصفحة) | `dash_ufonts` ⇐ `HFONTS` + `@font-face` (`#hufonts`) قبل الرسم |
-| 26618 | `#ufRow` بـ`openSettings` | «➕ أضف خطاً من جهازك» · 🗑 لكل خط |
-| 30034 · 30038 · 30043 | `ufontsLoad` · `ufontUp` · `ufontDel` | القائمة من الخادم · الرفع (يختاره فوراً) · الحذف (يسأل) |
-| 28901 · 28902 · 28903 · 28910 | `rmStop` · `rmRow` · `rmAsk` · `rmBoot` | «تقليل الحركة» بالجهاز: الزر بصفّي الخلفية والبطاقات · السؤال عند اختيار خلفية (مرة بالجلسة) أو عند الفتح (مرة لهذا الجهاز) |
+| 21906 · 21914 | `_font_label` · `user_fonts` · `user_font_path` | مجلد `fonts` جنب اللوحة ⇐ القائمة (اسم الملف منظّف · المفتاح `u` + 10 حروف) |
+| 21946 · 21969 | `user_font_add` · `user_font_del` | رفع (≤ 12 MB · أول 4 بايت = خط) · حذف بالمفتاح |
+| 22231 | `GET /api/fonts` · `GET /font/<k>` | القائمة · ملف الخط (خلف الدخول · `immutable`) |
+| 22424 | `POST /api/fonts` | add / del — قبل تسجيل الأوامر (ما ينكتب بالسجلات) |
+| 23042 | `hUFonts` (رأس الصفحة) | `dash_ufonts` ⇐ `HFONTS` + `@font-face` (`#hufonts`) قبل الرسم |
+| 26810 | `#ufRow` بـ`openSettings` | «➕ أضف خطاً من جهازك» · 🗑 لكل خط |
+| 30226 · 30230 · 30235 | `ufontsLoad` · `ufontUp` · `ufontDel` | القائمة من الخادم · الرفع (يختاره فوراً) · الحذف (يسأل) |
+| 29093 · 29094 · 29095 · 29102 | `rmStop` · `rmRow` · `rmAsk` · `rmBoot` | «تقليل الحركة» بالجهاز: الزر بصفّي الخلفية والبطاقات · السؤال عند اختيار خلفية (مرة بالجلسة) أو عند الفتح (مرة لهذا الجهاز) |
 
 ## 🃏📊🌌 v3.36.39 — حركات البطاقات · عناصر الشريط المصغّر · الخلفية وقت التمرير · 60 بالتطبيق
 
@@ -305,20 +310,20 @@
 
 | السطر | الدالة | الدور |
 |---|---|---|
-| 29968 | `hbLoop` | الخلفية المتحركة — ما توقف وقت التمرير (بس خلف النوافذ والشاشة مطفية) |
-| 29872 | `fpsFirst` | التطبيق 1.5+ وما اختار قبل ⇐ 60 مرة وحدة (`dash_fps1`) |
-| 23183 · 23184 | CSS `.sk-gfx rect.skb` · `.cfx-*` | أشرطة السلم تمتلئ من طرفها · البطاقة التجريبية |
-| 30110 · 30123 | `HCA` · `CA` | مجموعات حركات البطاقات وخياراتها · الحركات نفسها (menu · sec · bars · enter) |
-| 30145 · 30156 | `caNumChk` · `caAfterSync` | الرقم الكبير يصعد ⇐ يعدّ/وميض/نبضة · ظهور البطاقات + الأشرطة أول ما تبان |
-| 30165 · 30176 · 30181 | `cfxBody` · `setCa` · `cfxRun` | ⚙️ «🃏 حركات البطاقات»: البطاقة التجريبية · الاختيار يتحرك فوراً |
-| 26504 · 26506 | `X('cfx')` · `X('mbi')` بـ`openSettings` | صف حركات البطاقات · صف عناصر الشريط المصغّر |
-| 24126 | CSS `#mbar` · `.mb1` · `.mb2` · `.mbprev` | الشريط سطرين: الأرباح + الحالة (يلتف بالهاتف) |
-| 24413 | `mbarSync` | ينزل الشريط ⇐ حالته فوراً |
-| 30582 · 30597 | `MBI` · `mbItems` | العناصر الـ11 ونصوصها (بلا سرعة OKX) |
-| 30613 · 30615 · 30618 · 30622 | `mbSysPoll` · `mbStatPaint` · `mbTog` · `mbiBody` | حاسوب البوتات كل 10ث والشريط ظاهر · الرسم · زر العنصر · صف ⚙️ |
-| 30635 | `tick` (`MB.rtt` · `MB.last`) | زمن رد الخادم · آخر تحديث |
-| 21629 · 21679 | `_sys_cpu_times` · `_sys_ram_up` · `sys_stats` | المعالج · الذاكرة · القرص · مدة التشغيل (ويندوز ctypes · لينكس /proc) |
-| 21960 | `GET /api/sys` | خلف الدخول · قراءة بس |
+| 30160 | `hbLoop` | الخلفية المتحركة — ما توقف وقت التمرير (بس خلف النوافذ والشاشة مطفية) |
+| 30064 | `fpsFirst` | التطبيق 1.5+ وما اختار قبل ⇐ 60 مرة وحدة (`dash_fps1`) |
+| 23375 · 23376 | CSS `.sk-gfx rect.skb` · `.cfx-*` | أشرطة السلم تمتلئ من طرفها · البطاقة التجريبية |
+| 30302 · 30315 | `HCA` · `CA` | مجموعات حركات البطاقات وخياراتها · الحركات نفسها (menu · sec · bars · enter) |
+| 30337 · 30348 | `caNumChk` · `caAfterSync` | الرقم الكبير يصعد ⇐ يعدّ/وميض/نبضة · ظهور البطاقات + الأشرطة أول ما تبان |
+| 30357 · 30368 · 30373 | `cfxBody` · `setCa` · `cfxRun` | ⚙️ «🃏 حركات البطاقات»: البطاقة التجريبية · الاختيار يتحرك فوراً |
+| 26696 · 26698 | `X('cfx')` · `X('mbi')` بـ`openSettings` | صف حركات البطاقات · صف عناصر الشريط المصغّر |
+| 24318 | CSS `#mbar` · `.mb1` · `.mb2` · `.mbprev` | الشريط سطرين: الأرباح + الحالة (يلتف بالهاتف) |
+| 24605 | `mbarSync` | ينزل الشريط ⇐ حالته فوراً |
+| 30774 · 30789 | `MBI` · `mbItems` | العناصر الـ11 ونصوصها (بلا سرعة OKX) |
+| 30805 · 30807 · 30810 · 30814 | `mbSysPoll` · `mbStatPaint` · `mbTog` · `mbiBody` | حاسوب البوتات كل 10ث والشريط ظاهر · الرسم · زر العنصر · صف ⚙️ |
+| 30827 | `tick` (`MB.rtt` · `MB.last`) | زمن رد الخادم · آخر تحديث |
+| 21821 · 21871 | `_sys_cpu_times` · `_sys_ram_up` · `sys_stats` | المعالج · الذاكرة · القرص · مدة التشغيل (ويندوز ctypes · لينكس /proc) |
+| 22152 | `GET /api/sys` | خلف الدخول · قراءة بس |
 
 ## 📌🎬📲 v3.36.38 — الشريط المصغّر اختياري · سبب توقف الحركة · أزرار الهاتف (تطبيق 2.1)
 
@@ -326,9 +331,9 @@
 
 | السطر | الدالة | الدور |
 |---|---|---|
-| 24124 | CSS `html.nombar #mbar` (+ رأس الصفحة: `nombar` قبل الرسم) | الشريط المصغّر مطفي |
-| 24297 · 24301 | `navOk` · `uiNavOn` · `uiNavToggle` · `uiMbar` · `uiMbarToggle` | أزرار الهاتف (التطبيق 2.1+) · الشريط المصغّر |
-| 28661 · 28663 · 28665 | `hwStyle` · `hwDevRm` · `hwForce` · `setMotionForce` | «تقليل الحركة» بالجهاز ⇐ يوقف إلا إذا «شغّلها رغم إعداد الجهاز» |
+| 24316 | CSS `html.nombar #mbar` (+ رأس الصفحة: `nombar` قبل الرسم) | الشريط المصغّر مطفي |
+| 24489 · 24493 | `navOk` · `uiNavOn` · `uiNavToggle` · `uiMbar` · `uiMbarToggle` | أزرار الهاتف (التطبيق 2.1+) · الشريط المصغّر |
+| 28853 · 28855 · 28857 | `hwStyle` · `hwDevRm` · `hwForce` · `setMotionForce` | «تقليل الحركة» بالجهاز ⇐ يوقف إلا إذا «شغّلها رغم إعداد الجهاز» |
 | `android/smali/com/holy/dash/` | `Prefs.navBar/setNavBar` · `MainActivity.immersive/navShown` · `MainActivity$2` (الحواف) · `MainActivity$Bridge.setNavBar/navBar` · `MainActivity$Bridge$16` | التطبيق 2.1 |
 
 ## 🌌🎶 v3.36.37 — الخلفيات المتحركة · النغمة المستمرة · الأرقام بالخط · طبقة النافذة
@@ -337,11 +342,11 @@
 
 | السطر | الدالة | الدور |
 |---|---|---|
-| 22652 | `hFontApply` | + `--fm` (الأرقام بالخط المختار · «IBM Plex» يشيله) |
-| 24133 | CSS `#hbg` · `html.abg` · `.bgrid` · `.bgb` · `.tvol` | لوحة الخلفية · الأجرام ترتاح · الشريط العلوي بلا ضبابية |
-| 28665 | `hwIn` (+ `hwOut`) | `will-change` من لحظة الفتح ⇒ طبقة النافذة جاهزة قبل الحركة · ينشال بنهايتها |
-| 29767 · 29787 · 29832 · 29839 | `HBG` · `HBG_MAKE` · `hbgApply` · `hbPrev` (+ `hbCol` · `hbBase` · `hbSpr` · `hbLoop` · `setBg` · `uiBg` · `hbStill`) | الخلفيات: القائمة · الرسّامين بألوان المظهر · التشغيل/الإيقاف · المعاينات |
-| 29843 · 29892 · 29896 | `HTONE` · `htApply` · `htDuck` (+ `HTONES` · `htInit` · `htVoice` · `htSched` · `htArm` · `setTone` · `setToneVol`) | النغمة: القائمة · التشغيل بعد أول لمسة · تخفت مع صوت الربح |
+| 22844 | `hFontApply` | + `--fm` (الأرقام بالخط المختار · «IBM Plex» يشيله) |
+| 24325 | CSS `#hbg` · `html.abg` · `.bgrid` · `.bgb` · `.tvol` | لوحة الخلفية · الأجرام ترتاح · الشريط العلوي بلا ضبابية |
+| 28857 | `hwIn` (+ `hwOut`) | `will-change` من لحظة الفتح ⇒ طبقة النافذة جاهزة قبل الحركة · ينشال بنهايتها |
+| 29959 · 29979 · 30024 · 30031 | `HBG` · `HBG_MAKE` · `hbgApply` · `hbPrev` (+ `hbCol` · `hbBase` · `hbSpr` · `hbLoop` · `setBg` · `uiBg` · `hbStill`) | الخلفيات: القائمة · الرسّامين بألوان المظهر · التشغيل/الإيقاف · المعاينات |
+| 30035 · 30084 · 30088 | `HTONE` · `htApply` · `htDuck` (+ `HTONES` · `htInit` · `htVoice` · `htSched` · `htArm` · `setTone` · `setToneVol`) | النغمة: القائمة · التشغيل بعد أول لمسة · تخفت مع صوت الربح |
 
 ## 🔤🎬 v3.36.36 — الخط على كل حرف · الحركات أسرع وأخف · فحص السلاسة على الجهاز
 
@@ -349,11 +354,11 @@
 
 | السطر | الدالة | الدور |
 |---|---|---|
-| 22679 (+ 10 بالـCSS) | `.num` · `pre.rep` · `.pc-*` · `.skin svg text` · `.lg-it` | `'IBM Plex Mono',var(--ff),monospace` — الحروف العربية جنب الأرقام بالخط المختار |
-| 27986 | صورة الأرباح 🖼️ (`FA` · `FM`) | بالخط المختار (`--ff`) |
-| 28622 | `HW_MS` | 200–340ms (كانت 260–440) |
-| 28640 · 28650 · 28693 | `hwPlay` (q = الإغلاق: إطار واحد) · `hwLight` (نسخة الإغلاق: اللي برّا الشاشة ينفرغ بحجمه) · `hwOut` (0.6 من المدة) | |
-| 28659 | `motionCheck` | ⚙️ 🩺 «🎬 فحص سلاسة الحركة»: ⚙️ · تأكيد · 📊 فتح وسد ⇐ بدأت بعد · أطول فجوة · تقطّعات · الحكم + الجهاز |
+| 22871 (+ 10 بالـCSS) | `.num` · `pre.rep` · `.pc-*` · `.skin svg text` · `.lg-it` | `'IBM Plex Mono',var(--ff),monospace` — الحروف العربية جنب الأرقام بالخط المختار |
+| 28178 | صورة الأرباح 🖼️ (`FA` · `FM`) | بالخط المختار (`--ff`) |
+| 28814 | `HW_MS` | 200–340ms (كانت 260–440) |
+| 28832 · 28842 · 28885 | `hwPlay` (q = الإغلاق: إطار واحد) · `hwLight` (نسخة الإغلاق: اللي برّا الشاشة ينفرغ بحجمه) · `hwOut` (0.6 من المدة) | |
+| 28851 | `motionCheck` | ⚙️ 🩺 «🎬 فحص سلاسة الحركة»: ⚙️ · تأكيد · 📊 فتح وسد ⇐ بدأت بعد · أطول فجوة · تقطّعات · الحكم + الجهاز |
 
 ## 🎬⚙️ v3.36.35 — الحركات بلا تقطيع · الإعدادات قائمة · المكان يبقى · رجوع المتصفح يبقى باللوحة
 
@@ -361,15 +366,15 @@
 
 | السطر | الدالة | الدور |
 |---|---|---|
-| 26329 · 26330 · 26334 | `STO` · `stTog` · `openSettings` | ⚙️ قائمة: `X` (صف خيارات يتفتح · `data-k` = theme · skin · font · anim · poll · fps) · `T` (مفتاح `role=switch`) · `L` (نافذة ‹) · `G` (مجموعة) · المفتوح يبقى (`STO`) · `tick`+`gpuFill` بعد الحركة |
-| 28622 | `HW` | + `busy` (نهاية الحركة الشغّالة) · `pend` (رجوعات الخطوة) · `q` (نوافذ تنتظر رجوعنا) |
-| 28639 · 28644 · 28649 · 28650 | `hwPlay` · `hwIn` · `hwIdle` · `hwOut` | الحركة توقف بأولها لحد أول رسم · «من الزر» بـ`transform-origin` · بلا حركة للخلفية · انتظار نهاية الحركة · النسخة بلا ضبابية |
-| 28677 · 28685 · 28689 · 28692 · 28695 | `hwPush` · `hwPop` · `hwFlush` · `hwDrain` · `popstate` | سد+فتح بنفس الخطوة = `replaceState` · الرجوعات سوا (`history.go(-n)`) · الفتح ينتظر وصول رجوعنا |
-| 28705 | `showModal` | نفس النافذة (الحجم + العنوان) ⇒ مكان التمرير يبقى |
-| 26916 | `coverSync` | + `#btov` (الخلفية تتوقف خلف الاختبار) — ويناديه `hwSync` |
-| 30149 | `tick` | يرسم بعد `hwIdle()` |
-| 24714 | `tick` (أزرار ⚙️) | `#bWd`/`#bBoot`: `classList.toggle('on')` بس |
-| 23982 · 23986 | CSS | الهاتف: بلا `backdrop-filter` خلف `.mbg.full` · `.btov` · `.page` · ⚙️ القائمة: `.sgrid` · `.sgrp` · `.sitem` · `.shd`/`.stg`/`.sln` · `.sval` · `.sbody` · `.ssw` |
+| 26521 · 26522 · 26526 | `STO` · `stTog` · `openSettings` | ⚙️ قائمة: `X` (صف خيارات يتفتح · `data-k` = theme · skin · font · anim · poll · fps) · `T` (مفتاح `role=switch`) · `L` (نافذة ‹) · `G` (مجموعة) · المفتوح يبقى (`STO`) · `tick`+`gpuFill` بعد الحركة |
+| 28814 | `HW` | + `busy` (نهاية الحركة الشغّالة) · `pend` (رجوعات الخطوة) · `q` (نوافذ تنتظر رجوعنا) |
+| 28831 · 28836 · 28841 · 28842 | `hwPlay` · `hwIn` · `hwIdle` · `hwOut` | الحركة توقف بأولها لحد أول رسم · «من الزر» بـ`transform-origin` · بلا حركة للخلفية · انتظار نهاية الحركة · النسخة بلا ضبابية |
+| 28869 · 28877 · 28881 · 28884 · 28887 | `hwPush` · `hwPop` · `hwFlush` · `hwDrain` · `popstate` | سد+فتح بنفس الخطوة = `replaceState` · الرجوعات سوا (`history.go(-n)`) · الفتح ينتظر وصول رجوعنا |
+| 28897 | `showModal` | نفس النافذة (الحجم + العنوان) ⇒ مكان التمرير يبقى |
+| 27108 | `coverSync` | + `#btov` (الخلفية تتوقف خلف الاختبار) — ويناديه `hwSync` |
+| 30341 | `tick` | يرسم بعد `hwIdle()` |
+| 24906 | `tick` (أزرار ⚙️) | `#bWd`/`#bBoot`: `classList.toggle('on')` بس |
+| 24174 · 24178 | CSS | الهاتف: بلا `backdrop-filter` خلف `.mbg.full` · `.btov` · `.page` · ⚙️ القائمة: `.sgrid` · `.sgrp` · `.sitem` · `.shd`/`.stg`/`.sln` · `.sval` · `.sbody` · `.ssw` |
 
 ## 🪟 v3.36.34 — نمط واحد لكل النوافذ · 🎬 حركة الفتح من ⚙️ · ↩️ الرجوع يسكّر الأعلى أولاً
 
@@ -377,12 +382,12 @@
 
 | السطر | الدالة | الدور |
 |---|---|---|
-| 28559 · 28563 | `HW_ANIMS` · `HW_MS` · `HW` · `uiAnim` · `setAnim` | الحركات السبع · مدتها · المكدّس · الاختيار (`dash_anim`) يعيد فتح ⚙️ |
-| 28568 · 28579 · 28584 | `hwStyle` · `hwKF` · `hwIn` · `hwOut` | الحركة (الوضع الخفيف/تقليل الحركة = بلا) · الإطارات · الدخول · الإغلاق بنسخة `.hwclone` |
-| 28601 · 28609 · 28615 · 28618 · 28621 | `hwLayers` · `hwPush` · `hwPop` · `hwSync` · `hwWatch` | الطبقات (نافذة · اختبار · صفحات · تفاصيل · إشعارات) · الترتيب z · خطوة التاريخ (مو بالتطبيق) · المراقب · `popstate` |
-| 28629 · 28633 · 28634 | `hwDress` · `showModal` · `showDialog` · `hideModal` | ✕ + `.hwb` · «إغلاق» وحده ينشال · الكاملة/الصغيرة · السد بالحركة |
-| 28051 | `holyBack` | «⋯» · نافذة الخط ⇐ الأعلى بالمكدّس ⇐ القديم احتياط ⇐ false |
-| 26310 | ⚙️ `#animRow` | «🎬 حركة فتح النوافذ» (7) |
+| 28751 · 28755 | `HW_ANIMS` · `HW_MS` · `HW` · `uiAnim` · `setAnim` | الحركات السبع · مدتها · المكدّس · الاختيار (`dash_anim`) يعيد فتح ⚙️ |
+| 28760 · 28771 · 28776 | `hwStyle` · `hwKF` · `hwIn` · `hwOut` | الحركة (الوضع الخفيف/تقليل الحركة = بلا) · الإطارات · الدخول · الإغلاق بنسخة `.hwclone` |
+| 28793 · 28801 · 28807 · 28810 · 28813 | `hwLayers` · `hwPush` · `hwPop` · `hwSync` · `hwWatch` | الطبقات (نافذة · اختبار · صفحات · تفاصيل · إشعارات) · الترتيب z · خطوة التاريخ (مو بالتطبيق) · المراقب · `popstate` |
+| 28821 · 28825 · 28826 | `hwDress` · `showModal` · `showDialog` · `hideModal` | ✕ + `.hwb` · «إغلاق» وحده ينشال · الكاملة/الصغيرة · السد بالحركة |
+| 28243 | `holyBack` | «⋯» · نافذة الخط ⇐ الأعلى بالمكدّس ⇐ القديم احتياط ⇐ false |
+| 26502 | ⚙️ `#animRow` | «🎬 حركة فتح النوافذ» (7) |
 | CSS آخر الأنماط | `.hwx` · `.mbg.full` · `.mbg.small` · `.page .pwrap` · `.page .phead` · `#drawer` · `#notifPanel` · `.btov` · `@media (max-width:720px)` | الإطار الواحد (22px · 1180px · الهاتف كامل) |
 
 ## 🃏 v3.36.33 — معدل الربح لكل بطاقة من تداولها · الأشكال ج · ب · OKX تعرض كل شي · 🔤 خط الكتابة
@@ -393,10 +398,10 @@
 |---|---|---|
 | 6581 · 6584 | `_BTA_CACHE` · `_bot_trade_all` | ربح التداول لكل بوت بكل أيامه (n + 💠 r · `trade_period`) — مرة كل دقيقة |
 | 6608 · 6631 | `_rate_fix` · `overview` | `rate_daily` = تداول البطاقة ÷ أيام تشغيلها (`rate_trade` · `rate_days` · `rate_unit`) · DCA والدوري البيعي بعملتهم · عدّاد الربح ما يتغيّر |
-| 26892 · 26894 · 26895 | `rateNum` · `rateTxt` · `rateTip` · `cardRates` (JS) | «يومي / شهري / سنوي» بالإشارة والكسور · التلميح · صفّا 🔁/💹 الجديدين |
-| 29518 · 29520 · 29529 | `SK_SEEN` · `skRest` · `skBtnRest` (JS) | كل صف بالبطاقة القديمة ما ظهر بالشكل ⇐ ينضاف · كل زر ⇐ «⋯» · بلا «كل التفاصيل» |
-| 29784 | `skModel` (JS) | يبدي `SK_SEEN` (اللي يظهر بمكان ثاني) · يكمّل بالصفوف والأزرار الباقية |
-| 22647 · 29480 · 29483 · 26258 | `HFONTS` · `hFontApply` · `uiFont` · `setFont` · ⚙️ `#fontRow` | 9 خطوط · قبل الرسم · لكل جهاز (`dash_font`) · الأرقام تبقى IBM Plex Mono |
+| 27084 · 27086 · 27087 | `rateNum` · `rateTxt` · `rateTip` · `cardRates` (JS) | «يومي / شهري / سنوي» بالإشارة والكسور · التلميح · صفّا 🔁/💹 الجديدين |
+| 29710 · 29712 · 29721 | `SK_SEEN` · `skRest` · `skBtnRest` (JS) | كل صف بالبطاقة القديمة ما ظهر بالشكل ⇐ ينضاف · كل زر ⇐ «⋯» · بلا «كل التفاصيل» |
+| 29976 | `skModel` (JS) | يبدي `SK_SEEN` (اللي يظهر بمكان ثاني) · يكمّل بالصفوف والأزرار الباقية |
+| 22839 · 29672 · 29675 · 26450 | `HFONTS` · `hFontApply` · `uiFont` · `setFont` · ⚙️ `#fontRow` | 9 خطوط · قبل الرسم · لكل جهاز (`dash_font`) · الأرقام تبقى IBM Plex Mono |
 | CSS `.card.sk .skin …` | — | بلا «…» بالأشكال — كل نص يلتف · الأزرار بكلامها كامل |
 
 ## 📱 v3.36.32 — تطبيق 2.0: ويدجت بشكل كرت B بنفسجي وستة أرقام · مصدر التطبيق بالمستودع · مفتاح توقيع جديد
@@ -405,12 +410,12 @@
 
 | السطر | الدالة | الدور |
 |---|---|---|
-| 20033 · 20036 · 19863 | `_WD_E` · `_wd_n` · `app_widget_view` | «kb» ستة أرقام (اليوم · أمس · آخر 7 أيام · آخر 30 يوماً · هذا الشهر · الإجمالي) من `trade_period` واحد · «t» نوع كل بوت · «k» القديمة لـ1.9 |
-| 21678 | `/api/app/info` (`_app_get`) | تطبيق 1.x (UA «HolyApp/1.») ⇐ `code 0` · «rekey» |
-| 27929 | `appAuto` (JS) | داخل تطبيق 1.x: نافذة 📱 تنفتح وحدها مرة كل يومين (`holy_rekey_seen`) |
-| 27948 · 27958 | `appRender` · `OLDKEY` (JS) | صف «نسخة جديدة بتوقيع جديد» + «⬇️ احفظها» · الخطوات الأربع · صف الويدجت · المتصفح: «احذف 1.x أولاً» |
-| 28017 | `appRekeySave` (JS) | `Holy-2.0.apk` ⇐ «التنزيلات ← Holy» عبر `HolyApp.saveFile` + نسخ العنوان |
-| 35260 · 35262 | `APP_APK_CODE` · `APP_APK_NAME` · `APP_APK_REKEY` · `APP_APK_B64` | 11 · «2.0» · أول رمز بالمفتاح الجديد · التطبيق المدمج |
+| 20037 · 20040 · 19863 | `_WD_E` · `_wd_n` · `app_widget_view` | «kb» ستة أرقام (اليوم · أمس · آخر 7 أيام · آخر 30 يوماً · هذا الشهر · الإجمالي) من `trade_period` واحد · «t» نوع كل بوت · «k» القديمة لـ1.9 |
+| 21870 | `/api/app/info` (`_app_get`) | تطبيق 1.x (UA «HolyApp/1.») ⇐ `code 0` · «rekey» |
+| 28121 | `appAuto` (JS) | داخل تطبيق 1.x: نافذة 📱 تنفتح وحدها مرة كل يومين (`holy_rekey_seen`) |
+| 28140 · 28150 | `appRender` · `OLDKEY` (JS) | صف «نسخة جديدة بتوقيع جديد» + «⬇️ احفظها» · الخطوات الأربع · صف الويدجت · المتصفح: «احذف 1.x أولاً» |
+| 28209 | `appRekeySave` (JS) | `Holy-2.0.apk` ⇐ «التنزيلات ← Holy» عبر `HolyApp.saveFile` + نسخ العنوان |
+| 35455 · 35457 | `APP_APK_CODE` · `APP_APK_NAME` · `APP_APK_REKEY` · `APP_APK_B64` | 11 · «2.0» · أول رمز بالمفتاح الجديد · التطبيق المدمج |
 | `android/java/com/holy/dash/WidgetArt.java` | `render` · `speak` | رسم الويدجت (التطبيق) — `HolyWidget.render/speak` يسلّمون له |
 
 ## 🔔 v3.36.31 — تنبيهات مقيسة: 🟢 القاع المؤكد بالحجم · 🌊 انهيار السوق كله
@@ -426,7 +431,7 @@
 | — | `_mkt_rows` · `_mkt_at` · `mkt_scan` | 🗑️ أُزيلت v3.36.68 (🎯 الإشارات بدلها) · كانت: شموع 4 ساعات (ذاكرة · 260) · نزول الشمعة ÷ حركة 120 شمعة + الحجم ÷ 30 شمعة · آخر شمعة مغلقة: كم عملة انهارت + عملات الشريط المنهارة بحجم (≥ 3× · ≥ 3×) · مرة لكل شمعة |
 | — | `ina_tick` | 🗑️ أُزيلت v3.36.68 (🎯 الإشارات بدلها) · كانت: القاع: بس `vol` و≥ `minv` · 🌊: حصة ≥ `mkt` · شمعة أُغلقت خلال ساعتين · مرة لكل شمعة · مرة باليوم · `mkt=` للفحص |
 | — | `ina_view` | 🗑️ أُزيلت v3.36.68 (🎯 الإشارات بدلها) · كانت: نص القاعدة الجديد (المؤكد بالحجم · السوق · المتوقف) |
-| 26426 · 26428 | `fcBot` · `fcBotDet` (JS) | «✅ مؤكد بالحجم» / «بلا تأكيد حجم» · سطر سجل الحجم ومتحقق الآن أو لا |
+| 26618 · 26620 | `fcBot` · `fcBotDet` (JS) | «✅ مؤكد بالحجم» / «بلا تأكيد حجم» · سطر سجل الحجم ومتحقق الآن أو لا |
 
 ## ⬆️ v3.36.30 — 🪜 حتى 500 مستوى فوق السعر · 3,000 خانة
 
@@ -437,7 +442,7 @@
 | 18431 · 18432 | `STEP_MAX_SLOTS` · `STEP_MAX_UP` | 3,000 خانة (كان 1,500) · 500 مستوى فوق السعر (كان 200) |
 | 18478 | `_step_args` | يرفض أكثر من `STEP_MAX_UP` بالرقم |
 | 18519 | `step_plan` | يرفض أكثر من `STEP_MAX_SLOTS` · البيعات تحت حد OKX الأدنى بعددها (يحدد أعلى سعر يوصله المبلغ) |
-| 29099 | نموذج النشر (JS) | «⬆️ مستويات فوق السعر من عملاتك (0–500)» |
+| 29291 | نموذج النشر (JS) | «⬆️ مستويات فوق السعر من عملاتك (0–500)» |
 
 ## 📈 v3.36.29 — المسار التجريبي على أسعار OKX الحقيقية (كل البوتات) · + 3 و6 أشهر
 
@@ -454,8 +459,8 @@
 | 5573 | `_bt_finished` | `err_f.json` = نهاية (فشل الجلب ⇒ ما في عمّال) |
 | 5592 | `bt_status` | `fetching` ⇒ «prep» + `fetch` {done · total · pg} · `note` · `agg.real` (الوسيط · المسك · البوت مقابل المسك) |
 | 5725 | `_bt_child` | الحقيقي: `px_n` ⇒ `_bt_ohlc` · `dt = sec/4` · البداية = أول فتح · حدود السعر المطلقة × (أول سعر ÷ المرجع) · العملات بنفس قيمتها بالدولار · `sum.real` · `pnl` · `hold` · `vs` · `t0` · `t1` |
-| 25262 · 25265 · 25267 | `BT_PER` · `btWin` · `btRealRows` (JS) | المدد الخمسة وشمعتها · تاريخ النافذة · أسطر بطاقة النهاية الحقيقية |
-| 25330 · 25344 · 25358 · 25390 | `btNote` · `btProg` · `btResults` · `btPlayer` (JS) | ملاحظة الحقيقي · «⏳ يجلب أسعار OKX الحقيقية… (صفحة)» · سطر الوسيط + عمود «📈 الحقيقي · المسك» · العنوان والتواريخ |
+| 25454 · 25457 · 25459 | `BT_PER` · `btWin` · `btRealRows` (JS) | المدد الخمسة وشمعتها · تاريخ النافذة · أسطر بطاقة النهاية الحقيقية |
+| 25522 · 25536 · 25550 · 25582 | `btNote` · `btProg` · `btResults` · `btPlayer` (JS) | ملاحظة الحقيقي · «⏳ يجلب أسعار OKX الحقيقية… (صفحة)» · سطر الوسيط + عمود «📈 الحقيقي · المسك» · العنوان والتواريخ |
 
 ## 🖼️ v3.36.28 — بطاقة الأرباح: البارحة · الأسبوع السابق · الشهر الحالي · الشهر السابق
 
@@ -464,7 +469,7 @@
 | السطر | الدالة | الدور |
 |---|---|---|
 | 10632 | `_prev_week` · `/api/profit` (`per=yday` · `pweek`) | الأسبوع السابق (الاثنين ← الأحد) · البارحة يوم واحد — نفس `profit_view(days, end)` |
-| 27406 · 27419 · 27423 | `CARD_P` · `cardSet` · `cardRender` (JS) | 9 فترات بالبطاقة · مفتاح نصّي ⇐ `per=` · رقم ⇐ `days=` |
+| 27598 · 27611 · 27615 | `CARD_P` · `cardSet` · `cardRender` (JS) | 9 فترات بالبطاقة · مفتاح نصّي ⇐ `per=` · رقم ⇐ `days=` |
 
 ## 🔬 v3.36.27 — المؤشرات بقياس حقيقي · 🟢 مؤشر القاع · 🔔 تنبيهات القاع · 🎞️ الشريط (F22)
 
@@ -476,8 +481,8 @@
 | 15693 · 15704 · 15720 | `BOT_W` · `BOT_REAL` · `_bot_at` · `bot_coin` | 🟢 مؤشر القاع: النقاط (نفس `ci/sig_check3.py`) · المستوى · الأجزاء · سجل العملة · حالة البيتكوين — `fc_coin` ⇐ `out.bot` |
 | — | `INA_SENS` (`min`) · `ina_tick` | 🗑️ أُزيلت v3.36.68 (🎯 الإشارات بدلها) · كانت: 🔔 تنبيهات مؤشر القاع بس (حسب الحساسية · مرة لكل مستوى بالنوبة) — الانقلاب والانضغاط والدعم انطفت |
 | 13475 | `_tape_sum` | 🎞️ ملخص كل عملة للشريط (المعدل · «غداً» المقيس · شارة القاع) ⇐ `indic_view.cs` |
-| 26115 · 26118 · 26120 · 26122 | `fcRealW` · `fcRank` · `fcBot` · `fcBotDet` (JS) | سطر «أعلى بعدها» · الصادق أولاً · سطر القاع وتفاصيله |
-| 26304 | `indicSync` (JS) | الشريط: المعدل بالكلام + غداً + شارة القاع |
+| 26307 · 26310 · 26312 · 26314 | `fcRealW` · `fcRank` · `fcBot` · `fcBotDet` (JS) | سطر «أعلى بعدها» · الصادق أولاً · سطر القاع وتفاصيله |
+| 26496 | `indicSync` (JS) | الشريط: المعدل بالكلام + غداً + شارة القاع |
 
 ## 🧮 v3.36.26 — حاسبة المستويات فوق السعر (نشر الجرد) · ⏩ v3.36.25 — المسار التجريبي للمتدرج (F21)
 
@@ -486,10 +491,10 @@
 | السطر | الدالة | الدور |
 |---|---|---|
 | 17868 | `grid_up_calc` · `GRID_UP_MAX` | 🧮 حساب بس: العدد مفتوح (n) أو آخر سعر بيع (top) ⇐ المستويات · آخر بيعة · العملات المطلوبة · 🎚️ فوق السقف — ما يكتب شي (`/api/grid_up_calc`) |
-| 28526 · 28545 | `nUpRun` (JS) · `gridFormBody` | قسم «🧮 حاسبة المستويات فوق السعر» المطوي بنموذج نشر الجرد — الخانتين تعبّي وحدة الثانية · `gridFormBody` ما يقرا خاناتها |
+| 28718 · 28737 | `nUpRun` (JS) · `gridFormBody` | قسم «🧮 حاسبة المستويات فوق السعر» المطوي بنموذج نشر الجرد — الخانتين تعبّي وحدة الثانية · `gridFormBody` ما يقرا خاناتها |
 | 4583 | `_BtClock` (`settle` · `_BT_SETTLE`) | ⏩ المتدرج: 6 ث بالوتيرة الحية بعد كل نقطة سعر ثم النقطة التالية (نومة الثانية) — نفس التنفيذات بالضبط |
 | 4968 · 5609 | `_bt_run` (`prog`) · `_bt_child` | ⏳ تقدّم المسار الجاري ⇐ `g_n.json` كل ثانية |
-| 5481 · 25054 | `bt_status` (`prog` · المتبقي) · `btProg` (JS) | الشريط «⏳ يعمل المحرك على المسار — 37% · المتبقي ≈ …» |
+| 5481 · 25246 | `bt_status` (`prog` · المتبقي) · `btProg` (JS) | الشريط «⏳ يعمل المحرك على المسار — 37% · المتبقي ≈ …» |
 
 ## ⚠️ v3.36.24 — بلا تنبيه «ResizeObserver loop» (F20)
 
@@ -497,8 +502,8 @@
 
 | السطر | الدالة | الدور |
 |---|---|---|
-| 24212 | `rcFit3` (JS) | مراقب حجم صندوق 🔁 يقيس بالإطار التالي (`requestAnimationFrame`) — ما يغيّر الصندوق داخل رد المراقب ⇐ ولا حلقة |
-| 29281 | ماسك `window error` (JS) | يتجاهل «ResizeObserver loop» بس (ملاحظة متصفح مو خلل) · كل خطأ ثاني ⇐ «⚠️ خلل واجهة» |
+| 24404 | `rcFit3` (JS) | مراقب حجم صندوق 🔁 يقيس بالإطار التالي (`requestAnimationFrame`) — ما يغيّر الصندوق داخل رد المراقب ⇐ ولا حلقة |
+| 29473 | ماسك `window error` (JS) | يتجاهل «ResizeObserver loop» بس (ملاحظة متصفح مو خلل) · كل خطأ ثاني ⇐ «⚠️ خلل واجهة» |
 
 ## 💠↕️ v3.36.23 — جدول إعادة الاستثمار بترتيب البيع (F19)
 
@@ -506,7 +511,7 @@
 
 | السطر | الدالة | الدور |
 |---|---|---|
-| 26731 | `openReinvestLadder` (JS) | جدول 🪙 الماسك عملة بسعر البيع من الأعلى للأوطى (`sp`) — الأقرب لاصق بخط السعر · التعادل بسعر الشراء · جدول الشراء كما هو |
+| 26923 | `openReinvestLadder` (JS) | جدول 🪙 الماسك عملة بسعر البيع من الأعلى للأوطى (`sp`) — الأقرب لاصق بخط السعر · التعادل بسعر الشراء · جدول الشراء كما هو |
 
 ## 🎨 v3.36.22 — خطوط بطاقة المتدرج تبيّن التداخل (F18)
 
@@ -514,9 +519,9 @@
 
 | السطر | الدالة | الدور |
 |---|---|---|
-| 28896 · 28898 | `ST_PAL` · `ST_PAL_L` · `stCol` (JS) | 12 لون متباعدة للمستويات (ΔE2000 ≥ 15.9 · المتجاورة ≥ 30 · بلا أحمر) + مجموعة أغمق للثيم الفاتح |
-| 28906 | `stLad` (JS) | مسطرة البطاقة: سعر شراء كل مستوى داخل المدى وما عنده أمر شراء = خط منقّط `r:j` بلونه وسعره (تحت الأوامر) ⇐ التداخل يبين |
-| 28947 | `stPop` (JS) | ضغطة الخط المنقّط ⇐ تفاصيل المستوى + «لا يوجد له أمر شراء منشور الآن» |
+| 29088 · 29090 | `ST_PAL` · `ST_PAL_L` · `stCol` (JS) | 12 لون متباعدة للمستويات (ΔE2000 ≥ 15.9 · المتجاورة ≥ 30 · بلا أحمر) + مجموعة أغمق للثيم الفاتح |
+| 29098 | `stLad` (JS) | مسطرة البطاقة: سعر شراء كل مستوى داخل المدى وما عنده أمر شراء = خط منقّط `r:j` بلونه وسعره (تحت الأوامر) ⇐ التداخل يبين |
+| 29139 | `stPop` (JS) | ضغطة الخط المنقّط ⇐ تفاصيل المستوى + «لا يوجد له أمر شراء منشور الآن» |
 
 ## 🆔 v3.36.21 — كود عشوائي لكل بوت (F17) · تجربة المتدرج والشبكي
 
@@ -533,13 +538,13 @@
 | السطر | الدالة | الدور |
 |---|---|---|
 | 18328 · 18353 · 18370 | `_step_keep_levels` · `_step_sl_far` · `_step_slots_view` | فوق 400 خانة: البطاقة = مستويات بيها أمر بالمنصة أو تنفيذ جزئي + أقرب 10 · الباقي عدّادات · `full=True` كلها |
-| 18346 · 23903 | `_step_near` · `vbuyCost` (JS) | قوائم الشبكي العامة (ذاكرة) = الأقرب 40 · كلفة شراءات الذاكرة رقم واحد (`vbuy_usd`) |
+| 18346 · 24095 | `_step_near` · `vbuyCost` (JS) | قوائم الشبكي العامة (ذاكرة) = الأقرب 40 · كلفة شراءات الذاكرة رقم واحد (`vbuy_usd`) |
 | 563 | `_step_ri_snapshot` | صفوف 💠: اللي بيها قيمة + المستويات المهمة · `n_rows` · `full=True` كلها (كانت تنقطع عند أعلى 300) |
-| 18612 · 21322 | `step_ladder_view` · `/api/step_ladder` | السلّم الكامل عند الطلب (كل الخانات · كل صفوف 💠) — قراءة بس · يرفض أي مجلد برّه اللوحة |
-| 28947 · 28904 | `stPop` · `stRiRow` (JS) | ضغطة بيعة ⇐ «🛒 شراؤها الخاص» (المستوى · السعر · البعد · ينشر من أقرب W) + حصّالتها · ضغطة شراء ⇐ بيعاته الخاصة |
-| 28960 · 28965 · 25510 | `stFull` · `stFullDraw` · `openLadder` (JS) | «🪜 السلم» للمتدرج = السلّم الكامل بالمستوى (كل جزء · منشور/بالطريق/ذاكرة · +x% فوق شرائه · 💠) · فلاتر |
+| 18612 · 21514 | `step_ladder_view` · `/api/step_ladder` | السلّم الكامل عند الطلب (كل الخانات · كل صفوف 💠) — قراءة بس · يرفض أي مجلد برّه اللوحة |
+| 29139 · 29096 | `stPop` · `stRiRow` (JS) | ضغطة بيعة ⇐ «🛒 شراؤها الخاص» (المستوى · السعر · البعد · ينشر من أقرب W) + حصّالتها · ضغطة شراء ⇐ بيعاته الخاصة |
+| 29152 · 29157 · 25702 | `stFull` · `stFullDraw` · `openLadder` (JS) | «🪜 السلم» للمتدرج = السلّم الكامل بالمستوى (كل جزء · منشور/بالطريق/ذاكرة · +x% فوق شرائه · 💠) · فلاتر |
 | `main_step.py` 108 | `save_json` | F16: `json.dumps` (المشفّر السريع C) بدل `json.dump` — نفس البايتات · أسرع ~4× · الملف المؤقت والـfsync كما هي |
-| 26709 | `openReinvestLadder` (JS) | «💠 سلّم الإعادة» صفحة وحدة · فوق/تحت/بيها إعادة · «⬇️ تحت السعر» · «💠 اللي بيها إعادة بس» · الأرقام الصغيرة · الصفوف كلها عند الطلب |
+| 26901 | `openReinvestLadder` (JS) | «💠 سلّم الإعادة» صفحة وحدة · فوق/تحت/بيها إعادة · «⬇️ تحت السعر» · «💠 اللي بيها إعادة بس» · الأرقام الصغيرة · الصفوف كلها عند الطلب |
 
 ## 🪜🪟🛡️ v3.36.19 — النافذة صارمة مثل ♾️ (F13) · الرقابة تقرا 🪜 بقواعده (F14) · المُراكِم يستلم تسليم 🪜
 
@@ -563,17 +568,17 @@
 | السطر | الدالة | الدور |
 |---|---|---|
 | 18037 · 18110 · 18121 · 18203 | `STEP_TAKER_FEE` · `_step_taken` · `step_plan` · `deploy_step` | الجدول بعمولة taker (الأسوأ) والسطر الخسران أحمر · 🪜 واحد لكل عملة · النشر يكتب `taker_rate` و💠 `reinvest` · `reinvest_pct` |
-| 28906 · 28947 · 29015 | `stLad` · `stPop` · `stLadOld` (JS) | البطاقة بالطول: مسطرة السعر (خط لكل مستوى بعدّاده · خط لكل بيعة منشورة · لون لكل مستوى) · الضغطة ⇒ التفاصيل |
+| 29098 · 29139 · 29207 | `stLad` · `stPop` · `stLadOld` (JS) | البطاقة بالطول: مسطرة السعر (خط لكل مستوى بعدّاده · خط لكل بيعة منشورة · لون لكل مستوى) · الضغطة ⇒ التفاصيل |
 | 563 · 633 | `_step_ri_snapshot` · `reinvest_snapshot` | 💠 لقطة إعادة الاستثمار من الخانات: صف لكل خانة `kk = "j:k"` · `io` · التفكيك · `desync` |
 | 18309 | `_step_slots_view` | الشراء = الأساس + النمو |
 | 18781 | `control` (🪜 `reinvest`) | 🔄 تشغيل = الإعداد (بلا إعادة تشغيل) · إطفاء = الإعداد + `reinvest_release.flag` · 💉 ➖ ⚖️ = ملفات طلبات الشبكي |
 | 6630 | `launch` | 🪜 ما يتغلّف أبداً بـ`reinvest.py` الشبكي |
 | 4950 · 5102 · 5193 | `_bt_cum` · `_bt_ri_coin` · `_bt_detail` | المسار التجريبي: الربح = العادي + المعاد − المحرر · عملات 💠 · الإعادة تنتهي على رقم البطاقة |
-| 26623 · 26498 · 26555 · 25488 · 28598 · 28602 | `openReinvestLadder` · `riInject` · `riWithdraw` · `askReinvest` · `stBody` · `stRiSync` (JS) | «🪜 المستوى · الجزء» بالسلّم والنوافذ · نص 🔄 للمتدرج · صندوق 💠 بالنشر |
+| 26815 · 26690 · 26747 · 25680 · 28790 · 28794 | `openReinvestLadder` · `riInject` · `riWithdraw` · `askReinvest` · `stBody` · `stRiSync` (JS) | «🪜 المستوى · الجزء» بالسلّم والنوافذ · نص 🔄 للمتدرج · صندوق 💠 بالنشر |
 | 1190 · 864 | `started_of` · `bot_snapshot` | ⏱️ تاريخ تشغيل ثابت لكل كرت (`Holy_BotMeta.json` · «acc:<id>» للمُراكِم) · المعدلات على مدة الربح |
-| 26196 · 26200 · 27779 | `stAge` · `stAgeT` · `renderAccum` (JS) | «المدة · منذ MM-DD» بكل كرت + صف ⏱️ بالمُراكِم |
-| 18520 · 18546 · 18590 · 26203 | `_arch_record` · `archive_view` · `delete_bot` · `openArchive` (JS) | 🗄️ الأرشيف: يتسجّل لحظة الحذف (`Holy_Archive.json`) · `/api/archive` · بلا مفاتيح |
-| 23309 · 23312 | الأزرار | «🔗 الارتباط» (كان «👛 المحافظ») · «🗄️ الأرشيف» بين 🛡️ و📉 |
+| 26388 · 26392 · 27971 | `stAge` · `stAgeT` · `renderAccum` (JS) | «المدة · منذ MM-DD» بكل كرت + صف ⏱️ بالمُراكِم |
+| 18520 · 18546 · 18590 · 26395 | `_arch_record` · `archive_view` · `delete_bot` · `openArchive` (JS) | 🗄️ الأرشيف: يتسجّل لحظة الحذف (`Holy_Archive.json`) · `/api/archive` · بلا مفاتيح |
+| 23501 · 23504 | الأزرار | «🔗 الارتباط» (كان «👛 المحافظ») · «🗄️ الأرشيف» بين 🛡️ و📉 |
 | 19661 | `app_widget_view` | 📱 الويدجت: ربح التداول (عادي + 💠) بكل الخانات |
 
 | `main_step.py` — السطر | الدالة | الدور |
@@ -599,8 +604,8 @@
 
 | السطر | الدالة | الدور |
 |---|---|---|
-| 32966 · 32981 | `_step_left_orders` · `delete_purge` | F8: 🪜 ما ينحذف إلا إذا تأكدت اللوحة ما بقى أمر له ببصمته — وإلا «⛔ لم يُحذف» وإعادة التشغيل تنطفي |
-| 28282 · 28294 | `stPlanHtml` (JS) | الجدول بالطول: بيعة لكل سطر (رقمها · سعرها · بعدها عن الشراء · ربحها) — `tr[data-j][data-k]` |
+| 33161 · 33176 | `_step_left_orders` · `delete_purge` | F8: 🪜 ما ينحذف إلا إذا تأكدت اللوحة ما بقى أمر له ببصمته — وإلا «⛔ لم يُحذف» وإعادة التشغيل تنطفي |
+| 28474 · 28486 | `stPlanHtml` (JS) | الجدول بالطول: بيعة لكل سطر (رقمها · سعرها · بعدها عن الشراء · ربحها) — `tr[data-j][data-k]` |
 
 | `main_step.py` — السطر | الدالة | الدور |
 |---|---|---|
@@ -627,7 +632,7 @@
 | 17996 | `step_plan` | يرفض أي بيعة `sp·(1−f)² ≤ bp` (= شرط المحرك) · التداخل = d1 + (N−1)·d · `args.d1` |
 | 18074 | `deploy_step` | يكتب `step_first` · تيليگرام «أول بيعة · بين البيعات» |
 | 881 · 5189 · 7666 · 9829 · 18540 | `bot_snapshot` (`scfg.d1`) · `_bt_wallet_def` · `_gd_gather` (أكبر المسافتين) · `_pv_cfg_txt` · `control` (`clone_info.step_first_pct`) | العرض والحارس والاستنساخ |
-| 26451 · 28255 · 28274 · 28553 | التفاصيل (صفّين) · النموذج (`st_d1` · `st_d`) · `stBody` · سطر البطاقة (JS) | «📈 مسافة أول بيعة» · «↔️ المسافة بين البيعات» |
+| 26643 · 28447 · 28466 · 28745 | التفاصيل (صفّين) · النموذج (`st_d1` · `st_d`) · `stBody` · سطر البطاقة (JS) | «📈 مسافة أول بيعة» · «↔️ المسافة بين البيعات» |
 
 | `main_step.py` — السطر | الدالة | الدور |
 |---|---|---|
@@ -657,9 +662,9 @@
 | 18529 | `control` | 🪜: يرفض 💠 (`reinvest` · `ri_*`) · ⚔️ (`guard`) · التعديل الحي · `clone_info` ⇐ نموذج المتدرج |
 | 4206 · 5432 | `_BT_KINDS` · `_bt_dry_cfg` | 🧪 المسار التجريبي: النوع التاسع · الإعداد = `deploy_step` بالصندوق |
 | 31031 · 32647 | `_GRIDS_B64` · `engine_for` | المحرك المدمج (`GRIDS_SRC` · `GRIDS_VERSION`) · `grid_step` ⇐ `main.py` بمجلده |
-| 23437 | `updCard` (JS) | بلا شارة 🔄 ولا ⚔️ للمتدرج (والتفاصيل بلا زر الدرع) |
-| 22100 | CSS | `.card.sk.k-step{--k-rgb:var(--cyan-rgb)}` — لون البطاقة بالأشكال |
-| 28246 · 28282 | `openDeployStep` · `stPlanHtml` (JS) | النموذج + الجدول (صف لكل مستوى · بيعاته وربحها · الرفض بالأحمر · الملاحظات) · 🧪 `btFromForm('step')` |
+| 23629 | `updCard` (JS) | بلا شارة 🔄 ولا ⚔️ للمتدرج (والتفاصيل بلا زر الدرع) |
+| 22292 | CSS | `.card.sk.k-step{--k-rgb:var(--cyan-rgb)}` — لون البطاقة بالأشكال |
+| 28438 · 28474 | `openDeployStep` · `stPlanHtml` (JS) | النموذج + الجدول (صف لكل مستوى · بيعاته وربحها · الرفض بالأحمر · الملاحظات) · 🧪 `btFromForm('step')` |
 
 | `main_step.py` — السطر | الدالة | الدور |
 |---|---|---|
@@ -684,11 +689,11 @@
 
 | السطر | الدالة | الدور |
 |---|---|---|
-| 28031 | `skOn` | `.skin > .skv > .skt · .skx · .skf` — الصندوق (أوامر الدوري · صندوق المعدل) بين الأرقام والأزرار للأبد |
-| 28054 | `skinUpd` | يقسم الـHTML عند `sk-ft`/`ok-ft` ويكتب الجزء اللي تغيّر بس (`_skt._h` · `_skf._h`) ⇒ الصندوق ما ينعاد رسمه والسلايد يبقى · 28059: لما ينفتح من «⋯» يقيس |
-| 21829 | CSS | `.skt,.skf{min-width:0}` — التدفق العادي (الهوامش تنهار مثل قبل ⇒ البطاقات الثانية نفسها بالبكسل) |
-| 23523 · 23529 | `rcFit3` | صندوق أوامر الدوري = 3 أوامر بالضبط (أعلى الرابع − أعلى الأول) · ≤3 ⇒ بلا حد · `ResizeObserver` · بعد الخطوط · `_f3` = نفس الأوامر والعرض ⇒ ما يقرأ التخطيط |
-| 23588 | `updRecCard` | لما تتغير الأوامر (`_k`) ⇒ `rcFit3` |
+| 28223 | `skOn` | `.skin > .skv > .skt · .skx · .skf` — الصندوق (أوامر الدوري · صندوق المعدل) بين الأرقام والأزرار للأبد |
+| 28246 | `skinUpd` | يقسم الـHTML عند `sk-ft`/`ok-ft` ويكتب الجزء اللي تغيّر بس (`_skt._h` · `_skf._h`) ⇒ الصندوق ما ينعاد رسمه والسلايد يبقى · 28251: لما ينفتح من «⋯» يقيس |
+| 22021 | CSS | `.skt,.skf{min-width:0}` — التدفق العادي (الهوامش تنهار مثل قبل ⇒ البطاقات الثانية نفسها بالبكسل) |
+| 23715 · 23721 | `rcFit3` | صندوق أوامر الدوري = 3 أوامر بالضبط (أعلى الرابع − أعلى الأول) · ≤3 ⇒ بلا حد · `ResizeObserver` · بعد الخطوط · `_f3` = نفس الأوامر والعرض ⇒ ما يقرأ التخطيط |
+| 23780 | `updRecCard` | لما تتغير الأوامر (`_k`) ⇒ `rcFit3` |
 
 | أداة الفحص | الدور |
 |---|---|
@@ -703,10 +708,10 @@
 |---|---|---|
 | 19306 · 19309 · 19321 | `_WD_E` · `_wd_n` · `app_widget_view` | 📱 ملخص الويدجت (للعرض فقط): يعمل/الكل · ربح اليوم · هذا الشهر · الإجمالي · سطر لكل بوت (رمز · عملة · يعمل · اليوم · الإجمالي) — نفس أرقام الكروت |
 | 19888 · 20024 | `do_GET` ⇒ `_app_get` · `/api/app/widget` | مفتاح هذا الموبايل بس (`X-Holy-Device` — بلاه 401 حتى مع جلسة متصفح) |
-| 28030 | `skinUpd` | 🧩 `_skxo='*'` افتراضي للدوري ⇒ الدرج الفعلي `el._skxe` (`lots` / `avgbox` بالمعدل) ظاهر من البداية · «⋯ ⇐ 🧩 الأوامر المفتوحة» يخفيه/يرجعه |
-| 28239 · 21829 · 24960 | `skO` · CSS `.ok-*` · `#skinRow` | 🃏 شكل OKX: رأس · ربح كبير · شبكة 2×3 · زر أبيض بصف كامل والباقي بإطار · القيم الطويلة تنزل سطر (ولا رقم مقصوص) |
-| 22584 · 27952 · 19856 | `html[data-theme="okx"]` · `THEMES` · `LOGIN_PAGE` | 🎨 «OKX أسود» (#000 · #121212 · أبيض · #8c8c8c · أخضر #25a750 · أحمر #ef454a) — وصفحة الدخول |
-| 26692 · 26757 | صف «🧩 ويدجت الشاشة الرئيسية» · `appPinWidget` (JS) | لوحة 📱: مضاف ✓ / «📌 أضفه» (`HolyApp.pinWidget()`) / الطريقة اليدوية · «بعد البصمة» إذا القفل شغّال |
+| 28222 | `skinUpd` | 🧩 `_skxo='*'` افتراضي للدوري ⇒ الدرج الفعلي `el._skxe` (`lots` / `avgbox` بالمعدل) ظاهر من البداية · «⋯ ⇐ 🧩 الأوامر المفتوحة» يخفيه/يرجعه |
+| 28431 · 22021 · 25152 | `skO` · CSS `.ok-*` · `#skinRow` | 🃏 شكل OKX: رأس · ربح كبير · شبكة 2×3 · زر أبيض بصف كامل والباقي بإطار · القيم الطويلة تنزل سطر (ولا رقم مقصوص) |
+| 22776 · 28144 · 19856 | `html[data-theme="okx"]` · `THEMES` · `LOGIN_PAGE` | 🎨 «OKX أسود» (#000 · #121212 · أبيض · #8c8c8c · أخضر #25a750 · أحمر #ef454a) — وصفحة الدخول |
+| 26884 · 26949 | صف «🧩 ويدجت الشاشة الرئيسية» · `appPinWidget` (JS) | لوحة 📱: مضاف ✓ / «📌 أضفه» (`HolyApp.pinWidget()`) / الطريقة اليدوية · «بعد البصمة» إذا القفل شغّال |
 
 | المحرك | التصليح |
 |---|---|
@@ -730,7 +735,7 @@
 | 9089 | `link_audit` (S5 «📒 الدفتر ⇄ البوتات») | 🔗 التسامح = 1e-6 + 0.5e-6 × عدد قيود اليوم (تقريب `_rec_ledger_book` لـ6 مراتب بكل قيد) |
 | 10434 · 9911 · 10440 | `_prev_month` · `profit_view(…, end=)` · `report_html(days, end=)` | 📊 الشهر السابق كاملاً (آخر يوم + عدد أيامه) · «هذا الشهر»/«آخر 30 يوم» ما تغيّروا |
 | 19961 · 19979 | `/api/profit?per=prev` · `/api/report.html?per=prev` | الخادم: `per` = `month` / `prev` / (30 يوم) |
-| 22681 · 26226 | `#pcPer` · `pcQ`/`pcPerName`/`pcPerSet` (JS) | ثلاث أزرار متساوية (شبكة 3 أعمدة) · أسماء قصيرة ≤560px · بلا عنوان · `holy_pcper` يقبل `prev` |
+| 22873 · 26418 | `#pcPer` · `pcQ`/`pcPerName`/`pcPerSet` (JS) | ثلاث أزرار متساوية (شبكة 3 أعمدة) · أسماء قصيرة ≤560px · بلا عنوان · `holy_pcper` يقبل `prev` |
 
 | أداة الفحص | الدور |
 |---|---|
@@ -747,11 +752,11 @@
 
 | السطر | الدالة | الدور |
 |---|---|---|
-| 4068 · 20223 | `va_w0_api` · `/api/va_w0` | 👛 قراءة بس: العملة الحرة بـOKX − اللي تحتاجه البوتات الثانية بنفس المفتاح والعملة ⇒ يأخذ/يشتري الباقي |
+| 4068 · 20227 | `va_w0_api` · `/api/va_w0` | 👛 قراءة بس: العملة الحرة بـOKX − اللي تحتاجه البوتات الثانية بنفس المفتاح والعملة ⇒ يأخذ/يشتري الباقي |
 | 3955 · 3045 · 3054 | `deploy_va` · `_VA_SET` · `_va_p` | النشر: `first_src` · `wallet_q` · `hg_wallet` |
 | 3165 · 3469 · 3691 · 3855 | `_va_gd_txt` · `_va_snapshot` · `_va_control` · `_va_msg` | الكرت/التفاصيل «أول طلب» و«👛 الشبكة من المحفظة» · ⚙️ `set_hg_wallet` · رسائل `w0`/`hg_wal` بالفصحى |
 | 5156 | `_bt_wallet_def` | 🧪 محفظة الصندوق فيها عملات لخيارات 👛 |
-| 24007 | `_vaW0…` (JS) | زرّين «🛒/👛 أول طلب» · القسمة قبل التشغيل + «✅ تأكيد» · `vd_hgw` · `vs_hgw` |
+| 24199 | `_vaW0…` (JS) | زرّين «🛒/👛 أول طلب» · القسمة قبل التشغيل + «✅ تأكيد» · `vd_hgw` · `vs_hgw` |
 
 ## ♾️×💹➕🛡️📋📊🧪 v3.36.10 — شبكة التعاوني تنتظر بأوامرها · البلس · الرقابة · الأوامر · فترة التقرير · ربح العملات
 
@@ -766,8 +771,8 @@
 | 7224 · 7427 · 7506 · 7846 | `_gd_bot_ids` · `_gd_free_claims` · `_gd_gather` · `_gd_apply` | 🛡️ رقم شبكة التعاوني (`HG`+md5 مجلد `grid/`) · العملة المحجوزة للشبكة المنتظرة · تتبّع أوامرها الحية برقم فترتها · فحص الإلغاء يتخطّى فترة انتهت/تنسحب |
 | 3467 · 3686 · 3843 | `_va_snapshot` · `_va_control` · `_va_msg` | كرت التعاوني «⏸️ تنتظر» + دفتر المسار + حصة الشبكة · ⏩ وهي تنتظر · رسائل `hg_park`/`hg_back`/«cfg» |
 | 4720 · 4893 · 4755 · 4937 | `_bt_ri_nf` · `_bt_ri_coin` · `_bt_run` · `_bt_summary` | 🧪 عامل البلس = `_cycle_step` · «🪙 ربح العملات» لكل بوت بإعادة استثمار (`gst` · `ri_pct` · `ri_coin`) |
-| 18818 · 18770 · 19868 · 26862 | `balances_once` · `ex_orders_view` · `/api/ex_orders` · `exOrdOpen` | 📋 أوامر المنصة بالتفصيل (`ent["ords"]` · لبوتها من بداية رقمها · قراءة بس) |
-| 26078 · 26079 · 26080 | `pcQ` · `pcPerSet` · `pcPerName` | 📊 فترة التقرير «هذا الشهر» (`/api/profit?per=month` · `report.html?per=month`) / «آخر 30 يوم» (`holy_pcper`) |
+| 18818 · 18770 · 19868 · 27054 | `balances_once` · `ex_orders_view` · `/api/ex_orders` · `exOrdOpen` | 📋 أوامر المنصة بالتفصيل (`ent["ords"]` · لبوتها من بداية رقمها · قراءة بس) |
+| 26270 · 26271 · 26272 | `pcQ` · `pcPerSet` · `pcPerName` | 📊 فترة التقرير «هذا الشهر» (`/api/profit?per=month` · `report.html?per=month`) / «آخر 30 يوم» (`holy_pcper`) |
 
 ## 🔙 v3.36.9 — محركات الشبكة رجعت لـv3.36.7 (بقرار المالك)
 
@@ -787,13 +792,13 @@
 | 5169 · 5191 · 5247 | `_bt_run` (`rnf` · `_pop_check` · آخر تسجيل) | 🎞️ العيّنات من `_bt_cum` · علامة لكل تسجيل بالدفتر (بعد كل بيعة يراقب الدفتر لحد ما يسجّلها) · آخر تسجيل بعد آخر نقطة علامته بالنهاية |
 | 5263 · 5406 | `_bt_trade` · `_bt_detail` | «💰 ربح البيع والشراء» للشبكة بإعادة الاستثمار من `_bt_cum` · «📦 المفتوح» = الباقي (`od.q` · `od.pot`) · الإعادة نفسها بعلاماتها |
 | 4023 · 3886 | `_va_control` (`va_hg_ri`) · `_va_snapshot` (`ri_now`/`rip_now`) | 💠 زر إعادة استثمار التعاوني: يكتب `set_hg_ri`/`set_hg_ri_pct` بس · الرسالة (من فترة الشبكة الجاية لو وحدة شغّالة) · الكرت: إعداد الفترة الشغّالة |
-| 30917 · 30922 · 30944 | `vaHgRiChip` · `vaHgRi` · `vaHgRiPrev` | 🖥️ الشارة بصندوق الشبكة (القديم) وبالشكلين · النافذة (تشغيل/إيقاف · النسبة · ربح بيعة وحدة · متى يسري) |
-| 35906 · 35907 · 31889 | `uiSkin` (`dash_skin`) · `setSkin` · ⚙️ `#skinRow` | 🃏 شكل البطاقات لهذا الجهاز: القديم (الافتراضي) · ج · ب |
-| 35935 · 35943 · 36034 · 36053 · 36055 | `skOn` · `skOff` · `skinUpd` · `skinLockPaint` · `skAct` | الطبقة فوق البطاقة: تنقل الشارت/السلم/الأوامر وترجعها · ترسم بعد كل تحديث · 🔒 · كل زر يضغط زر البطاقة الأصلي · «⋯» · «🗂️ كل التفاصيل» |
-| 36197 · 36225 · 36237 · 36257 | `skLadder` · `skVa` · `skRec` · `skAcc` | الرسومات: الأوامر الحية 4+4 + الشريط (والنطاق) · الهدف مقابل القيمة · حلقة الدوري + أوامره + المتوسط · المُراكِم |
-| 36267 · 36350 · 36356 · 36365 | `skModel` · `skHead` · `skC` · `skB` | نموذج كل بطاقة من نصها نفسه (10 أنواع · التعاوني رسمتين جنب بعض) · القالبان ج وب |
-| 30181 · 34635 · 35900 | `syncCards` · `renderAccum` · `cardLockPaint` | الربط: بعد `updCard` لكل بوت · بعد كل مُراكِم · القفل يلوّن 🔒 الشكل |
-| 28065 · 28190 | CSS `.card.sk…` · `.sk-*` | الشكلان (ثيمات اللوحة · بلا تمرير جانبي) |
+| 31301 · 31306 · 31328 | `vaHgRiChip` · `vaHgRi` · `vaHgRiPrev` | 🖥️ الشارة بصندوق الشبكة (القديم) وبالشكلين · النافذة (تشغيل/إيقاف · النسبة · ربح بيعة وحدة · متى يسري) |
+| 36296 · 36297 · 32276 | `uiSkin` (`dash_skin`) · `setSkin` · ⚙️ `#skinRow` | 🃏 شكل البطاقات لهذا الجهاز: القديم (الافتراضي) · ج · ب |
+| 36325 · 36333 · 36424 · 36443 · 36445 | `skOn` · `skOff` · `skinUpd` · `skinLockPaint` · `skAct` | الطبقة فوق البطاقة: تنقل الشارت/السلم/الأوامر وترجعها · ترسم بعد كل تحديث · 🔒 · كل زر يضغط زر البطاقة الأصلي · «⋯» · «🗂️ كل التفاصيل» |
+| 36587 · 36615 · 36627 · 36647 | `skLadder` · `skVa` · `skRec` · `skAcc` | الرسومات: الأوامر الحية 4+4 + الشريط (والنطاق) · الهدف مقابل القيمة · حلقة الدوري + أوامره + المتوسط · المُراكِم |
+| 36657 · 36740 · 36746 · 36755 | `skModel` · `skHead` · `skC` · `skB` | نموذج كل بطاقة من نصها نفسه (10 أنواع · التعاوني رسمتين جنب بعض) · القالبان ج وب |
+| 30565 · 35025 · 36290 | `syncCards` · `renderAccum` · `cardLockPaint` | الربط: بعد `updCard` لكل بوت · بعد كل مُراكِم · القفل يلوّن 🔒 الشكل |
+| 28449 · 28574 | CSS `.card.sk…` · `.sk-*` | الشكلان (ثيمات اللوحة · بلا تمرير جانبي) |
 
 | المحرك (المصدر `p3368/eng_new/`) | البصمة | التغيير |
 |---|---|---|
@@ -806,12 +811,12 @@
 | السطر | الاسم | الدور |
 |---|---|---|
 | 17323 · 17337 · 17399 | `deploy` (`_ri` · `cfg["reinvest"]`/`cfg["reinvest_pct"]`) | 💠 نسبة إعادة الاستثمار من نموذج النشر (0–100 · 100 افتراضياً · الرفض بالفصحى قبل المجلد) ⇒ الإعدادات ⇒ `launch()` يشغّل `reinvest.py` من أول لحظة · سطر تيليغرام ورسالة النشر · DEMO يتجاهلها |
-| 24092 · 24098 | `control` (`clone_info`) | 📋 «انسخ الإعدادات» يحمل `reinvest`/`reinvest_pct` |
+| 24476 · 24482 | `control` (`clone_info`) | 📋 «انسخ الإعدادات» يحمل `reinvest`/`reinvest_pct` |
 | 5558 · 5593 · 5900 | `bt_prep` · `_bt_dry_cfg` | 🧪 «💠 يعمل بإعادة الاستثمار X% من أول دورة» — الاختبار يبني إعداداته بـ`deploy()` نفسه ⇒ الصندوق يشغّل الغلاف بنفس النسبة |
-| 35097 · 35105 · 35653 | `gridFormBody` · `nRiSync` · `#n_ri`/`#f_ri`/`#n_rip` | 🖥️ نموذج نشر الجرد (♾️ · ➕ · 🎚️): «💠 إعادة الاستثمار من البداية» + النسبة |
-| 35894 · 36389 · 36400 · 36402 | `CLK` · `uiCardLock` (`dash_clock`) · `cardKey` · `cardLocked` · `cardLockPaint` · `cardLockDeco` · `cardLockFlip` · `cardLockAll` · `uiCardLockToggle` · التقاط `click` | 🔒 القفل لكل جهاز · زر 🔒 برأس كل بطاقة (`.lkwrap` مع الحالة) · النقرة داخل بطاقة مقفلة تنحجب قبل أزرارها (ولا طلب) · 🔒 يفتح هاي البطاقة دقيقة (كل استعمال يجدّد) · 🔓 يقفلها · كل ثانية يعيد الرسم |
-| 30179 · 34556 · 31912 | `syncCards` · `renderAccum` · ⚙️ `bCLock` | `cardLockDeco` بعد بناء كل بطاقة (البوتات · المُراكِم) · «🔒 قفل البطاقات (لهذا الجهاز)» بـ«🛡️ الحماية والتشغيل» |
-| 28057 · 28062 | `.lkbtn` · `.card.lk` · `.lkwrap` | الزر · أزرار البطاقة المقفلة باهتة · الحالة والقفل سوية لو التفّ الرأس |
+| 35487 · 35495 · 36043 | `gridFormBody` · `nRiSync` · `#n_ri`/`#f_ri`/`#n_rip` | 🖥️ نموذج نشر الجرد (♾️ · ➕ · 🎚️): «💠 إعادة الاستثمار من البداية» + النسبة |
+| 36284 · 36779 · 36790 · 36792 | `CLK` · `uiCardLock` (`dash_clock`) · `cardKey` · `cardLocked` · `cardLockPaint` · `cardLockDeco` · `cardLockFlip` · `cardLockAll` · `uiCardLockToggle` · التقاط `click` | 🔒 القفل لكل جهاز · زر 🔒 برأس كل بطاقة (`.lkwrap` مع الحالة) · النقرة داخل بطاقة مقفلة تنحجب قبل أزرارها (ولا طلب) · 🔒 يفتح هاي البطاقة دقيقة (كل استعمال يجدّد) · 🔓 يقفلها · كل ثانية يعيد الرسم |
+| 30563 · 34946 · 32301 | `syncCards` · `renderAccum` · ⚙️ `bCLock` | `cardLockDeco` بعد بناء كل بطاقة (البوتات · المُراكِم) · «🔒 قفل البطاقات (لهذا الجهاز)» بـ«🛡️ الحماية والتشغيل» |
+| 28441 · 28446 | `.lkbtn` · `.card.lk` · `.lkwrap` | الزر · أزرار البطاقة المقفلة باهتة · الحالة والقفل سوية لو التفّ الرأس |
 
 | الاسم | سطر `p3367/vpath.py` | الدور |
 |---|---|---|
@@ -825,8 +830,8 @@
 | 3363 · 3395 · 3405 · 3415 | `_VA_SET` (`hg_pct`/`hg_usd`/`hg_ri`/`hg_ri_pct`) · `_va_hg` · `_va_hg_nf` · `_va_hg_grid` | المفاتيح الحية · إعدادات التعاوني (الحماية + درجة + دولار — وإلا None = 🛡️ v3.36.5) · معامل الربح الصافي (`net_factor` نفسه) · أوامر الشبكة وذاكرتها من `grid/grid_state_<SYM>.json` (قراءة بس) |
 | 3552 · 3752 | `va_plan` · `_va_plan_hg` | 📋 تحت سعر التشغيل جدول المسار نفسه بلا شبكة · فوقه سلّم الشبكة (سعر التشغيل × (1+الدرجة)ⁿ · كمية الدرجة · ربح الدورة الصافي) |
 | 3787 · 4009 · 4173 · 4273 · 4439 | `_va_snapshot` · `_va_control` (`va_set`) · `_va_msg` · `deploy_va` · `va_plan_api` | الكرت (`hg`: on · ep · n · rel/ri · q · `c_live`/`cash` · `live` · `grid` · `last`/`hist`) · ⚙️ حقول الشبكة (`set_hg_*` · الدرجة/إعادة الاستثمار من الفترة الجاية) · ⏩ مرفوض أثناء الشبكة · الرسائل `hg_on`/`hg_sell`/`hg_off` · النشر + الرفض · جدول النشر |
-| 2958 · 8632 · 41488 | `_rec_ledger_book` · `_gd_free_claims` · `delete_purge` | 📒 «♾️ مسار القيمة — ربح الشبكة #» · 🤝 العملة الحرة أثناء الفترة = الحيّة − المحجوزة ببيعات الشبكة · 🗑 ينتظر 75 دورة + يلغي أوامر الشبكة بمعرّفها من `grid/config_<SYM>.json` |
-| 30647 · 30758 · 30812 · 30950 · 30976 · 31100 | `VA_HINT.grid` · `buildVaCard`/`updVaCard` (`.vatag.hgtag` · `.vahg`) · `vaSettings` (`#vs_hgp`/`#vs_hgu`/`#vs_hgr`/`#vs_hgrp`) · `vaDetails` · `vaFormBody` (`#vd_hgp`/`#vd_hgu`/`#vd_hgr`/`#vd_hgrp`) | 🖥️ العلامة «♾️×💹 تعاوني» · صندوق الشبكة · العملة والكلفة الحيّة · ⚙️ · ⚙ · 🚀 |
+| 2958 · 8632 · 41878 | `_rec_ledger_book` · `_gd_free_claims` · `delete_purge` | 📒 «♾️ مسار القيمة — ربح الشبكة #» · 🤝 العملة الحرة أثناء الفترة = الحيّة − المحجوزة ببيعات الشبكة · 🗑 ينتظر 75 دورة + يلغي أوامر الشبكة بمعرّفها من `grid/config_<SYM>.json` |
+| 31031 · 31142 · 31196 · 31334 · 31360 · 31484 | `VA_HINT.grid` · `buildVaCard`/`updVaCard` (`.vatag.hgtag` · `.vahg`) · `vaSettings` (`#vs_hgp`/`#vs_hgu`/`#vs_hgr`/`#vs_hgrp`) · `vaDetails` · `vaFormBody` (`#vd_hgp`/`#vd_hgu`/`#vd_hgr`/`#vd_hgrp`) | 🖥️ العلامة «♾️×💹 تعاوني» · صندوق الشبكة · العملة والكلفة الحيّة · ⚙️ · ⚙ · 🚀 |
 
 | الاسم | سطر `p3366/vpath.py` | الدور |
 |---|---|---|
@@ -844,8 +849,8 @@
 | 3363 · 3386 · 3424 · 3483 | `_VA_SET` (`guard_on`/`guard_pct`) · `_va_gd` · `_va_p0` · `_va_gd_txt` | المفاتيح الحية · الحماية تعمل؟ + البُعد (بالنسبة = `drop_pct` · بالوقت = `guard_pct` 0.5–50) · سعر البداية كما يقراه المحرك (`p0` · وإلا أول خطوة · وإلا السعر الآن) · سطر 🛡️ بالإعدادات |
 | 3552 · 3610 | `va_plan` · `rebuys` | 📋 الجدول = المحرك: نفس الحالة (Q · C · المستوى · الهدف · n · التذاكر) ⇒ صفوف 🔁 إعادة الشراء بسعر كل تذكرة · صفوف 🛡️ المرفوضة · `rb_px` على البيع · `plan["guard"]` |
 | 3787 · 4009 · 4173 · 4273 · 4439 | `_va_snapshot` · `_va_control` (`va_set`) · `_va_msg` · `deploy_va` · `va_plan_api` | الكرت (`guard_on` · `p0` · `above` · `rb`/`rb_n`/`rb_q` · `gd_skips` · `rb_why` · إرشاد `guard`) · ⚙️ المفتاح والبُعد · الرسائل (إعادة شراء · لا شراء فوق البداية · مؤجّلة + السبب · بيعة فوق البداية) · النشر · جدول النشر |
-| 30647 · 30667 · 30714 · 30758 | `VA_HINT`/`VA_ACT` · `vaActTxt` · `vaRowAct` · `buildVaCard` | 🖥️ إرشاد 🛡️ · نص الحدث · صفوف «🔁 يعيد شراء»/🛡️ بالجدول · سطر 🛡️ بالكرت |
-| 30950 · 30976 · 31086 · 31100 · 27898 | `vaSettings` · `vaDetails` · `vaGuardSync` · `vaFormBody` · `tr.rebuy`/`tr.guard`/`.vahint.guard` | ⚙️ `#vs_guard`/`#vs_gpct` · ⚙ التفاصيل · 🚀 `#vd_guard` + `#vd_gpct` (بالوقت بس) · الطلب · الأنماط |
+| 31031 · 31051 · 31098 · 31142 | `VA_HINT`/`VA_ACT` · `vaActTxt` · `vaRowAct` · `buildVaCard` | 🖥️ إرشاد 🛡️ · نص الحدث · صفوف «🔁 يعيد شراء»/🛡️ بالجدول · سطر 🛡️ بالكرت |
+| 31334 · 31360 · 31470 · 31484 · 28282 | `vaSettings` · `vaDetails` · `vaGuardSync` · `vaFormBody` · `tr.rebuy`/`tr.guard`/`.vahint.guard` | ⚙️ `#vs_guard`/`#vs_gpct` · ⚙ التفاصيل · 🚀 `#vd_guard` + `#vd_gpct` (بالوقت بس) · الطلب · الأنماط |
 
 | الاسم | سطر `p3365/vpath.py` | الدور |
 |---|---|---|
@@ -862,7 +867,7 @@
 | 5169 · 5372 · 5406 | `_bt_run` · `_bt_summary` · `_bt_detail` | مسار واحد بالمحرك المدمج (`engine_for`) · أرقامه (المحفظة · المحقق · العمولات · الهبوط · الرفض) · بيانات الإعادة |
 | 5441 · 5477 · 5503 · 5900 | `_bt_spec` · `_bt_src` · `_bt_wallet_def` · `_bt_dry_cfg` | قواعد العملة (+ `spec.json`) · المصدر نموذج/بوت · المحفظة المقترحة · الإعدادات بالنشر الحقيقي على جذر مؤقت (داخل العامل) |
 | 5558 · 5619 · 5806 · 5865 · 5880 · 5940 · 5734 | `bt_prep` · `bt_start` · `bt_status` · `bt_path` · `bt_stop` · `_bt_child` · `--holy-bt` | واجهات `/api/bt_*` · العمّال (أولوية منخفضة · اختبار وحد) · التقدّم والملخص · العامل نفسه · مدخله بنفس الملف |
-| 31183 · 31189 · 31192 · 31233 · 31256 · 31288 · 35097 · 27929 | `btFromForm` · `btFromBot` · `btOpen` · `btGo` · `btResults` · `btPlayer` · `gridFormBody` · `.btov` | 🖥️ الأزرار · النافذة فوق النموذج · البدء · الملخص والأعمدة · الإعادة المتحرّكة · حقول نموذج الشبكة · الأنماط |
+| 31567 · 31573 · 31576 · 31617 · 31640 · 31672 · 35487 · 28313 | `btFromForm` · `btFromBot` · `btOpen` · `btGo` · `btResults` · `btPlayer` · `gridFormBody` · `.btov` | 🖥️ الأزرار · النافذة فوق النموذج · البدء · الملخص والأعمدة · الإعادة المتحرّكة · حقول نموذج الشبكة · الأنماط |
 
 ## 🗑 v3.35.2 — حذف بوت مسار القيمة يخيّرك (بيع العملات أو إبقاؤها)
 
@@ -870,16 +875,16 @@
 |---|---|---|
 | 3934 · 3943 · 3956 | `_va_del_all` · `_va_del_set` · `_va_del_of` | ملف الحذف المعلّق `Holy_VaDelete.json` (المجلد + `bot_id`) · قراءة/كتابة ذرّية · `bot_id` غريب ينرمى |
 | 3966 · 3978 · 3988 | `_va_del_abort` · `_va_del_do` · `_va_del_tick` | الإلغاء (يمسح `rq_exit` + تيليغرام) · الحذف `delete_purge` بخيط · المتابعة كل دورة: ينتظر البيع ⇐ يحذف / بقت عملات أو 15 دقيقة ⇐ يلغي |
-| 4009 · 25914 | `_va_control` (`va_exit_delete`) · `notifier_loop` | يكتب `rq_exit` + المعلّق · يشغّل المتوقف للبيع بس · سطر واحد يستدعي `_va_del_tick` لبوتات مسار القيمة |
-| 30889 · 30910 · 30911 · 35010 · 27910 | `vaDelete` · `vaDelSell` · `vaDelKeep` · `confirmPurge` · `.vadel` | 🖥️ النافذة بالأرقام والخيارين · 🗑 الدرج يحوّل بوت مسار القيمة لها · الأنماط |
+| 4009 · 26298 | `_va_control` (`va_exit_delete`) · `notifier_loop` | يكتب `rq_exit` + المعلّق · يشغّل المتوقف للبيع بس · سطر واحد يستدعي `_va_del_tick` لبوتات مسار القيمة |
+| 31273 · 31294 · 31295 · 35400 · 28294 | `vaDelete` · `vaDelSell` · `vaDelKeep` · `confirmPurge` · `.vadel` | 🖥️ النافذة بالأرقام والخيارين · 🗑 الدرج يحوّل بوت مسار القيمة لها · الأنماط |
 
 ## 👆 v3.35.1 — اضغط مستوى شراء ⇒ البيع من عنده · «لو بعت الكل هنا»
 
 | السطر | الاسم | الدور |
 |---|---|---|
 | 3516 · 3552 · 4439 | `_va_sim_step` (`lot`) · `va_plan` (`at` ⇐ `up_at`/`at` · `res`/`want`) · `va_plan_api` (`dir` حي قراءة بس · `at`) | البيع بوحدة المنصة · جدول البيع من مستوى مختار · النتيجة لو بعت الكل |
-| 30668 · 30714 · 30724 · 30729 | `vaPlanHTML` · `vaRowAct` · `vaPlanPut` · `vaPlanJump` | 🖥️ الجدولين + العمود + الملخص · تسميات «⏭️ يعبر»/«🔒» · يحفظ التمرير · ينزل لجدول البيع بعد الضغط |
-| 30732 · 30738 · 30744 · 31148 · 27902 | `vaPlanPick` · `vaPlanLive` · `vaPlanLiveAt` · `vaPlanFetch` · `.vapltbl tr.pk` | الضغط/الرجوع · النافذة الحيّة (يعيد الحساب لما يتغيّر مركز البوت) · قبل التشغيل · الأنماط |
+| 31052 · 31098 · 31108 · 31113 | `vaPlanHTML` · `vaRowAct` · `vaPlanPut` · `vaPlanJump` | 🖥️ الجدولين + العمود + الملخص · تسميات «⏭️ يعبر»/«🔒» · يحفظ التمرير · ينزل لجدول البيع بعد الضغط |
+| 31116 · 31122 · 31128 · 31532 · 28286 | `vaPlanPick` · `vaPlanLive` · `vaPlanLiveAt` · `vaPlanFetch` · `.vapltbl tr.pk` | الضغط/الرجوع · النافذة الحيّة (يعيد الحساب لما يتغيّر مركز البوت) · قبل التشغيل · الأنماط |
 
 ## 📉📈 v3.35.0 — مسار القيمة «بالنسبة» + 📋 الجدول
 
@@ -887,9 +892,9 @@
 |---|---|---|
 | 3494 · 3499 | `_va_pm` · `_va_next_line` | البوت بالنسبة؟ · سطر «الخطوة القادمة» بالرسائل (موعد أو سعرا المستويين القادمين) |
 | 3516 · 3552 | `_va_sim_step` · `va_plan` | 📋 خطوة المحرك حرفياً (العمولة · السنتات · أقصى أمر · الميزانية · أقل كمية · فوق الكلفة) · الجدول نزولاً لحد امتلاء الميزانية وصعوداً — قبل التشغيل أو من حالة البوت |
-| 4439 · 27198 · 3787 | `va_plan_api` · `/api/va_plan` · `_va_snapshot` | جدول النشر (حساب بس) · الكرت: `plan` · `trigger` · `drop_pct`/`rise_pct` · `anchor`/`lvl` · إرشاد «wait» |
-| 30643 · 31069 · 31148 | `VA_DEFP`/`VAP_HELP` · `vaTrig` · `vaPlanFetch` | 🖥️ الإعدادات المقاسة بالنسبة · اختيار «بالنسبة/بالوقت» · الجدول يتبع الحقول |
-| 30668 · 30750 · 27888 | `vaPlanHTML` · `vaPlanModal` · `.vaplan` | رسم الجدول (ملخص + نزول + صعود) · نافذة «📋 جدول» الحيّة · الأنماط |
+| 4439 · 27582 · 3787 | `va_plan_api` · `/api/va_plan` · `_va_snapshot` | جدول النشر (حساب بس) · الكرت: `plan` · `trigger` · `drop_pct`/`rise_pct` · `anchor`/`lvl` · إرشاد «wait» |
+| 31027 · 31453 · 31532 | `VA_DEFP`/`VAP_HELP` · `vaTrig` · `vaPlanFetch` | 🖥️ الإعدادات المقاسة بالنسبة · اختيار «بالنسبة/بالوقت» · الجدول يتبع الحقول |
+| 31052 · 31134 · 28272 | `vaPlanHTML` · `vaPlanModal` · `.vaplan` | رسم الجدول (ملخص + نزول + صعود) · نافذة «📋 جدول» الحيّة · الأنماط |
 
 ## 🛤️ v3.34.0 — بوت «مسار القيمة» (Value Averaging)
 
@@ -899,10 +904,10 @@
 | 3368 · 3372 · 3444 · 3455 | `_is_va` · `_va_p` · `_va_pos` · `_va_next_tgt` | التعرّف على البوت · الإعداد الحي (`set_*`) وإلا الإنشاء (= `P` بالمحرك) · الكمية/الكلفة من `lots[P]` · الهدف القادم |
 | 3462 · 3787 | `_va_cfg_txt` · `_va_snapshot` | ⚙️ سطر الإعدادات بالفصحى (التقارير والكرت) · بيانات الكرت (الهدف · القيمة · الفرق · النطاق · ماذا سيفعل · المحقق/غير المحقق · الميزانية · الخطوات · العمولات) |
 | 4009 · 4173 · 4273 | `_va_control` · `_va_msg` · `deploy_va` | ⏸/▶️ · ⚙️ (تحقق) · ⏩ · ✋ (البوت حي) · رسائل تيليغرام/🔔 بالفصحى · النشر (تحقق كامل · مجلد `va_<العملة>`) |
-| 3039 · 3142 · 3247 · 21873 | `_rec_snapshot` · `_rec_control` · `_rec_msg` · `_gd_rec_scan` | توجيه أول سطر لدوال مسار القيمة · 🛡️ الرقابة (العنوان · الميزانية من `_va_p`) |
-| 41685 · 40428 · 41683 · 27457 | `engine_for` · `_VA_B64`/`VA_SRC` · `VA_VERSION` · `/api/deploy_va` | المحرك المدمج `vpath.py` (بصمة `9149f232` — v3.36.11 💹: 👛 من المحفظة + ⚡) · نقطة النشر |
-| 30641 · 30658 · 30758 · 30812 | `VA_DEF` · `vaChart` · `buildVaCard` · `updVaCard` | 🖥️ الإعدادات الافتراضية المقاسة · رسم الهدف مقابل القيمة + خط التصحيح · الكرت |
-| 30912 · 30950 · 31005 · 31110 · 27869 | `vaExit` · `vaSettings` · `openDeployVa`/`vaMode` · `vaPreview` · `.card.va` | ✋ بيع الكل (النتيجة المتوقعة) · ⚙️ الإعدادات الحية · 🚀 النشر بالوضعين · المعاينة · الأنماط |
+| 3039 · 3142 · 3247 · 22257 | `_rec_snapshot` · `_rec_control` · `_rec_msg` · `_gd_rec_scan` | توجيه أول سطر لدوال مسار القيمة · 🛡️ الرقابة (العنوان · الميزانية من `_va_p`) |
+| 42075 · 40818 · 42073 · 27841 | `engine_for` · `_VA_B64`/`VA_SRC` · `VA_VERSION` · `/api/deploy_va` | المحرك المدمج `vpath.py` (بصمة `9149f232` — v3.36.11 💹: 👛 من المحفظة + ⚡) · نقطة النشر |
+| 31025 · 31042 · 31142 · 31196 | `VA_DEF` · `vaChart` · `buildVaCard` · `updVaCard` | 🖥️ الإعدادات الافتراضية المقاسة · رسم الهدف مقابل القيمة + خط التصحيح · الكرت |
+| 31296 · 31334 · 31389 · 31494 · 28253 | `vaExit` · `vaSettings` · `openDeployVa`/`vaMode` · `vaPreview` · `.card.va` | ✋ بيع الكل (النتيجة المتوقعة) · ⚙️ الإعدادات الحية · 🚀 النشر بالوضعين · المعاينة · الأنماط |
 
 ## 🏦🗞️📖 v3.33.0 — مؤشرات المحترفين · الاقتصاد والأخبار · 🌋 · الدليل بالفصحى
 
@@ -917,7 +922,7 @@
 | 17235 · 17280 · 17324 | `_mac_sig` · `_mac_rows` · `_pro_move` | 🗞️ إشارات الاقتصاد + 🧭 مزاج المخاطرة · 🌋 الحركة القادمة (العلامات المقيسة بس) |
 | 17343 · 17393 · 17444 | `pro_tick` · `_pro_build`/`pro_view` · `_pro_rel` · `pro_loop` | كل مصدر بوقته · من المحفوظ · 🎯 بـ`fc_fetch` كل نص ساعة · حلقة مستقلة (ما تأخر 📊) |
 | 17507 · 17752 · 17759 | `_GUIDE_SECS` · `_GUIDE` · `guide_audit` · `guide_view` | 📖 الأقسام والمداخل (38 · بالقياس) · التدقيق · `/api/guide` |
-| 32025 · 32037 · 32051 · 32019 | `indPro`/`indBlk` · `indP`/`indPDet` · `openGuide`/`gdRender` · `numIso` | 🖥️ الكتلتان (تنطوي · تنحفظ) · شارات وتفاصيل العملة · نافذة الدليل · الأرقام معزولة بالنص العربي |
+| 32415 · 32427 · 32441 · 32409 | `indPro`/`indBlk` · `indP`/`indPDet` · `openGuide`/`gdRender` · `numIso` | 🖥️ الكتلتان (تنطوي · تنحفظ) · شارات وتفاصيل العملة · نافذة الدليل · الأرقام معزولة بالنص العربي |
 
 ## 🌐🧲📐 v3.32.0 — مؤشرات السوق · التجميع والتصريف · القوة مقابل البيتكوين · قاعدة البوتات
 
@@ -928,29 +933,29 @@
 | 15624 · 15639 · 15660 · 15696 | `MKT_FILE` · `_mkt_stable` · `_mkt_cb` · `_mkt_cg` | 🌐 `Holy_Market.json` · 💵 DefiLlama (6 س) · 🇺🇸 كوينبيس ÷ OKX × USDT (5 د + إغلاقات يومية) · 🌐 CoinGecko (15 د + لقطة يومية) |
 | 15727 · 15790 · 15814 | `_mkt_build` · `mkt_tick` · `_mkt_rel` | الصفوف + 🧭 الجو العام · ويّا حلقة المؤشرات · 🎯 صدق 💵/🇺🇸 على البيتكوين بعد 7 أيام (بـ`fc_fetch`) |
 | 15861 · 15922 | `_xc_ad` · `_xc_ad_at` · `_xc_rs_at` · `xc_coin` | 🧲 A/D + OBV مقابل السعر (20 يوم) · 💪 العملة ÷ BTC (7/30 + متوسط 20) · صدق 14 يوم — بـ`fc_coin` (`out["x"]`) |
-| 32011 · 32070 | `indMkt` · `indX` · `indXDet` | 🖥️ نافذة 📊: كتلة 🌐 تحت الخوف والطمع · شارات 🧲/💪 · «➕ مؤشرات إضافية» |
+| 32401 · 32460 | `indMkt` · `indX` · `indXDet` | 🖥️ نافذة 📊: كتلة 🌐 تحت الخوف والطمع · شارات 🧲/💪 · «➕ مؤشرات إضافية» |
 
 ## 🔔💰 v3.31.1 — مركز الإشعارات الشراء/البيع بس · محفظتي بالموبايل مرتّبة
 
 | السطر | الاسم | الدور |
 |---|---|---|
 | 6923 · 6925 | `_FEED_SKIP` · `feed_all` | 🔔 أسطر سجل البوت اللي ما تطلع إشعار: عبور/حجز الإيقاف · **`[انتظار مؤقت]`** (تبقى بسجل البوت 📜) |
-| 36491 · 36496 · 36501 | `fxChip` · `fxRow` · `openWalletView` | 💰 صف العملة شبكة `.fxr` (الحاسوب سطر · الموبايل سطرين) · الصفر رمادي |
-| 29095 | CSS `.fxr` | الأعمدة: `i n q p c v` · ≤ 600px `"i n p v" "i q q c"` · `.nofx` (USDT) · ≤ 380px |
+| 36881 · 36886 · 36891 | `fxChip` · `fxRow` · `openWalletView` | 💰 صف العملة شبكة `.fxr` (الحاسوب سطر · الموبايل سطرين) · الصفر رمادي |
+| 29479 | CSS `.fxr` | الأعمدة: `i n q p c v` · ≤ 600px `"i n p v" "i q q c"` · `.nofx` (USDT) · ≤ 380px |
 
 ## 🔔📊 v3.31.0 — إشعارات الأسعار لحالها · تنبيهات المؤشرات لحالها (قبل الحركة) · التطبيق 1.8
 
 | السطر | الاسم | الدور |
 |---|---|---|
-| 21785 | `pxa_tick` | 🔔 حركة السعر بس (انشال منها «📊 صعود/نزول قوي») |
+| 22169 | `pxa_tick` | 🔔 حركة السعر بس (انشال منها «📊 صعود/نزول قوي») |
 | — | `INA_FILE` · `INA_SENS` · `ina_cfg` | 🗑️ أُزيلت v3.36.68 (🎯 الإشارات بدلها) · كانت: `Holy_IndAlerts.json` · الحساسيات (هادئة · متوسطة · حساسة) · وين توصل · الحد اليومي |
-| 21766 | `_ina_sq` | ⚡ الانضغاط على شموع الساعة (قراءة 📊) — `_ina_rel` و`_ina_levels` أُزيلتا v3.36.68 · ⚡ الانضغاط على شموع الساعة المسكّرة · 📏 الصدق مقابل الصدفة · 🧱 أقرب دعم/مقاومة |
+| 22150 | `_ina_sq` | ⚡ الانضغاط على شموع الساعة (قراءة 📊) — `_ina_rel` و`_ina_levels` أُزيلتا v3.36.68 · ⚡ الانضغاط على شموع الساعة المسكّرة · 📏 الصدق مقابل الصدفة · 🧱 أقرب دعم/مقاومة |
 | — | `ina_tick` · `_ina_send` | 🗑️ أُزيلت v3.36.68 (🎯 الإشارات بدلها) · كانت: 🔄 الانقلاب · ⚡ الانضغاط · 🧱 القرب ⇒ رسالة لحالها (نوع `ind` · `go=ind`) |
 | — | `ina_set` · `ina_test` · `ina_view` · `ina_set`/`ina_test` | 🗑️ أُزيلت v3.36.68 (🎯 الإشارات بدلها) · كانت: الإعدادات والتجربة واللوحة |
 | 15077 | `indic_loop` | يحدّث المؤشرات كل 5 دقائق بس إذا هي شغّالة (v3.36.68: بلا التنبيهات القديمة) |
 | — | `inaPanel` | 🗑️ أُزيلت v3.36.68 (🎯 الإشارات بدلها) · كانت: القسم الثاني بـ⚙️ «📈 شريط الأسعار» |
-| 42475 | `APP_APK_CODE` · `APP_APK_NAME` | التطبيق 1.8 (code 9) |
-| 33456 | `pcKpi` | 📊 لوحة التقارير: `data-x` لخانة «🪙 تداول العملات الإجمالي» بالموبايل · الاسم المختصر ≥ 1280px (CSS `.pc-kpi.stats`) |
+| 42865 | `APP_APK_CODE` · `APP_APK_NAME` | التطبيق 1.8 (code 9) |
+| 33846 | `pcKpi` | 📊 لوحة التقارير: `data-x` لخانة «🪙 تداول العملات الإجمالي» بالموبايل · الاسم المختصر ≥ 1280px (CSS `.pc-kpi.stats`) |
 
 ## 🖨️ v3.30.0 — التقرير المصوّر من جديد · 🪙 ربح تداول العملات · 💵 المُراكِمات يوم بيوم · 📆 الشهري × أيام الشهر
 
@@ -963,7 +968,7 @@
 | 14297 · 14379 | `trade_book` · `trade_stats` | 📆 الشهري × أيام الشهر · `mtd` هذا الشهر · `months` كل شهر |
 | 11686 | `profit_view(…, start_hint)` | التقرير يبدي من أول يوم بيه أي ربح · `tot.ctrade` للوحة 📊 |
 | 12093 · 12115 · 12215 | `_rep_src_donut` · `_rep_map_svg` · `report_html` | 🍩 المصادر · 🗺️ لقطة الخريطة · التقرير كله |
-| 26893 · 29242 · 30243 · 33456 | `/api/ctrade` · `#stCtD`/`#stCtA` · `ctModal` · `pcKpi` | الخانتين (12 خانة · 6 بالصف) · نافذة كل بوت · لوحة 📊 |
+| 27277 · 29626 · 30627 · 33846 | `/api/ctrade` · `#stCtD`/`#stCtA` · `ctModal` · `pcKpi` | الخانتين (12 خانة · 6 بالصف) · نافذة كل بوت · لوحة 📊 |
 
 ## 🔮 v3.29.0 — التوقعات من الصفر: نفس مؤشرات 📊 على شموع أطول + شارة صدقها · 🔮 بالشريط الأول فوق 📊
 
@@ -976,8 +981,8 @@
 | 18215 · 18226 · 18244 | `_fc_vote` · `_fc_grade` · `_fc_bt` | 🗳️ «X من N» · 🎯 الشارة مقابل الصدفة (فترات مستقلة) · فحص الماضي المحفوظ (يكمّل من آخر شمعة) |
 | 18298 · 18316 · 18343 | `_fc_rq` · `_fc_rcal` · `_fc_levels` | 📏 النطاق (تعيير نص · فحص نص) · 🧱 الدعم والمقاومة |
 | 18357 · 18377 · 18408 | `_fc_fng` · `_fc_fund` · `_fc_track` | 😨 الخوف والطمع (12 ساعة) · 💸 التمويل (8 ساعات · 3 أشهر) · 📒 السجل الحي |
-| 18440 · 18511 · 18564 · 18588 · 26784 | `fc_coin` · `fc_fetch` · `fc_api` · `fc_loop` · `/api/forecast` | عملة وحدة (4 مدايات) · كل العملات (النافذة تتعبّى وحدة وحدة) · كل نص ساعة (يبدي بعد 90 ث) |
-| 29285 · 32238 · 32243 · 32276 | `#fcBtn` بالشريط الأول · `fcAlign` · `openFc` · `fcRender` | الزر فوق 📊 بنفس العرض · النافذة المختصرة (4 سطور) · التفاصيل مدى مدى |
+| 18440 · 18511 · 18564 · 18588 · 27168 | `fc_coin` · `fc_fetch` · `fc_api` · `fc_loop` · `/api/forecast` | عملة وحدة (4 مدايات) · كل العملات (النافذة تتعبّى وحدة وحدة) · كل نص ساعة (يبدي بعد 90 ث) |
+| 29669 · 32628 · 32633 · 32666 | `#fcBtn` بالشريط الأول · `fcAlign` · `openFc` · `fcRender` | الزر فوق 📊 بنفس العرض · النافذة المختصرة (4 سطور) · التفاصيل مدى مدى |
 
 ## 🧮 v3.28.1 — خطأ الرقابة «💰 دفتر الربح» (تقريب نصيب المُراكِمات)
 
@@ -994,57 +999,57 @@
 
 | السطر | الاسم | الدور |
 |---|---|---|
-| 34007 · 34105 | `openFlow` · `flHL` | الخريطة تنفتح من جديد والماوس على مربع قبل البيانات ⇒ بلا «reading 'lines'» |
-| 29234 · 32554 · 32557 | زر `#bFs` · `fsOk` · `fsSync` · `fsToggle` | ⛶ شاشة كاملة بالحاسوب بس · 🗗/Esc يرجّع |
-| 24855 · 24858 · 24882 · 24896 | `_BIO_TRY` · `app_bio_set` · `app_bio_reset_all` · `app_bio_check` | مفتاح البصمة لكل موبايل (sha256 بس) · يتمسح مع تغيير كلمة السر · الفحص |
-| 26988 · 27536 | `/api/app/bio_unlock` (قبل كلمة السر · 6/10 دقائق) · `/api/app/bio` (enroll/off · بجلسة) | البصمة ⇒ نفس جلسة كلمة السر |
-| 26359 · 32550 | صفحة كلمة السر `bio()` · `appBioSync` | التطبيق: زر البصمة يطلب وحده · الربط/الفك وحده حسب القفل |
-| 33923 · 42472 · 42475 | `openWinPanel` · `WIN_EXE_*` · `APP_APK_*` | ويندوز 1.2 (code 3 · نافذة عادية) · التطبيق 1.7 (code 8) |
+| 34397 · 34495 | `openFlow` · `flHL` | الخريطة تنفتح من جديد والماوس على مربع قبل البيانات ⇒ بلا «reading 'lines'» |
+| 29618 · 32944 · 32947 | زر `#bFs` · `fsOk` · `fsSync` · `fsToggle` | ⛶ شاشة كاملة بالحاسوب بس · 🗗/Esc يرجّع |
+| 25047 · 25050 · 25074 · 25088 | `_BIO_TRY` · `app_bio_set` · `app_bio_reset_all` · `app_bio_check` | مفتاح البصمة لكل موبايل (sha256 بس) · يتمسح مع تغيير كلمة السر · الفحص |
+| 27372 · 27920 | `/api/app/bio_unlock` (قبل كلمة السر · 6/10 دقائق) · `/api/app/bio` (enroll/off · بجلسة) | البصمة ⇒ نفس جلسة كلمة السر |
+| 26743 · 32940 | صفحة كلمة السر `bio()` · `appBioSync` | التطبيق: زر البصمة يطلب وحده · الربط/الفك وحده حسب القفل |
+| 34313 · 42862 · 42865 | `openWinPanel` · `WIN_EXE_*` · `APP_APK_*` | ويندوز 1.2 (code 3 · نافذة عادية) · التطبيق 1.7 (code 8) |
 
 ## 🔔 v3.26.9 — النزول البطيء · بعد إعادة التشغيل · رسم أخف · 🎮 · الكروت «C» · التطبيق 1.6
 
 | السطر | الاسم | الدور |
 |---|---|---|
-| 21728 · 21735 · 21785 | `PXA_SENS` (h4/k4) · `PXA_COOL4` · `pxa_tick` | نافذة «خلال 4 ساعات» + تبريدها · أي إشعار بالاتجاه يسكّتها 4 ساعات |
-| 21760 · 22244 | `pxa_seed` · `ticker_loop` | بعد إعادة التشغيل: سجل الدقائق من شموع OKX العامة (مرة لكل عملة) |
-| 32500 · 32534 | `Tape` · `glide`/`halt`/`cover` | الحركة الثابتة على كرت الشاشة (Web Animations) · جافاسكربت بس للسحب/التوقف/60·30 |
-| 32560 · 32565 · 32563 · 32566 | `coverSync` · `coverWatch` · `scrollWatch` · `pulseBeat` | نافذة/صفحة فوق اللوحة ⇒ الحركة توقف · التمرير يوقف الكرات · نقطة «مباشر» مع كل تحديث |
-| 35704 · 35711 · 35713 | `gpuInfo` · `hzProbe` · `gpuFill` | ⚙️ «الفريمات»: 🎮 كرت الشاشة أو المعالج + سرعة الشاشة (ويندوز: وين ترفعها) |
-| 28016 · 30153 · 30162 | CSS «C» · `rowsFit` · `icFor` | الأيقونة بدائرة · الأرقام 14px · 2 بالصف · المربع الوحيد ياخذ السطر |
-| 42475 | `APP_APK_*` | التطبيق 1.6 (code 7 · نغمة «قطرة») |
+| 22112 · 22119 · 22169 | `PXA_SENS` (h4/k4) · `PXA_COOL4` · `pxa_tick` | نافذة «خلال 4 ساعات» + تبريدها · أي إشعار بالاتجاه يسكّتها 4 ساعات |
+| 22144 · 22628 | `pxa_seed` · `ticker_loop` | بعد إعادة التشغيل: سجل الدقائق من شموع OKX العامة (مرة لكل عملة) |
+| 32890 · 32924 | `Tape` · `glide`/`halt`/`cover` | الحركة الثابتة على كرت الشاشة (Web Animations) · جافاسكربت بس للسحب/التوقف/60·30 |
+| 32950 · 32955 · 32953 · 32956 | `coverSync` · `coverWatch` · `scrollWatch` · `pulseBeat` | نافذة/صفحة فوق اللوحة ⇒ الحركة توقف · التمرير يوقف الكرات · نقطة «مباشر» مع كل تحديث |
+| 36094 · 36101 · 36103 | `gpuInfo` · `hzProbe` · `gpuFill` | ⚙️ «الفريمات»: 🎮 كرت الشاشة أو المعالج + سرعة الشاشة (ويندوز: وين ترفعها) |
+| 28400 · 30537 · 30546 | CSS «C» · `rowsFit` · `icFor` | الأيقونة بدائرة · الأرقام 14px · 2 بالصف · المربع الوحيد ياخذ السطر |
+| 42865 | `APP_APK_*` | التطبيق 1.6 (code 7 · نغمة «قطرة») |
 
 ## 📈 v3.26.8 — الأسعار بلا وميض · الكروت بنمط واحد · الفريمات · التطبيق 1.5
 
 | السطر | الاسم | الدور |
 |---|---|---|
-| 29749 · 29773 | `updCard` · سعر الكرت | لون بس لما يتغيّر الاتجاه · السعر ينكتب مرة لكل تغيّر (بلا `priceFlash` ولا `offsetWidth` ولا `spring`) |
-| 32570 · 32590 · 32595 · 32599 | `LIVE` · `livePx` · `liveFlush` · `tkWrite` | السعر اللحظي ينحفظ ⇒ دفعة ≤4/ث على إطار ⇒ كاتب واحد يغيّر بس اللي تغيّر · لمحة لون ≤ مرة/1.5 ث · عرض ثابت |
-| 32500 · 32528 · 28742 | `Tape` · `measure` · CSS | العرض ينقاس بـ`ResizeObserver` (مو كل إطار) · `fpsSkip` · `contain` على الشريط · لمحة اللون بانتقال |
-| 28003 · 30153 | CSS الكروت · `rowsFit` | نفس الخلفية/الحافة/الشارة (`.ctag`)/المربّعات/الحشوة لكل الأنواع · القيمة الطويلة تاخذ السطر |
-| 33738 · 35689 · 35702 · 35722 | `appStat` · `uiFps` · `setFps` · `fpsSkip` | ⚙️ «الفريمات» 240/120/60/30 (افتراضي 120) · بالتطبيق `HolyApp.setFps` · 60/30 تخفف حركات اللوحة |
-| 33837 · 42475 | سطر 🔐 بـ📱 · `APP_APK_*` | `HolyApp.setLock` · التطبيق 1.5 (code 6) |
+| 30133 · 30157 | `updCard` · سعر الكرت | لون بس لما يتغيّر الاتجاه · السعر ينكتب مرة لكل تغيّر (بلا `priceFlash` ولا `offsetWidth` ولا `spring`) |
+| 32960 · 32980 · 32985 · 32989 | `LIVE` · `livePx` · `liveFlush` · `tkWrite` | السعر اللحظي ينحفظ ⇒ دفعة ≤4/ث على إطار ⇒ كاتب واحد يغيّر بس اللي تغيّر · لمحة لون ≤ مرة/1.5 ث · عرض ثابت |
+| 32890 · 32918 · 29126 | `Tape` · `measure` · CSS | العرض ينقاس بـ`ResizeObserver` (مو كل إطار) · `fpsSkip` · `contain` على الشريط · لمحة اللون بانتقال |
+| 28387 · 30537 | CSS الكروت · `rowsFit` | نفس الخلفية/الحافة/الشارة (`.ctag`)/المربّعات/الحشوة لكل الأنواع · القيمة الطويلة تاخذ السطر |
+| 34128 · 36079 · 36092 · 36112 | `appStat` · `uiFps` · `setFps` · `fpsSkip` | ⚙️ «الفريمات» 240/120/60/30 (افتراضي 120) · بالتطبيق `HolyApp.setFps` · 60/30 تخفف حركات اللوحة |
+| 34227 · 42865 | سطر 🔐 بـ📱 · `APP_APK_*` | `HolyApp.setLock` · التطبيق 1.5 (code 6) |
 
 ## ✨ v3.26.7 — 🔔 الإشعارات بـ⚙️ · الضغط يفتح التطبيق · فحص تيليغرام انشال · لمعة الشعار · التطبيق 1.4
 
 | السطر | الاسم | الدور |
 |---|---|---|
-| 42175 | `books_audit` | انشال منه «تقرير تيليغرام = لوحة التقارير» (إنذار كاذب: يوم مقابل أسبوع بعد 62 يوم) |
-| 25035 · 21739 · 27158 | `app_feed_push(text, go, kind)` · `_pxa_send` · `pxa_get` | إشعار السعر للتطبيق `k=price` بلا `go` (الضغط يفتح التطبيق) · قراءة اللوحة |
-| 32078 · 32083 · 32084 · 32402 | `pxaPanel` · `pxaRender` · `pxaLoad` · `openTicker` | لوحة 🔔 بـ⚙️ «📈 شريط الأسعار» (`#tk_pxa`) |
-| 26162 · 26237 · 27723 | `brand_word_svg(glint)` · `brand_fill` · CSS | الكتابة + نسخة متوهّجة بقناع متحرك (`…Lg/Lm/Lf` · `data-glint`) · `--glint` حسب `html[data-mood]` |
-| 31998 · 31995 · 31984 | `glintInit` · `glintRun` · `indBtnSync` | يسلّح الحركة ويشغلها كل 7 ث (توقف: مخفي/خفيف/تقليل الحركة) · مزاج السوق من ملخص المؤشرات |
-| 42475 | `APP_APK_CODE/NAME/B64` | التطبيق 1.4 (code 5) |
+| 42565 | `books_audit` | انشال منه «تقرير تيليغرام = لوحة التقارير» (إنذار كاذب: يوم مقابل أسبوع بعد 62 يوم) |
+| 25419 · 22123 · 27542 | `app_feed_push(text, go, kind)` · `_pxa_send` · `pxa_get` | إشعار السعر للتطبيق `k=price` بلا `go` (الضغط يفتح التطبيق) · قراءة اللوحة |
+| 32468 · 32473 · 32474 · 32792 | `pxaPanel` · `pxaRender` · `pxaLoad` · `openTicker` | لوحة 🔔 بـ⚙️ «📈 شريط الأسعار» (`#tk_pxa`) |
+| 26546 · 26621 · 28107 | `brand_word_svg(glint)` · `brand_fill` · CSS | الكتابة + نسخة متوهّجة بقناع متحرك (`…Lg/Lm/Lf` · `data-glint`) · `--glint` حسب `html[data-mood]` |
+| 32388 · 32385 · 32374 | `glintInit` · `glintRun` · `indBtnSync` | يسلّح الحركة ويشغلها كل 7 ث (توقف: مخفي/خفيف/تقليل الحركة) · مزاج السوق من ملخص المؤشرات |
+| 42865 | `APP_APK_CODE/NAME/B64` | التطبيق 1.4 (code 5) |
 
 ## 🔔 v3.26.6 — «📊 المؤشرات» بالشريط الثاني · «الخوف والطمع» جوّا النافذة · إشعارات الأسعار
 
 | السطر | الاسم | الدور |
 |---|---|---|
-| 21728 · 21738 | `PXA_SENS` · `pxa_cfg` | الحساسيات الثلاث (15 د · ساعة · × ATR · درجة 24 ساعة) · الإعداد من app_cfg (`pxa_on` · `pxa_sens` · `pxa_ch` · `pxa_ind` · `pxa_cap`) |
-| 21750 · 21785 | `_pxa_ago` · `pxa_tick` | السعر قبل N ثانية من عيّنات الدقيقة · الجولة: ساعة/ربع (تبريد 90 د · الضعف 1.8×) · درجات 24 ساعة · المؤشرات (6 س) · الحد اليومي · السجل |
-| 21739 | `_pxa_send` | رسالة وحدة للجولة ⇒ تيليغرام (plain) · التطبيق (`go=ind`) · 🔔 المركز · يحترم الكتم |
-| 21732 · 21747 · 21748 | `pxa_set` · `pxa_test` · `pxa_view` | أفعال `/api/control` (تشغيل/إطفاء · الحساسية · القناة · المؤشرات) · 🧪 التجربة · العرض للنافذة |
-| 22244 · 25035 · 15050 · 15584 | `ticker_loop` · `app_feed_push` · `indic_view` · `ind2_view` | الحلقة تشتغل لو الشريط أو الإشعارات شغّالة · `go` للتطبيق · `sum` للزر · `pxa` بالنافذة |
-| 29286 · 31984 · 32003 · 32078 · 32083 · 32084 · 33763 | الزر · `indBtnSync` · `indFng` · `indAl` · `pxaSet` · `pxaTest` · `holyGoNow` | الزر أول عنصر بالشريط الثاني (⬆️/⬇️) · بطاقة «الخوف والطمع» فوق · لوحة 🔔 · ضغطة إشعار الموبايل ⇒ 📊 |
+| 22112 · 22122 | `PXA_SENS` · `pxa_cfg` | الحساسيات الثلاث (15 د · ساعة · × ATR · درجة 24 ساعة) · الإعداد من app_cfg (`pxa_on` · `pxa_sens` · `pxa_ch` · `pxa_ind` · `pxa_cap`) |
+| 22134 · 22169 | `_pxa_ago` · `pxa_tick` | السعر قبل N ثانية من عيّنات الدقيقة · الجولة: ساعة/ربع (تبريد 90 د · الضعف 1.8×) · درجات 24 ساعة · المؤشرات (6 س) · الحد اليومي · السجل |
+| 22123 | `_pxa_send` | رسالة وحدة للجولة ⇒ تيليغرام (plain) · التطبيق (`go=ind`) · 🔔 المركز · يحترم الكتم |
+| 22116 · 22131 · 22132 | `pxa_set` · `pxa_test` · `pxa_view` | أفعال `/api/control` (تشغيل/إطفاء · الحساسية · القناة · المؤشرات) · 🧪 التجربة · العرض للنافذة |
+| 22628 · 25419 · 15050 · 15584 | `ticker_loop` · `app_feed_push` · `indic_view` · `ind2_view` | الحلقة تشتغل لو الشريط أو الإشعارات شغّالة · `go` للتطبيق · `sum` للزر · `pxa` بالنافذة |
+| 29670 · 32374 · 32393 · 32468 · 32473 · 32474 · 34153 | الزر · `indBtnSync` · `indFng` · `indAl` · `pxaSet` · `pxaTest` · `holyGoNow` | الزر أول عنصر بالشريط الثاني (⬆️/⬇️) · بطاقة «الخوف والطمع» فوق · لوحة 🔔 · ضغطة إشعار الموبايل ⇒ 📊 |
 
 ## 📊 v3.26.5 — «المؤشرات» (زر فوق «الخوف والطمع» · 10 مؤشرات · الدقة المقاسة)
 
@@ -1055,8 +1060,8 @@
 | 15258 · 15378 · 15390 | `_i2_signals` · `_i2_verdict` · `_i2_backtest` | إشارة كل مؤشر (−1..+1 + سطر) — نفس الدالة للحاضر والماضي · الحكم · دقّة كل مؤشر والأوزان (أول 60%) ودقّة المعدل (آخر 40%) |
 | 15433 · 15446 · 15460 | `_i2_candles` · `_i2_taker` · `_i2_book` | OKX العام: شموع · حجم الشراء/البيع · دفتر الأوامر ±1% |
 | 15474 · 15523 · 15563 · 15077 | `ind2_coin` · `_i2_track` · `ind2_fetch` · `indic_loop` | عملة وحدة · الدقّة الحيّة (`Holy_Indic.json`) · كل عملات الشريط · بالحلقة كل 5 دقائق |
-| 15584 · 15606 · 26788 | `ind2_view` · `ind2_api` · `/api/indicators` | العرض (لو ما انحسب ⇒ يبدي بالخلفية) |
-| 29285 · 31984 · 32087 · 32094 | الزر · `indBtnSync` · `openInd` · `indRender` | الزر فوق «الخوف والطمع» (عرضه = عرضه) · النافذة · البطاقات والتفاصيل والدعم/المقاومة |
+| 15584 · 15606 · 27172 | `ind2_view` · `ind2_api` · `/api/indicators` | العرض (لو ما انحسب ⇒ يبدي بالخلفية) |
+| 29669 · 32374 · 32477 · 32484 | الزر · `indBtnSync` · `openInd` · `indRender` | الزر فوق «الخوف والطمع» (عرضه = عرضه) · النافذة · البطاقات والتفاصيل والدعم/المقاومة |
 
 ## 🔗 v3.26.4 — كل الأنواع بـ«سجل أرباح اليوم» · 🔗 الترابط بالرقابة · قاعدة الترابط
 
@@ -1064,20 +1069,20 @@
 |---|---|---|
 | 14600 · 14601 | `_BOT_KINDS` · `_key_type` | سجل الأنواع السبعة (اسم · أيقونة · دولار/عملة · مصدر الصفقات · وحدة العدّ) — **نوع جديد ينضاف هنا (قاعدة الترابط)** · نوع بوت من مفتاح الدفتر (حي/محذوف) |
 | 14618 | `bot_day_events` | كل صفقة لبوت بيوم من نفس مصدر رقمه (الجرد: 🔴 × المعامل · 💠 · ⚡ — DCA والدوري: `cycles_log`) |
-| 14697 · 14768 · 22277 | `trade_log` · `released_log` · `_today_parts` | السطور لكل الأنواع · `bots` (رقم كل بوت وسطوره · `gone` · `orphan` · `diff`) · `coin_bots`/`coin_rows` · المحرر: نوع كل سطر · المتوقّع للمُراكِم اللي يبدي بيوم جاي 0 · `day_full` من محرّك 🔄 |
-| 10849 · 11076 · 11094 · 10782 · 26790 · 42358 | `link_audit` · `_gd_link_scan` · `link_now` | الأقسام السبعة (الأنواع · سجل اليوم · التداول · المحرر · الدفتر ⇄ البوتات · العملات · الدفاتر) · بجولة `guard_scan` · ❌ ⇒ `_gd_event(kind="link")` وينحلّ لحاله · `/api/link_audit` · `LINK_AUDIT.md` بالتقرير التشخيصي |
-| 32344 · 32346 · 32358 | `dlFlt` · `dlRows` · `dlRender` | نافذة «🧾 سجل أرباح اليوم» — قوائم `.dl-*` (عمودين ≥700px) · فلتر لكل بوت · سطر «✅ مجموع صفقات كل بوت = رقمه» |
-| 32807 · 32751 | قسم 🔗 بنافذة الرقابة · `linkNow` | «🔗 الترابط والحسابات» (`details.lk-sec` لكل قسم · الغلط مفتوح) · زر «🔄 افحص الترابط هسه» |
+| 14697 · 14768 · 22661 | `trade_log` · `released_log` · `_today_parts` | السطور لكل الأنواع · `bots` (رقم كل بوت وسطوره · `gone` · `orphan` · `diff`) · `coin_bots`/`coin_rows` · المحرر: نوع كل سطر · المتوقّع للمُراكِم اللي يبدي بيوم جاي 0 · `day_full` من محرّك 🔄 |
+| 10849 · 11076 · 11094 · 10782 · 27174 · 42748 | `link_audit` · `_gd_link_scan` · `link_now` | الأقسام السبعة (الأنواع · سجل اليوم · التداول · المحرر · الدفتر ⇄ البوتات · العملات · الدفاتر) · بجولة `guard_scan` · ❌ ⇒ `_gd_event(kind="link")` وينحلّ لحاله · `/api/link_audit` · `LINK_AUDIT.md` بالتقرير التشخيصي |
+| 32734 · 32736 · 32748 | `dlFlt` · `dlRows` · `dlRender` | نافذة «🧾 سجل أرباح اليوم» — قوائم `.dl-*` (عمودين ≥700px) · فلتر لكل بوت · سطر «✅ مجموع صفقات كل بوت = رقمه» |
+| 33197 · 33141 | قسم 🔗 بنافذة الرقابة · `linkNow` | «🔗 الترابط والحسابات» (`details.lk-sec` لكل قسم · الغلط مفتوح) · زر «🔄 افحص الترابط هسه» |
 
 ## 🗺️ v3.26.3 — «📥 الربح المحرر» = «محرر اليوم» · 💵 المبالغ جنب النسب · 📜 «السجل» بكل الكروت
 
 | السطر | الاسم | الدور |
 |---|---|---|
 | 13882 · 13946 · 14026 · 14060 | `flow_view` | `ltd` = سطور الدفتر لليوم لكل محفظة · `wday = day_profit_w(...)` · `rel` = `today` · `wait` (من الدفتر) · `src` (منين إجا · 🗑️ `gone`) · `split[].usd` · `rest_usd` · بالرجوع: `today_all` · `today_untag` |
-| 6658 · 26879 | `acc_log` · `/api/acc_log` | سجل المُراكِم (قراءة بس): `days`/`dpct` · `buys` (+`hid`) · `sells` · `moves` · `wlog` · `cout` · تنبيهات `journal_query(bot=…, lv="warn")` |
-| 34051 · 34063 · 34163 | `flRel` · `flRender` · `flInfo` | 💵 `.fl-am` جنب كل نسبة · «🗑️ منه … من بوت انحذف اليوم» · الشريط من `today_all` · النافذة: «📋 منين إجا» + «📊 التوزيع» بعمود المبلغ |
-| 30639 · 31393 · 34502 | `recHist` ⇒ `botHist` · `accLog` | نافذة السجل لكل الأنواع (`BT_LBL`) · نافذة سجل المُراكِم (لون لكل نوع) |
-| 29730 · 31546 | الأزرار | الشبكة `.cbtns2` (`hist` · `.ri` ⇒ 3+3) · DCA `.dcaopts.x3` (`dhist`) · المُراكِم `alog` |
+| 6658 · 27263 | `acc_log` · `/api/acc_log` | سجل المُراكِم (قراءة بس): `days`/`dpct` · `buys` (+`hid`) · `sells` · `moves` · `wlog` · `cout` · تنبيهات `journal_query(bot=…, lv="warn")` |
+| 34441 · 34453 · 34553 | `flRel` · `flRender` · `flInfo` | 💵 `.fl-am` جنب كل نسبة · «🗑️ منه … من بوت انحذف اليوم» · الشريط من `today_all` · النافذة: «📋 منين إجا» + «📊 التوزيع» بعمود المبلغ |
+| 31023 · 31777 · 34892 | `recHist` ⇒ `botHist` · `accLog` | نافذة السجل لكل الأنواع (`BT_LBL`) · نافذة سجل المُراكِم (لون لكل نوع) |
+| 30114 · 31930 | الأزرار | الشبكة `.cbtns2` (`hist` · `.ri` ⇒ 3+3) · DCA `.dcaopts.x3` (`dhist`) · المُراكِم `alog` |
 
 ## 🔢 v3.26.2 — أرقام الأوامر مثل ما تقراها OKX (الدوري · DCA · المُراكِم) · كسر خروج الدوري
 
@@ -1085,7 +1090,7 @@
 |---|---|---|
 | 2214 · 2223 | `_acc_fmt_qty` (+ هامش ضجيج) · `_okx_num` | كمية المُراكِم على خطوة العملة ⇒ نص خانات عادية (مو «3e-05») |
 | 2286 · 2392 | `acc_sell_now` · `acc_buy_now` | `sz` = `_okx_num(…)` |
-| 40249 · 37903 · 38094 | `_REC_B64` · `_DCA_B64` · `_DCAB_B64` | المحركات المدمجة الجديدة — مصادرها بالـDevKit: `recur/recur.py` · `p3262/patch_engines.py` |
+| 40639 · 38293 · 38484 | `_REC_B64` · `_DCA_B64` · `_DCAB_B64` | المحركات المدمجة الجديدة — مصادرها بالـDevKit: `recur/recur.py` · `p3262/patch_engines.py` |
 
 **بالمحركات (أسطر ملفاتها):** `recur.py` — `_num` 215 · `_spec_retry` 235 · `_place` 337 (الرفض نفسه مرة كل 10 دقائق) · `close_step` 798 (`hold` دقيقة · `_close_dust` · رفض الكمية بعد بيع جزء ⇒ يكمل) · `_SIZE_REJ`/`DUST_USD` 889 · `_close_dust` 893 — `dca.py` · `dca_buy.py` — `_num` 216 · `_spec_retry` 236 (بأول حلقة `run_cycle`) · كل `place_order` بـ`_num`.
 
@@ -1093,39 +1098,39 @@
 
 | السطر | الاسم | الدور |
 |---|---|---|
-| 26277 · 26292 | `win_exe_for(url, tok)` · `win_pair(ip)` | الفتحة `عنوان \0 مفتاح \0` · كل تنزيل = حاسوب مربوط (`app_pair` · `win-…` · المهملة: 7 أيام · آخر 2) |
-| 26677 | `/app/holy.exe` | جلسة ⇒ `win_pair` · البرنامج بمفتاحه ⇒ نفس المفتاح · السجل «🔔 انربط» (بلا المفتاح) |
-| 25363 | `app_pair` · `app_dev_watch` | «💻 حاسوب انربط» · حاسوب ساكت ⇒ سطر هادئ |
-| 30163 · 29874 · 29870 | `syncCards` (العدّاد «N بوت · M مُراكِم») · `applyFilter` (يحفظ) · استرجاع `dash_sort`/`dash_q` | 💾 الترتيب بالجهاز · البحث بالجلسة |
-| 34509 | `renderAccum` · `ACC_N` | بلا الملاحظة السمائية · البحث/الترتيب على بطاقات المُراكِم (ورا البوتات) |
-| 33803 | `appRender` (🙈 `HolyApp.watchSettings` · `watchHidden`) | نافذة أندرويد — الحواسيب تبين بقائمة الأجهزة بلا تحذير «ساكت» |
-| 33923 · 33951 | `openWinPanel` · `winUnpair` · `IN_WIN` (`?go=`) | نافذة ويندوز: الحواسيب المربوطة · فصل · 🧪 |
-| 33752 | `holyGoNow` (`app` · `win`) | روابط مباشرة لنافذتي التطبيقات |
-| 42472 | `WIN_EXE_CODE` 2 · `WIN_EXE_NAME` 1.1 · `WIN_EXE_B64` · `APP_APK_*` (4 · 1.3) · `BRAND_ICO_B64` (كلاسيكي) | المدمج — المصادر بالـDevKit: `win/` · `android/` · `brand/` |
+| 26661 · 26676 | `win_exe_for(url, tok)` · `win_pair(ip)` | الفتحة `عنوان \0 مفتاح \0` · كل تنزيل = حاسوب مربوط (`app_pair` · `win-…` · المهملة: 7 أيام · آخر 2) |
+| 27061 | `/app/holy.exe` | جلسة ⇒ `win_pair` · البرنامج بمفتاحه ⇒ نفس المفتاح · السجل «🔔 انربط» (بلا المفتاح) |
+| 25747 | `app_pair` · `app_dev_watch` | «💻 حاسوب انربط» · حاسوب ساكت ⇒ سطر هادئ |
+| 30547 · 30258 · 30254 | `syncCards` (العدّاد «N بوت · M مُراكِم») · `applyFilter` (يحفظ) · استرجاع `dash_sort`/`dash_q` | 💾 الترتيب بالجهاز · البحث بالجلسة |
+| 34899 | `renderAccum` · `ACC_N` | بلا الملاحظة السمائية · البحث/الترتيب على بطاقات المُراكِم (ورا البوتات) |
+| 34193 | `appRender` (🙈 `HolyApp.watchSettings` · `watchHidden`) | نافذة أندرويد — الحواسيب تبين بقائمة الأجهزة بلا تحذير «ساكت» |
+| 34313 · 34341 | `openWinPanel` · `winUnpair` · `IN_WIN` (`?go=`) | نافذة ويندوز: الحواسيب المربوطة · فصل · 🧪 |
+| 34142 | `holyGoNow` (`app` · `win`) | روابط مباشرة لنافذتي التطبيقات |
+| 42862 | `WIN_EXE_CODE` 2 · `WIN_EXE_NAME` 1.1 · `WIN_EXE_B64` · `APP_APK_*` (4 · 1.3) · `BRAND_ICO_B64` (كلاسيكي) | المدمج — المصادر بالـDevKit: `win/` · `android/` · `brand/` |
 
 ## 🎨 v3.26.0 — الهوية · انميشن البداية · حركة التحميل · برنامج ويندوز · الأوامر مرة وحدة
 
 | السطر | الاسم | الدور |
 |---|---|---|
-| 24553 | `ex_open_counts` (+ `balances_once`: `oid_b`/`oid_s` · `overview`: `ex_b`/`ex_s`) | «الأوامر المنشورة»: اتحاد أرقام أوامر OKX للبوتات الموجودة — كل أمر مرة وحدة |
-| 26162 · 26185 · 26196 | `BRAND_WORD` · `BRAND_MARK` · `_brand_shadow` · `brand_word_svg` · `brand_mark_svg` · `brand_tile_svg` | الكتابة الرفيعة (خطوط · خيال طويل بقناع) · الشعار (ساقين · جسمين · صاعد — كل خط باسمه للحركة) · اللوح المحفور |
-| 26237 · 26384 | `brand_fill` · `_login_page` · `_page_cache` | يبدّل `__BRAND_*__` بالصفحة والدخول (مرة لكل نسخة) |
-| 26213 · 26223 · 26728 | `brand_favicon_svg` · `brand_ico` (`BRAND_ICO_B64`) · `/favicon.svg` · `/favicon.ico` | أيقونة التبويب/النافذة (بلا دخول) |
-| 26350 | `#splash` (+ CSS `spDraw` · `spWipe` · `spOut`) | انميشن البداية — مرة بالجلسة · ما يمنع الضغط |
-| 29468 | `busySet` · `api(path, body, quiet)` · `LDR()` · `dlFile` | ⏳ الشعار يتحرك بأي تحميل > 0.18 ث (`html.busy`) · التحديث الدوري ساكت |
-| 33631 | `brandWordCanvas` (`BRAND_WORD_JS`) | الكتابة على بطاقة الأرباح (كانفس) |
-| 26255 · 26269 · 26277 · 26677 | `win_exe` · `win_url_ok` · `win_exe_for` · `/app/holy.exe?u=` · `/api/app/info` (`win`) | 💻 برنامج ويندوز: يكتب العنوان بالفتحة (`WIN_URL_TAG`) وينزّله (جلسة اللوحة) |
-| 33923 | `openWinPanel` · `winDownload` · `IN_WIN` (`?holyapp=win`) | نافذة ⚙️ ⇐ 💻 برنامج ويندوز |
-| 42471 | `BRAND_ICO_B64` · `WIN_EXE_CODE` · `WIN_EXE_NAME` · `WIN_EXE_B64` · `APP_APK_*` (1.2) | المدمج — مصادرها بالـDevKit: `brand/` · `win/` · `android/` |
+| 24937 | `ex_open_counts` (+ `balances_once`: `oid_b`/`oid_s` · `overview`: `ex_b`/`ex_s`) | «الأوامر المنشورة»: اتحاد أرقام أوامر OKX للبوتات الموجودة — كل أمر مرة وحدة |
+| 26546 · 26569 · 26580 | `BRAND_WORD` · `BRAND_MARK` · `_brand_shadow` · `brand_word_svg` · `brand_mark_svg` · `brand_tile_svg` | الكتابة الرفيعة (خطوط · خيال طويل بقناع) · الشعار (ساقين · جسمين · صاعد — كل خط باسمه للحركة) · اللوح المحفور |
+| 26621 · 26768 | `brand_fill` · `_login_page` · `_page_cache` | يبدّل `__BRAND_*__` بالصفحة والدخول (مرة لكل نسخة) |
+| 26597 · 26607 · 27112 | `brand_favicon_svg` · `brand_ico` (`BRAND_ICO_B64`) · `/favicon.svg` · `/favicon.ico` | أيقونة التبويب/النافذة (بلا دخول) |
+| 26734 | `#splash` (+ CSS `spDraw` · `spWipe` · `spOut`) | انميشن البداية — مرة بالجلسة · ما يمنع الضغط |
+| 29852 | `busySet` · `api(path, body, quiet)` · `LDR()` · `dlFile` | ⏳ الشعار يتحرك بأي تحميل > 0.18 ث (`html.busy`) · التحديث الدوري ساكت |
+| 34021 | `brandWordCanvas` (`BRAND_WORD_JS`) | الكتابة على بطاقة الأرباح (كانفس) |
+| 26639 · 26653 · 26661 · 27061 | `win_exe` · `win_url_ok` · `win_exe_for` · `/app/holy.exe?u=` · `/api/app/info` (`win`) | 💻 برنامج ويندوز: يكتب العنوان بالفتحة (`WIN_URL_TAG`) وينزّله (جلسة اللوحة) |
+| 34313 | `openWinPanel` · `winDownload` · `IN_WIN` (`?holyapp=win`) | نافذة ⚙️ ⇐ 💻 برنامج ويندوز |
+| 42861 | `BRAND_ICO_B64` · `WIN_EXE_CODE` · `WIN_EXE_NAME` · `WIN_EXE_B64` · `APP_APK_*` (1.2) | المدمج — مصادرها بالـDevKit: `brand/` · `win/` · `android/` |
 
 ## 🤝 v3.25.5 — الرصيد الحر · رفض الخروج · تنبيه الإنشاء · اليوم الخسران
 
 | السطر | الاسم | الدور |
 |---|---|---|
 | 8632 | `_gd_free_claims` · `_FREE_T` | اللي يحتاجه كل بوت **حر** بالمحفظة {عملة: كمية} (الدوري · DCA · بيعات الشبكة الافتراضية) — الرقابة وتنبيه الإنشاء |
-| 22007 | `_gd_cover_scan` (بعد `_gd_rec_scan` بـ`guard_scan`) | لكل محفظة × عملة: المطلوب حر ≤ `availBal` · قراءتين · `cov:<محفظة>:<عملة>` · يكتب فحص «💰» بكرت الدوري |
-| 21972 | `_gd_rec_scan` (`xfail`) | سطر «❌ … بالمحفظة للخروج» بآخر 20 دقيقة ⇒ 🔴 تنبيه |
-| 8677 · 26863 · 32633 | `coin_users` · `/api/coin_users` · `shareCheck` | تنبيه نماذج الإنشاء (الشبكة · DCA · الدوري · المُراكِم) |
+| 22391 | `_gd_cover_scan` (بعد `_gd_rec_scan` بـ`guard_scan`) | لكل محفظة × عملة: المطلوب حر ≤ `availBal` · قراءتين · `cov:<محفظة>:<عملة>` · يكتب فحص «💰» بكرت الدوري |
+| 22356 | `_gd_rec_scan` (`xfail`) | سطر «❌ … بالمحفظة للخروج» بآخر 20 دقيقة ⇒ 🔴 تنبيه |
+| 8677 · 27247 · 33023 | `coin_users` · `/api/coin_users` · `shareCheck` | تنبيه نماذج الإنشاء (الشبكة · DCA · الدوري · المُراكِم) |
 | 14144 | `_loss_day` (داخل `profit_audit`) | دليل خسارة بيوم المحفظة ⇒ الفرق موضّح مو ❌ |
 
 ## 📉 v3.25.4 — تبويب الخسائر (يحسب بس) · 🔢 علامات «انسلّم»
@@ -1135,9 +1140,9 @@
 | 6070 | `LOSS_FILE` (`Holy_Losses.json`) · `LOSS_SRC` · `_loss_load` | السجل: `since` · `items` · `done` (كل خروج انقرا) · `lots` (لقطة أوامر الدوري) |
 | 6083 | `_loss_split` | خروج يدوي لأكثر من أمر بالدوري ⇒ نتيجة كل أمر من نفس التنفيذ |
 | 6123 | `loss_tick` | يقرا الخسائر الجديدة (DCA · الدوري · بيع المُراكِم) — قراءة بس · `ledger_loop` + `delete_bot` |
-| 6275 · 26872 | `loss_view` · `/api/losses` | لكل محفظة ($ + عملات + ≈$ + منين) · القائمة بالفلاتر |
-| 42263 | `_loss_audit` (داخل `books_audit`) | كل خروج بخسارة انقرا · ولا خسارة مكررة |
-| 29277 · 32693 | زر `bLoss` · `openLosses` · `lossRender` · `lossSet` | الصفحة (بين الرقابة والإعدادات) |
+| 6275 · 27256 | `loss_view` · `/api/losses` | لكل محفظة ($ + عملات + ≈$ + منين) · القائمة بالفلاتر |
+| 42653 | `_loss_audit` (داخل `books_audit`) | كل خروج بخسارة انقرا · ولا خسارة مكررة |
+| 29661 · 33083 | زر `bLoss` · `openLosses` · `lossRender` · `lossSet` | الصفحة (بين الرقابة والإعدادات) |
 | 6342 · 12839 · 13371 | `accum_coin_handoff` (`live_h`) · `coin_ledger_tick` (`live_g`) · `profit_tick` (`cseen`) | علامات «انسلّم»: اللي لسه بسجلات البوتات ما ينمسح |
 
 ## 🔧 v3.25.3 — إصلاحات DCA (اللوحة) · 🧹 كسور الدوري
@@ -1148,20 +1153,20 @@
 | 7759 · 7786 | `DCA_TG_FILE` · `_dca_tg_get` · `_dca_tg_set` · `_dca_finish_scan` · `notifier_loop` | مؤشرات إشعار DCA محفوظة (`c|<مجلد>` آخر دورة · `f|<مجلد>` آخر دورة انتهت) |
 | 989 | `bot_snapshot.rate_daily` | DCA: `total_coin_profit` ÷ الأيام |
 | 8509 · 8453 | `_gd_rungs(st, is_dca, buy)` · `_GD_RX_DCA_FILL` · `_gd_apply` (`t_prev`) | الرقابة: درجات DCA الشرائي شراء · تنفيذاته · إغلاق الدورة مو «✂️» |
-| 41365 | `start_all_bots(user)` | الزر يمسح «آخر دورة» · الإقلاع يترك المنتهي واقف |
+| 41755 | `start_all_bots(user)` | الزر يمسح «آخر دورة» · الإقلاع يترك المنتهي واقف |
 | 3122 | `_rec_snapshot.dust` + `recDetails` | 🧹 كسور تنتظر الخروج الجاي (المحرك: `close["D"]` · `cycles_log[].dust_in`) |
 
 ## 🛡️ v3.25.2 — الرقابة على البوت الدوري · 📱 التطبيق 1.1 (الإشعارات والتطبيق مسكّر)
 
 | السطر | الاسم | الدور |
 |---|---|---|
-| 21873 | `_gd_rec_scan` · `GUARD_REC_GRACE` · `GUARD_REC_PEND` | فحص كل بوت دوري بكل جولة (قراءة فقط): الحسابات · الدفاتر · أمر معلّق · الموعد · حد الأمان · أمر قاعد بالمنصة · العمولة · رفض الخروج (`xfail`) · (تغطية المحفظة انتقلت لـ`_gd_cover_scan` على الرصيد الحر v3.25.5) — أحداث `rec:*` · سجلات (انحلّت · تغيّر حالة · ملخص يومي) · `g["rec"]` |
+| 22257 | `_gd_rec_scan` · `GUARD_REC_GRACE` · `GUARD_REC_PEND` | فحص كل بوت دوري بكل جولة (قراءة فقط): الحسابات · الدفاتر · أمر معلّق · الموعد · حد الأمان · أمر قاعد بالمنصة · العمولة · رفض الخروج (`xfail`) · (تغطية المحفظة انتقلت لـ`_gd_cover_scan` على الرصيد الحر v3.25.5) — أحداث `rec:*` · سجلات (انحلّت · تغيّر حالة · ملخص يومي) · `g["rec"]` |
 | 10736 | `guard_scan` (+) | ينادي `_gd_rec_scan` بعد `_gd_trade_scan` |
 | 11112 · 11308 | `guard_view` · `guard_report_lines` (+ `rec`) | نافذة الرقابة · التقرير التشخيصي: قسم «🔁 البوتات الدورية — فحص كل جولة» |
-| 32818 | `guardRender` (قسم `RC`) | الواجهة: كل بوت دوري وفحوصه ✅/❌ |
+| 33208 | `guardRender` (قسم `RC`) | الواجهة: كل بوت دوري وفحوصه ✅/❌ |
 | 11354 · 11381 | `app_dev_watch` · `APP_SILENT_SEC` (من `guard_loop`) | 📱 موبايل مربوط سكت 30 دقيقة ⇒ سطر بالسجلات · رجع ⇒ سطر |
-| 33821 | `appRender` (صف «🚀 والتطبيق مسكّر») | صحة المراقب (آخر سحب) · نوع الموبايل · زر `HolyApp.bgSettings()` · «⚠️ ساكت» بالأجهزة |
-| 42470 | `APP_APK_CODE` = 2 · `APP_APK_NAME` = 1.1 | التطبيق المدمج — المصدر بالـDevKit ⇐ `android/` (`Feed` · `Keep` · `KeepJob` · `Oem`) |
+| 34211 | `appRender` (صف «🚀 والتطبيق مسكّر») | صحة المراقب (آخر سحب) · نوع الموبايل · زر `HolyApp.bgSettings()` · «⚠️ ساكت» بالأجهزة |
+| 42860 | `APP_APK_CODE` = 2 · `APP_APK_NAME` = 1.1 | التطبيق المدمج — المصدر بالـDevKit ⇐ `android/` (`Feed` · `Keep` · `KeepJob` · `Oem`) |
 
 ## 🔁 v3.25.1 — الدوري: البيعي بالدولار · 📏 النطاق · 💸 العمولات · الخريطة/الإشعارات ⇐ الكرت · التقرير المطبوع
 
@@ -1171,15 +1176,15 @@
 | 3039 | `_rec_snapshot` (+) | `lo` · `hi` · `in_range` · `fees` · `fee_usd` · `fee_other` · `fee_rate` (%) · `amt_usd` · `unsure` (🔒 أمر ينتظر التأكيد) · المستثمر بالدولار للبيعي الجديد |
 | 3142 | `_rec_control` (+ `rec_range`) | يكتب `lo`/`hi` حقول تحكم (يتحقق: أرقام · أدنى < أعلى) — مسموح والبوت طافي |
 | 3247 · 11545 | `_rec_msg` · `_pv_cfg_txt` | رسالة تخطّي النطاق · سطر «💸 العمولة» · وحدة المستثمر/الحد · الإعدادات بالدولار والنطاق |
-| 22827 | `deploy_rec` (+) | `lo`/`hi` (أدنى ≥ أعلى ⇒ رفض) · `amt_usd: True` · حد OKX بالطرفين (المبلغ ÷ السعر) · رسالة الحد بالدولار |
+| 23211 | `deploy_rec` (+) | `lo`/`hi` (أدنى ≥ أعلى ⇒ رفض) · `amt_usd: True` · حد OKX بالطرفين (المبلغ ÷ السعر) · رسالة الحد بالدولار |
 | 6925 | `feed_all` | كل إشعار بوت يحمل `dir` ⇒ الجرس يفتح الكرت |
 | 12215 | `report_html` | 🖨️ قسم «البوتات الدورية (الآن)» · تسميات «بوت بالدولار/ربحت البوتات/حصة كل بوت» |
-| 40425 | `REC_SRC` (v3.25.1) | المحرك: `_place`/`_resolve_pending` (مرة وحدة بالضبط) · `_fee_net`/`_fee_book`/`_fee_rate` · `_amt_usd` · `_range` — المصدر بالـDevKit ⇐ `recur/recur.py` |
-| 30415 | `recAmt` · `recEx` · `recRng` | مبلغ الأمر بوحدته ($ للبيعي الجديد) · المستثمر/الحد بوحدته · نص النطاق |
-| 30501 · 30625 | `updRecCard` (+ صف النطاق والعمولات) · `recRange` | الكرت · نافذة تعديل النطاق |
-| 31483 | `recPreview` · `recFormBody` · `openDeployRec` | حقلين النطاق · البيعي بالدولار · تحذير أدنى ≥ أعلى |
-| 34151 · 34163 | `flRec` · `flInfo` | 🗺️ حالة البوت الدوري الكاملة بنافذة الخريطة + «🤖 افتح الكرت» (`holyGo('bot:'+key)`) لأي بوت |
-| 29661 · 33749 | `renderNotif` · `holyGo` | 🔔 إشعار البوت (`.nitem.ngo`) ينضغط ⇒ كرت البوت يومض |
+| 40815 | `REC_SRC` (v3.25.1) | المحرك: `_place`/`_resolve_pending` (مرة وحدة بالضبط) · `_fee_net`/`_fee_book`/`_fee_rate` · `_amt_usd` · `_range` — المصدر بالـDevKit ⇐ `recur/recur.py` |
+| 30799 | `recAmt` · `recEx` · `recRng` | مبلغ الأمر بوحدته ($ للبيعي الجديد) · المستثمر/الحد بوحدته · نص النطاق |
+| 30885 · 31009 | `updRecCard` (+ صف النطاق والعمولات) · `recRange` | الكرت · نافذة تعديل النطاق |
+| 31867 | `recPreview` · `recFormBody` · `openDeployRec` | حقلين النطاق · البيعي بالدولار · تحذير أدنى ≥ أعلى |
+| 34541 · 34553 | `flRec` · `flInfo` | 🗺️ حالة البوت الدوري الكاملة بنافذة الخريطة + «🤖 افتح الكرت» (`holyGo('bot:'+key)`) لأي بوت |
+| 30045 · 34139 | `renderNotif` · `holyGo` | 🔔 إشعار البوت (`.nitem.ngo`) ينضغط ⇒ كرت البوت يومض |
 
 ## 🔁 v3.25.0 — البوت الدوري (اللوحة) · مصدر المحرك بالـDevKit ⇐ `recur/recur.py`
 
@@ -1194,42 +1199,42 @@
 | 3142 | `_rec_control` (من `control` — أفعال `rec_*`) | `rec_sell` · `rec_withdraw` · `rec_now` (البوت شغّال بس) · `rec_pause/resume` · `rec_ri` — حقول تحكم بس (`save_state_keys`) |
 | 3247 · 3313 | `_rec_msg` · `_rec_notify` (من `notifier_loop`) | تيليغرام لكل حدث (أمر · خروج · تخطّي · سحب) مرة وحدة — `Holy_RecNotify.json` |
 | 6038 | `_rec_audit` (من `books_audit`) | هوية إعادة الاستثمار · الربح = المحرر + المعاد استثماره · الدفتر مقابل البوت |
-| 22827 | `deploy_rec` · `/api/deploy_rec` | النشر والتحقق (هدف ≥ 0.2% · حد الأمان · الساعة · حد OKX) · `bot_id` = معادلة المحرك |
-| 40425 · 41685 | `REC_SRC` · `REC_VERSION` · `engine_for` | المحرك المدمج ⇒ `recur.py` بمجلد البوت |
-| 30422 · 30501 | `buildRecCard` · `updRecCard` · `recLotRow` | الكرت (قائمة الأوامر أو المعدل) |
-| 30573 · 30588 | `recSell` · `recWithdraw` · `recRi` · `recNow` · `recPause` · `recPower` · `recHist` | أزرار الكرت ونوافذها (الخسارة تأكيد أحمر · ⏹ يطلب تأكيد) |
-| 31429 · 31483 · 31400 | `openDeployRec` · `recPreview` · `recDetails` | نافذة النشر وملخصها · التفاصيل |
+| 23211 | `deploy_rec` · `/api/deploy_rec` | النشر والتحقق (هدف ≥ 0.2% · حد الأمان · الساعة · حد OKX) · `bot_id` = معادلة المحرك |
+| 40815 · 42075 | `REC_SRC` · `REC_VERSION` · `engine_for` | المحرك المدمج ⇒ `recur.py` بمجلد البوت |
+| 30806 · 30885 | `buildRecCard` · `updRecCard` · `recLotRow` | الكرت (قائمة الأوامر أو المعدل) |
+| 30957 · 30972 | `recSell` · `recWithdraw` · `recRi` · `recNow` · `recPause` · `recPower` · `recHist` | أزرار الكرت ونوافذها (الخسارة تأكيد أحمر · ⏹ يطلب تأكيد) |
+| 31813 · 31867 · 31784 | `openDeployRec` · `recPreview` · `recDetails` | نافذة النشر وملخصها · التفاصيل |
 
 ## 📱 v3.24.0 — تطبيق أندرويد (اللوحة) · المصدر نفسه بالـDevKit ⇐ `android/`
 
 | السطر | الاسم | الدور |
 |---|---|---|
-| 25035 · 25010 · 24994 | `app_feed_push` · `_app_short` · `_app_go` | كل إشعار تيليغرام ⇒ مختصر للموبايل (بس لو في جهاز · بلا تكرار 3 ساعات) · النوع والربح ووين يفتح |
-| 25351 | `app_feed_wait` | السحب الطويل (≤ 55 ثانية) — يرجع لحظة ما يجي إشعار |
-| 24820 · 24839 | `app_pair` · `app_dev_auth` · `app_unpair` · `app_devices` | ربط الموبايل (مفتاح · sha256 بس) · المفتاح يفتح الإشعارات والتنزيل فقط |
-| 26652 · 27532 | `Handler._app_get` · `/api/app/pair` · `/api/app/devices` | `/api/app/feed` · `/api/app/info` · `/app/holy.apk` (قبل حارس الدخول) · الربط والقائمة والتجريبي (بالدخول) |
-| 25464 · 42472 | `app_apk` · `APP_APK_CODE/NAME/B64` | الـAPK الموقّع المدمج (يتحدّث بـ`android/tools/embed_apk.py`) |
-| 33799 | `openAppPanel` · `appRender` | ⚙️ ⇐ 📱: بالمتصفح زر التنزيل والخطوات · داخل التطبيق حالته وأزراره · الأجهزة المربوطة |
-| 33749 · 33770 | `holyGo` · `holyBack` | الإشعار انضغط ⇒ مكانه · زر الرجوع يسكّر اللي فوق |
-| 33740 · 33784 | `holySave` · `holyCopy` · `appAuto` | الحفظ/النسخ عبر التطبيق لو موجود · الربط وحده أول دخول |
+| 25419 · 25394 · 25378 | `app_feed_push` · `_app_short` · `_app_go` | كل إشعار تيليغرام ⇒ مختصر للموبايل (بس لو في جهاز · بلا تكرار 3 ساعات) · النوع والربح ووين يفتح |
+| 25735 | `app_feed_wait` | السحب الطويل (≤ 55 ثانية) — يرجع لحظة ما يجي إشعار |
+| 25012 · 25031 | `app_pair` · `app_dev_auth` · `app_unpair` · `app_devices` | ربط الموبايل (مفتاح · sha256 بس) · المفتاح يفتح الإشعارات والتنزيل فقط |
+| 27036 · 27916 | `Handler._app_get` · `/api/app/pair` · `/api/app/devices` | `/api/app/feed` · `/api/app/info` · `/app/holy.apk` (قبل حارس الدخول) · الربط والقائمة والتجريبي (بالدخول) |
+| 25848 · 42862 | `app_apk` · `APP_APK_CODE/NAME/B64` | الـAPK الموقّع المدمج (يتحدّث بـ`android/tools/embed_apk.py`) |
+| 34189 | `openAppPanel` · `appRender` | ⚙️ ⇐ 📱: بالمتصفح زر التنزيل والخطوات · داخل التطبيق حالته وأزراره · الأجهزة المربوطة |
+| 34139 · 34160 | `holyGo` · `holyBack` | الإشعار انضغط ⇒ مكانه · زر الرجوع يسكّر اللي فوق |
+| 34130 · 34174 | `holySave` · `holyCopy` · `appAuto` | الحفظ/النسخ عبر التطبيق لو موجود · الربط وحده أول دخول |
 
 ## 🖼️ v3.23.3 — بطاقة الأرباح (صورة بس لما تطلبها)
 
 | السطر | الاسم | الدور |
 |---|---|---|
-| 24916 · 27563 | `tg_photo` · `/api/card_tg` | صورة لتيليغرام (sendPhoto multipart · حتى لو مكتوم) · يقبل PNG ≤ 8MB · ما تنكتب بالسجلات |
-| 33568 · 33583 | `cardOpen` · `cardRender` | النافذة (الفترة · الاختيارات · المعاينة) · يجيب `/api/profit` (و`/api/flow` لو الصندوق مختار) |
-| 33600 | `cardModel` | النصوص والأرقام (نفس المصادر) · 🔒 وضع المشاركة · عزل الأرقام بالنص العربي |
-| 33641 | `cardDraw` | الرسم على canvas (1080 عرض) · الخلفية بالطول النهائي |
-| 33720 | `cardTg` · `cardSave` · `cardShare` | تيليغرام · حفظ PNG · مشاركة الموبايل |
+| 25300 · 27947 | `tg_photo` · `/api/card_tg` | صورة لتيليغرام (sendPhoto multipart · حتى لو مكتوم) · يقبل PNG ≤ 8MB · ما تنكتب بالسجلات |
+| 33958 · 33973 | `cardOpen` · `cardRender` | النافذة (الفترة · الاختيارات · المعاينة) · يجيب `/api/profit` (و`/api/flow` لو الصندوق مختار) |
+| 33990 | `cardModel` | النصوص والأرقام (نفس المصادر) · 🔒 وضع المشاركة · عزل الأرقام بالنص العربي |
+| 34031 | `cardDraw` | الرسم على canvas (1080 عرض) · الخلفية بالطول النهائي |
+| 34110 | `cardTg` · `cardSave` · `cardShare` | تيليغرام · حفظ PNG · مشاركة الموبايل |
 
 ## 📱 v3.23.2 — خانات الأرباح بالموبايل: عمودين بلا سحب · شريط بسطر واحد (الواجهة بس)
 
 | السطر | الاسم | الدور |
 |---|---|---|
-| 28712 | CSS `@media (max-width:760px)` للـ`.stats` | عمودين · `order` (كل خانة يمّ إجماليها) · شريط 32 بكسل · `data-s` بـ`::before` · بلا `.spk` · ≤ 380: `data-x` |
-| 29238 | `#stats` | الأسماء المختصرة `data-s` (وللعملات `data-x`) |
-| 33456 | `pcKpi` | خانات التقارير بنفس الشكل · `c(…, sh)` الاسم المختصر |
+| 29096 | CSS `@media (max-width:760px)` للـ`.stats` | عمودين · `order` (كل خانة يمّ إجماليها) · شريط 32 بكسل · `data-s` بـ`::before` · بلا `.spk` · ≤ 380: `data-x` |
+| 29622 | `#stats` | الأسماء المختصرة `data-s` (وللعملات `data-x`) |
+| 33846 | `pcKpi` | خانات التقارير بنفس الشكل · `c(…, sh)` الاسم المختصر |
 
 ## 📤 v3.23.1 — زر «للصندوق النهائي» بالكرت (دولار أو عملة) · 🗺️ كل محفظة بإطار معزول (اللوحة بس)
 
@@ -1237,9 +1242,9 @@
 |---|---|---|
 | 6538 · 6503 | `acc_coin_out` · `acc_withdraw` | 🪙 جزء/كل المخزون ⇒ `cout` (الكلفة بنسبتها · `_ri_left_w`) · 💵 المتراكم ⇒ `wlog` (رسائل بلا «طرح») |
 | 13371 · 13882 | `profit_tick` · `flow_view` | `cout` ⇒ عملات النهائي (`co|aid|عملة` · `coseen`) · خط `apc|aid` · `cout` بكل مُراكِم |
-| 27365 | `/api/accum` coin_out | 📤 العملة من المخزون |
-| 34062 | `flRender` | إطار لكل محفظة (`fl-lane`): بوتاتها ⇒ 📥 ⇒ مُراكِماتها ⇒ 💰 |
-| 34509 · 34806 · 34821 · 34826 | `renderAccum` · `accToFinal` · `accFinAll` · `accFinGo` | زر الكرت `afin` · نافذة القسمين · «الكل» يعبّي · التأكيد والتنفيذ |
+| 27749 | `/api/accum` coin_out | 📤 العملة من المخزون |
+| 34452 | `flRender` | إطار لكل محفظة (`fl-lane`): بوتاتها ⇒ 📥 ⇒ مُراكِماتها ⇒ 💰 |
+| 34899 · 35196 · 35211 · 35216 | `renderAccum` · `accToFinal` · `accFinAll` · `accFinGo` | زر الكرت `afin` · نافذة القسمين · «الكل» يعبّي · التأكيد والتنفيذ |
 
 ## 📥 v3.23.0 — صندوق الربح المحرر ⇒ المُراكِمات / 💰 الصندوق النهائي · بلا مُراكِم مباشر · البيع و🛑 الإنهاء للنهائي · العملات تتخصّص (اللوحة بس)
 
@@ -1251,12 +1256,12 @@
 | 13298 | `_pf_log` | `merge`: الربح المباشر سطر واحد لكل بوت ويوم (`x` = عدد الدفعات) |
 | 13700 | `profit_op` | `assign` (📁 تخصيص/↩ رجوع عملة لصندوق) · صرف عملة صندوق (`ccy`) · حذف الصندوق يرجّع عملاته · التصفير يشمل عملات الصناديق |
 | 13882 | `flow_view` | لكل محفظة `rel` (mode eod/live · today · wait · split · rest) · `mode` · `act_pct` · الخطوط `ur|k` · `ra|w|aid` · `rp|w` · `ap|aid` · مصادر النهائي `src` · `closed` · `coins_all` |
-| 14168 · 42175 | `profit_audit` · `books_audit` | لكل محفظة ويوم بالسنت (حتى `ghost`) · عملات الصناديق · نصيب المُراكِم بربح محفظته |
-| 27219 · 27301 · 27384 | `/api/accum` save · end/delete · preview | البداية: محفظة مباشرة ⇒ باچر · النقل ⇒ `profit_move_acc` · 🛑 ⇒ `profit_close_acc` · preview: `live` لكل محفظة |
-| 34041 · 34051 · 34062 | `flProfit` · `flRel` · `flRender` | 💰 الصندوق النهائي (عملات كل صندوق) · 📥 الربح المحرر · طبقة المحرر بين البوتات والمُراكِمات |
-| 34110 · 34163 | `flAnimate` · `flInfo` | فقاعة دخل بلا خط على النهائي · تفاصيل المحرر |
-| 34201 · 34237 · 34245 | `pfOpen` · `pfSpend` · `pfAssign` | نافذة النهائي (مصادر · عملات غير مخصّصة/مخصّصة · منتهية) · صرف عملة صندوق · 📁 تخصيص/↩ رجوع |
-| 34866 · 34678 | `accDel` · `accWalInfo` | 🛑 إنهاء بتأكيد يعدّد العملة والدولار · ملاحظة «يبدي باچر» |
+| 14168 · 42565 | `profit_audit` · `books_audit` | لكل محفظة ويوم بالسنت (حتى `ghost`) · عملات الصناديق · نصيب المُراكِم بربح محفظته |
+| 27603 · 27685 · 27768 | `/api/accum` save · end/delete · preview | البداية: محفظة مباشرة ⇒ باچر · النقل ⇒ `profit_move_acc` · 🛑 ⇒ `profit_close_acc` · preview: `live` لكل محفظة |
+| 34431 · 34441 · 34452 | `flProfit` · `flRel` · `flRender` | 💰 الصندوق النهائي (عملات كل صندوق) · 📥 الربح المحرر · طبقة المحرر بين البوتات والمُراكِمات |
+| 34500 · 34553 | `flAnimate` · `flInfo` | فقاعة دخل بلا خط على النهائي · تفاصيل المحرر |
+| 34591 · 34627 · 34635 | `pfOpen` · `pfSpend` · `pfAssign` | نافذة النهائي (مصادر · عملات غير مخصّصة/مخصّصة · منتهية) · صرف عملة صندوق · 📁 تخصيص/↩ رجوع |
+| 35256 · 35068 | `accDel` · `accWalInfo` | 🛑 إنهاء بتأكيد يعدّد العملة والدولار · ملاحظة «يبدي باچر» |
 
 ## 👛 v3.22.9 — المُراكِم لكل محفظة (حساب مستقل) · اختيار المحفظة قبل النشر (اللوحة بس)
 
@@ -1267,11 +1272,11 @@
 | 7937 | `ledger_tick` | يوسم كل سطر بمحفظة بوته (`w`) |
 | 2554 | `accum_tick` | النسبة من `day_profit_w(يوم، محفظته)` · يرحّل القديم أول |
 | 6319 · 6342 | `_ri_eligible` · `accum_coin_handoff` | العملة لمُراكِم نفس العملة ونفس المحفظة · الباقي `_ri_left_w[wid]` |
-| 8533 · 8711 · 22129 | `_gd_wallets` · `_gd_gather` · `_gd_acc_scan` | كل محفظة عليها مُراكِم تنراقب ويّا مُراكِماتها · النسب لكل محفظة (`by_wallet`) |
+| 8533 · 8711 · 22513 | `_gd_wallets` · `_gd_gather` · `_gd_acc_scan` | كل محفظة عليها مُراكِم تنراقب ويّا مُراكِماتها · النسب لكل محفظة (`by_wallet`) |
 | 6610 · 14768 | `acc_alloc_summary` · `released_log` | 📊 لكل محفظة (`wallets[]`) · المتوقّع من ربح محفظته |
-| 27219 · 27384 | `/api/accum` save · preview · toggle | المحفظة إلزامية · ≤ 100% لكل محفظة (وللعملة) · نقل بيه رصيد ⇒ `need_move_ok` · preview: `wallets[]` (ربح أمس · النسب) · `acc_w` |
-| 24218 | `wallet_op` upd | ✏️ مفتاح جديد ⇒ مُراكِماتها ودفتر ربحها ينتقلون ويّاه |
-| 34678 · 34696 · 34843 · 34737 | `accWalInfo` · `accEdit` · `accSave` · `accAlloc` | خانة 👛 + أرقام المحفظة المختارة · الحفظ ويّا `wid` + تأكيد النقل · 📊 قسم لكل محفظة |
+| 27603 · 27768 | `/api/accum` save · preview · toggle | المحفظة إلزامية · ≤ 100% لكل محفظة (وللعملة) · نقل بيه رصيد ⇒ `need_move_ok` · preview: `wallets[]` (ربح أمس · النسب) · `acc_w` |
+| 24602 | `wallet_op` upd | ✏️ مفتاح جديد ⇒ مُراكِماتها ودفتر ربحها ينتقلون ويّاه |
+| 35068 · 35086 · 35233 · 35127 | `accWalInfo` · `accEdit` · `accSave` · `accAlloc` | خانة 👛 + أرقام المحفظة المختارة · الحفظ ويّا `wid` + تأكيد النقل · 📊 قسم لكل محفظة |
 
 ## 🗺️ v3.22.8 — خريطة الأرباح المباشرة · 💰 صناديق الربح لكل محفظة (اللوحة بس · مراقبة — التوزيعات ولا سطر)
 
@@ -1282,36 +1287,36 @@
 | 13262 · 13248 · 13324 | `_pf_hid_map` · `_pf_wallets` · `_pf_add_usd` | تسليم ⇐ بوت (الحالة + دفتر العملات) · بوت ⇐ محفظة (`_gd_wallets`) · التقسيم على الصناديق بالضبط |
 | 13700 · 13864 | `profit_op` · `_pf_amt` | env_add · env_edit · env_del · spend · resplit · reset (دفتر للعرض) |
 | 13882 | `flow_view` | لقطة الخريطة: محافظ ⇐ بوتات (اليوم · ينتظر · 💠 · 🪙) · مُراكِمات (🚦) · خطوط من الإعدادات (نسبة صفر = ماكو) بمجاميعها · ربح كل محفظة |
-| 14168 · 42175 | `profit_audit` ⇐ `books_audit` | كل يوم = ربح البوتات − نصيب المُراكِمات · الرصيد = داخل − مصروف − مصفّر |
-| 26074 · 6480 | `ledger_loop` · `accum_loop` | + `profit_tick` (كل 30 ثانية · وبعد جولة نص الليل) |
-| 26881 · 27578 | `GET /api/flow` · `POST /api/pfbox` | الخريطة (تشغّل `profit_tick` كل ≥5 ثواني) · أوامر الصناديق |
-| 29372 | `#page_flow` | الصفحة (زر «🗺️ الخريطة» يمّ «📜 السجلات») · `#flSvg` (الخطوط) · `#flSvgP` (النقاط · `#flLbl` النسب) · `#flFx` (الفقاعات) · `#flBody` |
-| 34007 · 34011 · 34062 · 34088 | `openFlow` · `loadFlow` · `flRender` · `flDraw` | كل 4 ثواني · `flBot` · `flAcc` · `flProfit` · `flPort` (💵 32% · 🪙 68% · 💸 الوسط) · `flHL` |
-| 34110 · 34133 | `flAnimate` · `flSpawn` · `flStep` · `flBub` · `flPulse` | فرق مجموع الخط بين لقطتين ⇒ نقطة تمشي بالمبلغ · ربح البوت/💠/🛒 فقاعة |
-| 34201 | `pfOpen` · `pfEnv` · `pfSpend` · `pfDel` · `pfAct` · `flInfo` | نافذة الصناديق · تفاصيل المربع |
+| 14168 · 42565 | `profit_audit` ⇐ `books_audit` | كل يوم = ربح البوتات − نصيب المُراكِمات · الرصيد = داخل − مصروف − مصفّر |
+| 26458 · 6480 | `ledger_loop` · `accum_loop` | + `profit_tick` (كل 30 ثانية · وبعد جولة نص الليل) |
+| 27265 · 27962 | `GET /api/flow` · `POST /api/pfbox` | الخريطة (تشغّل `profit_tick` كل ≥5 ثواني) · أوامر الصناديق |
+| 29756 | `#page_flow` | الصفحة (زر «🗺️ الخريطة» يمّ «📜 السجلات») · `#flSvg` (الخطوط) · `#flSvgP` (النقاط · `#flLbl` النسب) · `#flFx` (الفقاعات) · `#flBody` |
+| 34397 · 34401 · 34452 · 34478 | `openFlow` · `loadFlow` · `flRender` · `flDraw` | كل 4 ثواني · `flBot` · `flAcc` · `flProfit` · `flPort` (💵 32% · 🪙 68% · 💸 الوسط) · `flHL` |
+| 34500 · 34523 | `flAnimate` · `flSpawn` · `flStep` · `flBub` · `flPulse` | فرق مجموع الخط بين لقطتين ⇒ نقطة تمشي بالمبلغ · ربح البوت/💠/🛒 فقاعة |
+| 34591 | `pfOpen` · `pfEnv` · `pfSpend` · `pfDel` · `pfAct` · `flInfo` | نافذة الصناديق · تفاصيل المربع |
 
 ## 🔑 v3.22.7 — 50119 بالمُراكِم والرقابة · الطلبات الموقّعة عالمية بس · الكل/اطرح · 🔁 · 👛 فحص وتحديث المفاتيح · 🔒 api/sec (اللوحة بس)
 
 | السطر | الاسم | الدور |
 |---|---|---|
-| 24327 · 24419 | `_OKX_SIGNED_HOSTS` · `_OKX_SIG_OK` · `_okx_hosts_ordered` | الموقّع على `www`/`aws` بس — `app.okx.com` (أمريكي) للعام بس عند الضرورة · مفضّل خاص بالموقّع |
-| 24342 | `_http_json` | `once=True` (أوامر): محاولة وحدة — ما يعيد الإرسال بـurllib |
-| 24399 · 24427 · 24446 | `_okx_post` · `_okx_get` · `_okx_get_on` | POST: 50119 صريح ⇒ المضيف الثاني مرة وحدة · GET: 50119 ⇒ يسأل الثاني · طلب على مضيف محدّد (للفحص) |
-| 24455 | `key_test` | 🔑 فحص مفتاح (قراءة بس): المضيفين · uid · الصلاحيات · IP · USDT · تحذيرات (14 يوم · سحب · قراءة بس) |
-| 24503 · 24524 · 24540 | `_OKX_AUTH_HINT` · `okx_code` · `okx_errmsg` · `_scope_err` | شرح 10 أكواد رفض بالعربي + الحل · أرصدة المحافظ/البوتات بالشرح |
+| 24711 · 24803 | `_OKX_SIGNED_HOSTS` · `_OKX_SIG_OK` · `_okx_hosts_ordered` | الموقّع على `www`/`aws` بس — `app.okx.com` (أمريكي) للعام بس عند الضرورة · مفضّل خاص بالموقّع |
+| 24726 | `_http_json` | `once=True` (أوامر): محاولة وحدة — ما يعيد الإرسال بـurllib |
+| 24783 · 24811 · 24830 | `_okx_post` · `_okx_get` · `_okx_get_on` | POST: 50119 صريح ⇒ المضيف الثاني مرة وحدة · GET: 50119 ⇒ يسأل الثاني · طلب على مضيف محدّد (للفحص) |
+| 24839 | `key_test` | 🔑 فحص مفتاح (قراءة بس): المضيفين · uid · الصلاحيات · IP · USDT · تحذيرات (14 يوم · سحب · قراءة بس) |
+| 24887 · 24908 · 24924 | `_OKX_AUTH_HINT` · `okx_code` · `okx_errmsg` · `_scope_err` | شرح 10 أكواد رفض بالعربي + الحل · أرصدة المحافظ/البوتات بالشرح |
 | 2465 · 2479 · 2366 | `_okx_no_order` · `_acc_settle` · `acc_settle_sell` | البصمة تنمسح بس على 51603 (مو موجود صراحةً) — رفض مفتاح/عطل ⇒ ينتظر |
 | 2392 · 2286 | `acc_buy_now` · `acc_sell_now` | رسالة الرفض باسم المحفظة (`okx_errmsg(r, who)`) |
 | 2554 | `accum_tick` | `only=` (🔁 لمُراكِم واحد) · فشل ⇒ `buy_err` + تيليغرام مرة باليوم (`err_tg_day`) · نجاح/قيد فارغ ⇒ تنمسح |
 | 6503 | `acc_withdraw` | `"all"` = المتراكم بالضبط · فرق ≤ نص سنت = الكل · سجل |
 | 6728 | `acc_snapshot` | + `buy_err` · `inflight` للكرت |
 | 8591 · 10736 | `_gd_errtxt` · `guard_scan` · `_GD_KEY_TG` | الرقابة: رفض المفتاح بالشرح · سجل + تيليغرام كل 6 ساعات لكل محفظة |
-| 24192 · 24218 | `settings_payload` · `wallet_op` | شارة محفظة المُراكِم (`acc`) · `acc_bot` · `upd` بمكانه + فحص قبل الحفظ (والإضافة كمان) |
-| 27329 · 27371 | `/api/accum` `buy_now` · `retry` | الشراء اليدوي تحت `_ACC_IO` ويسوّي الأمر السابق أول · 🔁 = `accum_tick(allow_buy=True, only=id)` |
-| 27413 · 27580 | `/api/okx_check` · `/api/wallet_test` | فحص OKX + المحافظ · فحص محفظة وحدة + نفس حساب أي بوت (uid) |
+| 24576 · 24602 | `settings_payload` · `wallet_op` | شارة محفظة المُراكِم (`acc`) · `acc_bot` · `upd` بمكانه + فحص قبل الحفظ (والإضافة كمان) |
+| 27713 · 27755 | `/api/accum` `buy_now` · `retry` | الشراء اليدوي تحت `_ACC_IO` ويسوّي الأمر السابق أول · 🔁 = `accum_tick(allow_buy=True, only=id)` |
+| 27797 · 27964 | `/api/okx_check` · `/api/wallet_test` | فحص OKX + المحافظ · فحص محفظة وحدة + نفس حساب أي بوت (uid) |
 | 249 · 301 | `_JR_SECRET_EXACT` · `journal_scrub_once` | 🔒 `api`/`sec` تنحجب بالسجلات والتقرير التشخيصي · تنظيف السجلات القديمة مرة وحدة (`Holy_Journal/_scrubbed_v3227`) |
-| 34546 | كرت المُراكِم `aretry` | زر 🔁 (فشل الشراء الآلي والمبلغ قيد الشراء) |
-| 34806 · 34815 · 34835 | `accWithdraw` · `accWithdrawAll` · `accRetry` | «الكل» يعبّي `#ac_w` (`data-all`) · «اطرح للمحفظة» يأكد وينقل (all ⇒ `amount:"all"`) · 🔁 يأكد ويشتري |
-| 34261 · 34270 · 34290 · 34875 | `openWallets` · `testWallet` · `updWallet` · `okxCheck` | 👛 🪙 · 🔑 فحص · ✏️ تحديث · 🔍 بالمحافظ |
+| 34936 | كرت المُراكِم `aretry` | زر 🔁 (فشل الشراء الآلي والمبلغ قيد الشراء) |
+| 35196 · 35205 · 35225 | `accWithdraw` · `accWithdrawAll` · `accRetry` | «الكل» يعبّي `#ac_w` (`data-all`) · «اطرح للمحفظة» يأكد وينقل (all ⇒ `amount:"all"`) · 🔁 يأكد ويشتري |
+| 34651 · 34660 · 34680 · 35265 | `openWallets` · `testWallet` · `updWallet` · `okxCheck` | 👛 🪙 · 🔑 فحص · ✏️ تحديث · 🔍 بالمحافظ |
 
 ## 📒 v3.22.6 — حسابات منتج · 📜 السجلات المفصّلة · 📦 التقرير التشخيصي (اللوحة بس)
 
@@ -1323,11 +1328,11 @@
 | 2554 | `accum_tick` | ياخذ فرق ربح يوم زاد بعدين — بنفس النسبة (`dpct`) |
 | 11589 · 11606 | `_ri_keyset` · `_pv_per_rows` | بوت بلا إعادة استثمار ⇒ التداول = الدفتر بالضبط (العدد من الأرشيف) |
 | 14242 | `alltime_view` | العملات الإجمالي من دفتر العملات بس |
-| 23682 · 23713 | `_books_since` · `books_fresh_start` | «📒 بداية جديدة للحسابات» من اليوم (الزرّين) · `_BOOKS_LOCK` يقفل الدفاتر الثلاثة |
-| 26074 | `ledger_loop` | + `journal_ingest_bots` كل 30 ثانية + أخطاء الحلقة بالسجلات |
-| 26883 | `/api/journal` | GET للسجلات |
-| 42175 · 42330 | `books_audit` · `diag_bundle` | 🧮 تدقيق الحسابات · الحزمة: `README_DIAG.md` · `ACCOUNTING_AUDIT.md` · الدفاتر · `numbers/` · `journal/` |
-| 29352 · 33383 · 33388 | `#page_logs` · `openLogs` · `loadLogs` | صفحة السجلات (`lgRender` · `lgToggle` · `lgCsv`) · زر «📜 السجلات» يمّ «📊 التقارير» |
+| 24066 · 24097 | `_books_since` · `books_fresh_start` | «📒 بداية جديدة للحسابات» من اليوم (الزرّين) · `_BOOKS_LOCK` يقفل الدفاتر الثلاثة |
+| 26458 | `ledger_loop` | + `journal_ingest_bots` كل 30 ثانية + أخطاء الحلقة بالسجلات |
+| 27267 | `/api/journal` | GET للسجلات |
+| 42565 · 42720 | `books_audit` · `diag_bundle` | 🧮 تدقيق الحسابات · الحزمة: `README_DIAG.md` · `ACCOUNTING_AUDIT.md` · الدفاتر · `numbers/` · `journal/` |
+| 29736 · 33773 · 33778 | `#page_logs` · `openLogs` · `loadLogs` | صفحة السجلات (`lgRender` · `lgToggle` · `lgCsv`) · زر «📜 السجلات» يمّ «📊 التقارير» |
 
 **الأوامر (POST):** `_do_POST_inner` يعلّم الطلب (`self._jpost`) و`_json` يكتبه بالسجلات ويّا نتيجته — كل زر بالواجهة ينسجّل لحاله.
 
@@ -1335,10 +1340,10 @@
 
 | السطر | الاسم | الدور |
 |---|---|---|
-| 31896 | `openSettings` | قسم «🕺 التسلية» · زر `bStk` ⇒ `STK.toggle()` (`localStorage: dash_stick`) |
-| 36478 | `tick` | ربح جديد ⇒ `STK.cheer()` (ويّا نغمة الربح) |
-| 36534 | `STK` | الوحدة كلها: المنصّات (`SEL` · `plats` · `seen` · `cross`) · المخ (`next` · `hopT` · `climbT` · `hitT`) · الحالات (`step`) · الوضعيات (`target` · `local` · `place`) · الرسم (`draw` · مسح المنطقة المتغيّرة) · الكرة (`ballStep`) · الضرب والشقوق (`hit` — رسم + `el.animate` بس) · المسك (`hitFig` · `pDown/pMove/pUp` · `eat` · `noSel` · `tStart`) · `start/stop` |
-| 36963 | الإقلاع | `STK.boot()` بعد `tick();schedPoll();applyTheme()` |
+| 32283 | `openSettings` | قسم «🕺 التسلية» · زر `bStk` ⇒ `STK.toggle()` (`localStorage: dash_stick`) |
+| 36868 | `tick` | ربح جديد ⇒ `STK.cheer()` (ويّا نغمة الربح) |
+| 36924 | `STK` | الوحدة كلها: المنصّات (`SEL` · `plats` · `seen` · `cross`) · المخ (`next` · `hopT` · `climbT` · `hitT`) · الحالات (`step`) · الوضعيات (`target` · `local` · `place`) · الرسم (`draw` · مسح المنطقة المتغيّرة) · الكرة (`ballStep`) · الضرب والشقوق (`hit` — رسم + `el.animate` بس) · المسك (`hitFig` · `pDown/pMove/pUp` · `eat` · `noSel` · `tStart`) · `start/stop` |
+| 37353 | الإقلاع | `STK.boot()` بعد `tick();schedPoll();applyTheme()` |
 
 **قواعد:** لوحة الرسم `pointer-events:none` z-index 70 (تحت الصفحات 80 والنوافذ 120) · ينمسك من خطوطه بس · ولا class/style يتغيّر على عناصر اللوحة. المصدر المقروء `stick.js` بالأدوات ويرجع للوحة بـ`reembed.py`.
 
@@ -1346,11 +1351,11 @@
 
 | السطر | الاسم | الدور |
 |---|---|---|
-| 28694 | `.stats` · `.st` (CSS) | الخانة 48 بكسل (حشو 5/12 · الاسم 11 · الرقم 18 · المسافة 6) |
-| 28970 | `header` · `#mbar` (CSS) | الشريط العلوي `position:relative` بكل الشاشات (كان `sticky`) · الشريط الرفيع بالحاسوب هم بعد ما يطلع الشريط (`body.pastTop`) |
-| 29287 | `#mbar` (HTML) | النبض · 🔄 `mTrade` (جديد) · 💵 `mTotal` · 📅 `mToday` · 🛡️ `mGuard` |
-| 30266 | `updTop` | انشال بناء `#hbar` (وُزّع · الرصيد · الرفض · الخلل) · زر 🛡️ الرقابة يعدّ `health_bad` + `audit_bad` ويّا تنبيهات الرقابة · `mTrade` |
-| 34696 · 34737 | `accEdit` · `accAlloc` | رابط «📊 التوزيع» بنافذة المُراكِم ⇒ نافذة المحاسبة (كان بابها شارة «وُزّع») |
+| 29078 | `.stats` · `.st` (CSS) | الخانة 48 بكسل (حشو 5/12 · الاسم 11 · الرقم 18 · المسافة 6) |
+| 29354 | `header` · `#mbar` (CSS) | الشريط العلوي `position:relative` بكل الشاشات (كان `sticky`) · الشريط الرفيع بالحاسوب هم بعد ما يطلع الشريط (`body.pastTop`) |
+| 29671 | `#mbar` (HTML) | النبض · 🔄 `mTrade` (جديد) · 💵 `mTotal` · 📅 `mToday` · 🛡️ `mGuard` |
+| 30650 | `updTop` | انشال بناء `#hbar` (وُزّع · الرصيد · الرفض · الخلل) · زر 🛡️ الرقابة يعدّ `health_bad` + `audit_bad` ويّا تنبيهات الرقابة · `mTrade` |
+| 35086 · 35127 | `accEdit` · `accAlloc` | رابط «📊 التوزيع» بنافذة المُراكِم ⇒ نافذة المحاسبة (كان بابها شارة «وُزّع») |
 
 ## 📚 v3.22.3 — رياضيات الأرباح: محرّك أيام واحد · الشهري طويل المدى · أفضل يوم واحد · الإجماليات من الدفتر · الموبايل بالعرض (اللوحة بس)
 
@@ -1364,9 +1369,9 @@
 | 14294 · 14297 | `_TB_CACHE` · `trade_book` | الإجماليات (مجموع كل الأيام · مجموع الدفتر) · متوسط اليوم (آخر 30) · الشهري (كل التاريخ ÷ أيامه × 30) · أفضل يوم (كل التاريخ) — كاش 60 ثانية |
 | 14379 | `trade_stats` | من `trade_book` (`avg` · `month` · `span` · `span_all` · `best`) |
 | 14403 | `trade_now` | + `cards` |
-| 28711 | CSS الموبايل | `.stats` صفّين × خمسة بعرض 136 بكسل · تنسحب داخل الشريط · حافة تتلاشى · الاسم سطرين |
-| 30266 | `updTop` | الإجمالي من `trade.trade_all` · تلميحات الإجماليات والشهري والمتوسط وأفضل يوم |
-| 33456 | `pcKpi` | الشهري وأفضل يوم من `DATA.stats` (نفس الشريط) · الإجمالي من `trade.trade_all` |
+| 29095 | CSS الموبايل | `.stats` صفّين × خمسة بعرض 136 بكسل · تنسحب داخل الشريط · حافة تتلاشى · الاسم سطرين |
+| 30650 | `updTop` | الإجمالي من `trade.trade_all` · تلميحات الإجماليات والشهري والمتوسط وأفضل يوم |
+| 33846 | `pcKpi` | الشهري وأفضل يوم من `DATA.stats` (نفس الشريط) · الإجمالي من `trade.trade_all` |
 
 **القاعدة:** أي رقم ربح جديد ⇒ من `_pv_per_rows` (أو `trade_book`/`profit_view`/`trade_period` اللي فوقه) — ولا حساب أيام ثاني. الفحص: `d16_math.py` (30 فحص مقابل حساب مستقل).
 
@@ -1384,13 +1389,13 @@
 | 14387 | `_bot_label` | اسم البوت بالتقرير (النوع · محذوف؟) |
 | 14403 | `trade_now` | + `rel_all` · `trade_all` · `coins_all` |
 | 14426 | `build_report` | كل بوت بسطره لو العملة بيها أكثر من بوت (بيعات/دورات) · قسم «🪙 الربح المحرّر بالعملات» · إجمالي العملات |
-| 23411 · 23625 | `_gone_archive` · `delete_bot` | لحظة الحذف: يلحّق الدفترين والأرشيف ثم يحفظ أرقام البوت الكلية |
-| 26074 | `ledger_loop` | + `coin_ledger_tick` كل 30 ثانية |
-| 28694 | `.stats` · `.st` (CSS) | خمسة × اثنين متساوية (الموبايل: v3.22.3 صفّين بالعرض — شوف فوق) |
-| 29238 | `#stats` (HTML) | العشر خانات (بدل البطاقات الخمس + أوامر المنصة) |
-| 30221 · 30224 · 30232 | `fmtCoin` · `rotSet`/`rotDraw` · `coinsModal` | تقليب خانات العملات كل ~3 ثواني · نافذة العملات |
-| 30266 | `updTop` | يعبّي الخانات · شيلت رقاقة 🪙 DCA (صارت بخانتي العملات) |
-| 33456 | `pcKpi` | نفس العشر خانات بالتقارير (الفترة فوق · الإجمالي تحت) |
+| 23795 · 24009 | `_gone_archive` · `delete_bot` | لحظة الحذف: يلحّق الدفترين والأرشيف ثم يحفظ أرقام البوت الكلية |
+| 26458 | `ledger_loop` | + `coin_ledger_tick` كل 30 ثانية |
+| 29078 | `.stats` · `.st` (CSS) | خمسة × اثنين متساوية (الموبايل: v3.22.3 صفّين بالعرض — شوف فوق) |
+| 29622 | `#stats` (HTML) | العشر خانات (بدل البطاقات الخمس + أوامر المنصة) |
+| 30605 · 30608 · 30616 | `fmtCoin` · `rotSet`/`rotDraw` · `coinsModal` | تقليب خانات العملات كل ~3 ثواني · نافذة العملات |
+| 30650 | `updTop` | يعبّي الخانات · شيلت رقاقة 🪙 DCA (صارت بخانتي العملات) |
+| 33846 | `pcKpi` | نفس العشر خانات بالتقارير (الفترة فوق · الإجمالي تحت) |
 
 ## 🏁 v3.22.1 — DCA: آخر دورة · الجدولين الصافيين · رسم الكرت · طريق الربح (ح٤ ح٥ ح٦ ح٧)
 
@@ -1406,16 +1411,16 @@
 | 6848 | `overview` | دولار الشرائي داخل «الربح المحرر» و«اليوم» · رقاقة 🪙 DCA للبيعي بس |
 | 7786 | `_dca_finish_scan` | ح٤: `finished` ⇒ `stop_bot` (يطفّي الحارس) + تيليگرام/🔔 مرة وحدة (من حلقة الحارس) |
 | 7937 | `ledger_tick` | ح٧: الشرائي من `cycles_log` ⇒ الدفتر اليومي (كل دورة مرة · `dca_seen`) |
-| 22529 | `compute_dca_table` | ح٥: صافي بعد العمولة · المسافتين · القيمة · المجموع · رأس المال · التغطية وتحذيرها · الدرع يغيّر العمولة |
-| 23862 | `control` (`start`) | يمسح `stop_after_cycle` قبل الإطلاق |
-| 24022 | `control` (`last_on`/`last_off`) | ح٤: حقل `stop_after_cycle` بـ`save_state_keys` |
-| 28257 · 28261 | `.dcaopts` · `.dcalast` · `.dcaviz` (CSS) | صف الدرع + آخر دورة · صندوق الرسم |
-| 31539 · 31546 | كرت DCA (`viz` · `dlast`) | الرسم بدل الشريط · زر «🏁 آخر دورة ويخرج» |
-| 31648 | `updDcaCard` | `dcaViz` · نص زر آخر دورة · «🏁» بسطر الحالة · `finished` |
-| 31666 | `dcaViz` (JS) | ح٦: سلم عمودي SVG — المستويات بحالتها · المتوسط · الخروج ومنطقته · الآن · قمة/قاع الدرع · أسماء بلا تراكب |
-| 31700 | `dcaLast` (JS) | نافذة تأكيد/إلغاء آخر دورة |
-| 31739 | `dcaTable` (JS) | ح٥: جدول الدورة الحي (كان فارغ) |
-| 35117 | `dcaPreview` (JS) | ح٥: جدول الخطة الصافي + الخلاصة + التحذيرات |
+| 22913 | `compute_dca_table` | ح٥: صافي بعد العمولة · المسافتين · القيمة · المجموع · رأس المال · التغطية وتحذيرها · الدرع يغيّر العمولة |
+| 24246 | `control` (`start`) | يمسح `stop_after_cycle` قبل الإطلاق |
+| 24406 | `control` (`last_on`/`last_off`) | ح٤: حقل `stop_after_cycle` بـ`save_state_keys` |
+| 28641 · 28645 | `.dcaopts` · `.dcalast` · `.dcaviz` (CSS) | صف الدرع + آخر دورة · صندوق الرسم |
+| 31923 · 31930 | كرت DCA (`viz` · `dlast`) | الرسم بدل الشريط · زر «🏁 آخر دورة ويخرج» |
+| 32032 | `updDcaCard` | `dcaViz` · نص زر آخر دورة · «🏁» بسطر الحالة · `finished` |
+| 32050 | `dcaViz` (JS) | ح٦: سلم عمودي SVG — المستويات بحالتها · المتوسط · الخروج ومنطقته · الآن · قمة/قاع الدرع · أسماء بلا تراكب |
+| 32084 | `dcaLast` (JS) | نافذة تأكيد/إلغاء آخر دورة |
+| 32125 | `dcaTable` (JS) | ح٥: جدول الدورة الحي (كان فارغ) |
+| 35507 | `dcaPreview` (JS) | ح٥: جدول الخطة الصافي + الخلاصة + التحذيرات |
 
 **المحركان** (أسطر v3.22.1):
 
@@ -1435,17 +1440,17 @@
 |---|---|---|
 | 44 | `APP_VERSION` | 3.22.0 |
 | 1259 | `_dca_snapshot` | أمان المجمّع بعدد مستوياته (`ns`) · `total_net` (القديم ينقدّر بالآخذ) · ربح «لو أغلقت الآن» صافي بعد العمولتين · `trail_on`/`trail_pct`/`trail_peak`/`trail_tp` |
-| 22761 | `deploy_dca` | `trail_on` · `trail_pct` (0.05–5 · افتراضي 0.3) بالإعدادات |
-| 24012 | `control` (`buy_now`) | مسموح بمرحلة الإغلاق كمان (`buying`) |
-| 24059 | `control` (`trail_on`/`trail_off`) | الدرع من الكرت — `save_state_keys` بحقل `trail_on` بس |
-| 25946 | `notifier_loop` (DCA) | رسالة الدورة: الشرائي بالدولار (اشترى/كلّف/باعها) · الإشارة الحقيقية · «صافي بعد العمولة» · «إغلاق يدوي» |
-| 28267 | `.dcashield` (CSS) | زر الدرع (مطفي · `.on` أخضر) |
-| 31546 · 31564 | كرت DCA (`dtrail`) | زر الدرع تحت زر الإغلاق ⇒ `dcaShield` |
-| 31655 | `updDcaCard` (`trk`) | سطر الحالة: «🛡️ يتتبّع القمة/القاع X» · «🎯 يتتبّع … للشراء/للبيع» · نص الزر وحالته |
-| 31706 | `dcaShield` (JS) | نافذة تأكيد التشغيل/الإطفاء بالشرح ⇒ `ctl(dir,'trail_on'/'trail_off')` |
-| 31703 | `dcaBuyNow` (JS) | الوصف بالصافي (`total_net`) |
-| 31583 · 31731 | `dcaLadderInline` · `dcaLadder` | المخزون بالدرع: «🛡️ بالذاكرة — الدرع يتتبّعها» |
-| 35038 · 35114 | `openDeployDca` · `dcaFormBody` | مربّع «🛡️ درع الحركة القوية» + خانة النسبة (تظهر لما ينختار) |
+| 23145 | `deploy_dca` | `trail_on` · `trail_pct` (0.05–5 · افتراضي 0.3) بالإعدادات |
+| 24396 | `control` (`buy_now`) | مسموح بمرحلة الإغلاق كمان (`buying`) |
+| 24443 | `control` (`trail_on`/`trail_off`) | الدرع من الكرت — `save_state_keys` بحقل `trail_on` بس |
+| 26330 | `notifier_loop` (DCA) | رسالة الدورة: الشرائي بالدولار (اشترى/كلّف/باعها) · الإشارة الحقيقية · «صافي بعد العمولة» · «إغلاق يدوي» |
+| 28651 | `.dcashield` (CSS) | زر الدرع (مطفي · `.on` أخضر) |
+| 31930 · 31948 | كرت DCA (`dtrail`) | زر الدرع تحت زر الإغلاق ⇒ `dcaShield` |
+| 32039 | `updDcaCard` (`trk`) | سطر الحالة: «🛡️ يتتبّع القمة/القاع X» · «🎯 يتتبّع … للشراء/للبيع» · نص الزر وحالته |
+| 32090 | `dcaShield` (JS) | نافذة تأكيد التشغيل/الإطفاء بالشرح ⇒ `ctl(dir,'trail_on'/'trail_off')` |
+| 32087 | `dcaBuyNow` (JS) | الوصف بالصافي (`total_net`) |
+| 31967 · 32117 | `dcaLadderInline` · `dcaLadder` | المخزون بالدرع: «🛡️ بالذاكرة — الدرع يتتبّعها» |
+| 35428 · 35504 | `openDeployDca` · `dcaFormBody` | مربّع «🛡️ درع الحركة القوية» + خانة النسبة (تظهر لما ينختار) |
 
 **المحركان** (`dca.py` · `dca_buy.py` — أسطر v3.22.1):
 
@@ -1477,17 +1482,17 @@
 | 44 | `APP_VERSION` | 3.21.10 |
 | 116 | `save_state_keys` | 🔐 ب٢٨: حقول التحكم بس على أحدث نسخة من ملف الحالة — بصمة الملف قبل القراءة = بعد الكتابة المؤقتة ⇒ استبدال · تغيّرت ⇒ إعادة (20) · الأخيرة بأقصر نافذة (قراءة ⇒ استبدال ⇒ fsync) |
 | 7644 | `stop_bot` | `status` بـ`save_state_keys` (الملف ما موجود ⇒ مثل قبل) |
-| 24018 · 24075 | `control` (DCA: `buy_now` · `pause`/`resume`) | الحقل بس (`manual_buy_now` · `paused`) — المحرك DCA نفسه ما انلمس |
-| 24106 | `control` (`_cpx`) | سعر السوق: `PX` ⇐ `current_price` بملف الحالة |
-| 24113 | `control` (`pause_buy`/`pause_sell`) | ب٢٧: الحد = سعر السوق لحظة الضغط (نفس زر الكرت) · بلا سعر ⇒ العلم القديم (المحرك يثبّته) |
-| 24147 | `control` (`accum_*` بسعر) | ب٢٥: الأرضية ≤ max(السوق، الأرضية الحالية) · السقف ≥ min(السوق، السقف الحالي) · بالجهة الغلط ⇒ تتثبّت + «⚠️» برسالة الرد · بلا سعر ⇒ رفض |
-| 24185 | `control` (الحفظ) | ب٢٨: `save_state_keys` بحقلي الحد والعلم بس (كان `save_json_atomic` للملف كله) |
+| 24402 · 24459 | `control` (DCA: `buy_now` · `pause`/`resume`) | الحقل بس (`manual_buy_now` · `paused`) — المحرك DCA نفسه ما انلمس |
+| 24490 | `control` (`_cpx`) | سعر السوق: `PX` ⇐ `current_price` بملف الحالة |
+| 24497 | `control` (`pause_buy`/`pause_sell`) | ب٢٧: الحد = سعر السوق لحظة الضغط (نفس زر الكرت) · بلا سعر ⇒ العلم القديم (المحرك يثبّته) |
+| 24531 | `control` (`accum_*` بسعر) | ب٢٥: الأرضية ≤ max(السوق، الأرضية الحالية) · السقف ≥ min(السوق، السقف الحالي) · بالجهة الغلط ⇒ تتثبّت + «⚠️» برسالة الرد · بلا سعر ⇒ رفض |
+| 24569 | `control` (الحفظ) | ب٢٨: `save_state_keys` بحقلي الحد والعلم بس (كان `save_json_atomic` للملف كله) |
 | 6921 · 6935 | `_FEED_SKIP` · `feed_all` | ب٣٠: سطرا المحرك «انحسبت بالخفاء» و«] حُجز مستوى» ما يطلعون بمركز 🔔 (يبقون بسجل البوت) — إشعار العبور يطلع مرة وحدة من اللوحة |
-| 25784 · 25791 | `_accx_snap` (`cb` · `cs`) | مجموع العملة المقطوعة (شراء · بيع) لنافذة التأكيد |
-| 30341 | `accumPrompt` (JS) | حد فعّال ⇒ `resumeConfirm` · إيقاف بانتظار البوت ⇒ إلغاؤه · غير فعّال ⇒ نافذة الحد معبّاة بسعر السوق كامل · الحد بالجهة الغلط ⇒ الخادم يثبّته ويرجّع التحذير |
-| 30373 | `resumeConfirm` (JS) | ب٢٦: كم درجة · كم عملة · تدفع/تستلم بالسوق · بأسعار الدرجات · التوفير/الزيادة · عمولة آخذ · دولارك الحر يغطي كم · المحفوظ يرجع بمكانه |
-| 33272 | `gridDetails` (`gd_pb`/`gd_ps`) | ب٢٧: نفس زرّي الكرت (`accumPrompt`) |
-| 33330 | `fillDrawer` (`d_ab`/`d_as`) | نفس الشي (كود ميت — احتياط) |
+| 26168 · 26175 | `_accx_snap` (`cb` · `cs`) | مجموع العملة المقطوعة (شراء · بيع) لنافذة التأكيد |
+| 30725 | `accumPrompt` (JS) | حد فعّال ⇒ `resumeConfirm` · إيقاف بانتظار البوت ⇒ إلغاؤه · غير فعّال ⇒ نافذة الحد معبّاة بسعر السوق كامل · الحد بالجهة الغلط ⇒ الخادم يثبّته ويرجّع التحذير |
+| 30757 | `resumeConfirm` (JS) | ب٢٦: كم درجة · كم عملة · تدفع/تستلم بالسوق · بأسعار الدرجات · التوفير/الزيادة · عمولة آخذ · دولارك الحر يغطي كم · المحفوظ يرجع بمكانه |
+| 33662 | `gridDetails` (`gd_pb`/`gd_ps`) | ب٢٧: نفس زرّي الكرت (`accumPrompt`) |
+| 33720 | `fillDrawer` (`d_ab`/`d_as`) | نفس الشي (كود ميت — احتياط) |
 
 **المحركات** (ب٢٩ · سطر بالرأس + 10 أسطر بكل محرك جرد · DCA وإعادة الاستثمار ولا بايت):
 
@@ -1509,12 +1514,12 @@
 | السطر | الاسم | الدور |
 |---|---|---|
 | 44 | `APP_VERSION` | 3.21.9 |
-| 29236 | الهوية (HTML) | «⚡ The Holy Dashboard» + الإصدار + `#pulse` — مثل قبل v3.21.8 (بلا شعار · بلا Sora) |
-| 28686 | `.hrow` (CSS grid) | 🔔 يمين · الهوية بالوسط · ▶️ ⏹️ يسار · بطاقات الأرباح سطر تحت |
-| 29281 | `.navhint.l` · `.navhint.r` (HTML) | سهمين SVG · `aria-hidden` |
-| 28672 | `.navhint` (CSS) | شفاف · `pointer-events:none` · يبين بـ`.navwrap.hint.ml/.mr` · `show` = 0.45 + حركة 3 مرات (`navHL`/`navHR`) |
-| 36521 | `navSync` (JS) | الباقي بكل جهة (RTL) ⇒ `ml`/`mr` |
-| 36528 | المؤقّت (JS) | بعد ثانيتين: `hint` ثم `show` (يتأخر) |
+| 29620 | الهوية (HTML) | «⚡ The Holy Dashboard» + الإصدار + `#pulse` — مثل قبل v3.21.8 (بلا شعار · بلا Sora) |
+| 29070 | `.hrow` (CSS grid) | 🔔 يمين · الهوية بالوسط · ▶️ ⏹️ يسار · بطاقات الأرباح سطر تحت |
+| 29665 | `.navhint.l` · `.navhint.r` (HTML) | سهمين SVG · `aria-hidden` |
+| 29056 | `.navhint` (CSS) | شفاف · `pointer-events:none` · يبين بـ`.navwrap.hint.ml/.mr` · `show` = 0.45 + حركة 3 مرات (`navHL`/`navHR`) |
+| 36911 | `navSync` (JS) | الباقي بكل جهة (RTL) ⇒ `ml`/`mr` |
+| 36918 | المؤقّت (JS) | بعد ثانيتين: `hint` ثم `show` (يتأخر) |
 
 ---
 
@@ -1532,12 +1537,12 @@
 
 | السطر | الاسم | الدور |
 |---|---|---|
-| 25757 | `_accx_afford` | نفس حساب المحرك: K من N · `q_av` = الدولار الحر بعملة التسعير |
-| 25775 · 25795 · 24168 | `_accx_snap` (`ab`/`qa`/`qn`) · `_accx_msg` · `control` (الاستئناف) | الكرت · الإشعار · رسالة الزر |
-| 24619 | `balances_once` | + عملة التسعير (`q_av`) |
-| 30323 | `accChipsOf` (JS) | شارة «💵 يغطي K/N» |
-| 29236 · 28672 | الهوية + `.hrow` (CSS grid) | 🔔 يمين · الهوية بالوسط · ▶️ ⏹️ يسار — (v3.21.9: الهوية رجعت مثل قبل · Sora انشال ⇐ فوق) |
-| 36521 | `navSync` · `.navwrap` (CSS) | (v3.21.9: الأسهم والخط انشالوا ⇐ تلميح `.navhint` فوق) |
+| 26141 | `_accx_afford` | نفس حساب المحرك: K من N · `q_av` = الدولار الحر بعملة التسعير |
+| 26159 · 26179 · 24552 | `_accx_snap` (`ab`/`qa`/`qn`) · `_accx_msg` · `control` (الاستئناف) | الكرت · الإشعار · رسالة الزر |
+| 25003 | `balances_once` | + عملة التسعير (`q_av`) |
+| 30707 | `accChipsOf` (JS) | شارة «💵 يغطي K/N» |
+| 29620 · 29056 | الهوية + `.hrow` (CSS grid) | 🔔 يمين · الهوية بالوسط · ▶️ ⏹️ يسار — (v3.21.9: الهوية رجعت مثل قبل · Sora انشال ⇐ فوق) |
+| 36911 | `navSync` · `.navwrap` (CSS) | (v3.21.9: الأسهم والخط انشالوا ⇐ تلميح `.navhint` فوق) |
 
 ---
 
@@ -1545,16 +1550,16 @@
 
 | السطر | الاسم | الدور |
 |---|---|---|
-| 24692 | `STABLE_CCY` · `_WREF` · `WFX` · `BFX` | العملات المستقرة (بلا أثر) · مرجع اليوم بالذاكرة · أثر كل محفظة · حسابات البوتات |
-| 24699 | `_px_ref` · `_px_ref_save` | سعر أول اليوم لكل عملة ⇒ `Holy_PxRefW.json` |
-| 24736 | `_fx_coin` | أثر عملة = الكلي × (السعر − المرجع) |
-| 24751 | `_bot_fx` | حسابات بوتات مو مضافة كمحفظة — عملة كل حساب مرة وحدة |
-| 24619 | `balances_once` | رصيد البوت يتصفّر قبل القراءة + `base_eq` · المحافظ: `tot`/`lock`/`fx`/`pct` + `WFX` |
-| 24192 | `settings_payload` | + `fx` لكل محفظة · `bot_fx` · `fx_day` |
-| 36491 | `fxChip` · `fxRow` · `openWalletView` (JS) | محفظتي: شارة أثر السعر · صف العملة (الكلي · 🔒 المحجوز · النسبة · الأثر) · قسم حسابات البوتات |
-| 31906 | `openSettings` (JS) | قسم «🔔 التنبيهات والصوت»: `sMute` · `sSound` |
-| 36521 | `navSync` · `navNudge` (JS) | صف الأزرار: `#navwrap.ml/.mr` (حافة باهتة + سهم) · تلميحة أول مرة (`nav_peek`) |
-| 29651 | `toggleNotif` (JS) | درج الإشعارات + `#npScrim` + سحب لليمين يسكّر · Esc |
+| 25076 | `STABLE_CCY` · `_WREF` · `WFX` · `BFX` | العملات المستقرة (بلا أثر) · مرجع اليوم بالذاكرة · أثر كل محفظة · حسابات البوتات |
+| 25083 | `_px_ref` · `_px_ref_save` | سعر أول اليوم لكل عملة ⇒ `Holy_PxRefW.json` |
+| 25120 | `_fx_coin` | أثر عملة = الكلي × (السعر − المرجع) |
+| 25135 | `_bot_fx` | حسابات بوتات مو مضافة كمحفظة — عملة كل حساب مرة وحدة |
+| 25003 | `balances_once` | رصيد البوت يتصفّر قبل القراءة + `base_eq` · المحافظ: `tot`/`lock`/`fx`/`pct` + `WFX` |
+| 24576 | `settings_payload` | + `fx` لكل محفظة · `bot_fx` · `fx_day` |
+| 36881 | `fxChip` · `fxRow` · `openWalletView` (JS) | محفظتي: شارة أثر السعر · صف العملة (الكلي · 🔒 المحجوز · النسبة · الأثر) · قسم حسابات البوتات |
+| 32294 | `openSettings` (JS) | قسم «🔔 التنبيهات والصوت»: `sMute` · `sSound` |
+| 36911 | `navSync` · `navNudge` (JS) | صف الأزرار: `#navwrap.ml/.mr` (حافة باهتة + سهم) · تلميحة أول مرة (`nav_peek`) |
+| 30035 | `toggleNotif` (JS) | درج الإشعارات + `#npScrim` + سحب لليمين يسكّر · Esc |
 
 ---
 
@@ -1603,9 +1608,9 @@
 | 11166 | `guard_view` ⇒ `qa` | للنافذة |
 | 11283 | `guard_selfcheck` | ثوابته: خط الأساس رقم · ولا عدّاد سالب |
 | 11308 | `guard_report_lines` | يضيف قسم التدقيق |
-| 42330 | `diag_bundle` | `qty_audit.json` |
-| 41612 | `main` | يشغّل `qa_sample_loop` ويّا الرقابة |
-| 32850 | `guardRender` (JS) | قسم «🧮 تدقيق الكميات»: صف لكل عملة · فروق الحجم · مشاكل السجلات |
+| 42720 | `diag_bundle` | `qty_audit.json` |
+| 42002 | `main` | يشغّل `qa_sample_loop` ويّا الرقابة |
+| 33240 | `guardRender` (JS) | قسم «🧮 تدقيق الكميات»: صف لكل عملة · فروق الحجم · مشاكل السجلات |
 
 **الحالة بـ`Holy_Guard.json` ⇒ `qa`:** `c[محفظة:عملة]` (`S0` خط الأساس · `isig` بصمة المخزون · `bsig` البوتات · `inj`/`invs` العدّادات · `tb` تنفيذات الشراء النص منفّذ ·
 `linv`/`invf`/`igl` أوامر المخزون · `usf` بيع برقم ما شفناه · `q2` · `n`/`first`/`d` التأكيد · `drift`) · `sz` فروق الحجم · `b` مشاكل السجلات · `view` للعرض.
@@ -1664,15 +1669,15 @@
 | 89 | `_dir_sync` | 🔌 fsync للمجلد بعد `os.replace` (ويندوز: يتجاوز) |
 | 103 | `save_json_atomic` | مؤقت + fsync + استبدال + تثبيت المجلد |
 | 1004 | `bot_snapshot` ⇒ `accx` | لقطة الكرت: عدّاد الإيقاف |
-| 25775 | `_accx_snap` | `nb`/`ub` شراء مقطوع + مبلغه · `ns`/`us` بيع · `kb`/`ks` كل المحفوظ (يرجع بأماكنه) |
-| 24162 | `control` (الاستئناف) | «N بأمر واحد (≈ X$) · M ترجع أوامر بأماكنها» |
-| 30303 | `accLbls` (JS) | اسما زري الكرت (نفس الحساب بالتحديث وبعد الضغط) |
-| 30306 | `accBtnSync` (JS) | يبدّل الاسم فوراً بعد الضغط |
-| 30323 | `accChipsOf` (JS) | الشارة: وقت الإيقاف المقطوع بس · بلا إيقاف (حجوزات المدى) مثل قبل |
-| 30341 | `accumPrompt` (JS) | إيقاف (نافذة الحد) / استئناف فوري · تحديث محلي فوري |
-| 27862 | أزرار كرت الجرد | `accumPrompt(botOf(b.dir)||b, …)` — الحالة الحالية |
-| 29014 · 29018 | أزرار كرت DCA | الشراء الفوري/الجدول/السلم بالأرقام الحالية · ⏸/▶️ بالحالة الحالية ويتبدّل فوراً |
-| 33225 | `gridDetails` (JS) | «▶️ استئناف (N)» · «▶️ إلغاء الإيقاف» للإيقاف المعلّق |
+| 26159 | `_accx_snap` | `nb`/`ub` شراء مقطوع + مبلغه · `ns`/`us` بيع · `kb`/`ks` كل المحفوظ (يرجع بأماكنه) |
+| 24546 | `control` (الاستئناف) | «N بأمر واحد (≈ X$) · M ترجع أوامر بأماكنها» |
+| 30687 | `accLbls` (JS) | اسما زري الكرت (نفس الحساب بالتحديث وبعد الضغط) |
+| 30690 | `accBtnSync` (JS) | يبدّل الاسم فوراً بعد الضغط |
+| 30707 | `accChipsOf` (JS) | الشارة: وقت الإيقاف المقطوع بس · بلا إيقاف (حجوزات المدى) مثل قبل |
+| 30725 | `accumPrompt` (JS) | إيقاف (نافذة الحد) / استئناف فوري · تحديث محلي فوري |
+| 28246 | أزرار كرت الجرد | `accumPrompt(botOf(b.dir)||b, …)` — الحالة الحالية |
+| 29398 · 29402 | أزرار كرت DCA | الشراء الفوري/الجدول/السلم بالأرقام الحالية · ⏸/▶️ بالحالة الحالية ويتبدّل فوراً |
+| 33615 | `gridDetails` (JS) | «▶️ استئناف (N)» · «▶️ إلغاء الإيقاف» للإيقاف المعلّق |
 
 **المحركات:**
 
@@ -1702,15 +1707,15 @@
 
 | السطر | الاسم | الدور |
 |---|---|---|
-| 25672 | `_ACCX` · `_ACCX_FILE_KEY` · `DASH_EVENTS` | الدرجات المبلّغة لكل بوت/جهة (بملف `Holy_Notify.json` مفتاح `__accx__`) · أحداث اللوحة لمركز 🔔 |
-| 25677 | `_px_s` | سعر للعرض بأرقامه المعنوية (الرخيصة ما تصير 0.0000) |
-| 25691 | `_accx_ok` | نفس قيود المحرك وقت الاستئناف: الشراء فوق أدنى سعر · النطاق داخل حدّيه |
-| 25743 | `_accx_levels` | المقطوع بس من المخزن (شراء ≥ السعر · بيع ≤ السعر) |
-| 25795 | `_accx_msg` | (رسالة تيليگرام، سطر 🔔): العدد · المعدل الموزون · الكمية والمبلغ · لو تستأنف هسه · العمولة |
-| 24019 · 24076 | `_accx_state` · `_accx_save` | تحميل كسول من الملف · حفظ بس لو تغيّر (والبوتات المحذوفة تنشال) |
-| 25859 | `_accx_tick` | مرة وحدة لكل درجة بكل إيقاف · تنتسى الدرجة اللي طلعت من المخزن · الإيقاف يخلص/الحد يتغيّر ⇒ يبدي من جديد |
-| 25907 | `_dash_event` | يضيف لـ`DASH_EVENTS` (آخر 40) |
-| 25914 | `notifier_loop` | ينادي `_accx_tick` لكل بوت جرد (بدل «📦 مخزن الشراء — المخزون») · `_accx_save` بآخر كل دورة |
+| 26056 | `_ACCX` · `_ACCX_FILE_KEY` · `DASH_EVENTS` | الدرجات المبلّغة لكل بوت/جهة (بملف `Holy_Notify.json` مفتاح `__accx__`) · أحداث اللوحة لمركز 🔔 |
+| 26061 | `_px_s` | سعر للعرض بأرقامه المعنوية (الرخيصة ما تصير 0.0000) |
+| 26075 | `_accx_ok` | نفس قيود المحرك وقت الاستئناف: الشراء فوق أدنى سعر · النطاق داخل حدّيه |
+| 26127 | `_accx_levels` | المقطوع بس من المخزن (شراء ≥ السعر · بيع ≤ السعر) |
+| 26179 | `_accx_msg` | (رسالة تيليگرام، سطر 🔔): العدد · المعدل الموزون · الكمية والمبلغ · لو تستأنف هسه · العمولة |
+| 24403 · 24460 | `_accx_state` · `_accx_save` | تحميل كسول من الملف · حفظ بس لو تغيّر (والبوتات المحذوفة تنشال) |
+| 26243 | `_accx_tick` | مرة وحدة لكل درجة بكل إيقاف · تنتسى الدرجة اللي طلعت من المخزن · الإيقاف يخلص/الحد يتغيّر ⇒ يبدي من جديد |
+| 26291 | `_dash_event` | يضيف لـ`DASH_EVENTS` (آخر 40) |
+| 26298 | `notifier_loop` | ينادي `_accx_tick` لكل بوت جرد (بدل «📦 مخزن الشراء — المخزون») · `_accx_save` بآخر كل دورة |
 | 6925 | `feed_all` | يضم `DASH_EVENTS` لمركز الإشعارات الداخلي |
 
 **المحركات:** `_min_guard` — لانهائي س694 · نطاق س706 · بلس س709 ·
@@ -1738,8 +1743,8 @@
 | `start_bot` | 2682 | 2787 | 2782 | أساس الدمج + قراءة اللوحة كل حلقة |
 | تمديد البيع (بلس بس) | — | — | 2735 | ➕ ما يحط بيع تحت سعر السوق |
 
-**اللوحة:** `control` (س22914) — `pause_buy`/`pause_sell` = إيقاف بس · `accum_buy`/`accum_sell` بلا سعر = استئناف بس، بسعر = تفعيل/تحديث الحد ·
-الواجهة: `accumPrompt` (س29536) · أزرار الكرت (س28823) · `gridDetails` (س32461).
+**اللوحة:** `control` (س23298) — `pause_buy`/`pause_sell` = إيقاف بس · `accum_buy`/`accum_sell` بلا سعر = استئناف بس، بسعر = تفعيل/تحديث الحد ·
+الواجهة: `accumPrompt` (س29920) · أزرار الكرت (س29207) · `gridDetails` (س32851).
 **قاعدة:** أي حقل تحكّم جديد تكتبه اللوحة بملف الحالة ⇒ ينضاف لـ`_CTL_KEYS` بالمحركات، وإلا حفظ المحرك يمسحه.
 
 ---
@@ -1759,9 +1764,9 @@
 | 623 | `_dca_snapshot` | بيانات كرت DCA: المتوسط، الهدف، تقدّم الدورة، الربح اللحظي لو اشترى الآن |
 | 532 | `bot_snapshot` |  |
 
-**الواجهة (`HTML_PAGE` س26580):** `:root` متغيّرات الألوان (`--X-rgb` + المشتقة) · `html[data-theme="…"]` (س27515) · `html.lite` (س27566) ·
-سكربت الثيم قبل الرسم بأول `<head>` · دوال: `uiTheme` · `applyTheme` · `setTheme` · `tvTheme`/`tvBg` · `uiLite`/`uiLiteToggle` · `pollMs`/`setPoll` · `schedPoll` · `wsCoins` (س34111) · `pcPal` (س32394) ·
-الإعدادات: «🎨 المظهر» + «⚡ الخفة والأداء» داخل `openSettings` (س29742).
+**الواجهة (`HTML_PAGE` س26964):** `:root` متغيّرات الألوان (`--X-rgb` + المشتقة) · `html[data-theme="…"]` (س27899) · `html.lite` (س27950) ·
+سكربت الثيم قبل الرسم بأول `<head>` · دوال: `uiTheme` · `applyTheme` · `setTheme` · `tvTheme`/`tvBg` · `uiLite`/`uiLiteToggle` · `pollMs`/`setPoll` · `schedPoll` · `wsCoins` (س34501) · `pcPal` (س32784) ·
+الإعدادات: «🎨 المظهر» + «⚡ الخفة والأداء» داخل `openSettings` (س30126).
 **قاعدة:** أي لون جديد = متغيّر (`var(--x)` أو `rgb(var(--x-rgb)/ش)`) — ما يُكتب سداسي ثابت.
 
 ---
@@ -1787,8 +1792,8 @@
 | 8718 | `do_GET` |  |
 
 **المسارات:** `GET /api/profit?days=N` (1-365) ⇒ `profit_view` · `GET /api/report.html?days=N` ⇒ `report_html` (مرفق) — بـ`do_GET` ورا الجلسة والـPIN.
-**الواجهة (`HTML_PAGE` س26580):** لوحة `#pcPanel` بصفحة التقارير · `loadProfit` (س32404) · `pcKpi` · `pcBars` · `pcTipShow/Hide` · `pcDonut` · `pcTable` · `pcTblToggle` ·
-`dlFile` (س32477: تنزيل بالـfetch ويّا الجلسة والـPIN — md · zip · التقرير المصوّر) · `drawSpark` (يقبل `{d,v}`). **كل أصناف الچارت `pc-*`** (صنف `.seg` عام قديم يخرّب SVG).
+**الواجهة (`HTML_PAGE` س26964):** لوحة `#pcPanel` بصفحة التقارير · `loadProfit` (س32794) · `pcKpi` · `pcBars` · `pcTipShow/Hide` · `pcDonut` · `pcTable` · `pcTblToggle` ·
+`dlFile` (س32867: تنزيل بالـfetch ويّا الجلسة والـPIN — md · zip · التقرير المصوّر) · `drawSpark` (يقبل `{d,v}`). **كل أصناف الچارت `pc-*`** (صنف `.seg` عام قديم يخرّب SVG).
 **المصادر:** `Holy_Reinvest.json` → `bots[k].daily{n,r,c}` (ربح التداول بيومه) · `Holy_Ledger.json` → `[k].daily` (المحرر؛ قبل الأرشيف فقط).
 
 ---
@@ -1931,7 +1936,7 @@
 | 6363 | `_ri_orphans` | 🧹 أوامر مكبّرة **يتيمة** (بلا بند تفكيك) وإعادة الاستثمار مطفية — من نسخة قديمة مسحت البنو |
 | 6494 | `_gd_ri_scan` | 🔄 يتابع كل عملة ودولار بعد إطفاء إعادة الاستثمار لحد ما يوصل مكانه: |
 
-## كل دوال اللوحة (725)
+## كل دوال اللوحة (731)
 | السطر | الدالة | الوصف |
 |---|---|---|
 | 21 | `_pick_python` | يختار مفسّر بايثون عنده مكتبة okx فعلاً — يحل مشكلة تعدد نسخ بايثون |
@@ -2413,252 +2418,258 @@
 | 18290 | `fc_api` | 🔮 GET /api/forecast — لو لسه ما انحسب ⇒ يبدي بالخلفية والنافذة ترجع تسأل بعد ثواني |
 | 18307 | `fc_loop` | ⏱️ التوقعات كل نص ساعة · يبدي بعد المؤشرات بشوية حتى ما يزاحمها · بس لما المؤشرات شغّالة |
 | 19557 | `_an_lv_cfg` | 🔔 v3.36.76: مستوى كل نوع — المحفوظ (an_lv) · وإلا القديم (an_types: مطفي ⇒ ⛔) · وإلا الافتراضي |
-| 20042 | `_an_ema` |  |
-| 20050 | `_an_sd` |  |
-| 20057 | `_an_lr` |  |
-| 20061 | `_an_trend_seq` | حالة الاتجاه لكل يوم: صاعد = فوق متوسط 200 ومتوسط 50 فوقه وصاعد · نازل = العكس · غير ذلك عرضي — وتثب |
-| 20083 | `_an_since` |  |
-| 20093 | `_an_volstate` | 🎢 تذبذب آخر 30 يوماً مقارنةً بأيام السنة: أين يقع (0…100) ⇒ هادئ · عادي · هائج |
-| 20104 | `_an_levels` | 🧱 أقرب دعم ومقاومة (قيعان وقمم واضحة خلال الشهر — كل واحدة أدنى/أعلى من يومين قبلها وبعدها) + منطقة  |
-| 20141 | `_an_rsi` |  |
-| 20153 | `_an_coin` | 🪙 العملة الآن: [(الأيقونة · السطر · الحالة)] + الأرقام |
-| 20235 | `an_present` | 🔎 الآن في السوق كله ولكل عملة — من الشموع المحفوظة وقراءات اللوحة (لا شبكة) |
-| 20344 | `_an_range` | لكل مدة: التذبذب (آخر 48 شمعة من إطارها) × √المدة ⇒ بين كم وكم بثقة 80% — {مفتاح: {lo, hi, w%}} |
-| 20362 | `_an_newdata` | 📈 v3.36.77: أسطر «الآن» الجديدة للسوق — 🇺🇸 علاوة كوينبيس · 💵 العملات المستقرة · 🏦 عقود البيتكوين · 📆 |
-| 20398 | `_cal_facts` | 🗓️ قبل نحو نصف ساعة من خبر أمريكي عالي التأثير ⇒ إشعار واحد لكل خبر |
-| 20426 | `an_scan` | 🔎 + 🔮 في عامل الفحص (بلا شبكة): الآن لكل عملة وللسوق + المدى المتوقع لكل مدة |
-| 20436 | `_an_load` |  |
-| 20446 | `_an_grade` | ✅ كل مدى سُجّل يُحكم عند نهاية مدته (إغلاق شمعة الساعة التي تنتهي فيها): السعر داخله ⇒ صدق · خارجه ⇒ |
-| 20470 | `_an_issue` | 📝 يُسجَّل المدى عند إغلاق شمعة إطاره فقط (4 ساعات ⇐ شمعة 4 ساعات · غداً ⇐ اليومية · الأسبوع ⇐ يومية  |
-| 20488 | `_an_mv` | تغيّر السعر % خلال آخر n ساعات (شموع الساعة المحفوظة) |
-| 20497 | `_an_mine_mv` |  |
-| 20503 | `_an_facts` | 📨 ما تغيّر بين لقطتين ⇒ [(مفتاح التكرار, {sym · ty · lv · urg · ln (سطر البطاقة) · t (للسجل) · b})]  |
-| 20582 | `an_feed` | 📈 بعد كل فحص: يحفظ «الآن» والمدى والميل · يحكم المدى القديم · ويعيد ما تغيّر (مرة لكل حدث) — التسليم |
-| 20620 | `an_view` | 📈 GET /api/market — الآن والمدى لكل عملة من عملاتك وللسوق + صدق المدى الحي |
-| 20693 | `_gp_codes` | كل رمز معروف (الأنظمة الـ36 + القراءات) ⇒ أسرته — مؤشر جديد يُضاف إلى _SG_NM أو _SG_XNM يظهر هنا وحد |
-| 20704 | `gp_members` | أعضاء المجموعة (المؤشرات): كل رمز من أسرها + المضاف بالاسم − المستبعد · قراءات السوق كله خارج مجاميع |
-| 20713 | `_gp_fires` | كل شمعة ⇒ {الرمز: الجهة} (الجهتان معاً على الشمعة نفسها ⇒ لا شيء · أحداث الجهة الواحدة بجهتها) |
-| 20725 | `_gp_keys` | ما انطلق في المجموعة على الشمعة i ⇒ {العضو: الجهة}: المؤشرات + التوليفات (اثنان بالجهة نفسها · الثان |
-| 20743 | `_gp_med` | وسيط حركة آخر w شمعة (\|عائد\|) حتى كل شمعة |
-| 20753 | `_gp_outs` | نتيجة كل شمعة لشغل المجموعة (للحكم وللعادي): +1 · −1 · None (حركة صغيرة · لا شمعة بعدها · لا سعر بيت |
-| 20777 | `_gp_pb` | العادي لعضو: لو أُطلق التنبؤ عشوائياً بالجهات نفسها (نصيب الصعود q) على شموع نصيب «+1» فيها u ⇒ q·u  |
-| 20783 | `gp_walk` | 🧩 F = {العملة: (الشموع, الإشارات)} لإطار واحد (العملات: كل العملات · السوق: البيتكوين وحده ومعه قراء |
-| 20880 | `gp_score` | سجل ما كان سيصل: [صدق · المحكوم · مجموع العادي] (الحركة الصغيرة والتي لم تُغلق بعد لا تُحسب) |
-| 20892 | `gp_pack` | 🧩 للوحة: لكل مجموعة — سجلها (ما كان سيصل: كله · آخر ربع · لكل عملة من عملاتك) مع العادي · الأعضاء (ك |
-| 20920 | `_gp_surge` | 🚀 الصعود المفاجئ للسوق كله: ≥ 30% من العملات (10 فأكثر) صعدت ≥ 2.5× حركتها المعتادة في الشمعة نفسها  |
-| 20929 | `_gp_wide` | 🌐 قراءات السوق كله لكل إطار ⇒ تُضاف لكل عملة: 🌊 الانهيار و🚀 الصعود المفاجئ (10 عملات فأكثر) · 📊 عدد  |
-| 20975 | `gp_build` | 🏗️ (العامل · بلا شبكة · مرة باليوم بعد إغلاق اليوم) كل عملة بكل إطار على تاريخها (GP_HIST) بالكود نف |
-| 21006 | `gp_now` | 🔔 الفحص الحي (كل شمعة مغلقة): على آخر شمعة لكل عملة وإطار ⇒ ما انطلق من أبطال كل مجموعة (المحفوظين ف |
-| 21036 | `gp_load` | آخر بناء من الملف (بالذاكرة حتى يتغير الملف) |
-| 21048 | `_gp_need` | يحتاج بناءً الآن؟ لا بناء · أقدم من 30 ساعة · عملة من عملاتك (لها شموع) ليس لها سجل — ولا يُعاد قبل  |
-| 21056 | `gp_name` | اسم العضو بكلام واضح: المؤشر باسمه المحايد (GP_NM) · التوليفة «أ + ب» |
-| 21066 | `_gp_grp` |  |
-| 21070 | `_gp_best` | أصدق الأبطال المنطلقين ⇒ صف العضو [المفتاح · صدق · أخطأ · أيام · الحالة · العادي] |
-| 21076 | `gp_proven` | 📲 للمجموعة على هذا الإطار؟ سجلها نفسه (ما كان سيصل) ≥ العادي + GP_SAY على 30 مرة فأكثر |
-| 21082 | `_gp_facts` | 📨 ما انطلق الآن من أبطال كل مجموعة ⇒ [(مفتاح التكرار, {sym · ty · lv · urg · ln · t · b · dup})] — 🪙 |
-| 21117 | `gp_recs` | ⚙️ سجل كل مجموعة بكل إطار (ما كان سيصل): {g_المجموعة: {الإطار: [صدق · المحكوم · مجموع العادي]}} |
-| 21127 | `gp_coin_now` | 🔮 ما تتوقعه مجاميع العملة الآن: {العملة: [[الإطار · المجموعة · الجهة · اسم العضو · صدق · المحكوم · ا |
-| 21144 | `gp_view` | 🧩 GET /api/groups — المجاميع كما بُنيت آخر مرة (من الملف · لا ينتظر الحساب) + ما انطلق الآن + مستوى  |
-| 21222 | `pxa_cfg` |  |
-| 21269 | `pxa_tick` | 🔔 جولة إشعارات الأسعار (بعد كل تحديث للأسعار · العيّنة كل دقيقة) — ترجع الإشعارات اللي طلعت |
-| 21362 | `_pxa_send` | 📨 رسالة وحدة للجولة: إشعار واحد ⇒ عنوانه هو الإشعار · أكثر ⇒ «🔔 إشعارات الأسعار (N)» وكل عملة بسطر |
-| 21384 | `pxa_set` |  |
-| 21399 | `pxa_test` | 🧪 إشعار تجربة بنفس الطريق (حتى تشوف شكله بتيليغرام والموبايل) |
-| 21413 | `pxa_view` |  |
-| 21431 | `_ina_sq` | ⚡ الانضغاط على شموع الساعة المسكّرة: شغّال هسه + من كم شمعة · أو خرج منه هسه (بعد ≥ 6 شموع) وباتجاه  |
-| 21460 | `_ri_orphans` | 🧹 أوامر مكبّرة **يتيمة** (بلا بند تفكيك) وإعادة الاستثمار مطفية — من نسخة قديمة مسحت البنود |
-| 21496 | `_gd_hist_recent` | سطور سجل البوت خلال آخر `hours` ساعة (الأحدث أولاً). |
-| 21510 | `_gd_trade_scan` | 📡 **مراقبة التداول** لكل بوت شبكة — كل جولة رقابة، من نفس بيانات المنصة (بلا طلبات زايدة): |
-| 21595 | `_gd_rec_scan` | 🔁 v3.25.2: فحص **كل بوت دوري** بكل جولة رقابة — قراءة فقط (ولا أمر ينحط ولا ينلغى ولا ملف بوت ينكتب) |
-| 21729 | `_gd_cover_scan` | 🤝 v3.25.5: تغطية العملة المشتركة — لكل محفظة × عملة: اللي تحتاجه البوتات **حر** بالمحفظة (أوامر الدو |
-| 21789 | `_gd_ri_scan` | 🔄 يتابع كل عملة ودولار بعد إطفاء إعادة الاستثمار لحد ما يوصل مكانه: |
-| 21851 | `_gd_acc_scan` | 🪙 يراقب المُراكِم: جولته اليومية · توزيع ربح كل يوم · الأمر المعلّق · الفلوس الواقفة. |
-| 21966 | `ticker_loop` | ⏱️ يحدّث الأسعار كل 10 ثواني — ويوقف كلياً لو الشريط مطفي (🔔 v3.26.6: إلا لو إشعارات الأسعار شغّالة  |
-| 21980 | `ri_archive_map` | 💠 مبلغ إعادة الاستثمار لكل يوم بين تاريخين — الأرشيف أولاً ثم السجل الحي. |
-| 21999 | `_today_parts` | 📅 ربح اليوم مفصّلاً — 🔗 v3.26.4: من نفس محرّك بطاقة 🔄 (كل الأنواع · كان من سجل صفقات الجرد بس). |
-| 22005 | `ri_daily_map` | 💠 نمو إعادة الاستثمار لكل يوم — أرشيف + سجل حي. |
-| 22010 | `ri_period` | 💠 نمو إعادة الاستثمار خلال فترة التقرير — من سجل الصفقات. |
-| 22026 | `_ri_at` | أقرب لقطة عند اليوم أو قبله — يتحمّل أيام مفقودة (انقطاع/إطفاء). |
-| 22046 | `_snap_yday` | يخزّن سعر كل رمز مرة يومياً — مرجع لحساب أثر حركة السعر |
-| 22057 | `backup_states` | 🗄️ نسخة يومية من ملفات الحالة والإعدادات — رجوع آمن دائماً |
-| 22087 | `_rej_why` | 🚨 v3.36.60: سبب الرفض بالعربي من رمز OKX أو رسالتها الإنجليزية ⇒ (السبب، الرمز) أو ("", "") |
-| 22097 | `_rej_short` | 🚨 v3.36.60: «⚠️ [رفض أمر شراء] … (المستوى -13 · الجزء 1) — الرصيد لا يكفي (51008)» بدل الإنجليزي الم |
-| 22105 | `_rej_cash` | 🚨 v3.36.60: أمر شراء رُفض لأن الدولار نفد — له إشعاراته الخاصة (⏳ المؤقت · 💵 توفر دولار · 🛡️ نفد الد |
-| 22111 | `health_alert_tick` | 🚨 تنبيه تليجرام عند فشل أوامر متكرر (مرة كل ساعة لكل بوت) · v3.36.60: الرفض الحديث فقط · نفاد الدولا |
-| 22131 | `_hb_write` |  |
-| 22135 | `boot_notice` | 🔔 عند إقلاع اللوحة: يقارن آخر نبضة بالوقت الآن — فيكشف انقطاعاً حصل |
-| 22143 | `_boot_notice_inner` |  |
-| 22160 | `_graceful_bye` | 🔌 عند إطفاء السيرفر/اللوحة: تنبيه قبل الخروج |
-| 22174 | `heartbeat_loop` |  |
-| 22179 | `health_loop` |  |
-| 22187 | `reports_loop` |  |
-| 22218 | `_new_bot_folder` | 🆔 v3.36.20 (طلب المالك 7-11): مجلد بوت جديد = البادئة + كود عشوائي من 6 حروف — المجلد هو هوية البوت  |
-| 22236 | `find_script` |  |
-| 22245 | `wallet_keys` |  |
-| 22251 | `compute_dca_table` |  |
-| 22257 | `_dca_table_classic` | 📋 v3.22.1 (ح٥): جدول خطة DCA قبل النشر — **صافي بعد العمولة** بنفس حساب المحرك: |
-| 22282 | `_target` |  |
-| 22397 | `compute_grid_range_table` | يحسب جدول أوامر جرد النطاق قبل التشغيل: كل المستويات بين الحدّين، |
-| 22483 | `deploy_dca` | ينشئ بوت DCA بإعدادات نمط 3Commas · ⚡ v3.36.57: DCA+ = صفوف المالك (plus_rows) |
-| 22549 | `deploy_rec` | 🔁 v3.25.0: ينشئ بوت دوري (شراء/بيع متكرر). الإعدادات تثبت من الإنشاء — من الكرت: إيقاف الأمر الدوري  |
-| 22645 | `_step_round` |  |
-| 22653 | `_step_layout` | نسخة حرفية من step_layout بالمحرك (main_step.py) — [{"j","k","bp","sp","q","sq","side"(+"skip")}] |
-| 22685 | `_step_args` | قراءة نموذج النشر (نسب مئوية ⇒ كسور) · (args, None) أو (None, سبب الرفض) |
-| 22715 | `_step_taken` | 🪜 v3.36.18 (المالك 6-11: «واحد لكل عملة»): مجلد شبكي متدرج موجود على هالعملة (أي محفظة) · None = لا |
-| 22726 | `step_plan` | 📋 جدول ما قبل النشر (حساب فقط · بلا مفاتيح ولا كتابة) — كل مستوى: قاعدته · بيعاته وربح كل بيعة صافيا |
-| 22808 | `deploy_step` | 🪜 نشر الشبكي المتدرج: نفس الجدول (يرفض بنفس الأسباب) · سعر البداية يُثبَّت بالإعداد (الجدول = المحرك |
-| 22886 | `step_audit` | 🪜 تدقيق الشبكي المتدرج (بدل سلّم الشبكة): كل خانة لها أمر واحد على الأكثر · أوامر البوت لا تتلاقى (ش |
-| 22909 | `_step_keep_levels` | 🪜 v3.36.20: المستويات اللي تنعرض كاملة بالبطاقة لمن الخانات كثيرة — أي جزء عنده أمر (منشور · بالطريق |
-| 22927 | `_step_near` | 🪜 v3.36.20: قائمة الشبكة العامة (ذاكرة بيع/شراء) لبوت متدرج كبير — الأقرب `n` بس (أدنى بيع · أعلى شر |
-| 22934 | `_step_sl_far` | 🪜 v3.36.20: المستويات اللي ما انعرضت كاملة (خانات كثيرة) — [المستوى, سعر الشراء, شراء ينتظر بالذاكرة |
-| 22976 | `_step_merge_lv` | البطاقة: شراءات المستوى الواحد (نفس السعر) تظهر سطراً واحداً — الكمية مجموعة · n = عدد أوامرها المنف |
-| 22989 | `deploy` |  |
-| 23091 | `edit_bot` |  |
-| 23121 | `rebuild` |  |
-| 23133 | `_gone_archive` | 🗃️ v3.22.2: لحظة الحذف — أرقام البوت الكلية تنحفظ (المحرر · 💠 داخل الأوامر · 💠 للمُراكِم · ربح العمل |
-| 23173 | `_arch_record` | 🗄️ لحظة الحذف (قبل نقل المجلد): تاريخ التشغيل الثابت · ربح التداول بكل أيامه (عادي + 💠) · المحرر · 💠 |
-| 23199 | `step_ladder_view` | 🪜 v3.36.20: السلّم الكامل لبوت متدرج عند الطلب — كل الخانات (بلا اختصار) + كل صفوف إعادة الاستثمار · |
-| 23214 | `archive_view` | 🗄️ الأرشيف (للعرض): كل مجلد بـ_archive = بوت محذوف — إعداداته (بلا مفاتيح) · تشغيله · حذفه · مدته ·  |
-| 23347 | `delete_bot` |  |
-| 23352 | `_delete_bot_do` |  |
-| 23385 | `shutdown_all` |  |
-| 23404 | `_books_since` | 📒 v3.22.6: أول يوم بالدفاتر بعد «بداية جديدة للحسابات» ("" = من البداية). |
-| 23419 | `_books_locked` |  |
-| 23435 | `books_fresh_start` | 📒 v3.22.6: «بداية جديدة للحسابات» — كأنها لوحة جديدة **من اليوم**: كل الدفاتر (المحرر · التداول · ال |
-| 23486 | `reset_ledger_only` | يصفّر سجل الأرباح (الرسم والتقارير) بلا لمس أرباح البوتات — لتنظيف أرقام وهمية قديمة |
-| 23504 | `reset_ledger` |  |
-| 23519 | `_ri_request_write` | 📨 طلب للبوت بملف — **ما يكتب فوق طلب سابق ما انطبق بعد** (كان الأول يضيع بصمت لو ضغطت مرتين بسرعة). |
-| 23535 | `control` | 🧪 v3.36.59: أزرار بطاقة الديمو تعمل مثل الحقيقي — بلا إشعار |
-| 23545 | `_control_do` |  |
-| 23914 | `settings_payload` |  |
-| 23933 | `settings_save` |  |
-| 23940 | `wallet_op` |  |
-| 24064 | `_http_json` | طلب موحّد: requests أولاً (مثل بوتاتك) ثم urllib احتياطاً. |
-| 24096 | `_okx_pub` | يجرّب مضيفات OKX بالتناوب ويتذكّر الناجح — يحصّن ضد حجب مضيف واحد |
-| 24108 | `_okx_ts` |  |
-| 24121 | `_okx_post` | إرسال أمر موقّع — requests أولاً. |
-| 24141 | `_okx_hosts_ordered` | 🔑 v3.22.7: مضيفات الطلبات الموقّعة — العالمية بس، آخر واحد رد صح أولاً. |
-| 24149 | `_okx_get` | استعلام موقّع — requests أولاً (مثل بوتاتك) وعبر عدة مضيفات |
-| 24168 | `_okx_get_on` | 🔑 v3.22.7: استعلام موقّع على مضيف محدّد (لفحص المفتاح مضيف مضيف) |
-| 24177 | `key_test` | 🔑 v3.22.7: فحص مفتاح OKX على المضيفين العالميين — قراءة بس، ولا أمر: |
-| 24239 | `okx_code` |  |
-| 24246 | `okx_errmsg` | 🔑 v3.22.7: نص رفض OKX — ولو الرفض من المفتاح: اسم المحفظة/البوت + شنو تسوي. |
-| 24262 | `_scope_err` |  |
-| 24275 | `ex_open_counts` | 📋 v3.26.0: «الأوامر المنشورة على المنصة» — كل أمر مرة وحدة. |
-| 24341 | `balances_once` |  |
-| 24421 | `_px_ref` | 📉 v3.21.7: سعر المرجع لليوم لكل عملة = أول سعر شافته اللوحة اليوم (منتصف الليل بتوقيت السيرفر · أو أ |
-| 24446 | `_px_ref_save` |  |
-| 24458 | `_fx_coin` | 📉 v3.21.7: أثر السعر لعملة = الكمية الكلية × (السعر الحالي − سعر أول اليوم). المستقرة والصفرية بلا أ |
-| 24473 | `_bot_fx` | 📉 v3.21.7: حسابات البوتات اللي مفاتيحها مو مضافة كمحفظة — عملة كل حساب تنحسب مرة وحدة (بوتين بنفس ال |
-| 24503 | `balances_loop` |  |
-| 24513 | `price_loop` |  |
-| 24564 | `_demo_quiet` | 🧪 v3.36.59 (المالك 16-11: «ما اريد اشعارات لانه حساب ديمو»): داخل هذا السياق لا يخرج أي إشعار يخص بو |
-| 24581 | `_tg_b` | 🧪 v3.36.59: إشعار يخص بوتاً — بوت الديمو بلا إشعار |
-| 24588 | `tg_send` |  |
-| 24638 | `tg_photo` | 🖼️ v3.23.3: صورة لتيليغرام (بطاقة الأرباح — بس لما تطلبها، فتنرسل حتى لو الإشعارات مكتومة). يرجع (نج |
-| 24689 | `_appf_load` | (تحت القفل) الإشعارات المحفوظة — حتى التطبيق ياخذ اللي فاته بعد انقطاع أو إعادة تشغيل اللوحة. |
-| 24697 | `_appd_load` |  |
-| 24704 | `_appd_save` |  |
-| 24710 | `app_devices` |  |
-| 24716 | `_app_go` | وين يفتح الإشعار لما تضغطه: كرت البوت · المُراكِم · الرقابة · التقارير · اللوحة. |
-| 24732 | `_app_short` | إشعار تيليغرام ⇒ نسخة مختصرة للموبايل: عنوان + سطر · نوعه (صفقة/تنبيه/معلومة) · ربحه بالدولار (للتجم |
-| 24757 | `app_feed_push` | 📨 كل إشعار تيليغرام (بعد زر الكتم) ينضاف هنا مختصراً — بس لو في جهاز مربوط · نفس النص خلال 3 ساعات م |
-| 24792 | `_wd_n` | 📱 v3.36.13: رقم الويدجت — بإشارته (اختياري) · خانتين فوق 10 وإلا أربع · وحدته ($ ملزوقة · العملة بمس |
-| 24803 | `app_widget_view` | 📱 v3.36.13: ويدجت الشاشة الرئيسية (تطبيق 1.9) — للعرض فقط: ربح اليوم · هذا الشهر · الإجمالي · وكل بو |
-| 25073 | `app_feed_wait` | ⏳ سحب طويل: الطلب ينتظر لحد ما يجي إشعار جديد (أو تخلص المهلة) — إشعار فوري بلا ما التطبيق يسأل كل ث |
-| 25085 | `app_pair` | 🔗 ربط جهاز (من داخل اللوحة وإنت داخل): مفتاح عشوائي يرجع للتطبيق مرة وحدة · هنا ينحفظ مُجزّأ (sha256 |
-| 25104 | `app_dev_auth` | مفتاح الجهاز ⇒ الجهاز (أو None). يفتح الإشعارات وتنزيل التطبيق فقط. |
-| 25123 | `app_bio_set` | 🔐 v3.27.0: البصمة تفتح اللوحة بهالموبايل بدل كلمة السر — يتفعّل بس وإنت داخل بكلمة السر (كلمة السر ت |
-| 25147 | `app_bio_reset_all` | 🔐 كلمة السر تغيّرت أو انشالت ⇒ كل موبايل يرجع يربط بصمته من جديد (أول ما تدخل بكلمة السر الجديدة) |
-| 25161 | `app_bio_check` | 🔐 مفتاح الجهاز + مفتاح البصمة ⇒ الجهاز (أو None) |
-| 25170 | `app_unpair` |  |
-| 25186 | `app_apk` | التطبيق المدمج بهذي النسخة من اللوحة (APK موقّع) + معلوماته — للتنزيل والتحديث الذاتي. |
-| 25209 | `_fate_text` | سطر سجل ⇒ (رسالة مصير أمر معلّق، دولارها) أو (None، 0). العملة تطلع برسالة التسليم (وين راحت وبأي مع |
-| 25249 | `_fate_kind` |  |
-| 25257 | `_fate_line` |  |
-| 25265 | `_fate_flush` |  |
-| 25276 | `_fate_batch` | 📨 سطور البوت الجديدة ⇒ رسائل: **رسالة وحدة لكل طلب حقن/سحب** (تطلع عند سطر الخلاصة، يعني بعد ما كل د |
-| 25325 | `_release_msg` | 🔄 رسالة **وحدة** للإيقاف: من الجهتين — كم دولار وكم عملة انسحب (منشور بالمنصة ✅ مؤكد / ذاكرة / دفتر) |
-| 25354 | `_tg_fate_events` | 📨 بعد إيقاف إعادة الاستثمار: كل أمر معلّق يجي مصيره (للذاكرة أو تنفيذ) ⇒ رسالة تگول شنو صار. |
-| 25399 | `_px_s` | سعر للعرض بأرقامه المعنوية — العملة الرخيصة ما تصير 0.0000 والغالية ما تطلع بخانات زايدة. |
-| 25413 | `_accx_ok` | نفس قيود المحرك وقت الاستئناف: شراء تحت «أدنى سعر» ما ينشرى (v3.21.1) · النطاق: ما يطلع برّا الحدّين |
-| 25427 | `_accx_src` | 📦 مخزن الإيقاف {مفتاح: {target_price, locked_qty}} — ♾️ ➕ 🎚️ من accum_* · 🪜 v3.36.45 من خاناته: كل خ |
-| 25465 | `_accx_levels` | الدرجات اللي **قطعها السعر** وهي بمخزن الإيقاف = اللي تتنفّذ بأمر واحد لو تستأنف هسه |
-| 25479 | `_accx_afford` | 💵 v3.21.8 (ب٢٤): كم درجة من المقطوعة يغطيها دولارك الحر هسه — نفس حساب المحرك بالضبط (من الحافة · سع |
-| 25497 | `_accx_snap` | 📦 v3.21.2: عدّاد الإيقاف للكرت والنافذة — **اللي قطعها السعر بس** (يبدي من صفر لحظة الإيقاف ويزيد كل |
-| 25517 | `_accx_msg` | (رسالة تيليگرام، سطر مركز الإشعارات): كم أمر · معدل سعر الدرجات · الكمية والمبلغ · تقدير الاستئناف ا |
-| 25561 | `_accx_state` |  |
-| 25569 | `_accx_save` | يحفظ بس لو تغيّر — والبوتات المحذوفة (مجلدها راح) تنشال من الملف. |
-| 25581 | `_accx_tick` | 📦 v3.21.1: إشعار **مرة وحدة** لكل درجة يعبرها السعر وإنت موقف — شراء تحت الأرضية / بيع فوق السقف: |
-| 25629 | `_dash_event` |  |
-| 25636 | `notifier_loop` |  |
-| 25796 | `ledger_loop` |  |
-| 25824 | `_pw_hash` |  |
-| 25829 | `_pw_verify` |  |
-| 25836 | `auth_cfg` |  |
-| 25840 | `auth_enabled` |  |
-| 25843 | `_new_session` |  |
-| 25852 | `_session_ok` |  |
-| 25871 | `_brand_shadow` | 🌗 الخيال الطويل: n نسخة صلبة تنزل يمين-تحت (اتحادها بلا تراكم ⇒ بلا خطوط) وقناع يبهّته كل ما يبعد عن |
-| 25884 | `brand_word_svg` | ✍️ «THE HOLY DASHBOARD» بالحروف الرفيعة + خيالها. full ⇒ مساحة الخيال داخل الصورة (للانميشن) · غيرها |
-| 25907 | `brand_mark_svg` | 🕯️ الشعار: كل خط عنده اسمه (l1 l2 ساقين · b1 b2 جسمين · br الصاعد) حتى ينرسم/يتحرك بالتحميل. |
-| 25918 | `brand_tile_svg` | 🔲 الشعار الرسمي: لوح فاتح محفور + الشعار بخيال طويل (نفس أيقونة أندرويد وويندوز) — خطوطه تنرسم بالان |
-| 25935 | `brand_favicon_svg` | ⭐ أيقونة المتصفح (والنافذة بالبرنامج): الشعار على لوحه، مرسوم على شبكة البكسل حتى يبين واضح بالحجم ا |
-| 25945 | `brand_ico` | ⭐ favicon.ico + أيقونة برنامج ويندوز (16…256 — الصغيرة مرسومة على البكسل). |
-| 25959 | `brand_fill` | يبدّل علامات الهوية بالصفحة (مرة وحدة لكل نسخة — بـ`_page_cache`). |
-| 25977 | `win_exe` |  |
-| 25991 | `win_url_ok` | عنوان اللوحة اللي ينكتب بالبرنامج: http/https بس · بلا فراغات ولا رموز تحكم · ≤540 بايت. |
-| 25999 | `win_exe_for` | نسخة البرنامج وبيها عنوان لوحتك + مفتاح الإشعارات (`عنوان \0 مفتاح \0` بالفتحة — باقي البرنامج نفسه با |
-| 26014 | `win_pair` | 💻 v3.26.1: كل تنزيل للبرنامج من ⚙️ = حاسوب مربوط بالإشعارات (المفتاح ينكتب بالبرنامج · هنا sha256 بس |
-| 26106 | `_login_page` | 🔒 صفحة الدخول بالشعار (تنبني مرة وحدة). |
-| 26114 | `_page_cache` | 🗜️ صفحة اللوحة: تنبني وتنضغط مرة وحدة لكل نسخة — والبصمة (ETag) تخلي المتصفح يعيد استعمال نسخته. |
-| 26178 | `sys_stats` |  |
-| 26213 | `_font_label` |  |
-| 26221 | `user_fonts` |  |
-| 26246 | `user_font_path` |  |
-| 26253 | `user_font_add` |  |
-| 26276 | `user_font_del` |  |
-| 26284 | `_overview_cached` | ⚡ لو أكثر من جهاز/تبويب يطلب الملخص بنفس الثانية ⇒ حساب واحد يخدم الكل (والأفعال تصفّره). |
-| 26296 | `_client_ip` |  |
-| 26299 | `_cookie_token` |  |
-| 26307 | `_authed` |  |
-| 26323 | `_send_login` |  |
-| 26336 | `log_message` |  |
-| 26339 | `_check_pin` |  |
-| 26343 | `_gz_ok` |  |
-| 26346 | `_json` |  |
-| 26440 | `do_GET` |  |
-| 26683 | `do_POST` |  |
-| 26744 | `_do_POST_inner` |  |
-| 37344 | `_eng_fp` | بصمة مستقرة: تطبّع نهايات الأسطر والمسافات الذيلية فلا تتأثر بطريقة كتابة الملف على القرص |
-| 37354 | `_file_fp` |  |
-| 41145 | `engine_for` |  |
-| 41167 | `start_all_bots` | user=True: زر «تشغيل الكل» — بوت DCA خلّص «آخر دورة» يبدي دورة جديدة (مثل ▶️ بكرته) · |
-| 41199 | `kill_all_bot_procs` | 💀 قتل قسري لكل عمليات البوتات تحت هذا الجذر — يمسح أي عملية يتيمة عالقة على المنفذ |
-| 41249 | `stop_all_bots` |  |
-| 41264 | `_write_state_flag` |  |
-| 41275 | `_step_left_orders` | 🪜 v3.36.17 (F8): كم أمر للبوت (ببصمته) باقٍ مفتوحاً على المنصة · None = تعذّر السؤال (لا اتصال / لا  |
-| 41290 | `delete_purge` | 💣 حذف نهائي: البوت الحي يلغي أوامره بنفسه؛ الميت تلغى أوامره من اللوحة (بصمته فقط) — ثم أرشفة |
-| 41335 | `upgrade_engines` |  |
-| 41371 | `_port_busy` |  |
-| 41380 | `_kill_port_squatter` | يطفي أي محرك ماسك المنفذ: بأدب (die) أولاً، وإذا نسخة قديمة لا تعرفه → بالقوة عبر netstat/taskkill |
-| 41408 | `_block_forever` |  |
-| 41414 | `main` |  |
-| 41504 | `_boot_army` |  |
-| 41526 | `_full_shutdown` |  |
-| 41616 | `_open_app_window` | يفتح كروم/إيدج بوضع التطبيق (--app): نافذة نظيفة مستقلة، وإغلاقها يُنهي العملية فنراقبها |
-| 41646 | `health_scan` | 🩺 فحص شامل — **قراءة فقط**، ولا يكتب ولا يلمس ملف بوت أبداً. |
-| 41764 | `money_audit` | 🧾 تدقيق حركة الأموال — كل سنت: من وين جا · وين راح · وشنو معلّق. قراءة فقط. |
-| 41776 | `chk` |  |
-| 41889 | `_money_audit_md` | قسم التقرير التشخيصي: تدقيق حركة الأموال. |
-| 41914 | `_diag_bot_checks` | 🧾 فحوص محسوبة لبوت — تنقرا بلا تشغيل شي (للتشخيص). |
-| 41956 | `_diag_exchange` | 🔌 صورة المنصة لكل محفظة (قراءة فقط): الأوامر المفتوحة والأرصدة — **ولا حرف من المفاتيح**. |
-| 41977 | `books_audit` | 🧮 v3.22.6: تدقيق الحسابات (قراءة فقط) — كل رقم مقابل مصدره، للتقرير التشخيصي. |
-| 42065 | `_loss_audit` | 🧮 v3.25.4: سجل الخسائر — كل خروج بخسارة بسجلات البوتات (من بداية السجل) انقرا · ولا خسارة مكررة |
-| 42093 | `books_audit_md` |  |
-| 42132 | `diag_bundle` | 📦 حزمة تشخيص: تقرير md + json + بيانات كل بوت — **قراءة فقط**. |
-| 42230 | `env_report` | 🩺 تقرير بيئة التشغيل — يُكتب عند كل إقلاع وعند أي فشل. |
-| 42262 | `_write_env` |  |
+| 20046 | `_an_ema` |  |
+| 20054 | `_an_sd` |  |
+| 20061 | `_an_lr` |  |
+| 20065 | `_an_trend_seq` | حالة الاتجاه لكل يوم: صاعد = فوق متوسط 200 ومتوسط 50 فوقه وصاعد · نازل = العكس · غير ذلك عرضي — وتثب |
+| 20087 | `_an_since` |  |
+| 20097 | `_an_volstate` | 🎢 تذبذب آخر 30 يوماً مقارنةً بأيام السنة: أين يقع (0…100) ⇒ هادئ · عادي · هائج |
+| 20108 | `_an_levels` | 🧱 أقرب دعم ومقاومة (قيعان وقمم واضحة خلال الشهر — كل واحدة أدنى/أعلى من يومين قبلها وبعدها) + منطقة  |
+| 20145 | `_an_rsi` |  |
+| 20157 | `_an_coin` | 🪙 العملة الآن: [(الأيقونة · السطر · الحالة)] + الأرقام |
+| 20239 | `an_present` | 🔎 الآن في السوق كله ولكل عملة — من الشموع المحفوظة وقراءات اللوحة (لا شبكة) |
+| 20348 | `_an_range` | لكل مدة: التذبذب (آخر 48 شمعة من إطارها) × √المدة ⇒ بين كم وكم بثقة 80% — {مفتاح: {lo, hi, w%}} |
+| 20366 | `_an_newdata` | 📈 v3.36.77: أسطر «الآن» الجديدة للسوق — 🇺🇸 علاوة كوينبيس · 💵 العملات المستقرة · 🏦 عقود البيتكوين · 📆 |
+| 20402 | `_cal_facts` | 🗓️ قبل نحو نصف ساعة من خبر أمريكي عالي التأثير ⇒ إشعار واحد لكل خبر |
+| 20430 | `an_scan` | 🔎 + 🔮 في عامل الفحص (بلا شبكة): الآن لكل عملة وللسوق + المدى المتوقع لكل مدة |
+| 20440 | `_an_load` |  |
+| 20450 | `_an_grade` | ✅ كل مدى سُجّل يُحكم عند نهاية مدته (إغلاق شمعة الساعة التي تنتهي فيها): السعر داخله ⇒ صدق · خارجه ⇒ |
+| 20474 | `_an_issue` | 📝 يُسجَّل المدى عند إغلاق شمعة إطاره فقط (4 ساعات ⇐ شمعة 4 ساعات · غداً ⇐ اليومية · الأسبوع ⇐ يومية  |
+| 20492 | `_an_mv` | تغيّر السعر % خلال آخر n ساعات (شموع الساعة المحفوظة) |
+| 20501 | `_an_mine_mv` |  |
+| 20507 | `_an_facts` | 📨 ما تغيّر بين لقطتين ⇒ [(مفتاح التكرار, {sym · ty · lv · urg · ln (سطر البطاقة) · t (للسجل) · b})]  |
+| 20586 | `an_feed` | 📈 بعد كل فحص: يحفظ «الآن» والمدى والميل · يحكم المدى القديم · ويعيد ما تغيّر (مرة لكل حدث) — التسليم |
+| 20624 | `an_view` | 📈 GET /api/market — الآن والمدى لكل عملة من عملاتك وللسوق + صدق المدى الحي |
+| 20700 | `_gp_codes` | كل رمز معروف (الأنظمة الـ36 + القراءات) ⇒ أسرته — مؤشر جديد يُضاف إلى _SG_NM أو _SG_XNM يظهر هنا وحد |
+| 20711 | `gp_members` | أعضاء المجموعة (المؤشرات): كل رمز من أسرها + المضاف بالاسم − المستبعد · قراءات السوق كله خارج مجاميع |
+| 20720 | `_gp_fires` | كل شمعة ⇒ {الرمز: الجهة} (الجهتان معاً على الشمعة نفسها ⇒ لا شيء · أحداث الجهة الواحدة بجهتها) |
+| 20732 | `_gp_keys` | ما انطلق في المجموعة على الشمعة i ⇒ {العضو: الجهة}: المؤشرات + التوليفات (اثنان بالجهة نفسها · الثان |
+| 20756 | `_gp_med` | وسيط حركة آخر w شمعة (\|عائد\|) حتى كل شمعة |
+| 20766 | `_gp_outs` | نتيجة كل شمعة لشغل المجموعة بعد h شمعة (للحكم وللعادي): +1 · −1 · 0 (لمس الهدف والوقف معاً) · None ( |
+| 20806 | `_gp_pb` | العادي لعضو: لو أُطلق التنبؤ عشوائياً بالجهات نفسها (نصيب الصعود q) على شموع نصيب «+1» فيها u ونصيب  |
+| 20814 | `_gp_states` | 🤝 حال السوق لكل شمعة من الإطار ⇒ {المساعد: {وقت الشمعة: الجهة}} — مساعدون للمجاميع (لا يرسلون وحدهم) |
+| 20859 | `_gp_svol` | 🤝 S-vol للعملة نفسها: حجم الشمعة ≥ ضعف وسيط آخر 20 شمعة ⇒ بجهة الشمعة |
+| 20872 | `gp_walk` | 🧩 F = {العملة: (الشموع, الإشارات)} لإطار واحد (العملات: كل العملات · السوق: البيتكوين وحده ومعه قراء |
+| 21011 | `_gp_path` | مسار التنبؤ بجهته بعد الشمعة i حتى h شمعة: [الحركة عند الإغلاق · أسوأ عكس قبلها · أحسن حركة] (نسبة · |
+| 21022 | `gp_pathst` | متوسطات مسار ما كان سيصل: [العدد · متوسط الحركة · متوسط أسوأ عكس · متوسط أحسن حركة · نصيب العكس الأس |
+| 21032 | `gp_score` | سجل ما كان سيصل: [صدق · المحكوم · مجموع العادي] (الحركة الصغيرة والتي لم تُغلق بعد لا تُحسب) |
+| 21044 | `gp_pack` | 🧩 للوحة: لكل مجموعة — سجلها (ما كان سيصل: كله · آخر ربع · لكل عملة من عملاتك) مع العادي · الأعضاء (ك |
+| 21074 | `_gp_surge` | 🚀 الصعود المفاجئ للسوق كله: ≥ 30% من العملات (10 فأكثر) صعدت ≥ 2.5× حركتها المعتادة في الشمعة نفسها  |
+| 21083 | `_gp_wide` | 🌐 قراءات السوق كله لكل إطار ⇒ تُضاف لكل عملة: 🌊 الانهيار و🚀 الصعود المفاجئ (10 عملات فأكثر) · 📊 عدد  |
+| 21129 | `gp_build` | 🏗️ (العامل · بلا شبكة · مرة باليوم بعد إغلاق اليوم) كل عملة بكل إطار على تاريخها (GP_HIST) بالكود نف |
+| 21162 | `gp_now` | 🔔 الفحص الحي (كل شمعة مغلقة): على آخر شمعة لكل عملة وإطار ⇒ ما انطلق من أبطال كل مجموعة (المحفوظين ف |
+| 21204 | `gp_load` | آخر بناء من الملف (بالذاكرة حتى يتغير الملف) |
+| 21216 | `_gp_need` | يحتاج بناءً الآن؟ لا بناء · أقدم من 30 ساعة · عملة من عملاتك (لها شموع) ليس لها سجل — ولا يُعاد قبل  |
+| 21224 | `gp_name` | اسم العضو بكلام واضح: المؤشر باسمه المحايد (GP_NM) · التوليفة «أ + ب» |
+| 21234 | `_gp_grp` |  |
+| 21238 | `_gp_best` | أصدق الأبطال المنطلقين ⇒ صف العضو [المفتاح · صدق · أخطأ · أيام · الحالة · العادي] |
+| 21244 | `gp_proven` | 📲 للمجموعة على هذا الإطار؟ سجلها نفسه (ما كان سيصل) ≥ العادي + GP_SAY على 30 مرة فأكثر · 🎯 v3.36.78: |
+| 21253 | `gp_hz` | المدة بكلام واضح: الإطار × عدد الشموع ⇒ «خلال الساعة القادمة» · «خلال الساعات الأربع القادمة» · «خلا |
+| 21261 | `_gp_pxln` | سطر المسار: متوسط الحركة بعد المدة · أسوأ عكس قبلها (على 30 تنبؤاً فأكثر) |
+| 21266 | `_gp_facts` | 📨 ما انطلق الآن من أبطال كل مجموعة ⇒ [(مفتاح التكرار, {sym · ty · lv · urg · ln · t · b · dup})] — 🪙 |
+| 21305 | `gp_recs` | ⚙️ سجل كل مجموعة بكل إطار (ما كان سيصل): {g_المجموعة: {الإطار: [صدق · المحكوم · مجموع العادي]}} |
+| 21315 | `gp_coin_now` | 🔮 ما تتوقعه مجاميع العملة الآن: {العملة: [[الإطار · المجموعة · الجهة · اسم العضو · صدق · المحكوم · ا |
+| 21333 | `gp_view` | 🧩 GET /api/groups — المجاميع كما بُنيت آخر مرة (من الملف · لا ينتظر الحساب) + ما انطلق الآن + مستوى  |
+| 21414 | `pxa_cfg` |  |
+| 21461 | `pxa_tick` | 🔔 جولة إشعارات الأسعار (بعد كل تحديث للأسعار · العيّنة كل دقيقة) — ترجع الإشعارات اللي طلعت |
+| 21554 | `_pxa_send` | 📨 رسالة وحدة للجولة: إشعار واحد ⇒ عنوانه هو الإشعار · أكثر ⇒ «🔔 إشعارات الأسعار (N)» وكل عملة بسطر |
+| 21576 | `pxa_set` |  |
+| 21591 | `pxa_test` | 🧪 إشعار تجربة بنفس الطريق (حتى تشوف شكله بتيليغرام والموبايل) |
+| 21605 | `pxa_view` |  |
+| 21623 | `_ina_sq` | ⚡ الانضغاط على شموع الساعة المسكّرة: شغّال هسه + من كم شمعة · أو خرج منه هسه (بعد ≥ 6 شموع) وباتجاه  |
+| 21652 | `_ri_orphans` | 🧹 أوامر مكبّرة **يتيمة** (بلا بند تفكيك) وإعادة الاستثمار مطفية — من نسخة قديمة مسحت البنود |
+| 21688 | `_gd_hist_recent` | سطور سجل البوت خلال آخر `hours` ساعة (الأحدث أولاً). |
+| 21702 | `_gd_trade_scan` | 📡 **مراقبة التداول** لكل بوت شبكة — كل جولة رقابة، من نفس بيانات المنصة (بلا طلبات زايدة): |
+| 21787 | `_gd_rec_scan` | 🔁 v3.25.2: فحص **كل بوت دوري** بكل جولة رقابة — قراءة فقط (ولا أمر ينحط ولا ينلغى ولا ملف بوت ينكتب) |
+| 21921 | `_gd_cover_scan` | 🤝 v3.25.5: تغطية العملة المشتركة — لكل محفظة × عملة: اللي تحتاجه البوتات **حر** بالمحفظة (أوامر الدو |
+| 21981 | `_gd_ri_scan` | 🔄 يتابع كل عملة ودولار بعد إطفاء إعادة الاستثمار لحد ما يوصل مكانه: |
+| 22043 | `_gd_acc_scan` | 🪙 يراقب المُراكِم: جولته اليومية · توزيع ربح كل يوم · الأمر المعلّق · الفلوس الواقفة. |
+| 22158 | `ticker_loop` | ⏱️ يحدّث الأسعار كل 10 ثواني — ويوقف كلياً لو الشريط مطفي (🔔 v3.26.6: إلا لو إشعارات الأسعار شغّالة  |
+| 22172 | `ri_archive_map` | 💠 مبلغ إعادة الاستثمار لكل يوم بين تاريخين — الأرشيف أولاً ثم السجل الحي. |
+| 22191 | `_today_parts` | 📅 ربح اليوم مفصّلاً — 🔗 v3.26.4: من نفس محرّك بطاقة 🔄 (كل الأنواع · كان من سجل صفقات الجرد بس). |
+| 22197 | `ri_daily_map` | 💠 نمو إعادة الاستثمار لكل يوم — أرشيف + سجل حي. |
+| 22202 | `ri_period` | 💠 نمو إعادة الاستثمار خلال فترة التقرير — من سجل الصفقات. |
+| 22218 | `_ri_at` | أقرب لقطة عند اليوم أو قبله — يتحمّل أيام مفقودة (انقطاع/إطفاء). |
+| 22238 | `_snap_yday` | يخزّن سعر كل رمز مرة يومياً — مرجع لحساب أثر حركة السعر |
+| 22249 | `backup_states` | 🗄️ نسخة يومية من ملفات الحالة والإعدادات — رجوع آمن دائماً |
+| 22279 | `_rej_why` | 🚨 v3.36.60: سبب الرفض بالعربي من رمز OKX أو رسالتها الإنجليزية ⇒ (السبب، الرمز) أو ("", "") |
+| 22289 | `_rej_short` | 🚨 v3.36.60: «⚠️ [رفض أمر شراء] … (المستوى -13 · الجزء 1) — الرصيد لا يكفي (51008)» بدل الإنجليزي الم |
+| 22297 | `_rej_cash` | 🚨 v3.36.60: أمر شراء رُفض لأن الدولار نفد — له إشعاراته الخاصة (⏳ المؤقت · 💵 توفر دولار · 🛡️ نفد الد |
+| 22303 | `health_alert_tick` | 🚨 تنبيه تليجرام عند فشل أوامر متكرر (مرة كل ساعة لكل بوت) · v3.36.60: الرفض الحديث فقط · نفاد الدولا |
+| 22323 | `_hb_write` |  |
+| 22327 | `boot_notice` | 🔔 عند إقلاع اللوحة: يقارن آخر نبضة بالوقت الآن — فيكشف انقطاعاً حصل |
+| 22335 | `_boot_notice_inner` |  |
+| 22352 | `_graceful_bye` | 🔌 عند إطفاء السيرفر/اللوحة: تنبيه قبل الخروج |
+| 22366 | `heartbeat_loop` |  |
+| 22371 | `health_loop` |  |
+| 22379 | `reports_loop` |  |
+| 22410 | `_new_bot_folder` | 🆔 v3.36.20 (طلب المالك 7-11): مجلد بوت جديد = البادئة + كود عشوائي من 6 حروف — المجلد هو هوية البوت  |
+| 22428 | `find_script` |  |
+| 22437 | `wallet_keys` |  |
+| 22443 | `compute_dca_table` |  |
+| 22449 | `_dca_table_classic` | 📋 v3.22.1 (ح٥): جدول خطة DCA قبل النشر — **صافي بعد العمولة** بنفس حساب المحرك: |
+| 22474 | `_target` |  |
+| 22589 | `compute_grid_range_table` | يحسب جدول أوامر جرد النطاق قبل التشغيل: كل المستويات بين الحدّين، |
+| 22675 | `deploy_dca` | ينشئ بوت DCA بإعدادات نمط 3Commas · ⚡ v3.36.57: DCA+ = صفوف المالك (plus_rows) |
+| 22741 | `deploy_rec` | 🔁 v3.25.0: ينشئ بوت دوري (شراء/بيع متكرر). الإعدادات تثبت من الإنشاء — من الكرت: إيقاف الأمر الدوري  |
+| 22837 | `_step_round` |  |
+| 22845 | `_step_layout` | نسخة حرفية من step_layout بالمحرك (main_step.py) — [{"j","k","bp","sp","q","sq","side"(+"skip")}] |
+| 22877 | `_step_args` | قراءة نموذج النشر (نسب مئوية ⇒ كسور) · (args, None) أو (None, سبب الرفض) |
+| 22907 | `_step_taken` | 🪜 v3.36.18 (المالك 6-11: «واحد لكل عملة»): مجلد شبكي متدرج موجود على هالعملة (أي محفظة) · None = لا |
+| 22918 | `step_plan` | 📋 جدول ما قبل النشر (حساب فقط · بلا مفاتيح ولا كتابة) — كل مستوى: قاعدته · بيعاته وربح كل بيعة صافيا |
+| 23000 | `deploy_step` | 🪜 نشر الشبكي المتدرج: نفس الجدول (يرفض بنفس الأسباب) · سعر البداية يُثبَّت بالإعداد (الجدول = المحرك |
+| 23078 | `step_audit` | 🪜 تدقيق الشبكي المتدرج (بدل سلّم الشبكة): كل خانة لها أمر واحد على الأكثر · أوامر البوت لا تتلاقى (ش |
+| 23101 | `_step_keep_levels` | 🪜 v3.36.20: المستويات اللي تنعرض كاملة بالبطاقة لمن الخانات كثيرة — أي جزء عنده أمر (منشور · بالطريق |
+| 23119 | `_step_near` | 🪜 v3.36.20: قائمة الشبكة العامة (ذاكرة بيع/شراء) لبوت متدرج كبير — الأقرب `n` بس (أدنى بيع · أعلى شر |
+| 23126 | `_step_sl_far` | 🪜 v3.36.20: المستويات اللي ما انعرضت كاملة (خانات كثيرة) — [المستوى, سعر الشراء, شراء ينتظر بالذاكرة |
+| 23168 | `_step_merge_lv` | البطاقة: شراءات المستوى الواحد (نفس السعر) تظهر سطراً واحداً — الكمية مجموعة · n = عدد أوامرها المنف |
+| 23181 | `deploy` |  |
+| 23283 | `edit_bot` |  |
+| 23313 | `rebuild` |  |
+| 23325 | `_gone_archive` | 🗃️ v3.22.2: لحظة الحذف — أرقام البوت الكلية تنحفظ (المحرر · 💠 داخل الأوامر · 💠 للمُراكِم · ربح العمل |
+| 23365 | `_arch_record` | 🗄️ لحظة الحذف (قبل نقل المجلد): تاريخ التشغيل الثابت · ربح التداول بكل أيامه (عادي + 💠) · المحرر · 💠 |
+| 23391 | `step_ladder_view` | 🪜 v3.36.20: السلّم الكامل لبوت متدرج عند الطلب — كل الخانات (بلا اختصار) + كل صفوف إعادة الاستثمار · |
+| 23406 | `archive_view` | 🗄️ الأرشيف (للعرض): كل مجلد بـ_archive = بوت محذوف — إعداداته (بلا مفاتيح) · تشغيله · حذفه · مدته ·  |
+| 23539 | `delete_bot` |  |
+| 23544 | `_delete_bot_do` |  |
+| 23577 | `shutdown_all` |  |
+| 23596 | `_books_since` | 📒 v3.22.6: أول يوم بالدفاتر بعد «بداية جديدة للحسابات» ("" = من البداية). |
+| 23611 | `_books_locked` |  |
+| 23627 | `books_fresh_start` | 📒 v3.22.6: «بداية جديدة للحسابات» — كأنها لوحة جديدة **من اليوم**: كل الدفاتر (المحرر · التداول · ال |
+| 23678 | `reset_ledger_only` | يصفّر سجل الأرباح (الرسم والتقارير) بلا لمس أرباح البوتات — لتنظيف أرقام وهمية قديمة |
+| 23696 | `reset_ledger` |  |
+| 23711 | `_ri_request_write` | 📨 طلب للبوت بملف — **ما يكتب فوق طلب سابق ما انطبق بعد** (كان الأول يضيع بصمت لو ضغطت مرتين بسرعة). |
+| 23727 | `control` | 🧪 v3.36.59: أزرار بطاقة الديمو تعمل مثل الحقيقي — بلا إشعار |
+| 23737 | `_control_do` |  |
+| 24106 | `settings_payload` |  |
+| 24125 | `settings_save` |  |
+| 24132 | `wallet_op` |  |
+| 24256 | `_http_json` | طلب موحّد: requests أولاً (مثل بوتاتك) ثم urllib احتياطاً. |
+| 24288 | `_okx_pub` | يجرّب مضيفات OKX بالتناوب ويتذكّر الناجح — يحصّن ضد حجب مضيف واحد |
+| 24300 | `_okx_ts` |  |
+| 24313 | `_okx_post` | إرسال أمر موقّع — requests أولاً. |
+| 24333 | `_okx_hosts_ordered` | 🔑 v3.22.7: مضيفات الطلبات الموقّعة — العالمية بس، آخر واحد رد صح أولاً. |
+| 24341 | `_okx_get` | استعلام موقّع — requests أولاً (مثل بوتاتك) وعبر عدة مضيفات |
+| 24360 | `_okx_get_on` | 🔑 v3.22.7: استعلام موقّع على مضيف محدّد (لفحص المفتاح مضيف مضيف) |
+| 24369 | `key_test` | 🔑 v3.22.7: فحص مفتاح OKX على المضيفين العالميين — قراءة بس، ولا أمر: |
+| 24431 | `okx_code` |  |
+| 24438 | `okx_errmsg` | 🔑 v3.22.7: نص رفض OKX — ولو الرفض من المفتاح: اسم المحفظة/البوت + شنو تسوي. |
+| 24454 | `_scope_err` |  |
+| 24467 | `ex_open_counts` | 📋 v3.26.0: «الأوامر المنشورة على المنصة» — كل أمر مرة وحدة. |
+| 24533 | `balances_once` |  |
+| 24613 | `_px_ref` | 📉 v3.21.7: سعر المرجع لليوم لكل عملة = أول سعر شافته اللوحة اليوم (منتصف الليل بتوقيت السيرفر · أو أ |
+| 24638 | `_px_ref_save` |  |
+| 24650 | `_fx_coin` | 📉 v3.21.7: أثر السعر لعملة = الكمية الكلية × (السعر الحالي − سعر أول اليوم). المستقرة والصفرية بلا أ |
+| 24665 | `_bot_fx` | 📉 v3.21.7: حسابات البوتات اللي مفاتيحها مو مضافة كمحفظة — عملة كل حساب تنحسب مرة وحدة (بوتين بنفس ال |
+| 24695 | `balances_loop` |  |
+| 24705 | `price_loop` |  |
+| 24756 | `_demo_quiet` | 🧪 v3.36.59 (المالك 16-11: «ما اريد اشعارات لانه حساب ديمو»): داخل هذا السياق لا يخرج أي إشعار يخص بو |
+| 24773 | `_tg_b` | 🧪 v3.36.59: إشعار يخص بوتاً — بوت الديمو بلا إشعار |
+| 24780 | `tg_send` |  |
+| 24830 | `tg_photo` | 🖼️ v3.23.3: صورة لتيليغرام (بطاقة الأرباح — بس لما تطلبها، فتنرسل حتى لو الإشعارات مكتومة). يرجع (نج |
+| 24881 | `_appf_load` | (تحت القفل) الإشعارات المحفوظة — حتى التطبيق ياخذ اللي فاته بعد انقطاع أو إعادة تشغيل اللوحة. |
+| 24889 | `_appd_load` |  |
+| 24896 | `_appd_save` |  |
+| 24902 | `app_devices` |  |
+| 24908 | `_app_go` | وين يفتح الإشعار لما تضغطه: كرت البوت · المُراكِم · الرقابة · التقارير · اللوحة. |
+| 24924 | `_app_short` | إشعار تيليغرام ⇒ نسخة مختصرة للموبايل: عنوان + سطر · نوعه (صفقة/تنبيه/معلومة) · ربحه بالدولار (للتجم |
+| 24949 | `app_feed_push` | 📨 كل إشعار تيليغرام (بعد زر الكتم) ينضاف هنا مختصراً — بس لو في جهاز مربوط · نفس النص خلال 3 ساعات م |
+| 24984 | `_wd_n` | 📱 v3.36.13: رقم الويدجت — بإشارته (اختياري) · خانتين فوق 10 وإلا أربع · وحدته ($ ملزوقة · العملة بمس |
+| 24995 | `app_widget_view` | 📱 v3.36.13: ويدجت الشاشة الرئيسية (تطبيق 1.9) — للعرض فقط: ربح اليوم · هذا الشهر · الإجمالي · وكل بو |
+| 25265 | `app_feed_wait` | ⏳ سحب طويل: الطلب ينتظر لحد ما يجي إشعار جديد (أو تخلص المهلة) — إشعار فوري بلا ما التطبيق يسأل كل ث |
+| 25277 | `app_pair` | 🔗 ربط جهاز (من داخل اللوحة وإنت داخل): مفتاح عشوائي يرجع للتطبيق مرة وحدة · هنا ينحفظ مُجزّأ (sha256 |
+| 25296 | `app_dev_auth` | مفتاح الجهاز ⇒ الجهاز (أو None). يفتح الإشعارات وتنزيل التطبيق فقط. |
+| 25315 | `app_bio_set` | 🔐 v3.27.0: البصمة تفتح اللوحة بهالموبايل بدل كلمة السر — يتفعّل بس وإنت داخل بكلمة السر (كلمة السر ت |
+| 25339 | `app_bio_reset_all` | 🔐 كلمة السر تغيّرت أو انشالت ⇒ كل موبايل يرجع يربط بصمته من جديد (أول ما تدخل بكلمة السر الجديدة) |
+| 25353 | `app_bio_check` | 🔐 مفتاح الجهاز + مفتاح البصمة ⇒ الجهاز (أو None) |
+| 25362 | `app_unpair` |  |
+| 25378 | `app_apk` | التطبيق المدمج بهذي النسخة من اللوحة (APK موقّع) + معلوماته — للتنزيل والتحديث الذاتي. |
+| 25401 | `_fate_text` | سطر سجل ⇒ (رسالة مصير أمر معلّق، دولارها) أو (None، 0). العملة تطلع برسالة التسليم (وين راحت وبأي مع |
+| 25441 | `_fate_kind` |  |
+| 25449 | `_fate_line` |  |
+| 25457 | `_fate_flush` |  |
+| 25468 | `_fate_batch` | 📨 سطور البوت الجديدة ⇒ رسائل: **رسالة وحدة لكل طلب حقن/سحب** (تطلع عند سطر الخلاصة، يعني بعد ما كل د |
+| 25517 | `_release_msg` | 🔄 رسالة **وحدة** للإيقاف: من الجهتين — كم دولار وكم عملة انسحب (منشور بالمنصة ✅ مؤكد / ذاكرة / دفتر) |
+| 25546 | `_tg_fate_events` | 📨 بعد إيقاف إعادة الاستثمار: كل أمر معلّق يجي مصيره (للذاكرة أو تنفيذ) ⇒ رسالة تگول شنو صار. |
+| 25591 | `_px_s` | سعر للعرض بأرقامه المعنوية — العملة الرخيصة ما تصير 0.0000 والغالية ما تطلع بخانات زايدة. |
+| 25605 | `_accx_ok` | نفس قيود المحرك وقت الاستئناف: شراء تحت «أدنى سعر» ما ينشرى (v3.21.1) · النطاق: ما يطلع برّا الحدّين |
+| 25619 | `_accx_src` | 📦 مخزن الإيقاف {مفتاح: {target_price, locked_qty}} — ♾️ ➕ 🎚️ من accum_* · 🪜 v3.36.45 من خاناته: كل خ |
+| 25657 | `_accx_levels` | الدرجات اللي **قطعها السعر** وهي بمخزن الإيقاف = اللي تتنفّذ بأمر واحد لو تستأنف هسه |
+| 25671 | `_accx_afford` | 💵 v3.21.8 (ب٢٤): كم درجة من المقطوعة يغطيها دولارك الحر هسه — نفس حساب المحرك بالضبط (من الحافة · سع |
+| 25689 | `_accx_snap` | 📦 v3.21.2: عدّاد الإيقاف للكرت والنافذة — **اللي قطعها السعر بس** (يبدي من صفر لحظة الإيقاف ويزيد كل |
+| 25709 | `_accx_msg` | (رسالة تيليگرام، سطر مركز الإشعارات): كم أمر · معدل سعر الدرجات · الكمية والمبلغ · تقدير الاستئناف ا |
+| 25753 | `_accx_state` |  |
+| 25761 | `_accx_save` | يحفظ بس لو تغيّر — والبوتات المحذوفة (مجلدها راح) تنشال من الملف. |
+| 25773 | `_accx_tick` | 📦 v3.21.1: إشعار **مرة وحدة** لكل درجة يعبرها السعر وإنت موقف — شراء تحت الأرضية / بيع فوق السقف: |
+| 25821 | `_dash_event` |  |
+| 25828 | `notifier_loop` |  |
+| 25988 | `ledger_loop` |  |
+| 26016 | `_pw_hash` |  |
+| 26021 | `_pw_verify` |  |
+| 26028 | `auth_cfg` |  |
+| 26032 | `auth_enabled` |  |
+| 26035 | `_new_session` |  |
+| 26044 | `_session_ok` |  |
+| 26063 | `_brand_shadow` | 🌗 الخيال الطويل: n نسخة صلبة تنزل يمين-تحت (اتحادها بلا تراكم ⇒ بلا خطوط) وقناع يبهّته كل ما يبعد عن |
+| 26076 | `brand_word_svg` | ✍️ «THE HOLY DASHBOARD» بالحروف الرفيعة + خيالها. full ⇒ مساحة الخيال داخل الصورة (للانميشن) · غيرها |
+| 26099 | `brand_mark_svg` | 🕯️ الشعار: كل خط عنده اسمه (l1 l2 ساقين · b1 b2 جسمين · br الصاعد) حتى ينرسم/يتحرك بالتحميل. |
+| 26110 | `brand_tile_svg` | 🔲 الشعار الرسمي: لوح فاتح محفور + الشعار بخيال طويل (نفس أيقونة أندرويد وويندوز) — خطوطه تنرسم بالان |
+| 26127 | `brand_favicon_svg` | ⭐ أيقونة المتصفح (والنافذة بالبرنامج): الشعار على لوحه، مرسوم على شبكة البكسل حتى يبين واضح بالحجم ا |
+| 26137 | `brand_ico` | ⭐ favicon.ico + أيقونة برنامج ويندوز (16…256 — الصغيرة مرسومة على البكسل). |
+| 26151 | `brand_fill` | يبدّل علامات الهوية بالصفحة (مرة وحدة لكل نسخة — بـ`_page_cache`). |
+| 26169 | `win_exe` |  |
+| 26183 | `win_url_ok` | عنوان اللوحة اللي ينكتب بالبرنامج: http/https بس · بلا فراغات ولا رموز تحكم · ≤540 بايت. |
+| 26191 | `win_exe_for` | نسخة البرنامج وبيها عنوان لوحتك + مفتاح الإشعارات (`عنوان \0 مفتاح \0` بالفتحة — باقي البرنامج نفسه با |
+| 26206 | `win_pair` | 💻 v3.26.1: كل تنزيل للبرنامج من ⚙️ = حاسوب مربوط بالإشعارات (المفتاح ينكتب بالبرنامج · هنا sha256 بس |
+| 26298 | `_login_page` | 🔒 صفحة الدخول بالشعار (تنبني مرة وحدة). |
+| 26306 | `_page_cache` | 🗜️ صفحة اللوحة: تنبني وتنضغط مرة وحدة لكل نسخة — والبصمة (ETag) تخلي المتصفح يعيد استعمال نسخته. |
+| 26370 | `sys_stats` |  |
+| 26405 | `_font_label` |  |
+| 26413 | `user_fonts` |  |
+| 26438 | `user_font_path` |  |
+| 26445 | `user_font_add` |  |
+| 26468 | `user_font_del` |  |
+| 26476 | `_overview_cached` | ⚡ لو أكثر من جهاز/تبويب يطلب الملخص بنفس الثانية ⇒ حساب واحد يخدم الكل (والأفعال تصفّره). |
+| 26488 | `_client_ip` |  |
+| 26491 | `_cookie_token` |  |
+| 26499 | `_authed` |  |
+| 26515 | `_send_login` |  |
+| 26528 | `log_message` |  |
+| 26531 | `_check_pin` |  |
+| 26535 | `_gz_ok` |  |
+| 26538 | `_json` |  |
+| 26632 | `do_GET` |  |
+| 26875 | `do_POST` |  |
+| 26936 | `_do_POST_inner` |  |
+| 37539 | `_eng_fp` | بصمة مستقرة: تطبّع نهايات الأسطر والمسافات الذيلية فلا تتأثر بطريقة كتابة الملف على القرص |
+| 37549 | `_file_fp` |  |
+| 41340 | `engine_for` |  |
+| 41362 | `start_all_bots` | user=True: زر «تشغيل الكل» — بوت DCA خلّص «آخر دورة» يبدي دورة جديدة (مثل ▶️ بكرته) · |
+| 41394 | `kill_all_bot_procs` | 💀 قتل قسري لكل عمليات البوتات تحت هذا الجذر — يمسح أي عملية يتيمة عالقة على المنفذ |
+| 41444 | `stop_all_bots` |  |
+| 41459 | `_write_state_flag` |  |
+| 41470 | `_step_left_orders` | 🪜 v3.36.17 (F8): كم أمر للبوت (ببصمته) باقٍ مفتوحاً على المنصة · None = تعذّر السؤال (لا اتصال / لا  |
+| 41485 | `delete_purge` | 💣 حذف نهائي: البوت الحي يلغي أوامره بنفسه؛ الميت تلغى أوامره من اللوحة (بصمته فقط) — ثم أرشفة |
+| 41530 | `upgrade_engines` |  |
+| 41566 | `_port_busy` |  |
+| 41575 | `_kill_port_squatter` | يطفي أي محرك ماسك المنفذ: بأدب (die) أولاً، وإذا نسخة قديمة لا تعرفه → بالقوة عبر netstat/taskkill |
+| 41603 | `_block_forever` |  |
+| 41609 | `main` |  |
+| 41699 | `_boot_army` |  |
+| 41721 | `_full_shutdown` |  |
+| 41811 | `_open_app_window` | يفتح كروم/إيدج بوضع التطبيق (--app): نافذة نظيفة مستقلة، وإغلاقها يُنهي العملية فنراقبها |
+| 41841 | `health_scan` | 🩺 فحص شامل — **قراءة فقط**، ولا يكتب ولا يلمس ملف بوت أبداً. |
+| 41959 | `money_audit` | 🧾 تدقيق حركة الأموال — كل سنت: من وين جا · وين راح · وشنو معلّق. قراءة فقط. |
+| 41971 | `chk` |  |
+| 42084 | `_money_audit_md` | قسم التقرير التشخيصي: تدقيق حركة الأموال. |
+| 42109 | `_diag_bot_checks` | 🧾 فحوص محسوبة لبوت — تنقرا بلا تشغيل شي (للتشخيص). |
+| 42151 | `_diag_exchange` | 🔌 صورة المنصة لكل محفظة (قراءة فقط): الأوامر المفتوحة والأرصدة — **ولا حرف من المفاتيح**. |
+| 42172 | `books_audit` | 🧮 v3.22.6: تدقيق الحسابات (قراءة فقط) — كل رقم مقابل مصدره، للتقرير التشخيصي. |
+| 42260 | `_loss_audit` | 🧮 v3.25.4: سجل الخسائر — كل خروج بخسارة بسجلات البوتات (من بداية السجل) انقرا · ولا خسارة مكررة |
+| 42288 | `books_audit_md` |  |
+| 42327 | `diag_bundle` | 📦 حزمة تشخيص: تقرير md + json + بيانات كل بوت — **قراءة فقط**. |
+| 42425 | `env_report` | 🩺 تقرير بيئة التشغيل — يُكتب عند كل إقلاع وعند أي فشل. |
+| 42457 | `_write_env` |  |
 
 ## ١ · التقسيم العام للملف
 
@@ -2681,9 +2692,9 @@
 | 9060-9178 | 🔐 المصادقة + القفل التلقائي |
 | 9162-9619 | `Handler` — خادم HTTP (كل المسارات) |
 | 9621-14992 | 🎨 **الواجهة** `HTML_PAGE` (HTML + CSS + JS بسلسلة وحدة) |
-| 14993-23013 | 🧬 **المحركات المضمّنة** B64 + بصماتها |
-| 23014-23716 | التشغيل الجماعي · `main()` · الإقلاع |
-| 23717-24391 | الإطفاء · 🩺 الفحص الشامل · 📦 حزمة التشخيص · تقرير البيئة |
+| 14993-23205 | 🧬 **المحركات المضمّنة** B64 + بصماتها |
+| 23206-23908 | التشغيل الجماعي · `main()` · الإقلاع |
+| 23909-24583 | الإطفاء · 🩺 الفحص الشامل · 📦 حزمة التشخيص · تقرير البيئة |
 
 **الإحصاء:** 158 دالة بايثون · صنفان (`_AuthMixin` 3570 · `Handler` 3599) · 66 متغيّراً عاماً · 159 دالة JS · 21 مساراً · 11 خيطاً خلفياً.
 
