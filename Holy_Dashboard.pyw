@@ -25232,7 +25232,8 @@ def balances_once():
                     ent["base_usd"] = round(float(d.get("eqUsd") or 0), 2)
                     ent["base_eq"] = round(float(d.get("eq") or d.get("cashBal") or 0), 8)   # الكلي: حر + محجوز بأوامر
             ent.setdefault("usdt", 0.0); ent.setdefault("base", 0.0); ent.setdefault("base_usd", 0.0)
-        ro = _okx_get(f"/api/v5/trade/orders-pending?instType=SPOT&instId={sym}", k, s, p)
+        ro = None if str(cfg.get("bot_type") or "") == "grid_pair" else \
+            _okx_get(f"/api/v5/trade/orders-pending?instType=SPOT&instId={sym}", k, s, p)   # 🔀 v3.36.79: لا زوج «SOL-XRP» بالمنصة ولا أوامر قاعدة له
         if ro and ro.get("code") == "0":
             ds = ro.get("data") or []
             ent["ob"] = sum(1 for d in ds if d.get("side") == "buy")

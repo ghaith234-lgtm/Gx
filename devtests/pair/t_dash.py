@@ -305,6 +305,18 @@ if hasattr(m, "_pair_del_wait"):
     ok("🏷️ its name in every list (free coins · archive type · widgets · icons)", m._FREE_T.get("grid_pair") == "🔀 شبكة عملتين"
        and m._PV_TYPE_ALL.get("grid_pair") == "شبكة عملتين" and m._WD_E.get("grid_pair") == "🔀" and m._RD_FORM.get("grid_pair") == "pair")
 
+# ── p154: the balance refresh reads its coins but never asks OKX for orders on «SOL-XRP» (no such instrument)
+if hasattr(m, "_pair_del_wait"):
+    CALLS = []
+    m._okx_get = lambda path, *a, **k: CALLS.append(path) or {"code": "0", "data": [{"details": []}]}
+    only = {k_: v_ for k_, v_ in m.bot_dirs().items() if v_["cfg"].get("bot_type") == "grid_pair" and not v_["cfg"].get("is_demo")}
+    _bd0 = m.bot_dirs
+    m.bot_dirs = lambda *a, **k: only
+    m.balances_once()
+    m.bot_dirs = _bd0
+    ok("💰 the balance refresh reads the pair's coins and never asks for pending orders of a pair symbol", only and CALLS
+       and all("orders-pending" not in c for c in CALLS) and any("account/balance" in c for c in CALLS), CALLS)
+
 print(f"\n{'✅' if all(RES) else '❌'} t_dash: {sum(RES)}/{len(RES)}")
 shutil.rmtree(R, ignore_errors=True)
 sys.exit(0 if all(RES) else 1)
