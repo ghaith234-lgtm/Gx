@@ -22,6 +22,22 @@
 - `t_core.py` **57/57 ✅** — الدفاتر = المحفظة بكل دورة (أقصى فرق 2e-10) · مثال المالك: 20 XRP ⇒ +0.31 XRP بالدورة.
 - `t_cut.py` ⚡ انقطاع بكل لحظة (3 سيناريوهات) — النهاية لازم = بلا انقطاع.
 
+## نتائج المرحلة A
+- `t_core` 57/57 ✅ · `t_cut` السيناريو a: 846/846 لحظة انقطاع = بلا انقطاع ✅ (b و c بالتشغيل) · `ci/pair_engine_check.py` المحرك نفسه على أسعار OKX الحقيقية (GitHub · holy-pair-check.yml).
+- فحص 4 (`ci/ratio_check4.py` · 45980110447): SOL و XLM ربحن بالنصين · ETH و LINK و BTC لا (ETH −74% · LINK −70% أسوأ نزول بالـXRP بـ3 سنين).
+
+## خريطة الربط باللوحة (المرحلة B — قريت المواضع 27-11)
+- **المحرك**: حرفي `_GRIDX_B64` بعد `GRIDS_VERSION` (~سطر 39902) + `GRIDX_SRC`/`GRIDX_VERSION` · `engine_for` (~41354): `grid_pair ⇒ (GRIDX_SRC, "main.py", GRIDX_VERSION)` · التضمين بعدين بـ`devtests/step/embed_engine.py devtests/pair/eng/main_pair.py --var=_GRIDX_B64`.
+- **الجدول** `_BOT_KINDS` (~2777): `"grid_pair": {"lbl": "عملتين", "ico": "🔀", "cur": "coin", "src": "hist", "unit": "بيعة", "fam": "grid", "state": "grid_state_", "eng": "GRIDX_SRC", "route": ("events", "coin_ledger", "coin_trade", "report")}` — عملة الربح = **الثانية بالرمز** (`SOL-XRP` ⇒ XRP) ⇐ `coin_ledger_tick` (~12839) و`coin_trade_tick` يقرون `base = symbol.split("-")[0]` ⇒ لازم استثناء لـgrid_pair (العملة = الرئيسية).
+- **المسارات** `paths_of`: `grid_state_SOL-XRP.json` · `trade_history_SOL.json` (يطابق المحرك).
+- **الأسعار**: `PX.get(sym)` — `SOL-XRP` مو أداة OKX ⇒ النسبة = `PX[SOL-USDT]/PX[XRP-USDT]` (وما ينطلب سعرها من OKX).
+- **بيانات البطاقة** (~985 الدالة اللي ترجع dict البوت): + `"pair": {...}` (النسبة · الأمران التاليان · main_book · other_book · usd_booked · total_profit بالرئيسية · daily · swaps · R0 · g · mv · dn · up) · `profit`/`today` بالرئيسية.
+- **JS**: `buildCard`/`updCard` (~29613/29669) ⇒ `buildPairCard`/`updPairCard` · الأشكال: `skKind` (~35929) ⇒ 'pair' · `skModel` (~36264) فرع pair · القوائم: `CMP_T` · `BT_LBL` · `flIco` · `_WD_E` · `_FREE_T` · `_PV_TYPE(_ALL)` · `ico` (~12132) · `TUT` (~29913) · `TUT_SETS` · `_RD_FORM` (♻️) · الاستنساخ (~33363).
+- **النشر**: `deploy_step` (~23003) نموذج للنسخ: `wallet_keys` · رصيد OKX الحر − `_gd_free_claims` للبوتات الثانية · `_new_bot_folder("pair_" + other)` · `save_json_atomic(config)` · يكتب المحرك · `launch(b)` · `tg_send` · المسارات `/api/pair_plan` (حساب فقط) و`/api/deploy_pair` قرب ~27114 · الديمو: `deploy_demo(kind, data)` (~27098).
+- **الحجز**: `_gd_free_claims` (~8632) ⇒ `{MAIN: main_book, OTHER: other_book, "USDT": usd_booked}` (كله حر بالمحفظة · ماكو أوامر قاعدة) · الدولار الحر غير المحجوز `_tp_budget` (~10480) يطرح `dca_hold` ⇐ يضاف `pair_hold` (يُبنى بـ`_gd_gather` ~8770 من `usd_booked`).
+- **الرقابة**: `_gd_gather` يصنّف البوت (is_dca/is_rec) ⇒ grid_pair: رصيده حر بثلاث عملات · أوامره IOC بمعرّف البوت (`clOrdId` يبدأ بـbot_id) ⇒ لازم ما تطلع «أوامر مجهولة».
+- **الديمو/المسار التجريبي**: `_BtEx` (~4576) أداة وحدة ⇒ منصة ورقية بأداتين لـgrid_pair (ما نلمس `_BtEx` الحالية).
+
 ## الجاي (المرحلة B — اللوحة)
 - تضمين المحرك (`_GRIDX_B64` + `engine_for` "grid_pair") · `_BOT_KINDS` · عملة الربح = الرئيسية (دفتر العملات) · الأسعار = نسبة الأداتين.
 - النموذج + الحاسبة (`/api/pair_plan` حساب بس) + النشر (`/api/deploy_pair` من المحفظة) · البطاقة بالرئيسية · السجل · الإشعارات.
