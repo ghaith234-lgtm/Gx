@@ -193,7 +193,51 @@ if hasattr(m, "pair_plan"):
     ok("🚀 one bot per pair", not r2.get("ok") and "واحد لكل زوج" in str(r2.get("msg")), r2)
     BAL["XRP"] = 1250.0
     r3 = m.deploy_pair(dict(base_, other="XLM", other_amount=0, main_amount=1300))
-    ok("🚀 not enough free XRP (the SOL bot deployed a second ago, not born yet, holds its 200 by its config) ⇒ refused with the numbers", not r3.get("ok") and "الحر بمحفظتك" in str(r3.get("msg")), r3)
+    ok("🚀 v3.36.80 not enough free XRP (the SOL bot deployed a second ago, not born yet, holds its 200 by its config ⇒ 1050 free) ⇒ the levels below "
+       "stop at the last one it covers (52 of 65) — deployed, the numbers in the message («اذا ما يوجد عملات يتوقف»)",
+       r3.get("ok") and r3.get("dn") == 52 and r3.get("up") == 0 and "يكفي 52 مستوى تحت من 65" in str(r3.get("msg")), r3)
+    # ── p155 (v3.36.80) the owner: «صلحه التحديد ضمن الاعداد الاعلى والاسفل ، واذا ما يوجد عملات يتوقف»
+    PXS["SUI-USDT"] = 0.669
+    SPECS["SUI-USDT"] = {"lotSz": 0.0001, "minSz": 1.0}
+    Ps = m.pair_plan(dict(base_, other="SUI", main_amount=200, other_amount=10000))
+    r0s, want_up, need_s = 0.669 / 2.0, 0, 0.0
+    while 20 / (r0s * 1.02 ** want_up) >= 1.5:
+        need_s += 20 / (r0s * 1.02 ** want_up)
+        want_up += 1
+    ok(f"🧮 more coin than the ladder can hold (10000 SUI): the levels above stop where a level falls under 1.5 × OKX's minimum ({want_up}) · "
+       f"the levels below stay (10 — never squeezed to 0) · no refusal · the rest stays in the wallet (said)",
+       Ps.get("ok") and not Ps["err"] and Ps["up"] == want_up and Ps["dn"] == 10 and abs(Ps["other_left"] - (10000 - need_s)) < 1e-6
+       and any("أدنى حجم" in n_ and "يبقى الباقي" in n_ for n_ in Ps.get("notes") or []), {k: Ps.get(k) for k in ("up", "dn", "err", "notes", "other_left")})
+    Pc = m.pair_plan(dict(base_, dn_max=4, up_max=2))
+    ok("🔢 the owner's counts inside the amounts: 4 below · 2 above (the amounts cover more) · 80 XRP needed · no notes",
+       Pc.get("ok") and Pc["dn"] == 4 and Pc["up"] == 2 and abs(Pc["main_need"] - 80) < 1e-9 and not Pc["notes"] and len(Pc["rows"]) == 6,
+       {k: Pc.get(k) for k in ("dn", "up", "main_need", "notes")})
+    Pb = m.pair_plan(dict(base_, dn_max=15, up_max=5))
+    nt = " | ".join(Pb.get("notes") or [])
+    ok("🔢 the counts beyond the coins: it stops where they end (10 of 15 below · 3 of 5 above) and says so",
+       Pb.get("ok") and Pb["dn"] == 10 and Pb["up"] == 3 and "تكفي 10 مستوى تحت من 15" in nt and "تكفي 3 مستوى فوق من 5" in nt, nt)
+    Po = m.pair_plan(dict(base_, main_amount="", other_amount="", dn_max=6, up_max=4))
+    ok("🔢 only the counts (no amounts): 6 below · 4 above · what they need is taken from the free wallet at the deploy (said)",
+       Po.get("ok") and Po["dn"] == 6 and Po["up"] == 4 and abs(Po["main_need"] - 120) < 1e-9 and any(n_.startswith("💼") for n_ in Po.get("notes") or []),
+       {k: Po.get(k) for k in ("dn", "up", "main_need", "notes")})
+    for bad, why in (({"dn_max": 2.5}, "عدد صحيح"), ({"up_max": 5000}, "عدد صحيح"), ({"dn_max": -1}, "سالبة"), ({"up_max": "nan"}, "الأرقام"),
+                     ({"main_amount": "", "other_amount": "", "dn_max": "", "up_max": ""}, "ضع كمية")):
+        P1 = m.pair_plan(dict(base_, **bad))
+        ok(f"🔢 refused: {bad} ⇒ «{why}»", not P1.get("ok") and why in str(P1.get("msg")), P1.get("msg"))
+    PXS["ADA-USDT"] = 0.05
+    SPECS["ADA-USDT"] = {"lotSz": 0.000001, "minSz": 1.0}
+    BAL["ADA"] = 2000.0
+    r4 = m.deploy_pair(dict(base_, other="ADA", main_amount="", other_amount="", dn_max=2, up_max=5))
+    ok("🚀 counts only, and the free wallet is short on both sides (10 XRP free · 2000 ADA): it deploys what the coins cover (0 below · 2 of 5 above) "
+       "and stops there — the numbers in the message", r4.get("ok") and r4.get("dn") == 0 and r4.get("up") == 2
+       and "يكفي 0 مستوى تحت من 2" in str(r4.get("msg")) and "يكفي 2 مستوى فوق من 5" in str(r4.get("msg")), r4)
+    BAL["XRP"] = 0.0
+    BAL["DOT"] = 0.0
+    PXS["DOT-USDT"] = 4.0
+    SPECS["DOT-USDT"] = {"lotSz": 0.000001, "minSz": 0.1}
+    r5 = m.deploy_pair(dict(base_, other="DOT", main_amount="", other_amount="", dn_max=3, up_max=3))
+    ok("🚀 no free coins at all ⇒ refused (nothing to build) with the numbers", not r5.get("ok") and "لا يكفي مستوى واحداً" in str(r5.get("msg")), r5)
+    BAL["XRP"] = 1250.0
     rd_ = m.deploy_pair(dict(base_, demo=True))
     dmo = next((b for b in m.bot_dirs().values() if b["cfg"].get("bot_type") == "grid_pair" and b["cfg"].get("is_demo")), None)
     ok("🧪 the demo (p153) deploys beside the real one: no keys · its own paper wallet with two legs · the real one is not touched",
@@ -301,6 +345,7 @@ if hasattr(m, "_pair_del_wait"):
            ri.get("ok") and ri.get("form") == "pair" and pr.get("main") == "XRP" and pr.get("other") == "LINK" and abs(pr.get("step_pct", 0) - 2) < 1e-9
            and pr.get("main_value") == 20.0 and abs(pr.get("main_amount", 0) - 2000) < 1e-9 and abs(float(pr.get("other_amount") or 0) - want_ao) < 1e-6 * want_ao
            and pr.get("profit_to") == "half" and "forced_ratio" not in pr and ri.get("ico") == "🔀", ri)
+        ok("♻️ v3.36.80 … with its level counts (100 below · 100 above)", pr.get("dn_max") == 100 and pr.get("up_max") == 100, pr)
     ok("🗄️ its settings in one line for the archive/report", m._pv_cfg_txt(cfg2) == "LINK/XRP · الخطوة 2% · 20 XRP لكل شراء · 100 تحت · 100 فوق", m._pv_cfg_txt(cfg2))
     ok("🏷️ its name in every list (free coins · archive type · widgets · icons)", m._FREE_T.get("grid_pair") == "🔀 شبكة عملتين"
        and m._PV_TYPE_ALL.get("grid_pair") == "شبكة عملتين" and m._WD_E.get("grid_pair") == "🔀" and m._RD_FORM.get("grid_pair") == "pair")

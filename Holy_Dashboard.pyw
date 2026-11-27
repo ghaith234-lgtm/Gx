@@ -23397,24 +23397,30 @@ def _pair_args(data):
         return None, "العملة الرئيسية والثانية يجب أن تكونا مختلفتين"
     if "USDT" in (mn, oth):
         return None, "الدولار وسيط بين العملتين فقط — اختر عملتين غيره"
+    def _opt(k):                                     # 🔀 v3.36.80: حقل فارغ = بلا حد (None)
+        x = data.get(k)
+        return None if x is None or str(x).strip() == "" else float(x)
     try:
         g = float(data.get("step_pct") or 0) / 100.0
         mv = float(data.get("main_value") or 0)
-        am = float(data.get("main_amount") or 0)
-        ao = float(data.get("other_amount") or 0)
+        am, ao = _opt("main_amount"), _opt("other_amount")
+        upx, dnx = _opt("up_max"), _opt("dn_max")
         r0 = float(data.get("forced_ratio") or 0)
     except Exception:
-        return None, "تأكد من الأرقام (الخطوة · كمية كل شراء · الكميات)"
-    if not all(math.isfinite(x) for x in (g, mv, am, ao, r0)):          # 🔢 «nan» / «inf» يمرّ من كل مقارنة ⇒ يُرفض هنا
-        return None, "تأكد من الأرقام (الخطوة · كمية كل شراء · الكميات)"
+        return None, "تأكد من الأرقام (الخطوة · كمية كل شراء · الكميات · عدد المستويات)"
+    if not all(math.isfinite(x) for x in (g, mv, r0) + tuple(v for v in (am, ao, upx, dnx) if v is not None)):   # 🔢 «nan» / «inf» ⇒ يُرفض هنا
+        return None, "تأكد من الأرقام (الخطوة · كمية كل شراء · الكميات · عدد المستويات)"
     if g <= 0 or mv <= 0:
         return None, "الخطوة وكمية كل شراء يجب أن تكونا أكبر من صفر"
-    if am < 0 or ao < 0 or r0 < 0:
-        return None, "الكميات ونسبة البداية لا تكون سالبة"
-    if am <= 0 and ao <= 0:
-        return None, "ضع كمية من العملة الرئيسية (للشراءات تحت) أو من الثانية (للبيعات فوق) أو كليهما"
+    if r0 < 0 or any(v is not None and v < 0 for v in (am, ao, upx, dnx)):
+        return None, "الكميات وعدد المستويات ونسبة البداية لا تكون سالبة"
+    if any(v is not None and (v != int(v) or v > PAIR_MAX_LV) for v in (upx, dnx)):
+        return None, f"عدد المستويات عدد صحيح من 0 إلى {PAIR_MAX_LV}"
+    if not (am or dnx) and not (ao or upx):
+        return None, "ضع كمية أو عدد مستويات للشراءات تحت (العملة الرئيسية) أو للبيعات فوق (العملة الثانية) أو كليهما"
     pt = str(data.get("profit_to") or "main")
     return {"main": mn, "other": oth, "sym": f"{oth}-{mn}", "g": g, "mv": mv, "am": am, "ao": ao, "r0": r0,
+            "upx": None if upx is None else int(upx), "dnx": None if dnx is None else int(dnx),
             "pt": pt if pt in ("main", "other", "half") else "main"}, None
 
 
@@ -23435,16 +23441,44 @@ def pair_plan(data, px=None, _deploy=False):
     r_now = po / pm
     r0 = a["r0"] or r_now
     g, mv = a["g"], a["mv"]
-    dn = int(math.floor(a["am"] / mv + 1e-9))
-    up, need_o = 0, 0.0
-    while up < PAIR_MAX_LV:
+    so, sm = _acc_spec(lo_), _acc_spec(lm_)
+    am, ao, upx, dnx = a["am"], a["ao"], a["upx"], a["dnx"]
+    O_, M_ = a["other"], a["main"]
+    mn_o = float(so.get("minSz") or 0)
+    notes = []
+    # ⬆️ v3.36.80: فوق ضمن عدد المالك · بقدر كمية الثانية · ويتوقف حين يصغر المستوى عن 1.5 × أدنى حجم بالمنصة (لا رفض)
+    up_lim = 0 if (upx is None and ao is None) else (PAIR_MAX_LV if upx is None else upx)
+    up, need_o, up_why = 0, 0.0, ""
+    while up < up_lim:
         q = mv / (r0 * (1 + g) ** up)
-        if need_o + q > a["ao"] + 1e-12:
+        if mn_o > 0 and q < 1.5 * mn_o - 1e-15:
+            up_why = "min"
+            break
+        if ao is not None and need_o + q > ao + 1e-12:
+            up_why = "coins"
             break
         need_o += q
         up += 1
-    dn = max(0, min(dn, PAIR_MAX_LV - up))
-    so, sm = _acc_spec(lo_), _acc_spec(lm_)
+    # ⬇️ تحت ضمن عدد المالك · بقدر كمية الرئيسية
+    dn_c = None if am is None else int(math.floor(am / mv + 1e-9))
+    dn = (dn_c or 0) if dnx is None else (dnx if dn_c is None else min(dnx, dn_c))
+    dn_why = "coins" if (dnx is not None and dn_c is not None and dn_c < dnx) else ""
+    if dn + up > PAIR_MAX_LV:
+        dn, dn_why = max(0, PAIR_MAX_LV - up), "max"
+    if up_why == "min" and up == 0:
+        notes.append(f"⬆️ كمية مستوى البيع الأول أقل من 1.5 × أدنى حجم في المنصة ({mn_o:g} {O_}) — لا بيعات فوق (كبّر كمية كل شراء)")
+    elif up_why == "min" and (upx is not None or (ao is not None and ao - need_o > 1e-12)):
+        notes.append(f"⬆️ بعد المستوى {up}" + (f" من {upx}" if upx is not None and upx > up else "")
+                     + f" تصبح كمية المستوى أقل من 1.5 × أدنى حجم في المنصة ({mn_o:g} {O_}) — يتوقف البوت عنده"
+                     + (f"، ويبقى الباقي من {O_} في محفظتك" if ao is not None else ""))
+    elif up_why == "coins" and upx is not None:
+        notes.append(f"⬆️ كمية {O_} تكفي {up} مستوى فوق من {upx} — يتوقف البوت عند المستوى {up}")
+    if dn_why == "coins":
+        notes.append(f"⬇️ كمية {M_} تكفي {dn} مستوى تحت من {dnx} — يتوقف البوت عند المستوى {dn}")
+    elif dn_why == "max":
+        notes.append(f"⬇️ مجموع المستويات {PAIR_MAX_LV} على الأكثر — بقي للشراءات تحت {dn} مستوى")
+    if (am is None and dn > 0) or (ao is None and up > 0):
+        notes.append("💼 ما لم تحدّد كميته يُؤخذ من الحر في محفظتك عند النشر — وإن لم يكفِ يتوقف البوت عند آخر مستوى يكفيه")
     cf = (1 + g) * (1 - PAIR_FEE) ** 4 * (1 - PAIR_SPREAD) ** 4      # العمولات الأربع + فرق السعر بكل أمر
     ms = _pair_min_step()
     errs = []
@@ -23454,9 +23488,6 @@ def pair_plan(data, px=None, _deploy=False):
         errs.append(f"الخطوة {g * 100:.2f}% لا تغطي العمولات الأربع وسقف السعر — أقل خطوة تربح ≈ {ms * 100:.2f}%")
     if sm.get("minSz") and mv < 1.5 * float(sm["minSz"]):
         errs.append(f"كمية كل شراء {mv:g} {a['main']} أقل من 1.5 × أدنى حجم بالمنصة ({float(sm['minSz']):g} {a['main']})")
-    q_top = mv / (r0 * (1 + g) ** max(0, up - 1)) if up else mv / r0      # أصغر كمية ثانية بالأمر (أعلى مستوى)
-    if so.get("minSz") and q_top < 1.5 * float(so["minSz"]):
-        errs.append(f"كمية {a['other']} بأعلى مستوى {q_top:.8g} أقل من 1.5 × أدنى حجم بالمنصة ({float(so['minSz']):g} {a['other']}) — كبّر كمية كل شراء")
     if mv * pm < 2.0:
         errs.append(f"قيمة كل أمر ≈ {mv * pm:.2f}$ — أقل أمر 2$")
     rows = []
@@ -23466,7 +23497,9 @@ def pair_plan(data, px=None, _deploy=False):
                      "q": (mv / bp) if j >= 0 else None, "main": mv})
     return {"ok": True, "err": errs, "a": {k: a[k] for k in ("main", "other", "sym", "g", "mv", "pt")}, "r_now": r_now, "r0": r0,
             "dn": dn, "up": up, "main_need": round(dn * mv, 10), "other_need": round(need_o, 12),
-            "main_left": round(max(0.0, a["am"] - dn * mv), 10), "other_left": round(max(0.0, a["ao"] - need_o), 12),
+            "main_left": round(max(0.0, am - dn * mv), 10) if am is not None else 0.0,
+            "other_left": round(max(0.0, ao - need_o), 12) if ao is not None else 0.0,
+            "notes": notes, "up_max": upx, "dn_max": dnx,
             "px": {"main": pm, "other": po}, "lo": r0 * (1 + g) ** (-dn), "hi": r0 * (1 + g) ** up,
             "cycle_main": mv * (cf - 1), "cycle_usd": mv * (cf - 1) * pm, "fee": PAIR_FEE, "min_step": ms, "usd_order": mv * pm,
             "worst_main": mv * ((1 + g) * (1 - PAIR_FEE) ** 4 * ((1 - PAIR_CAP) / (1 + PAIR_CAP)) ** 2 - 1),
@@ -23571,14 +23604,28 @@ def deploy_pair(data):
     tk = _pair_taken(a["sym"])
     if tk:
         return {"ok": False, "msg": f"⛔ يوجد «شبكة عملتين» على {a['other']}/{a['main']} ({tk}) — واحد لكل زوج · احذفه أولاً"}
-    for ccy, need, what in ((a["main"], P["main_need"], "الشراءات تحت"), (a["other"], P["other_need"], "البيعات فوق")):
+    short = {}
+    for ccy, need, key in ((a["main"], P["main_need"], "main_amount"), (a["other"], P["other_need"], "other_amount")):
         if need <= 0:
             continue
         fr, cl = _pair_free(keys, ccy, need)
         if fr is None:
             return {"ok": False, "msg": cl}
         if fr + 1e-12 < need:
-            return {"ok": False, "msg": f"⛔ {what} تحتاج {need:.8g} {ccy} — الحر بمحفظتك {fr:.8g} (بعد ما تحتاجه بوتاتك الأخرى {cl:.8g}) · قلّل الكمية"}
+            short[key] = (fr, cl, need, ccy)
+    capped = []
+    if short:                                          # 🔀 v3.36.80: «اذا ما يوجد عملات يتوقف» — يتوقف عند آخر مستوى يكفيه الحر (كان: يرفض)
+        d2 = dict(data, forced_ratio=P["r0"])
+        for key, (fr, cl, need, ccy) in short.items():
+            d2[key] = max(0.0, fr)
+        P2 = pair_plan(d2, px=P["px"])
+        if not P2.get("ok") or P2["err"] or P2["dn"] + P2["up"] == 0:
+            fr, cl, need, ccy = next(iter(short.values()))
+            return {"ok": False, "msg": f"⛔ الحر بمحفظتك من {ccy} {fr:.8g} (بعد ما تحتاجه بوتاتك الأخرى {cl:.8g}) لا يكفي مستوى واحداً — المطلوب {need:.8g}"}
+        for key, (fr, cl, need, ccy) in short.items():
+            side, n0, n1 = ("تحت", P["dn"], P2["dn"]) if key == "main_amount" else ("فوق", P["up"], P2["up"])
+            capped.append(f"الحر من {ccy} ({fr:.8g}) يكفي {n1} مستوى {side} من {n0}")
+        P = P2
     folder = _new_bot_folder("pair_" + a["other"].lower())
     full = os.path.join(ROOT, folder)
     os.makedirs(full, exist_ok=True)
@@ -23595,7 +23642,9 @@ def deploy_pair(data):
         tg_send(f"🔀 *تم نشر شبكة عملتين*\nالزوج: `{a['other']}/{a['main']}` (الرئيسية `{a['main']}`)\nالبداية: `1 {a['other']} = {float(P['r0']):.8g} {a['main']}`\n"
                 f"الخطوة `{a['g'] * 100:g}%` · كل شراء `{a['mv']:g} {a['main']}` · `{P['dn']}` شراء تحت · `{P['up']}` بيع فوق\n"
                 f"ربح الدورة ≈ `{P['cycle_main']:.6g} {a['main']}` بعد العمولات الأربع")
-    return {"ok": ok, "msg": (f"🔀 انتشرت «شبكة عملتين» وانطلقت — {a['other']}/{a['main']} · البداية {float(P['r0']):.8g}") if ok else msg, "dir": folder}
+    return {"ok": ok, "msg": (f"🔀 انتشرت «شبكة عملتين» وانطلقت — {a['other']}/{a['main']} · البداية {float(P['r0']):.8g} · {P['dn']} تحت · {P['up']} فوق"
+                              + (" · ⚠️ " + " · ".join(capped) + " — يتوقف البوت عند آخر مستوى يكفيه" if capped else "")) if ok else msg,
+            "dir": folder, "dn": P["dn"], "up": P["up"]}
 
 
 def deploy_step(data):
@@ -24113,7 +24162,8 @@ def redeploy_info(name):
         _g, _mv, _r0 = n("grid_percentage"), n("main_value"), n("forced_base_ratio")
         _ao = sum(_mv / (_r0 * (1 + _g) ** j) for j in range(int(n("up_levels")))) if _r0 > 0 and _g > 0 else 0.0
         P.update(main=_m, other=_o, step_pct=round(_g * 100, 6), main_value=_mv, main_amount=round(_mv * int(n("down_levels")), 10),
-                 other_amount=float(f"{_ao:.8g}") if _ao > 0 else "", profit_to=str(c.get("profit_to") or "main"))
+                 other_amount=float(f"{_ao:.8g}") if _ao > 0 else "", profit_to=str(c.get("profit_to") or "main"),
+                 up_max=int(n("up_levels")), dn_max=int(n("down_levels")))      # 🔀 v3.36.80: العدد نفسه
     else:                                                             # 💹 مسار القيمة
         pm = str(c.get("trigger") or "time") == "price"
         hg = bool(c.get("guard_on")) and (n("hg_pct") > 0 or n("hg_usd") > 0)
@@ -30655,6 +30705,7 @@ const TUT={
     steps:[['المستويات','من نسبة البداية: كل مستوى أعلى أو أدنى بالخطوة نفسها.'],['الشراء','تنزل النسبة إلى مستوى ⇐ يبيع كمية الرئيسية الثابتة بالدولار ويشتري بها الثانية فوراً.'],
            ['البيع','تصعد النسبة خطوةً فوق شرائه ⇐ يبيع ما اشتراه ويشتري الرئيسية — ولا يبيع إلا بربح بعد العمولات الأربع حتى بأسوأ سعر يسمح به سقف الأمر.'],
            ['فوق البداية','مستويات تبيع من عملاتك الثانية الموجودة في المحفظة كأنها اشتُريت بنسبة مستواها.'],
+           ['عدد المستويات','تحدد أقصى عدد للمستويات فوق وتحت؛ يبني البوت ضمنه من عملاتك، وإن لم تكفِ العملة أو صغر المستوى عن أدنى حجم في المنصة يتوقف عند آخر مستوى يكفيه.'],
            ['الدولار المحجوز','الدولار بين الرجلين ملك البوت حتى يُصرف — لا يحسبه أي بوت آخر حراً، وإن رُفض الرجل الثاني يعيد المحاولة حتى يكمل.'],
            ['الإيقاف','⏸ إيقاف الشراء أو البيع من النسبة الحالية، والاستئناف يكمل من حيث وصلت النسبة.']],
     ex:['XRP رئيسية وSOL ثانية، والنسبة 75 (SOL واحد = 75 XRP)، والخطوة 2%، وكل شراء 20 XRP.',
@@ -30663,6 +30714,7 @@ const TUT={
     btns:['pw','ab','as','hist','cset','del'],
     faq:[['لماذا الربح بالرئيسية لا بالدولار؟','لأن الرئيسية هي «الدولار» هنا: كل دورة تعيدها أكثر. ويمكنك عند النشر أن تجعل الربح في الثانية أو نصفين.'],
          ['هل يحمي من نزول السوق كله؟','لا — العملتان تتحركان مع السوق. البوت يزيد عدد العملة الرئيسية من تذبذب النسبة بين العملتين.'],
+         ['هل فيه خسارة؟','لا يبيع بخسارة أبداً. الخسارة الممكنة على الورق فقط: إن نزلت الثانية مقابل الرئيسية ولم تعد، يبقى معك منها أكثر بقيمة أقل — وعدد المستويات تحت يحدّ أقصاها. وإن صعدت ولم تعد، يكون قد باعها في الطريق بربح فيزيد عدد الرئيسية، لكن يفوتك جزء من صعودها.'],
          ['لماذا لا أوامر على المنصة؟','لا يوجد في المنصة زوج يسعّر الثانية بالرئيسية مباشرة؛ لذلك يحفظ البوت الأمرين التاليين ويراقب، ثم ينفذ الرجلين لحظياً.'],
          ['ماذا لو قفز السعر بين الرجلين؟','كل رجل أمر فوري بسقف سعر؛ وإن كان إكمال البيعة سيؤدي إلى خسارة ينتظر سعراً لا يخسر حتى عشر دقائق.'],
          ['هل أشغّل أكثر من بوت على الزوج نفسه؟','لا — بوت واحد لكل زوج حتى لا تتداخل مستوياته. ويمكن تشغيل أزواج أخرى بالرئيسية نفسها.']]},
@@ -36523,20 +36575,23 @@ async function openDeployPair(pre){pre=pre||{};      // 🔀 v3.36.79: «شبك�
   const v=(k,d)=>pre[k]!=null&&pre[k]!==''?pre[k]:d;
   showModal(`<h2 class="tuth" style="color:var(--blue)"><span>🔀 نشر «شبكة عملتين»</span>${tutX('pair')}</h2>
   <p class="sthelp">عملة <b>رئيسية</b> (مثل XRP) تؤدي دور الدولار، وعملة <b>ثانية</b> (مثل SOL) تُتداول على سعرها محسوباً بالرئيسية — كم XRP يساوي SOL واحد. كل شراء تحت يدفع <b>الكمية نفسها من الرئيسية</b>، وبيعته فوقه بالخطوة نفسها تعيدها <b>مع الربح</b>. البيعات فوق نسبة البداية من عملاتك الثانية الموجودة في المحفظة — لا يُشترى شيء عند النشر. التحويل عبر الدولار لحظي بأمرين فوريين، ولا تبقى أوامر على المنصة: البوت يراقب النسبة كل ثانيتين.</p>
+  <p class="sthelp">🔢 حدّد <b>عدد المستويات</b> فوق وتحت (أو الكميات): يبني البوت ضمن هذا العدد من عملاتك، وإن لم تكفِ العملة أو صغر المستوى عن أدنى حجم في المنصة <b>يتوقف عند آخر مستوى يكفيه</b>. عدد المستويات تحت هو أقصى ما تضعه من الرئيسية في الثانية إن هبطت ولم تعد.</p>
   <div class="frm">
     <div class="fld"><label title="العملة التي تؤدي دور الدولار — الربح يُحسب بها">🏦 العملة الرئيسية (مثل XRP)</label><input id="pa_main" style="text-transform:uppercase" value="${gEsc(String(v('main','XRP')))}" oninput="paPreview()"></div>
     <div class="fld"><label title="العملة التي تُتداول على سعرها بالرئيسية">🔁 العملة الثانية (مثل SOL)</label><input id="pa_oth" style="text-transform:uppercase" placeholder="SOL" value="${gEsc(String(v('other','')))}" oninput="paPreview()"></div>
     <div class="fld"><label title="المسافة بين مستوى وآخر — والبيعة فوق شرائها بالمسافة نفسها">📏 الخطوة (%)</label><input id="pa_g" class="num" value="${v('step_pct',2)}" oninput="paPreview()"></div>
     <div class="fld"><label title="مثل «دولار كل شراء» في الشبكة اللانهائية: كل شراء يدفع هذه الكمية من الرئيسية">💰 كمية كل شراء (بالرئيسية)</label><input id="pa_mv" class="num" value="${v('main_value',20)}" oninput="paPreview()"></div>
-    <div class="fld"><label title="كمية الرئيسية التي تخصّصها للشراءات تحت نسبة البداية — عدد المستويات = الكمية ÷ كمية كل شراء">⬇️ كمية الرئيسية للشراءات تحت</label><input id="pa_am" class="num" value="${v('main_amount','')}" oninput="paPreview()"></div>
-    <div class="fld"><label title="كمية الثانية من محفظتك للبيعات فوق نسبة البداية — كل مستوى يبيع ما يساوي كمية شراء بنسبته">⬆️ كمية الثانية للبيعات فوق (من محفظتك)</label><input id="pa_ao" class="num" value="${v('other_amount','')}" oninput="paPreview()"></div>
+    <div class="fld"><label title="أقصى عدد لمستويات الشراء تحت نسبة البداية — فارغ = بقدر الكمية · إن لم تكفِ الرئيسية يتوقف البوت عند آخر مستوى تكفيه">⬇️ عدد مستويات الشراء تحت (الأقصى)</label><input id="pa_dn" class="num" placeholder="بقدر الكمية" value="${v('dn_max','')}" oninput="paPreview()"></div>
+    <div class="fld"><label title="أقصى عدد لمستويات البيع فوق نسبة البداية — فارغ = بقدر الكمية · إن لم تكفِ الثانية أو صغر المستوى عن أدنى حجم يتوقف البوت عند آخر مستوى يكفيه">⬆️ عدد مستويات البيع فوق (الأقصى)</label><input id="pa_up" class="num" placeholder="بقدر الكمية" value="${v('up_max','')}" oninput="paPreview()"></div>
+    <div class="fld"><label title="كمية الرئيسية للشراءات تحت نسبة البداية — فارغ مع عدد المستويات = ما تحتاجه المستويات من الحر في محفظتك">⬇️ كمية الرئيسية للشراءات تحت (اختياري)</label><input id="pa_am" class="num" value="${v('main_amount','')}" oninput="paPreview()"></div>
+    <div class="fld"><label title="كمية الثانية من محفظتك للبيعات فوق نسبة البداية — كل مستوى يبيع ما يساوي كمية شراء بنسبته · فارغ مع عدد المستويات = ما تحتاجه من الحر في محفظتك">⬆️ كمية الثانية للبيعات فوق (اختياري)</label><input id="pa_ao" class="num" value="${v('other_amount','')}" oninput="paPreview()"></div>
     <div class="fld"><label title="فارغ = النسبة لحظة النشر">🎯 نسبة البداية (اختياري)</label><input id="pa_r0" class="num" value="${+v('forced_ratio',0)||''}" oninput="paPreview()"></div>
     <div class="fld"><label title="الافتراضي: الربح كله يعود بالرئيسية">💎 الربح يذهب إلى</label><select id="pa_pt" onchange="paPreview()"><option value="main">العملة الرئيسية</option><option value="other">العملة الثانية</option><option value="half">نصفان</option></select></div>
     <div class="fld"><label>المحفظة</label><select id="pa_wallet">${ws.map(w=>`<option>${gEsc(w.name)}</option>`).join('')||'<option value="">— أضف محفظة أولاً —</option>'}</select></div>
   </div>
   <div class="cklist" style="margin-top:10px"><label class="ck"><input type="checkbox" id="pa_auto" checked>🤖 يشمله الحارس</label>
     <label class="ck" title="المحرك الحقيقي نفسه على منصة وهمية برجلين بسعر OKX الحي — لا أوامر حقيقية ولا يدخل في أي مجموع"><input type="checkbox" id="pa_demo" ${pre.demo?'checked':''} onchange="paDemo()">🧪 ديمو</label></div>
-  <div class="sthelp" id="pa_dnote" style="display:none">🧪 الديمو: المحفظة الوهمية = الكميتان أعلاه (الرئيسية للشراءات تحت · الثانية للبيعات فوق) — لا حاجة إلى محفظة OKX، ولا إشعارات، ولا يدخل في أي مجموع.</div>
+  <div class="sthelp" id="pa_dnote" style="display:none">🧪 الديمو: المحفظة الوهمية = الكميتان أعلاه، أو ما تحتاجه المستويات إن تُركتا فارغتين (الرئيسية للشراءات تحت · الثانية للبيعات فوق) — لا حاجة إلى محفظة OKX، ولا إشعارات، ولا يدخل في أي مجموع.</div>
   <div class="dnsec" style="margin-top:12px">📋 الجدول قبل النشر — كل مستوى بنسبة شرائه وبيعه، وربح الدورة صافياً بعد العمولات الأربع</div>
   <div id="pa_plan"><div class="vach0">…</div></div>
   <div class="mbtns" style="margin-top:14px"><button class="primary" id="pa_go" style="background:linear-gradient(94deg,var(--green),rgb(var(--green-rgb)/.8))">🚀 انشر وشغّل</button><button onclick="hideModal()">إلغاء</button></div>`);
@@ -36549,7 +36604,7 @@ async function openDeployPair(pre){pre=pre||{};      // 🔀 v3.36.79: «شبك�
   paPreview()}
 function paBody(){const g=k=>(($('#'+k)||{}).value||'').trim();
   return {main:g('pa_main').toUpperCase(),other:g('pa_oth').toUpperCase(),step_pct:g('pa_g'),main_value:g('pa_mv'),main_amount:g('pa_am'),
-    other_amount:g('pa_ao'),forced_ratio:g('pa_r0'),profit_to:g('pa_pt')||'main',wallet:g('pa_wallet'),auto:!!($('#pa_auto')||{}).checked,
+    other_amount:g('pa_ao'),up_max:g('pa_up'),dn_max:g('pa_dn'),forced_ratio:g('pa_r0'),profit_to:g('pa_pt')||'main',wallet:g('pa_wallet'),auto:!!($('#pa_auto')||{}).checked,
     demo:!!($('#pa_demo')||{}).checked}}
 function paDemo(){const on=!!($('#pa_demo')||{}).checked,n=$('#pa_dnote'),w=$('#pa_wallet');if(n)n.style.display=on?'':'none';if(w)w.disabled=on}   // 🧪 v3.36.79
 function paPreview(){clearTimeout(_paT);_paT=setTimeout(paPlan,350)}
@@ -36563,6 +36618,7 @@ function paPlanHtml(P){
   const A=P.a||{},M=gEsc(A.main||''),O=gEsc(A.other||''),pc=x=>((+x||0)*100).toFixed(2)+'%';
   let h='';
   (P.err||[]).forEach(e=>h+=`<div class="sterr">⛔ ${gEsc(e)}</div>`);
+  (P.notes||[]).forEach(t=>h+=`<div class="sthelp pa_note">${gEsc(t)}</div>`);      // 🔀 v3.36.80: أين يتوقف ولماذا
   h+=`<div class="stsum">
    <span>⚖️ الآن: 1 ${O} = <b dir="ltr">${stN(P.r_now)}</b> ${M}</span><span>🎯 البداية <b dir="ltr">${stN(P.r0)}</b></span>
    <span>⬇️ ${P.dn} شراء تحت حتى <b dir="ltr">${stN(P.lo)}</b> — يحتاج <b dir="ltr">${stN(P.main_need)}</b> ${M}</span>

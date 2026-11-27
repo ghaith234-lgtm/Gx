@@ -1,6 +1,6 @@
 // 🔀 «شبكة عملتين» in a real browser (run through ui_pair.py): ① the deploy button · ② the form (h2 · the main coin XRP by default) ·
 //   ③ the calculator table = /api/pair_plan (10 buys below from 200 XRP · 3 sells above from 1 SOL · the cycle profit ≈ 0.30 XRP) ·
-//   ④ a step under the four fees ⇒ refused in red · ⑤ the deploy (launch stubbed) · ⑥ the 📖 guide · ⑦ a phone width · no page error
+//   ④ a step under the four fees ⇒ refused in red · ④b the level counts (v3.36.80) · ⑤ the deploy (launch stubbed) · ⑥ the 📖 guide · ⑦ a phone width · no page error
 const { chromium } = require('playwright');
 const fs = require('fs'), path = require('path');
 const URL = process.argv[2], DIR = process.argv[3], SHOTS = process.argv[4] && process.argv[4] !== '-' ? process.argv[4] : '', Q = process.argv.includes('-q');
@@ -39,6 +39,20 @@ async function planText(pg) { await sleep(900); return await pg.evaluate(() => (
   t = await planText(pg);
   ok('④ a 1% step (under the four fees and the cap) is refused in red', /لا تغطي العمولات الأربع/.test(t) && await pg.locator('#pa_plan .sterr').count() >= 1, t.slice(0, 300));
   await pg.fill('#pa_g', '2');
+  await planText(pg);
+  // ④b v3.36.80 the counts: «⬇️/⬆️ عدد المستويات» inside the amounts · beyond them it stops where the coins end and says so
+  await pg.fill('#pa_dn', '4'); await pg.fill('#pa_up', '2');
+  t = await planText(pg);
+  const rows2 = await pg.evaluate(() => document.querySelectorAll('#pa_plan tbody tr').length);
+  const bodyC = await pg.evaluate(() => { const b = paBody(); return [b.dn_max, b.up_max] });
+  ok('④b the counts 4 below · 2 above ⇒ 6 rows (the amounts cover more) · sent with the form', rows2 === 6 && /4 شراء تحت/.test(t) && /2 بيع فوق/.test(t)
+     && bodyC[0] === '4' && bodyC[1] === '2', { rows2, bodyC, t: t.slice(0, 300) });
+  await pg.fill('#pa_dn', '15'); await pg.fill('#pa_up', '5');
+  t = await planText(pg);
+  const notesN = await pg.locator('#pa_plan .pa_note').count();
+  ok('④b the counts beyond the coins ⇒ 10 of 15 below · 3 of 5 above — it stops there, said in two lines (no refusal)',
+     notesN === 2 && /تكفي 10 مستوى تحت من 15/.test(t) && /تكفي 3 مستوى فوق من 5/.test(t) && await pg.locator('#pa_plan .sterr').count() === 0, { notesN, t: t.slice(0, 500) });
+  await pg.fill('#pa_dn', ''); await pg.fill('#pa_up', '');
   await planText(pg);
   if (SHOTS) await pg.screenshot({ path: path.join(SHOTS, 'pair_form.png'), fullPage: false });
   await pg.click('#pa_go');
