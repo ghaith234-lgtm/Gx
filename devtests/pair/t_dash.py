@@ -156,6 +156,57 @@ if hasattr(m, "_pair_coin_events") and "grid_pair" in open(DASH, encoding="utf-8
     ok("the dollar reconciliation skips it (its profit is XRP)", all(str(r.get("sym") or r.get("symbol") or "") != "SOL-XRP" for r in (rc.get("bots") or [])),
        [r.get("sym") or r.get("symbol") for r in (rc.get("bots") or [])])
 
+# ── the calculator and the deploy (p149)
+if hasattr(m, "pair_plan"):
+    PXS = {"XRP-USDT": 2.0, "SOL-USDT": 150.0, "XLM-USDT": 0.26}
+    SPECS = {"XRP-USDT": {"lotSz": 0.000001, "minSz": 1.0}, "SOL-USDT": {"lotSz": 0.000001, "minSz": 0.01}, "XLM-USDT": {"lotSz": 0.000001, "minSz": 10.0}}
+    m._acc_price = lambda s_: PXS.get(s_, 0)
+    m._acc_spec = lambda s_: SPECS.get(s_, {"lotSz": 1e-8, "minSz": 0.0})
+    BAL = {"XRP": 1000.0, "SOL": 5.0}
+    m._okx_get = lambda path, *a, **k: {"code": "0", "data": [{"details": [{"ccy": c, "availBal": str(BAL.get(c, 0))} for c in BAL if ("ccy=" + c) in path]}]}
+    m.wallet_keys = lambda name: {"api_key": "KW", "secret_key": "SW", "passphrase": "PW"} if name == "W" else None
+    LA = []
+    m.launch = lambda b, *a, **k: (LA.append(b) or (True, "ok"))
+    base_ = {"wallet": "W", "main": "XRP", "other": "SOL", "step_pct": 2, "main_value": 20, "main_amount": 200, "other_amount": 1.0}
+    P0 = m.pair_plan(dict(base_))
+    ok("🧮 the calculator: 10 buys below from 200 XRP · the levels above the 1 SOL covers", P0.get("ok") and P0["dn"] == 10 and P0["up"] == 3 and not P0["err"],
+       {k: P0.get(k) for k in ("dn", "up", "err", "other_need")})
+    ok("🧮 the cycle profit after the four fees and the spread ≈ 0.30 XRP on 20 XRP (≈ 0.60$ — conservative · the engine measured +0.31)",
+       abs(P0["cycle_main"] - 20 * (1.02 * 0.999 ** 4 * 0.9998 ** 4 - 1)) < 1e-12 and 0.30 < P0["cycle_main"] < 0.31
+       and abs(P0["cycle_usd"] - P0["cycle_main"] * 2) < 1e-12, P0.get("cycle_main"))
+    ok("🧮 the smallest step that still profits at the worst capped price ≈ 1.2%", 0.011 < P0["min_step"] < 0.0125, P0.get("min_step"))
+    for bad, why in (({"step_pct": "nan"}, "الأرقام"), ({"main_value": "inf"}, "الأرقام"), ({"step_pct": 1}, "لا تغطي"), ({"main_value": 0.5}, "1.5 × أدنى حجم"),
+                     ({"main": "SOL"}, "مختلفتين"), ({"other": "USDT"}, "وسيط"), ({"main_amount": 0, "other_amount": 0}, "ضع كمية")):
+        P1 = m.pair_plan(dict(base_, **bad))
+        msg = P1.get("msg") or " · ".join(P1.get("err") or [])
+        ok(f"🧮 refused: {bad} ⇒ «{why}»", (not P1.get("ok") or P1.get("err")) and why in msg, msg)
+    shutil.rmtree(pd)                                   # (the test folder of the same pair — one per pair)
+    r = m.deploy_pair(dict(base_))
+    ok("🚀 deploy: launched", r.get("ok") and LA, r)
+    nb = next((b for b in m.bot_dirs().values() if b["cfg"].get("bot_type") == "grid_pair" and b["cfg"].get("api_key") == "KW"), None)
+    c = (nb or {}).get("cfg") or {}
+    ok("🚀 the config = the calculator (pair SOL-XRP · 2% · 20 XRP · 10 below · 3 above · the ratio fixed at 75)",
+       c.get("symbol") == "SOL-XRP" and c.get("down_levels") == 10 and c.get("up_levels") == 3 and abs(float(c.get("forced_base_ratio") or 0) - 75.0) < 1e-12
+       and abs(float(c.get("grid_percentage")) - 0.02) < 1e-12 and c.get("profit_to") == "main", c)
+    ok("🚀 the engine written = the pair engine", nb and open(os.path.join(nb["dir"], "main.py"), encoding="utf-8").read() == m.GRIDX_SRC)
+    r2 = m.deploy_pair(dict(base_))
+    ok("🚀 one bot per pair", not r2.get("ok") and "واحد لكل زوج" in str(r2.get("msg")), r2)
+    BAL["XRP"] = 1250.0
+    r3 = m.deploy_pair(dict(base_, other="XLM", other_amount=0, main_amount=1300))
+    ok("🚀 not enough free XRP (the SOL bot deployed a second ago, not born yet, holds its 200 by its config) ⇒ refused with the numbers", not r3.get("ok") and "الحر بمحفظتك" in str(r3.get("msg")), r3)
+    ok("🚀 the demo says it is not available yet (no paper exchange with two coins in this step)", not m.deploy_pair(dict(base_, demo=True)).get("ok"))
+    # the table = the engine: the engine born from this config has exactly the calculator's levels
+    sys.path.insert(0, H)
+    import pairsim as PS
+    ex = PS.market(bal_xrp="400", bal_sol="2")
+    pb = PS.PBot(ex, cfg={k: c[k] for k in ("main_value", "grid_percentage", "down_levels", "up_levels", "forced_base_ratio", "profit_to")})
+    pb.run([(5, lambda b_: None)], end=30)
+    sl = (pb.state() or {}).get("slots") or {}
+    same = len(sl) == len(P0["rows"]) and all(abs(sl[str(rw["j"])]["bp"] - rw["bp"]) < 1e-9 * rw["bp"] and abs(sl[str(rw["j"])]["sp"] - rw["sp"]) < 1e-9 * rw["sp"]
+                                                and sl[str(rw["j"])]["side"] == rw["side"] for rw in P0["rows"])
+    ok("🧮 the table = the engine: every level (ratio to buy · to sell · side) is what the engine is born with", same, (len(sl), len(P0["rows"])))
+    pb.cleanup()
+
 print(f"\n{'✅' if all(RES) else '❌'} t_dash: {sum(RES)}/{len(RES)}")
 shutil.rmtree(R, ignore_errors=True)
 sys.exit(0 if all(RES) else 1)
