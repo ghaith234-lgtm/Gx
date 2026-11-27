@@ -1,0 +1,26 @@
+name: Holy signals check 18
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/sig_check18.py', 'ci/RUN_SIG18', '.github/workflows/holy-sig18-check.yml']
+permissions:
+  contents: read
+jobs:
+  rightsignal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: what gives the right signal (the dashboard's own gp_walk with each option — horizon, recent window, combos, market-state helpers, target before stop — on 1H, 4H and 1D, the 📲 gate on the unseen half, the path of the calls, shuffled prices) — public data, no keys, no orders, no notifications
+        run: |
+          pip install -q requests numpy
+          python3 ci/sig_check18.py Holy_Dashboard.pyw
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: holysig18
+          path: /tmp/holysig18.json
+          if-no-files-found: ignore
