@@ -1,0 +1,26 @@
+name: Holy pair real-minute replay
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/pair_replay.py', 'ci/pair_model.py', 'ci/RUN_PAIRR', '.github/workflows/holy-pairr-check.yml']
+permissions:
+  contents: read
+jobs:
+  pairr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: «شبكة عملتين» on REAL 1-minute OKX prices — XRP main with SUI · SOL · ASTER · XLM · 1.5% · 5 XRP per buy · the last year minute by minute (and every 15 minutes / hour) + 200 random years from real two-week pieces — public data, no keys, no orders
+        run: |
+          pip install -q requests numpy
+          python3 ci/pair_replay.py Holy_Dashboard.pyw
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: holypairr
+          path: /tmp/holypairr.json
+          if-no-files-found: ignore
