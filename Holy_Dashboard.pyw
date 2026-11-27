@@ -8842,6 +8842,13 @@ def _gd_gather(W, prev, now):
             q = snap["quotes"].setdefault(quote, {"bots_frozen": 0.0, "min_next": 0.0})
             modes.setdefault(quote, set()).add("quote")
             n_tr = 0
+            if bt == "grid_pair":                   # 🔀 v3.36.79: دولار تبديله بالطريق + كسوره = له (لا يُحسب حراً لأي بوت) — بعملة الوسيط
+                try:
+                    _qb = str(cfg.get("bridge") or "USDT")
+                    _qq = snap["quotes"].setdefault(_qb, {"bots_frozen": 0.0, "min_next": 0.0})
+                    _qq["pair_hold"] = float(_qq.get("pair_hold") or 0) + max(0.0, float(st.get("usd_booked") or 0))
+                except Exception:
+                    pass
             if bt == "dca" and st.get("phase") in ("selling", "buying"):       # ⏳ v3.36.58: دولار DCA البيعي (وDCA+) محجوز لإعادة شراء عملته
                 try:
                     q["dca_hold"] = float(q.get("dca_hold") or 0) + max(0.0, float(st.get("total_net") or 0))
@@ -9343,7 +9350,8 @@ def _gd_apply(g, snap, now):
             rec.update(avail=av, cash=float(b.get("cash") or 0), frozen=float(b.get("frozen") or 0),
                        okx_frozen=(None if okx_fr is None else round(okx_fr, 6)),
                        bots_frozen=round(float(qi.get("bots_frozen") or 0), 6),
-                       min_next=float(qi.get("min_next") or 0), dca_hold=round(float(qi.get("dca_hold") or 0), 6), ts=now)
+                       min_next=float(qi.get("min_next") or 0), dca_hold=round(float(qi.get("dca_hold") or 0), 6),
+                       pair_hold=round(float(qi.get("pair_hold") or 0), 6), ts=now)            # 🔀 v3.36.79
             for e in new_ev:
                 if e["ccy"] == q:
                     rec.setdefault("moves", []).insert(0, {k: e[k] for k in ("q", "ts", "txt")})
@@ -10243,7 +10251,7 @@ def _cw_low(g, wid, q, rec, snap, now):
     av = float(rec.get("avail") or 0)
     held = _cw_held(wid, q)
     dh = float(rec.get("dca_hold") or 0)
-    eff = av - held
+    eff = av - held - float(rec.get("pair_hold") or 0)          # 🔀 v3.36.79: دولار «شبكة عملتين» بين رجلي التبديل ليس حراً
     un = eff - dh
     rec["held"], rec["eff"], rec["free_u"] = round(held, 6), round(eff, 6), round(un, 6)
     mn = float(rec.get("min_next") or 0)
@@ -10568,7 +10576,7 @@ def _tp_budget(r, d=None):
     d = d if d is not None else _cw_load()
     held = sum(float(x.get("freed") or 0) for x in (d.get("bots") or {}).values()
                if isinstance(x, dict) and x.get("wid") == r.get("wid") and x.get("q") == r.get("q") and x is not r)
-    return max(0.0, av - dh - held)
+    return max(0.0, av - dh - held - float(rec.get("pair_hold") or 0))      # 🔀 v3.36.79: ولا دولار «شبكة عملتين» بالطريق
 
 
 def _tp_owner(b, st, action, value, cp):

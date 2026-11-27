@@ -207,6 +207,21 @@ if hasattr(m, "pair_plan"):
     ok("🧮 the table = the engine: every level (ratio to buy · to sell · side) is what the engine is born with", same, (len(sl), len(P0["rows"])))
     pb.cleanup()
 
+# ── «ولا بوت لازم ياخذ هذا الدولار» (p150): the wallet snapshot books the bot's dollar in flight under USDT; the free dollar subtracts it
+if "pair_hold" in open(DASH, encoding="utf-8").read():
+    m._gd_load = lambda: {"wallets": {"w1": {"quotes": {"USDT": {"avail": 100.0, "dca_hold": 10.0, "pair_hold": 5.0}}}}}
+    ok("💵 a bot's budget (the temporary pause) = 100 − 10 (DCA) − 5 (the pair's dollar in flight) = 85",
+       abs(m._tp_budget({"wid": "w1", "q": "USDT"}, {"bots": {}}) - 85.0) < 1e-9, m._tp_budget({"wid": "w1", "q": "USDT"}, {"bots": {}}))
+    rec = {"avail": 100.0, "dca_hold": 10.0, "pair_hold": 5.0, "min_next": 0.0}
+    try:
+        m._cw_low({"events": []}, "w1", "USDT", rec, {"bots": {}}, time.time())
+    except Exception:
+        pass
+    ok("💵 the wallet's low-dollar watch: free not reserved = 100 − 5 − 10 = 85 (what the temporary pause reads)", abs(float(rec.get("free_u") or 0) - 85.0) < 1e-9, rec)
+    src_ = open(DASH, encoding="utf-8").read()
+    gi = src_.split("def _gd_gather", 1)[1][:20000]
+    ok("💵 the snapshot books it under the bridge (USDT), never under XRP", 'snap["quotes"].setdefault(_qb' in gi and 'usd_booked' in gi)
+
 print(f"\n{'✅' if all(RES) else '❌'} t_dash: {sum(RES)}/{len(RES)}")
 shutil.rmtree(R, ignore_errors=True)
 sys.exit(0 if all(RES) else 1)
