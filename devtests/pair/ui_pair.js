@@ -46,6 +46,21 @@ async function planText(pg) { await sleep(900); return await pg.evaluate(() => (
   const toastT = await pg.evaluate(() => Array.from(document.querySelectorAll('.toast,#toast,.toasts *')).map(n => n.innerText).join(' | '));
   const launched = fs.existsSync(path.join(DIR, '_launched.json')) ? JSON.parse(fs.readFileSync(path.join(DIR, '_launched.json'))) : {};
   ok('⑤ the deploy: the bot folder made and launched (SOL-XRP) · the toast says so', launched.launched === 'SOL-XRP' && /انتشرت/.test(toastT), { launched, toastT });
+  // ⑤b the demo: «🧪 ديمو» shows its note, the wallet is not needed (disabled) · the deploy goes to the demo (the two amounts = its paper wallet)
+  await btn.first().click(); await sleep(400);
+  await pg.fill('#pa_oth', 'SOL'); await pg.fill('#pa_am', '200'); await pg.fill('#pa_ao', '1');
+  await pg.check('#pa_demo'); await sleep(300);
+  const dm = await pg.evaluate(() => ({ note: getComputedStyle(document.getElementById('pa_dnote')).display !== 'none', wd: document.getElementById('pa_wallet').disabled,
+    body: paBody().demo }));
+  await planText(pg);
+  try { fs.unlinkSync(path.join(DIR, '_launched.json')) } catch (e) {}
+  await pg.click('#pa_go'); await sleep(1800);
+  const toastD = await pg.evaluate(() => Array.from(document.querySelectorAll('.toast,#toast,.toasts *')).map(n => n.innerText).join(' | '));
+  const launchedD = fs.existsSync(path.join(DIR, '_launched.json')) ? JSON.parse(fs.readFileSync(path.join(DIR, '_launched.json'))) : {};
+  const dwal = fs.readdirSync(DIR).filter(n => n.startsWith('demo_pair_sol')).map(n => { try { return JSON.parse(fs.readFileSync(path.join(DIR, n, 'demo_wallet.json'))) } catch (e) { return null } })[0] || {};
+  ok('⑤b 🧪 the demo: its note shows · no wallet needed · deployed as a demo with the two amounts as its paper wallet (200 XRP · 1 SOL)',
+     dm.note && dm.wd && dm.body === true && launchedD.launched === 'SOL-XRP' && /ديمو/.test(toastD) && dwal.pair === true
+     && (dwal.bal || {}).XRP === 200 && (dwal.bal || {}).SOL === 1, { dm, launchedD, toastD, bal: dwal.bal });
   await btn.first().click(); await sleep(400);
   await pg.click('button.tutx'); await sleep(500);
   const tut = await pg.evaluate(() => document.body.innerText);

@@ -194,7 +194,12 @@ if hasattr(m, "pair_plan"):
     BAL["XRP"] = 1250.0
     r3 = m.deploy_pair(dict(base_, other="XLM", other_amount=0, main_amount=1300))
     ok("🚀 not enough free XRP (the SOL bot deployed a second ago, not born yet, holds its 200 by its config) ⇒ refused with the numbers", not r3.get("ok") and "الحر بمحفظتك" in str(r3.get("msg")), r3)
-    ok("🚀 the demo says it is not available yet (no paper exchange with two coins in this step)", not m.deploy_pair(dict(base_, demo=True)).get("ok"))
+    rd_ = m.deploy_pair(dict(base_, demo=True))
+    dmo = next((b for b in m.bot_dirs().values() if b["cfg"].get("bot_type") == "grid_pair" and b["cfg"].get("is_demo")), None)
+    ok("🧪 the demo (p153) deploys beside the real one: no keys · its own paper wallet with two legs · the real one is not touched",
+       rd_.get("ok") and dmo and not dmo["cfg"].get("api_key") and (m.load_json(os.path.join(dmo["dir"], m.DEMO_WALLET)) or {}).get("pair") is True, rd_)
+    if dmo:
+        shutil.rmtree(dmo["dir"])
     # the table = the engine: the engine born from this config has exactly the calculator's levels
     sys.path.insert(0, H)
     import pairsim as PS
