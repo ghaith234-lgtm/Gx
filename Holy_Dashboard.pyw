@@ -19479,7 +19479,7 @@ def sg_scan_calc(jd, job):
         if G:
             G["keep"] = keep
     gsrc = G or _safe(load_json, GP_FILE, default=None)
-    gpn = (_safe(gp_now, FF, gsrc, default=None) or {}) if isinstance(gsrc, dict) and gsrc.get("v") == GP_VER else {}
+    gpn = (_safe(gp_now, FF, gsrc, None, cdb, default=None) or {}) if isinstance(gsrc, dict) and gsrc.get("v") == GP_VER else {}
     return {"ok": True, "c": res, "crash": crash, "ts": time.time(), "an": an, "gp": G, "gpn": gpn}
 
 
@@ -20645,7 +20645,9 @@ GP_FRN = {"1H": ("⏱", "ساعة", "خلال الساعة القادمة"), "4H
 GP_HIST = {"1H": 2160, "4H": 3000, "1D": 2600}           # كم شمعة يُختبر عليها كل إطار (~3 أشهر · ~16 شهراً · ~7 سنوات)
 GP_MV = 0.002                                            # حركة أصغر من 0.2% (عمولة الذهاب والعودة) لا تُحسب
 GP_BIGX = 1.5                                            # «حركة كبيرة» = ≥ 1.5 × وسيط حركة آخر 20 شمعة
-GP_P = {"dmin": 30, "lift": 0.05, "gap": 0.02, "cap": 2, "combo": 1}
+GP_P = {"dmin": 30, "lift": 0.05, "gap": 0.02, "cap": 2, "combo": 1, "h": 1, "win": 0, "help": 0, "grade": "close"}
+GP_TPX = 1.0                                             # «الهدف قبل الوقف»: الهدف والوقف = المعتاد × √المدة
+from collections import deque as _GPdq
 GP_SAY = 0.03                                            # 📲 يصل فوراً فقط إذا كان سجل المجموعة نفسه (ما كان سيصل) ≥ العادي + 3% على 30 مرة فأكثر
 GP_ONE = {"W-crash": -1, "W-surge": 1}                   # أحداث تُقرأ بجهة واحدة
 GP_JOBS = {   # الشغل ⇒ (اسمه · كيف يُحكم)
@@ -20722,8 +20724,9 @@ def _gp_fires(E, allowed):
     return {i: {c: s for c, s in d.items() if s} for i, d in f.items()}
 
 
-def _gp_keys(FI, i, mem, lk, job, combo=True):
-    """ما انطلق في المجموعة على الشمعة i ⇒ {العضو: الجهة}: المؤشرات + التوليفات (اثنان بالجهة نفسها · الثاني انطلق الآن والأول خلال lk شمعة)
+def _gp_keys(FI, i, mem, lk, job, combo=True, st=None, ok=None):
+    """ما انطلق في المجموعة على الشمعة i ⇒ {العضو: الجهة}: المؤشرات + التوليفات (اثنان بالجهة نفسها · الثاني انطلق الآن والأول خلال lk شمعة ·
+    combo=2: فقط إذا كان كل واحد منهما وحده ≥ العادي حتى الآن — ok) + 🤝 «عضو + مساعد» (st = {المساعد: جهته على هذه الشمعة} · بالجهة نفسها)
     · شغل «حجم الحركة» بلا جهة (كل الأعضاء ⇒ +1) — الدالة نفسها للتاريخ وللفحص الحي"""
     now = {c: s for c, s in (FI.get(i) or {}).items() if c in mem}
     if not now:
@@ -20733,8 +20736,13 @@ def _gp_keys(FI, i, mem, lk, job, combo=True):
         for c, s in now.items():
             for k in range(lk):
                 for c2, s2 in (FI.get(i - k) or {}).items():
-                    if c2 != c and s2 == s and c2 in mem and (k > 0 or c2 > c):
+                    if c2 != c and s2 == s and c2 in mem and (k > 0 or c2 > c) and (combo != 2 or (ok is not None and c in ok and c2 in ok)):
                         keys.setdefault("+".join(sorted((c, c2))), s)
+    if st:
+        for c, s in now.items():
+            for h_, s2 in st.items():
+                if s2 and (s2 == s or job == "big"):
+                    keys.setdefault(c + "+" + h_, s)
     if job == "big":
         keys = {k_: 1 for k_ in keys}
     return keys
@@ -20750,66 +20758,151 @@ def _gp_med(C, w=20):
     return med
 
 
-def _gp_outs(job, D, B=None):
-    """نتيجة كل شمعة لشغل المجموعة (للحكم وللعادي): +1 · −1 · None (حركة صغيرة · لا شمعة بعدها · لا سعر بيتكوين)
-    dir: جهة إغلاق الشمعة التالية · big: هل تحركت ≥ 1.5 × المعتاد · rs: هل سبقت العملة البيتكوين"""
+def _gp_outs(job, D, B=None, h=1, grade="close"):
+    """نتيجة كل شمعة لشغل المجموعة بعد h شمعة (للحكم وللعادي): +1 · −1 · 0 (لمس الهدف والوقف معاً) · None (حركة صغيرة · لا شموع بعدها)
+    dir: جهة الإغلاق بعد h شمعة («close») أو أيهما لُمس أولاً: هدف أو وقف بحجم المعتاد × √h («tp») · big: هل تحركت ≥ 1.5 × المعتاد × √h ·
+    rs: هل سبقت العملة البيتكوين"""
     C, T, n = D["C"], D["T"], D["n"]
+    H_, L_ = D.get("H"), D.get("L")
     out = [None] * n
-    med = _gp_med(C) if job == "big" else None
-    for i in range(n - 1):
+    tp = grade == "tp" and job == "dir" and H_ and L_
+    med = _gp_med(C) if job == "big" or tp else None
+    rt = math.sqrt(h)
+    for i in range(n - h):
         if not C[i]:
             continue
-        r = C[i + 1] / C[i] - 1.0
+        r = C[i + h] / C[i] - 1.0
         if job == "big":
             if med[i]:
-                out[i] = 1 if abs(r) >= GP_BIGX * med[i] else -1
+                out[i] = 1 if abs(r) >= GP_BIGX * med[i] * rt else -1
             continue
         if job == "rs":
-            b0, b1 = (B or {}).get(T[i]), (B or {}).get(T[i + 1])
+            b0, b1 = (B or {}).get(T[i]), (B or {}).get(T[i + h])
             if not b0 or not b1:
                 continue
             r -= b1 / b0 - 1.0
+        elif tp:
+            if not med[i]:
+                continue
+            a = max(GP_MV, GP_TPX * med[i] * rt)
+            o = None
+            for k in range(i + 1, i + h + 1):
+                up, dn = H_[k] / C[i] - 1.0 >= a, L_[k] / C[i] - 1.0 <= -a
+                if up or dn:
+                    o = 0 if (up and dn) else (1 if up else -1)
+                    break
+            out[i] = o
+            continue
         if abs(r) >= GP_MV:
             out[i] = 1 if r > 0 else -1
     return out
 
 
 def _gp_pb(nup, n, u):
-    """العادي لعضو: لو أُطلق التنبؤ عشوائياً بالجهات نفسها (نصيب الصعود q) على شموع نصيب «+1» فيها u ⇒ q·u + (1−q)(1−u)"""
+    """العادي لعضو: لو أُطلق التنبؤ عشوائياً بالجهات نفسها (نصيب الصعود q) على شموع نصيب «+1» فيها u ونصيب «−1» ud
+    ⇒ q·u + (1−q)·ud (u رقم ⇒ ud = 1 − u)"""
     q = nup / n if n else 0.5
-    return q * u + (1 - q) * (1 - u)
+    uu, ud = (u[0], u[1]) if isinstance(u, (tuple, list)) else (u, 1 - u)
+    return q * uu + (1 - q) * ud
 
 
-def gp_walk(F, sec, fr, B=None, p=None, keep=(), codes=None, groups=None):
+def _gp_states(F, fr, cdb=None):
+    """🤝 حال السوق لكل شمعة من الإطار ⇒ {المساعد: {وقت الشمعة: الجهة}} — مساعدون للمجاميع (لا يرسلون وحدهم):
+    S-comp بوصلة السوق اليومية (آخر يوم مكتمل قبل إغلاق الشمعة) · S-brd أغلب العملات فوق متوسط 50 شمعة من الإطار نفسه (60% ⇒ +1 · 40% ⇒ −1 ·
+    لا ترجع إلا بعد عبور المنتصف) · S-btc اتجاه البيتكوين على الإطار (فوق متوسطه الأسي 50 وهو فوق 200 ⇒ +1 · العكس ⇒ −1)"""
+    out = {"S-comp": {}, "S-brd": {}, "S-btc": {}}
+    AB = {}
+    for sym, (D, E) in F.items():
+        C, n = D["C"], D["n"]
+        cs = [0.0]
+        for x in C:
+            cs.append(cs[-1] + x)
+        for i in range(49, n):
+            AB.setdefault(D["T"][i], []).append(C[i] > (cs[i + 1] - cs[i - 49]) / 50.0)
+    cur = 0
+    for t in sorted(AB):
+        a = AB[t]
+        if len(a) < 10:
+            continue
+        sh = sum(a) / len(a)
+        cur = 1 if sh >= 0.6 else -1 if sh <= 0.4 else (0 if (cur > 0 and sh < 0.5) or (cur < 0 and sh > 0.5) else cur)
+        if cur:
+            out["S-brd"][t] = cur
+    if "BTC-USDT" in F:
+        D = F["BTC-USDT"][0]
+        C = D["C"]
+        e50, e200 = _an_ema(C, 50), _an_ema(C, 200)
+        for i in range(200, D["n"]):
+            s = 1 if C[i] > e50[i] > e200[i] else -1 if C[i] < e50[i] < e200[i] else 0
+            if s:
+                out["S-btc"][D["T"][i]] = s
+    rows = {s: ((cdb or {}).get("c") or {}).get(s, {}).get("d") or [] for s in (((cdb or {}).get("c")) or {})}
+    if len(rows.get("BTC-USDT") or []) >= 220:
+        Dd = {s: _sg_D(r, True) for s, r in rows.items() if len(r) >= 60}
+        seq = _sg_compass_states(Dd["BTC-USDT"], list(Dd.values()))
+        ks = [x[0] for x in seq]
+        dx = SG_SEC.get(fr, 86400)
+        for t in {t for D, E in F.values() for t in D["T"]}:
+            j = bisect.bisect_right(ks, t + dx - 86400) - 1           # آخر يوم أُغلق قبل إغلاق هذه الشمعة
+            if j >= 0:
+                s = {"up": 1, "down": -1}.get(seq[j][2], 0)
+                if s:
+                    out["S-comp"][t] = s
+    return out
+
+
+def _gp_svol(D):
+    """🤝 S-vol للعملة نفسها: حجم الشمعة ≥ ضعف وسيط آخر 20 شمعة ⇒ بجهة الشمعة"""
+    V, O, C, n = D.get("V"), D.get("O"), D["C"], D["n"]
+    out = {}
+    if not V or not O:
+        return out
+    for i in range(20, n):
+        m = sorted(V[i - 20:i])[10]
+        if m > 0 and V[i] >= 2.0 * m and C[i] != O[i]:
+            out[i] = 1 if C[i] > O[i] else -1
+    return out
+
+
+def gp_walk(F, sec, fr, B=None, p=None, keep=(), codes=None, groups=None, S=None):
     """🧩 F = {العملة: (الشموع, الإشارات)} لإطار واحد (العملات: كل العملات · السوق: البيتكوين وحده ومعه قراءات السوق كله) ⇒ بترتيب الزمن:
     سجل كل عضو (مؤشر أو توليفة) على شغل مجموعته للعملات معاً (ولكل عملة في keep) · الأبطال بما عُرف وقتها فقط · ما كان سيصل وحكمه
     rec[المجموعة][العضو] = [صدق · أخطأ · أيام مختلفة · آخر يوم · مرات الصعود] · B = {وقت الشمعة: إغلاق البيتكوين} لشغل «مقابل البيتكوين»
-    sent[المجموعة] = [(الوقت, العملة, الجهة, النتيجة 1 صدق · 0 أخطأ · None حركة صغيرة · -1 لم تُغلق التالية, العادي وقتها, الأبطال)]"""
+    sent[المجموعة] = [(الوقت, العملة, الجهة, النتيجة 1 صدق · 0 أخطأ · None حركة صغيرة · -1 لم تُغلق بعد, العادي وقتها, الأبطال)]
+    path[المجموعة] (بنفس ترتيب sent · للجهة): [حركتها بعد المدة · أسوأ عكس قبلها · أحسن حركة بجهتها] (نسبة · بجهة التنبؤ)
+    الخيارات (GP_P): h المدة بالشموع · win آخر كم يوماً من النتائج (0 = كل التاريخ) · combo 0/1/2 · help 🤝 مساعدو حال السوق (S من _gp_states +
+    S-vol) · grade «close» أو «tp»"""
     p = dict(GP_P, **(p or {}))
+    h, win, grade = max(1, int(p.get("h") or 1)), float(p.get("win") or 0) * 86400, p.get("grade") or "close"
     codes = codes if codes is not None else _gp_codes()
     groups = [g for g in (groups or GP_GROUPS) if GP_GROUPS[g]["sec"] == sec]
     mem = {g: set(gp_members(g, codes)) for g in groups}
     allowed = set().union(*mem.values()) if mem else set()
     jobs = sorted({GP_GROUPS[g]["job"] for g in groups})
     lk = SG_LK.get(fr, 2)
-    FI, OUT, times, known = {}, {}, {}, []
+    help_ = bool(p.get("help"))
+    FI, OUT, SV, times, known = {}, {}, {}, {}, []
     for sym, (D, E) in F.items():
         FI[sym] = fi = _gp_fires(E, allowed)
-        OUT[sym] = {j: _gp_outs(j, D, B) for j in jobs if not (j == "rs" and sym.startswith("BTC-"))}
+        OUT[sym] = {j: _gp_outs(j, D, B, h, grade) for j in jobs if not (j == "rs" and sym.startswith("BTC-"))}
+        SV[sym] = _gp_svol(D) if help_ else {}
         for i in fi:
             times.setdefault(D["T"][i], []).append((sym, i))
         for j, o in OUT[sym].items():
-            known.extend((D["T"][i + 1], j, o[i]) for i in range(D["n"] - 1) if o[i] is not None)
+            known.extend((D["T"][i + h], j, o[i]) for i in range(D["n"] - h) if o[i] is not None)
     known.sort(key=lambda x: x[0])
-    U = {j: [0, 0] for j in jobs}                         # لكل شغل: [مرات +1 · كل المحكوم] حتى الآن (للعادي)
+    U = {j: [0, 0, 0] for j in jobs}                      # لكل شغل: [مرات +1 · مرات −1 · كل المحكوم] (للعادي) — بنافذة win إن وُجدت
+    UQ = _GPdq()
     ku = 0
     rec, rc, on, champ = {g: {} for g in groups}, {g: {} for g in groups}, {g: set() for g in groups}, {g: [] for g in groups}
-    pend, pk, sent, now = {}, [], {g: [] for g in groups}, {g: {} for g in groups}
+    RQ = {g: {} for g in groups}                          # بنافذة win: لكل عضو [(وقت النتيجة, صدق, صعود, اليوم)] + عدّاد الأيام
+    ok = {g: set() for g in groups}
+    pend, pk, sent, path, now = {}, [], {g: [] for g in groups}, {g: [] for g in groups}, {g: {} for g in groups}
     tl = max((D["T"][D["n"] - 1] for D, E in F.values()), default=0)
 
     def u_(j):
         x = U[j]
-        return x[0] / x[1] if x[1] else 0.5
+        return (x[0] / x[2], x[1] / x[2]) if x[2] else (0.5, 0.5)
 
     def sc(r):
         return r[0] / (r[0] + r[1]) if r[0] + r[1] else 0.0
@@ -20817,49 +20910,81 @@ def gp_walk(F, sec, fr, B=None, p=None, keep=(), codes=None, groups=None):
         while ku < len(known) and known[ku][0] <= t:
             _k, j, o = known[ku]
             U[j][0] += o > 0
-            U[j][1] += 1
+            U[j][1] += o < 0
+            U[j][2] += 1
+            if win:
+                UQ.append(known[ku])
             ku += 1
+        if win:
+            while UQ and UQ[0][0] < t - win:
+                _k, j, o = UQ.popleft()
+                U[j][0] -= o > 0
+                U[j][1] -= o < 0
+                U[j][2] -= 1
         moved = set()
         while pk and pk[0] <= t:
             k = heapq.heappop(pk)
-            for g, key, sym, win, s, d in pend.pop(k, ()):
+            for g, key, sym, w_, s, d in pend.pop(k, ()):
                 r = rec[g].get(key)
                 if r is None:
                     r = rec[g][key] = [0, 0, 0, -1, 0]
-                r[0 if win else 1] += 1
+                r[0 if w_ else 1] += 1
                 r[4] += s > 0
-                if d != r[3]:
+                if win:
+                    q = RQ[g].setdefault(key, [_GPdq(), {}])
+                    q[0].append((k, w_, s > 0, d))
+                    if not q[1].get(d):
+                        r[2] += 1
+                    q[1][d] = q[1].get(d, 0) + 1
+                elif d != r[3]:
                     r[2] += 1
                     r[3] = d
                 if sym in keep:
                     x = rc[g].setdefault(sym, {}).setdefault(key, [0, 0])
-                    x[0 if win else 1] += 1
+                    x[0 if w_ else 1] += 1
                 moved.add(g)
-        for g in moved:
+        for g in (groups if win else moved):
             u = u_(GP_GROUPS[g]["job"])
             for key, r in rec[g].items():
+                if win:
+                    q = RQ[g].get(key)
+                    while q and q[0] and q[0][0][0] < t - win:
+                        _k, w_, up_, d_ = q[0].popleft()
+                        r[0 if w_ else 1] -= 1
+                        r[4] -= up_
+                        q[1][d_] -= 1
+                        if not q[1][d_]:
+                            del q[1][d_]
+                            r[2] -= 1
                 n_ = r[0] + r[1]
                 pb = _gp_pb(r[4], n_, u)
+                if p["combo"] == 2 and "+" not in key:
+                    (ok[g].add if n_ and sc(r) >= pb else ok[g].discard)(key)
                 if key in on[g]:
-                    if sc(r) < pb + p["gap"]:
+                    if not n_ or sc(r) < pb + p["gap"]:
                         on[g].discard(key)
-                elif r[2] >= p["dmin"] and sc(r) >= pb + p["lift"] and _sg_wlb(r[0], n_) / 100.0 > pb and (p["combo"] or "+" not in key):
+                elif n_ and r[2] >= p["dmin"] and sc(r) >= pb + p["lift"] and _sg_wlb(r[0], n_) / 100.0 > pb and (p["combo"] or "+" not in key or "+S-" in key):
                     on[g].add(key)
             champ[g] = sorted(on[g], key=lambda k_: (-sc(rec[g][k_]), -(rec[g][k_][0] + rec[g][k_][1]), k_))[:p["cap"]]
         d = t // 86400
         for sym, i in times[t]:
             D = F[sym][0]
+            st = None
+            if help_:
+                st = {c_: (S.get(c_) or {}).get(D["T"][i], 0) for c_ in ("S-comp", "S-brd", "S-btc")} if S else {}
+                if SV[sym].get(i):
+                    st["S-vol"] = SV[sym][i]
             for g in groups:
                 j = GP_GROUPS[g]["job"]
                 o = OUT[sym].get(j)
                 if o is None:
                     continue
-                keys = _gp_keys(FI[sym], i, mem[g], lk, j, combo=bool(p["combo"]))
+                keys = _gp_keys(FI[sym], i, mem[g], lk, j, combo=p["combo"], st=st, ok=ok[g])
                 if not keys:
                     continue
                 oi = o[i]
                 if oi is not None:
-                    kn = D["T"][i + 1]
+                    kn = D["T"][i + h]
                     if kn not in pend:
                         pend[kn] = []
                         heapq.heappush(pk, kn)
@@ -20869,12 +20994,34 @@ def gp_walk(F, sec, fr, B=None, p=None, keep=(), codes=None, groups=None):
                 if len(sides) == 1:                      # ما كان سيصل: أبطال المجموعة انطلقوا بجهة واحدة (لا بطل بالجهة المعاكسة)
                     s = sides.pop()
                     u = u_(j)
-                    res = (-1 if i + 1 >= D["n"] else None) if oi is None else (1 if oi == s else 0)
-                    sent[g].append((t, sym, s, res, round(u if s > 0 else 1 - u, 4), cs))
+                    res = (-1 if i + h >= D["n"] else None) if oi is None else (1 if oi == s else 0)
+                    sent[g].append((t, sym, s, res, round(_gp_pb(1 if s > 0 else 0, 1, u), 4), cs))
+                    path[g].append(_gp_path(D, i, s, h) if j == "dir" else None)
                     if t == tl:
                         now[g][sym] = [s, cs]
-    return {"sec": sec, "fr": fr, "p": p, "U": {j: u_(j) for j in jobs}, "rec": rec, "rc": rc, "on": on, "champ": champ, "sent": sent, "now": now,
-            "t": tl, "mem": {g: sorted(mem[g]) for g in groups}, "keep": list(keep)}
+    return {"sec": sec, "fr": fr, "p": p, "U": {j: u_(j)[0] for j in jobs}, "U2": {j: list(u_(j)) for j in jobs}, "rec": rec, "rc": rc, "on": on,
+            "champ": champ, "sent": sent, "path": path, "now": now, "t": tl, "mem": {g: sorted(mem[g]) for g in groups}, "keep": list(keep)}
+
+
+def _gp_path(D, i, s, h):
+    """مسار التنبؤ بجهته بعد الشمعة i حتى h شمعة: [الحركة عند الإغلاق · أسوأ عكس قبلها · أحسن حركة] (نسبة · None إن لم تُغلق بعد)"""
+    C, H_, L_, n = D["C"], D.get("H") or D["C"], D.get("L") or D["C"], D["n"]
+    if i + h >= n or not C[i]:
+        return None
+    hi = max(H_[k] for k in range(i + 1, i + h + 1)) / C[i] - 1.0
+    lo = min(L_[k] for k in range(i + 1, i + h + 1)) / C[i] - 1.0
+    fin = (C[i + h] / C[i] - 1.0) * s
+    return [round(fin, 5), round(lo if s > 0 else -hi, 5), round(hi if s > 0 else -lo, 5)]
+
+
+def gp_pathst(path, sent=None, t_from=0):
+    """متوسطات مسار ما كان سيصل: [العدد · متوسط الحركة · متوسط أسوأ عكس · متوسط أحسن حركة · نصيب العكس الأسوأ من 2%] (نسب مئوية)"""
+    xs = [x for k, x in enumerate(path or []) if x and (sent is None or sent[k][0] >= t_from)]
+    if not xs:
+        return [0, 0.0, 0.0, 0.0, 0.0]
+    n = len(xs)
+    return [n, round(100 * sum(x[0] for x in xs) / n, 3), round(100 * sum(x[1] for x in xs) / n, 3), round(100 * sum(x[2] for x in xs) / n, 3),
+            round(100.0 * sum(1 for x in xs if x[1] <= -0.02) / n, 1)]
 
 
 def gp_score(sent, t_from=0, t_to=None, sym=None):
@@ -20894,9 +21041,10 @@ def gp_pack(W, top=10):
     بحالتهم (2 ⭐ بطل · 1 ✅ مثبت خارج الحد · 0 🧪 قيد الاختبار · −1 لم يثبت) · الأبطال · ما انطلق الآن
     m = [العضو · صدق · أخطأ · أيام · الحالة · العادي]"""
     tl = W["t"]
-    out = {"sec": W["sec"], "fr": W["fr"], "t": tl, "U": {j: round(u, 4) for j, u in W["U"].items()}, "p": W["p"], "g": {}}
+    out = {"sec": W["sec"], "fr": W["fr"], "t": tl, "U": {j: round(u, 4) for j, u in W["U"].items()}, "p": W["p"], "g": {},
+           "U2": {j: [round(x, 4) for x in u] for j, u in (W.get("U2") or {}).items()}}
     for g, R in W["rec"].items():
-        u = W["U"].get(GP_GROUPS[g]["job"], 0.5)
+        u = (W.get("U2") or {}).get(GP_GROUPS[g]["job"]) or W["U"].get(GP_GROUPS[g]["job"], 0.5)
         rows = []
         for key, r in R.items():
             n_ = r[0] + r[1]
@@ -20913,6 +21061,7 @@ def gp_pack(W, top=10):
         span = tl - S[0][0] if S else 0
         out["g"][g] = {"rec": gp_score(S), "rec1": gp_score(S, tl - span // 4) if span else [0, 0, 0.0], "m": singles + combos, "ch": list(W["champ"][g]),
                        "now": W["now"][g], "nm": len(W["mem"][g]), "nc": len(combos),
+                       "px": gp_pathst((W.get("path") or {}).get(g)), "px1": gp_pathst((W.get("path") or {}).get(g), S, tl - span // 4) if span else gp_pathst([]),
                        "coin": {s: {"rec": gp_score(S, sym=s), "m": W["rc"][g].get(s) or {}} for s in W["keep"]}}
     return out
 
@@ -20996,31 +21145,41 @@ def gp_build(cdb, coins, keep, pdb, fdb, prog=None, p=None):
         _gp_wide({fr: F}, full=True)
         Db = F["BTC-USDT"][0]
         B = {Db["T"][i]: Db["C"][i] for i in range(Db["n"])}
-        out["f"][fr] = {"coin": gp_pack(gp_walk(F, "coin", fr, B=B, p=p, keep=[s for s in keep if s in F], codes=codes)),
-                        "mkt": gp_pack(gp_walk({"BTC-USDT": F["BTC-USDT"]}, "mkt", fr, p=p, codes=codes))}
+        S = _safe(_gp_states, F, fr, cdb, default=None) if out["p"].get("help") else None     # 🤝 حال السوق (للمساعدين)
+        out["f"][fr] = {"coin": gp_pack(gp_walk(F, "coin", fr, B=B, p=p, keep=[s for s in keep if s in F], codes=codes, S=S)),
+                        "mkt": gp_pack(gp_walk({"BTC-USDT": F["BTC-USDT"]}, "mkt", fr, p=p, codes=codes, S=S))}
         out["n"][fr] = [len(F), min(D["T"][0] for D, E in F.values()), Db["T"][-1]]
         F = None
     return out
 
 
-def gp_now(FF, G, p=None):
+def gp_now(FF, G, p=None, cdb=None):
     """🔔 الفحص الحي (كل شمعة مغلقة): على آخر شمعة لكل عملة وإطار ⇒ ما انطلق من أبطال كل مجموعة (المحفوظين في آخر بناء) بجهة واحدة
-    ⇒ {الإطار: {القسم: {المجموعة: {العملة: [الجهة, الأبطال]}}}} — الدالة نفسها (_gp_keys) التي يُبنى بها السجل"""
-    p = dict(GP_P, **(p or {}))
+    ⇒ {الإطار: {القسم: {المجموعة: {العملة: [الجهة, الأبطال]}}}} — الدالة نفسها (_gp_keys) التي يُبنى بها السجل · بقواعد البناء نفسه (G["p"])"""
+    p = dict(GP_P, **((G or {}).get("p") or {}), **(p or {}))
     codes = _gp_codes()
     out = {}
     for fr, F in (FF or {}).items():
         Gf = ((G or {}).get("f") or {}).get(fr) or {}
+        S = (_safe(_gp_states, F, fr, cdb, default=None) or {}) if p.get("help") else None
         for sec in ("coin", "mkt"):
             Gs = (Gf.get(sec) or {}).get("g") or {}
             for g, x in Gs.items():
                 if g not in GP_GROUPS or not x.get("ch"):
                     continue
                 mem, job = set(gp_members(g, codes)), GP_GROUPS[g]["job"]
+                ok = {m_[0] for m_ in x.get("m") or [] if "+" not in m_[0] and m_[1] + m_[2] and m_[1] / (m_[1] + m_[2]) >= m_[5]}
                 for sym, (D, E) in F.items():
                     if (sec == "mkt" and sym != "BTC-USDT") or (job == "rs" and sym.startswith("BTC-")):
                         continue
-                    keys = _gp_keys(_gp_fires(E, mem), D["n"] - 1, mem, SG_LK.get(fr, 2), job, combo=bool(p["combo"]))
+                    i = D["n"] - 1
+                    st = None
+                    if S is not None:
+                        st = {c_: (S.get(c_) or {}).get(D["T"][i], 0) for c_ in ("S-comp", "S-brd", "S-btc")}
+                        sv = _gp_svol(D).get(i)
+                        if sv:
+                            st["S-vol"] = sv
+                    keys = _gp_keys(_gp_fires(E, mem), i, mem, SG_LK.get(fr, 2), job, combo=p["combo"], st=st, ok=ok)
                     cs = [k_ for k_ in x["ch"] if k_ in keys]
                     sides = {keys[k_] for k_ in cs}
                     if len(sides) == 1:
