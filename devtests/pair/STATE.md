@@ -38,6 +38,15 @@
 - **الرقابة**: `_gd_gather` يصنّف البوت (is_dca/is_rec) ⇒ grid_pair: رصيده حر بثلاث عملات · أوامره IOC بمعرّف البوت (`clOrdId` يبدأ بـbot_id) ⇒ لازم ما تطلع «أوامر مجهولة».
 - **الديمو/المسار التجريبي**: `_BtEx` (~4576) أداة وحدة ⇒ منصة ورقية بأداتين لـgrid_pair (ما نلمس `_BtEx` الحالية).
 
+### ⚠️ مهم: ربحه بالرئيسية (XRP) مو دولار — كل دفتر دولار لازم يتجاوزه أو يحوّله
+- `ledger_tick` (~7995) يحسب فرق `total_profit` لأي نوع مو dca/دوري **كدولار** ⇒ لازم يتجاوز grid_pair.
+- قرّاء `total_profit` الثانية (فحص 27-11): `export_md` 1693 · `reconcile` 11476 · `alltime_view` 14264 · `_gone_archive` 23348 · `archive_view` 23438 ·
+  `reset_ledger(_only)` 23690/23702 · `app_widget_view` 25038 · **`notifier_loop` 25880 (إشعار تيليغرام لكل بيعة)** · فحوص التشخيص 41998–42217 ·
+  بيانات البطاقة 990–995 (`profit`/`rate_daily`/`today` — `today` من `LEDGER` للشبكات ⇒ لـgrid_pair من `st.daily`).
+- `PROFIT_RE` (560) يطابق «الربح: +0.3 XRP» ⇒ مواضعه (941 · 953 · 6974) لازم تعرف grid_pair.
+- `_kinds`: `fam` جديدة «pair» (مو grid: `_rep_src_of` يعدّ عائلة grid دولاراً ⇒ رقابة «📐 قاعدة البوتات» تطلّع ❌) · `_NONGRID = _kinds(fam=("dca","rec","pair"))` + سطر der بـ`kinds_audit` (~2856).
+- `_CT_T` يشمله تلقائياً (route فيه coin_trade) ⇒ `_ct_events(bt, st)` فرع grid_pair · `coin_trade_tick`/`coin_ledger_tick` العملة = الرئيسية (مو `symbol.split("-")[0]`).
+
 ## الجاي (المرحلة B — اللوحة)
 - تضمين المحرك (`_GRIDX_B64` + `engine_for` "grid_pair") · `_BOT_KINDS` · عملة الربح = الرئيسية (دفتر العملات) · الأسعار = نسبة الأداتين.
 - النموذج + الحاسبة (`/api/pair_plan` حساب بس) + النشر (`/api/deploy_pair` من المحفظة) · البطاقة بالرئيسية · السجل · الإشعارات.
