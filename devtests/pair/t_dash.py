@@ -222,6 +222,84 @@ if "pair_hold" in open(DASH, encoding="utf-8").read():
     gi = src_.split("def _gd_gather", 1)[1][:20000]
     ok("💵 the snapshot books it under the bridge (USDT), never under XRP", 'snap["quotes"].setdefault(_qb' in gi and 'usd_booked' in gi)
 
+# ── the card (p152): the nearest levels · the pause by the ratio · no delete mid-swap · the archive and its re-deploy
+if hasattr(m, "_pair_del_wait"):
+    ld_ = os.path.join(R, "pair_link_test2")
+    os.makedirs(ld_)
+    cfg2 = {"api_key": "K", "secret_key": "S", "passphrase": "P", "symbol": "LINK-XRP", "bot_type": "grid_pair", "bridge": "USDT", "main_value": 20.0,
+            "grid_percentage": 0.02, "down_levels": 100, "up_levels": 100, "profit_to": "half", "forced_base_ratio": 7.5, "fee_rate": 0.001,
+            "is_demo": False, "auto_restart": True}
+    json.dump(cfg2, open(os.path.join(ld_, "config_LINK-XRP.json"), "w"))
+    sl2 = {str(j): {"j": j, "bp": 7.5 * 1.02 ** j, "sp": 7.5 * 1.02 ** (j + 1), "side": "buy" if j < 0 else "sell",
+                    "q": 0.0 if j < 0 else 20 / (7.5 * 1.02 ** j), "c": 0.0 if j < 0 else 20.0, "dq": 0.0, "n": 2 if j in (-1, -2, 5) else 0} for j in range(-100, 100)}
+    st2 = {"pair": {"other": "LINK", "main": "XRP", "bridge": "USDT", "r0": 7.5, "g": 0.02, "mv": 20.0, "dn": 100, "up": 100, "pt": "half", "born": now - 86400},
+           "slots": sl2, "total_profit": 1.2, "main_book": 2000.0, "other_book": 30.0, "main_start": 2000.0, "other_start": 30.0, "usd_booked": 0.0,
+           "ratio": 7.52, "px_main": 2.0, "px_other": 15.04, "op": None, "daily": {today: 0.4}, "swaps": []}
+    sp2 = os.path.join(ld_, "grid_state_LINK-XRP.json")
+    json.dump(st2, open(sp2, "w"))
+    b2 = next(b for b in m.bot_dirs().values() if b["symbol"] == "LINK-XRP")
+    P2 = (m.bot_snapshot(b2).get("pair") or {})
+    L2 = P2.get("levels") or []
+    ok("🪜 the card gets the NEAREST 30 levels each side (not all 200 every tick) · the count of all · the completed sales",
+       len(L2) == 60 and {x["j"] for x in L2} == set(range(-30, 30)) and P2.get("n_levels") == 200 and P2.get("sales") == 6,
+       (len(L2), P2.get("n_levels"), P2.get("sales"), sorted(x["j"] for x in L2)[:3]))
+    m.PX["LINK-XRP"] = 7.52
+    rel2 = os.path.relpath(b2["dir"], m.ROOT)
+    r_ = m.control(rel2, "pause_buy", None)
+    s_ = json.load(open(sp2))
+    ok("⏸ pause buy = a floor at the ratio now (7.52) — the control fields only", r_.get("ok") and abs(float(s_.get("buy_floor") or 0) - 7.52) < 1e-12
+       and not s_.get("pause_buy") and "7.52" in r_.get("msg", ""), (r_, s_.get("buy_floor")))
+    ok("⏸ … a second press says it is paused already (the floor stays)", "أصلاً" in m.control(rel2, "pause_buy", None).get("msg", "")
+       and abs(float(json.load(open(sp2)).get("buy_floor") or 0) - 7.52) < 1e-12)
+    r_ = m.control(rel2, "resume_buy", None)
+    ok("▶️ resume buy clears the floor", r_.get("ok") and float(json.load(open(sp2)).get("buy_floor") or 0) == 0 and "استُؤنف" in r_.get("msg", ""), r_)
+    m.control(rel2, "accum_sell", 99)
+    a1 = float(json.load(open(sp2)).get("sell_ceiling") or 0)
+    m.control(rel2, "accum_sell", None)
+    a2 = float(json.load(open(sp2)).get("sell_ceiling") or 0)
+    ok("📦 the grid's accum buttons only toggle the pause at the ratio (no price typed in a pair)", abs(a1 - 7.52) < 1e-12 and a2 == 0, (a1, a2))
+    rg_ = [m.control(rel2, a_, None) for a_ in ("guard", "reinvest", "edit", "buy_now", "pause")]
+    ok("🔀 the grid-only buttons are refused with a clear line", all(not x.get("ok") and "غير متاح" in x.get("msg", "") for x in rg_), rg_)
+    # — the delete never mid-swap
+    _al0, _sl0, _og0 = m.is_alive, m.time.sleep, m._okx_get
+    OK_CALLS = []
+    m._okx_get = lambda *a, **k: OK_CALLS.append(a) or {"code": "0", "data": []}
+    s_ = json.load(open(sp2))
+    s_.update(op={"id": "HBx1", "k": "-1", "kind": "buy"}, usd_booked=3.5)
+    json.dump(s_, open(sp2, "w"))
+    m.is_alive = lambda d_, sp_: (False, "")
+    r_ = m.delete_purge(b2)
+    ok("🗑 a stopped bot with a swap in flight is NOT deleted (3.5 USDT between the two coins) — start it to finish the swap",
+       not r_.get("ok") and "⛔ لم يُحذف" in r_.get("msg", "") and "3.5000 USDT" in r_.get("msg", "") and os.path.isdir(ld_), r_)
+    ok("🗑 … and no exchange call to cancel orders (it has none)", not OK_CALLS, OK_CALLS)
+    m.is_alive = lambda d_, sp_: (True, "dash")
+    m.time.sleep = lambda *a, **k: None
+    r_ = m.delete_bot(b2)
+    s_ = json.load(open(sp2))
+    ok("🗑 a running bot mid-swap: asked to withdraw (self_destruct) — not deleted until it finishes («⏳ … أعد الحذف بعد قليل»)",
+       not r_.get("ok") and "⏳" in r_.get("msg", "") and s_.get("self_destruct") is True and os.path.isdir(ld_), r_)
+
+    def _finish(*a, **k):                                 # the engine finishes the swap and withdraws while the dashboard waits
+        x = json.load(open(sp2))
+        x.update(op=None, usd_booked=0.0, destruct_done=True)
+        json.dump(x, open(sp2, "w"))
+    m.time.sleep = _finish
+    r_ = m.delete_purge(b2)
+    m.is_alive, m.time.sleep, m._okx_get = _al0, _sl0, _og0
+    arch = [n_ for n_ in os.listdir(os.path.join(m.ROOT, "_archive")) if n_.endswith("pair_link_test2")] if os.path.isdir(os.path.join(m.ROOT, "_archive")) else []
+    ok("🗑 … once the engine says it withdrew (the dollar back to a coin) the delete goes through and archives it", r_.get("ok") and not os.path.isdir(ld_) and arch, r_)
+    if arch:
+        ri = m.redeploy_info(arch[0])
+        pr = ri.get("pre") or {}
+        want_ao = sum(20.0 / (7.5 * 1.02 ** j) for j in range(100))
+        ok("♻️ the archive re-deploys it in its own form (XRP · LINK · 2% · 20 XRP · 2000 XRP below · the LINK above · half) — the ratio left empty",
+           ri.get("ok") and ri.get("form") == "pair" and pr.get("main") == "XRP" and pr.get("other") == "LINK" and abs(pr.get("step_pct", 0) - 2) < 1e-9
+           and pr.get("main_value") == 20.0 and abs(pr.get("main_amount", 0) - 2000) < 1e-9 and abs(float(pr.get("other_amount") or 0) - want_ao) < 1e-6 * want_ao
+           and pr.get("profit_to") == "half" and "forced_ratio" not in pr and ri.get("ico") == "🔀", ri)
+    ok("🗄️ its settings in one line for the archive/report", m._pv_cfg_txt(cfg2) == "LINK/XRP · الخطوة 2% · 20 XRP لكل شراء · 100 تحت · 100 فوق", m._pv_cfg_txt(cfg2))
+    ok("🏷️ its name in every list (free coins · archive type · widgets · icons)", m._FREE_T.get("grid_pair") == "🔀 شبكة عملتين"
+       and m._PV_TYPE_ALL.get("grid_pair") == "شبكة عملتين" and m._WD_E.get("grid_pair") == "🔀" and m._RD_FORM.get("grid_pair") == "pair")
+
 print(f"\n{'✅' if all(RES) else '❌'} t_dash: {sum(RES)}/{len(RES)}")
 shutil.rmtree(R, ignore_errors=True)
 sys.exit(0 if all(RES) else 1)
