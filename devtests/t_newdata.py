@@ -187,7 +187,7 @@ L = m._an_newdata(pdb, cdb)
 txt = " | ".join(x[1] for x in L)
 ok(f"⑤ 📈 the market now: {len(L)} new lines — «{txt[:240]}»", [x[0] for x in L] == ["🇺🇸", "💵", "🏦", "📆"] and "علاوة كوينبيس" in txt and "مليار دولار" in txt
    and "التمويل" in txt and "العقود المفتوحة" in txt and "مراكز الكبار" in txt and "سنوياً" in txt and not re.search(r"[A-Za-z]{2,}", txt), L)
-pdb3 = dict(pdb, cal={"ev": [{"t": int(NOW) + 3 * 3600, "ti": "Non-Farm Employment Change", "im": "h"}]})
+pdb3 = dict(pdb, cal={"ev": [{"t": int(time.time()) + 3 * 3600, "ti": "Non-Farm Employment Change", "im": "h"}]})   # _an_newdata reads the real clock (not NOW = 05:00) — any hour of the day
 L3 = m._an_newdata(pdb3, cdb)
 ok(f"⑤ 🗓️ the next high-impact US release in its own line: «{L3[-1][1] if L3 else ''}»", L3 and L3[-1][0] == "🗓️" and "أقرب خبر أمريكي مهم" in L3[-1][1], L3)
 
