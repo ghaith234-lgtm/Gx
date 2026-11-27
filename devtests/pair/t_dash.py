@@ -114,6 +114,48 @@ cla = m._gd_free_claims(bp, st)
 ok("the coins it holds free: XRP 60.9 · SOL 0.53 · USDT 0.02", abs(cla.get("XRP", 0) - 60.9) < 1e-9 and abs(cla.get("SOL", 0) - 0.53) < 1e-9
    and abs(cla.get("USDT", 0) - 0.02) < 1e-9, cla)
 
+# ── Telegram (p148): one message per completed sale, in XRP — nothing for a buy, nothing at the first look
+if hasattr(m, "_pair_coin_events") and "grid_pair" in open(DASH, encoding="utf-8").read().split("def notifier_loop", 1)[1][:9000]:
+    msgs = []
+    m.tg_send = lambda t, *a, **k: msgs.append(str(t)) or True
+
+    class _Brk(BaseException):
+        pass
+
+    _sl0 = m.time.sleep
+
+    def _once():
+        m.time.sleep = lambda *a, **k: (_ for _ in ()).throw(_Brk())
+        try:
+            m.notifier_loop()
+        except _Brk:
+            pass
+        finally:
+            m.time.sleep = _sl0
+    sp_ = os.path.join(pd, "grid_state_SOL-XRP.json")
+    st["last_trade"] = {"side": "sell", "ratio": 76.9, "qty": 0.28, "main": 20.3, "profit": 0.3, "kept": 0.0, "ts": now - 60, "n": 7}
+    json.dump(st, open(sp_, "w"))
+    _once()
+    n0 = len([x for x in msgs if "شبكة عملتين" in x])
+    st["last_trade"] = {"side": "buy", "ratio": 75.0, "qty": 0.27, "main": 20.0, "ts": now - 30, "n": 8}
+    json.dump(st, open(sp_, "w"))
+    _once()
+    n1 = len([x for x in msgs if "شبكة عملتين" in x])
+    st["last_trade"] = {"side": "sell", "ratio": 76.6, "qty": 0.27, "main": 20.31, "profit": 0.31, "kept": 0.0, "ts": now - 5, "n": 9}
+    st["total_profit"] = 1.21
+    json.dump(st, open(sp_, "w"))
+    _once()
+    pm = [x for x in msgs if "شبكة عملتين" in x]
+    ok("📲 Telegram: nothing at the first look (old sales are not re-sent) · nothing for a buy", n0 == 0 and n1 == 0, msgs)
+    ok("📲 … one message for the new sale, in XRP with ≈ $ — never «$» on the XRP number",
+       len(pm) == 1 and "`+0.31` XRP" in pm[0] and "≈ `0.6200$`" in pm[0] and "`1.21` XRP" in pm[0] and "0.31$" not in pm[0], pm)
+    m.ledger_tick()
+    led = m.load_json(m.LEDGER) or {}
+    ok("… and still no dollar booking after it", kp not in led, list(led))
+    rc = m.reconcile()
+    ok("the dollar reconciliation skips it (its profit is XRP)", all(str(r.get("sym") or r.get("symbol") or "") != "SOL-XRP" for r in (rc.get("bots") or [])),
+       [r.get("sym") or r.get("symbol") for r in (rc.get("bots") or [])])
+
 print(f"\n{'✅' if all(RES) else '❌'} t_dash: {sum(RES)}/{len(RES)}")
 shutil.rmtree(R, ignore_errors=True)
 sys.exit(0 if all(RES) else 1)
