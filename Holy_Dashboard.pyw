@@ -886,8 +886,8 @@ def net_factor(b):
     النسبة بينهما ثابتة، فنضربها بكل رقم ربح يُعرض أو يُوزَّع.
     🔧 v3.36.3: «خطوة» = ربح الدورة الحقيقي (`_cycle_step`) — للبلس بُعد الشراء لا مسافة السلم (كان يطرح عمولة أكثر ⇒ ربحه أقل بـ≈10%)
     """
-    if str(b["cfg"].get("bot_type") or "") == "grid_step":
-        return 1.0                          # 🪜 v3.36.15: المحرك يكتب الربح الصافي الحقيقي (العمولتين من التنفيذ نفسه)
+    if str(b["cfg"].get("bot_type") or "") in ("grid_step", "grid_pair"):
+        return 1.0                          # 🪜 v3.36.15: المحرك يكتب الربح الصافي الحقيقي (العمولتين من التنفيذ نفسه) · 🔀 الأربع
     try:
         g = _cycle_step(b["cfg"])
         f = float(b["cfg"].get("fee_rate") or FEE_RATE_DEFAULT)
@@ -924,7 +924,12 @@ def bot_snapshot(b):
         last_event = e.get("msg", "")[:140]
         break
     _bt = b["cfg"].get("bot_type")
-    if (_bt in ("dca", "dca_buy") and st.get("cycles_log")) or _bt in _REC_T:   # 🔁 الدوري: نفس سجل الصفقات
+    if _bt == "grid_pair":                       # 🔀 v3.36.79: ربح اليوم من دفتر المحرك نفسه (بالعملة الرئيسية)
+        try:
+            today_profit = float((st.get("daily") or {}).get(today) or 0)
+        except Exception:
+            today_profit = 0.0
+    elif (_bt in ("dca", "dca_buy") and st.get("cycles_log")) or _bt in _REC_T:   # 🔁 الدوري: نفس سجل الصفقات
         # 🧾 v3.22.1: ربح اليوم من سجل الدورات (صافي بعد العمولة) — بالشرائي دولار وبالبيعي عملة
         for c in st.get("cycles_log") or []:
             try:
@@ -1021,6 +1026,7 @@ def bot_snapshot(b):
                        "vbuys": _step_near((_step_merge_lv if _bt == "grid_step" else (lambda x: x))(pack_levels(st.get("virtual_buys"), "vb")), st, True, _bt),
                        "asells": pack_levels(st.get("accum_sells"), "as"), "abuys": pack_levels(st.get("accum_buys"), "ab")},
             "bot_type": b["cfg"].get("bot_type", "grid"),
+            "pair": (_safe(_pair_snapshot, b, st, default=None) if _bt == "grid_pair" else None),     # 🔀 v3.36.79
             "gcfg": ({"lower_price": b["cfg"].get("lower_price"), "upper_price": b["cfg"].get("upper_price"),
                       "buy_offset": b["cfg"].get("buy_offset")}
                      if b["cfg"].get("bot_type") in ("grid_range", "grid_plus") else None),
@@ -1254,6 +1260,53 @@ def _dca_live(st, cfg, is_buy, cp, trail_on):
         if cfg.get("plus_rows"):
             rows[-1]["x"] = round(_tpn * 100, 3)                # ⚡ DCA+: نسبة خروج هذا الصف
     return rows
+
+
+def _pair_parts(b):
+    """🔀 (الثانية · الرئيسية) من الرمز: SOL-XRP ⇒ (SOL, XRP)"""
+    p = (str((b or {}).get("symbol") or "").upper().split("-") + ["", ""])[:2]
+    return p[0], p[1]
+
+
+def _pair_coin_events(st):
+    """🔀 بيعات المحرك (state «swaps» · kind sell) ⇒ [(المعرّف، الربح بالرئيسية، الوقت، "pair")] — مرة وحدة لكل بيعة"""
+    out = []
+    for s in (st.get("swaps") or []):
+        try:
+            if isinstance(s, dict) and s.get("kind") == "sell":
+                out.append((f"pair:{int(round(float(s.get('t') or 0) * 10))}:{int(s.get('j') or 0)}", float(s.get("profit") or 0), float(s.get("t") or 0), "pair"))
+        except Exception:
+            continue
+    return out
+
+
+def _pair_snapshot(b, st):
+    """🔀 v3.36.79: بيانات بطاقة «شبكة عملتين» — كلها من حالة المحرك (المحرك ما يقرا شي منها)"""
+    pr = st.get("pair") or {}
+    oth, mn = _pair_parts(b)
+    f = lambda x: float(x or 0)
+    pm, po = f(st.get("px_main")), f(st.get("px_other"))
+    r = f(st.get("ratio")) or (po / pm if pm > 0 and po > 0 else 0.0)
+    tp = f(st.get("total_profit"))
+    born = f(pr.get("born"))
+    age = max(0.0, (time.time() - born) / 86400.0) if born else 0.0
+    S = st.get("slots") or {}
+    lv = sorted(({"j": s.get("j"), "bp": s.get("bp"), "sp": s.get("sp"), "side": s.get("side"),
+                  "q": round(f(s.get("q")) + f(s.get("dq")), 12)} for s in S.values() if isinstance(s, dict)), key=lambda x: int(x["j"] or 0))
+    w_now = f(st.get("main_book")) + f(st.get("other_book")) * r + (f(st.get("usd_booked")) / pm if pm > 0 else 0.0)
+    w0 = f(st.get("main_start")) + f(st.get("other_start")) * f(pr.get("r0"))
+    days = sorted((st.get("daily") or {}).items())
+    return {"main": pr.get("main") or mn, "other": pr.get("other") or oth, "ratio": r, "r0": pr.get("r0"), "g": pr.get("g"), "mv": pr.get("mv"),
+            "dn": pr.get("dn"), "up": pr.get("up"), "pt": pr.get("pt") or "main", "px_main": pm, "px_other": po,
+            "next_buy": st.get("next_buy"), "next_sell": st.get("next_sell"), "n_buy": st.get("n_buy"), "n_sell": st.get("n_sell"),
+            "main_book": f(st.get("main_book")), "other_book": f(st.get("other_book")), "usd_booked": f(st.get("usd_booked")),
+            "profit": tp, "profit_usd": round(tp * pm, 6) if pm > 0 else None, "profit_other": f(st.get("profit_other")),
+            "today": f((st.get("daily") or {}).get(time.strftime("%Y-%m-%d"))),
+            "per_day": round(tp / age, 10) if age >= 0.5 else None, "age_days": round(age, 3),
+            "days": [[k, v] for k, v in days[-31:]], "swaps": (st.get("swaps") or [])[-12:], "in_flight": bool(st.get("op")),
+            "levels": lv[:600], "n_levels": len(lv), "wallet_main": round(w_now, 10), "wallet_main0": round(w0, 10),
+            "wallet_pct": round((w_now / w0 - 1) * 100, 4) if w0 > 0 else None, "born": born,
+            "destructing": bool(st.get("self_destruct")) and not st.get("destruct_done")}
 
 
 def _dca_snapshot(b, st):
@@ -2776,6 +2829,8 @@ _BOT_KINDS = {
                    "route": ("events", "ledger", "trade", "released", "box", "reinvest", "report")},
     "grid_step":  {"lbl": "متدرج",      "ico": "🪜", "cur": "usd",  "src": "hist",   "unit": "بيعة", "fam": "grid", "state": "grid_state_", "eng": "GRIDS_SRC",
                    "route": ("events", "ledger", "trade", "released", "box", "report")},      # 🪜 v3.36.15: الشبكي المتدرج (بلا 💠 بهذا الإصدار)
+    "grid_pair":  {"lbl": "شبكة عملتين", "ico": "🔀", "cur": "coin", "src": "hist",   "unit": "بيعة", "fam": "pair", "state": "grid_state_", "eng": "GRIDX_SRC",
+                   "route": ("events", "coin_ledger", "coin_trade", "report")},      # 🔀 v3.36.79: ربحه بالعملة الرئيسية (ثاني جزء من الرمز: SOL-XRP ⇒ XRP)
     "dca_buy":    {"lbl": "DCA شرائي",  "ico": "📈", "cur": "usd",  "src": "cycles", "unit": "دورة", "fam": "dca", "state": "dca_state_", "eng": "DCAB_SRC",
                    "route": ("events", "ledger", "trade", "released", "box", "loss", "report")},
     "rec_buy":    {"lbl": "دوري شرائي", "ico": "🔁", "cur": "usd",  "src": "cycles", "unit": "صفقة", "fam": "rec", "state": "rec_state_", "eng": "REC_SRC",
@@ -2853,7 +2908,7 @@ def kinds_audit():
                 bad.append("دالة دفتر مفقودة: " + "، ".join(_BOOKS[r][1] for r in miss_f))
         out.append((f"{K.get('ico', '🤖')} {K.get('lbl', k)} ({k})", not bad, " · ".join(bad) if bad else kind_route(k)))
     der = [("_REC_T", set(globals().get("_REC_T") or ()), set(_kinds(fam="rec"))),
-           ("_NONGRID", set(globals().get("_NONGRID") or ()), set(_kinds(fam=("dca", "rec")))),
+           ("_NONGRID", set(globals().get("_NONGRID") or ()), set(_kinds(fam=("dca", "rec", "pair")))),
            ("_CT_T", set(globals().get("_CT_T") or ()), set(_kinds(book="coin_trade"))),
            ("_LOSS_T", set(globals().get("_LOSS_T") or ()), set(_kinds(book="loss"))),
            ("_REC_USD", set(globals().get("_REC_USD") or ()), set(_kinds(fam="rec", cur="usd")))]
@@ -2867,7 +2922,7 @@ def kinds_audit():
 
 
 _REC_T = _kinds(fam="rec")                   # 📐 v3.32.0: من الجدول (كان مكتوب باليد)
-_NONGRID = _kinds(fam=("dca", "rec"))        # بوتات بلا سلّم شبكة (ولا غلاف إعادة استثمار الشبكة ولا تدقيق سلّم) · 📐 من الجدول
+_NONGRID = _kinds(fam=("dca", "rec", "pair"))   # 🔀 v3.36.79: + شبكة عملتين · بوتات بلا سلّم شبكة (ولا غلاف إعادة استثمار الشبكة ولا تدقيق سلّم) · 📐 من الجدول
 _LOSS_T = _kinds(book="loss")                # 📉 البوتات اللي خروجها بخسارة ينحسب (📐 من الجدول)
 _REC_USD = _kinds(fam="rec", cur="usd")      # 💹 v3.34.0: الدوري الشرائي ومسار القيمة — ربحهما دولار من بيع عملة اشتراها (📐 من الجدول)
 REC_FEE = 0.001                              # نفس المحرك: عمولة الآخذ (أوامره كلها فورية)
@@ -7951,7 +8006,7 @@ def ledger_tick():
         #   • الديمو معزول تماماً (لا يلوّث الأرقام الحقيقية)
         #   • DCA ربحه بالعملة (total_coin_profit) ولا يكتب total_profit إطلاقاً،
         #     فإدخاله يقرأ صفراً ويصفّر خط الأساس → تضخّم لا نهائي بالسجل
-        if b["cfg"].get("is_demo") or b["cfg"].get("bot_type") == "dca":
+        if b["cfg"].get("is_demo") or b["cfg"].get("bot_type") in ("dca", "grid_pair"):     # 🔀 v3.36.79: ربحه XRP ⇒ دفتر العملات (لا الدولار)
             continue
         sp, _, _ = paths_of(b)
         st = load_json(sp) or {}
@@ -8657,6 +8712,17 @@ def _gd_free_claims(b, st):
             if isinstance(st.get("close"), dict):
                 u -= float(st["close"].get("dv") or 0)
             out[quote] = max(0.0, u)
+        elif bt == "grid_pair":                 # 🔀 v3.36.79: كل ما يملكه حرّ بالمحفظة (لا أوامر قاعدة) ⇒ الرئيسية · الثانية · الدولار المحجوز
+            oth, mn = _pair_parts(b)
+            op = st.get("op") if isinstance(st.get("op"), dict) else {}
+            m_ = float(st.get("main_book") or 0) - (float(op.get("sold") or 0) if op.get("kind") == "buy" else 0.0) \
+                + (float(op.get("got") or 0) if op.get("kind") == "sell" else 0.0)
+            o_ = float(st.get("other_book") or 0) + (float(op.get("got") or 0) if op.get("kind") == "buy" else 0.0) \
+                - (float(op.get("sold") or 0) if op.get("kind") == "sell" else 0.0)
+            quote_ = str((b.get("cfg") or {}).get("bridge") or "USDT")
+            out[mn] = max(0.0, m_)
+            out[oth] = max(0.0, o_)
+            out[quote_] = max(0.0, float(st.get("usd_booked") or 0))
         elif bt in ("dca", "dca_buy"):
             if st.get("phase") == "selling" and st.get("filled") and not st.get("close") and not st.get("pending_close_id"):
                 v = sum(float(f.get("net") if f.get("net") is not None else (f.get("qty") if bt == "dca_buy" else float(f.get("qty") or 0) * float(f.get("price") or 0)) or 0)
@@ -11023,8 +11089,12 @@ def link_audit(force=False):
         any_c = False
         for k, b in live.items():
             bt = str((b.get("cfg") or {}).get("bot_type") or "grid")
-            base = str(b["symbol"]).split("-")[0].upper()
+            base = (_pair_parts(b)[1] if bt == "grid_pair" else str(b["symbol"]).split("-")[0].upper())
             evs = []
+            if bt == "grid_pair":                     # 🔀 v3.36.79
+                for _eid, q, ts, _s in _pair_coin_events(_safe(load_json, paths_of(b)[0], default={}) or {}):
+                    if datetime.fromtimestamp(float(ts or 0)).strftime("%Y-%m-%d") == today:
+                        evs.append(("pair", float(q or 0), float(ts or 0)))
             if bt == "dca":
                 evs = [("dca", e["q"], e["ts"]) for e in (_safe(bot_day_events, b, today, default=[]) or [])]
             if bt in _REC_T:
@@ -11040,11 +11110,11 @@ def link_audit(force=False):
                 ev_all[(base, src)] = ev_all.get((base, src), 0.0) + q
                 if now - ts >= 180:
                     ev_old[(base, src)] = ev_old.get((base, src), 0.0) + q
-        keys = set(ev_all) | {(bs, s) for bs, e in cday.items() for s in ("dca", "rec") if abs(float((e or {}).get(s) or 0)) > 1e-12}
+        keys = set(ev_all) | {(bs, s) for bs, e in cday.items() for s in ("dca", "rec", "pair") if abs(float((e or {}).get(s) or 0)) > 1e-12}
         for bs, src in sorted(keys):
             lq = float(((cday.get(bs) or {}).get(src)) or 0)
             lo_, hi_ = ev_old.get((bs, src), 0.0), ev_all.get((bs, src), 0.0)
-            lab = f"{bs} · {'DCA بيعي' if src == 'dca' else 'الدوري'}"
+            lab = f"{bs} · {'DCA بيعي' if src == 'dca' else ('شبكة عملتين' if src == 'pair' else 'الدوري')}"
             if lq + 1e-9 < lo_:
                 add(S6, lab, False, f"دفتر العملات اليوم {lq:.8g} أقل من صفقات البوتات {lo_:.8g} — صفقة لم تُقيَّد")
             elif lq > hi_ + 1e-9:
@@ -12846,7 +12916,8 @@ def coin_ledger_tick():
     seen_l = list(cl.get("seen") or [])
     seen = set(seen_l)
     daily = cl.setdefault("daily", {})
-    tot = {"dca": cl.setdefault("total_dca", {}), "ri": cl.setdefault("total_ri", {}), "rec": cl.setdefault("total_rec", {})}
+    tot = {"dca": cl.setdefault("total_dca", {}), "ri": cl.setdefault("total_ri", {}), "rec": cl.setdefault("total_rec", {}),
+           "pair": cl.setdefault("total_pair", {})}                  # 🔀 v3.36.79: شبكة عملتين (ربحها بالرئيسية)
     bots = cl.setdefault("bots", {})
     changed = False
     live_g = set()                                     # 🔢 v3.25.4: كل حدث لسه بسجل بوت
@@ -12856,8 +12927,10 @@ def coin_ledger_tick():
             continue
         st = _safe(load_json, paths_of(b)[0], default={}) or {}
         key = os.path.relpath(b["dir"], ROOT)
-        base = str(b["symbol"]).split("-")[0].upper()
+        base = (_pair_parts(b)[1] if c0.get("bot_type") == "grid_pair" else str(b["symbol"]).split("-")[0].upper())   # 🔀 الرئيسية
         evs = []
+        if c0.get("bot_type") == "grid_pair":
+            evs += _pair_coin_events(st)
         if c0.get("bot_type") == "dca":
             for c in (st.get("cycles_log") or []):
                 if c.get("id"):
@@ -12886,7 +12959,7 @@ def coin_ledger_tick():
             tot[src][base] = round(float(tot[src].get(base) or 0) + q, 10)
             be = bots.setdefault(key, {"sym": b["symbol"], "type": c0.get("bot_type") or "grid"})
             be[src] = round(float(be.get(src) or 0) + q, 10)
-            journal("profit", f"🪙 {q:+.8g} {base} ربح محرّر بالعملة — {'DCA بيعي' if src == 'dca' else ('البوت الدوري' if src == 'rec' else 'تحرير إعادة الاستثمار')} · يوم {day}", "ok",
+            journal("profit", f"🪙 {q:+.8g} {base} ربح محرّر بالعملة — {'DCA بيعي' if src == 'dca' else ('البوت الدوري' if src == 'rec' else ('شبكة عملتين' if src == 'pair' else 'تحرير إعادة الاستثمار'))} · يوم {day}", "ok",
                     bot=key, sym=b["symbol"], event=eid, coin=q, base=base, day=day)
     if changed:
         cl["seen"] = list(dict.fromkeys([x for x in seen_l if x in live_g] + seen_l[-30000:]))   # 🔢 v3.25.4: اللي لسه بسجلات البوتات ما ينمسح
@@ -12906,8 +12979,8 @@ def coins_period(start, end):
         if not (start <= d <= end) or not isinstance(row, dict):
             continue
         for base, e in row.items():
-            o = out.setdefault(base, {"dca": 0.0, "ri": 0.0, "rec": 0.0, "t": 0.0})
-            for k in ("dca", "ri", "rec"):
+            o = out.setdefault(base, {"dca": 0.0, "ri": 0.0, "rec": 0.0, "pair": 0.0, "t": 0.0})
+            for k in ("dca", "ri", "rec", "pair"):
                 v = float((e or {}).get(k) or 0)
                 o[k] += v
                 o["t"] += v
@@ -12940,6 +13013,8 @@ def _ct_events(bt, st):
             out.append((str(c["id"]), c.get("profit"), 0.0, c.get("ts")))
         elif bt == "rec_sell":
             out.append((str(c["id"]), c.get("rel") if c.get("rel") is not None else c.get("profit"), c.get("ri") or 0.0, c.get("ts")))
+    if bt == "grid_pair":                                       # 🔀 v3.36.79: كل بيعة تداول بالرئيسية
+        out += [(eid, q, 0.0, ts) for eid, q, ts, _s in _pair_coin_events(st)]
     return out
 
 
@@ -12999,7 +13074,7 @@ def coin_trade_tick():
             continue
         st = _safe(load_json, paths_of(b)[0], default={}) or {}
         key = os.path.relpath(b["dir"], ROOT)
-        base = str(b["symbol"]).split("-")[0].upper()
+        base = (_pair_parts(b)[1] if bt == "grid_pair" else str(b["symbol"]).split("-")[0].upper())   # 🔀 الرئيسية
         if first and bt in _REC_T:                     # سحب المعاد استثماره (بدفتر العملات تحت «rec») ⇒ ينطرح من الباقي
             for r in (st.get("releases") or []):
                 try:
@@ -14274,7 +14349,7 @@ def alltime_view():
         except Exception:
             continue
     cl = load_json(COIN_LEDGER) or {}
-    for src in ("total_dca", "total_ri", "total_rec"):
+    for src in ("total_dca", "total_ri", "total_rec", "total_pair"):
         for base, q in ((cl.get(src) or {}) if isinstance(cl, dict) else {}).items():
             coins[base] = coins.get(base, 0.0) + float(q or 0)
     tb = _safe(trade_book, default=None) or {}
@@ -14525,7 +14600,8 @@ def build_report(kind, ref=None):
         for base, v in sorted(CP.items(), key=lambda kv: kv[0]):
             parts = ([f"DCA بيعي `{v['dca']:+.8g}`"] if abs(v.get("dca", 0)) > 1e-12 else []) \
                 + ([f"تحرير إعادة الاستثمار `{v['ri']:+.8g}`"] if abs(v.get("ri", 0)) > 1e-12 else []) \
-                + ([f"الدوري `{v['rec']:+.8g}`"] if abs(v.get("rec", 0)) > 1e-12 else [])
+                + ([f"الدوري `{v['rec']:+.8g}`"] if abs(v.get("rec", 0)) > 1e-12 else []) \
+                + ([f"شبكة عملتين `{v['pair']:+.8g}`"] if abs(v.get("pair", 0)) > 1e-12 else [])
             L.append(f"▫️ *{_tp_md(base)}*: `{v['t']:+.8g}`" + (" = " + " + ".join(parts) if len(parts) > 1 else (" · " + parts[0] if parts else "")))
     A = _tp_alltime()
     L.append(SEP)
@@ -23653,14 +23729,14 @@ def books_fresh_start():
         cl = load_json(COIN_LEDGER) or {}
         if isinstance(cl, dict):
             cl["daily"] = {d: v for d, v in (cl.get("daily") or {}).items() if d >= today}
-            tot = {"dca": {}, "ri": {}, "rec": {}}
+            tot = {"dca": {}, "ri": {}, "rec": {}, "pair": {}}
             for row in cl["daily"].values():
                 for base, e in (row or {}).items():
-                    for src in ("dca", "ri", "rec"):
+                    for src in ("dca", "ri", "rec", "pair"):
                         q = float((e or {}).get(src) or 0)
                         if abs(q) > 1e-12:
                             tot[src][base] = round(tot[src].get(base, 0.0) + q, 10)
-            cl["total_dca"], cl["total_ri"], cl["total_rec"], cl["bots"] = tot["dca"], tot["ri"], tot["rec"], {}
+            cl["total_dca"], cl["total_ri"], cl["total_rec"], cl["total_pair"], cl["bots"] = tot["dca"], tot["ri"], tot["rec"], tot["pair"], {}
             save_json_atomic(COIN_LEDGER, cl)                # «seen» يبقى ⇒ الأحداث القديمة ما تنعاد
         for _fn in (COINTR_FILE, ACCPL_FILE):                # 🪙💵 v3.30.0: نفس القاعدة — الأيام قبل اليوم تنمسح · «seen» يبقى
             _B = load_json(_fn) or {}
@@ -24707,7 +24783,16 @@ def price_loop():
     while True:
         try:
             # 🪙 رموز المُراكِمات أيضاً — حتى لو ما عندك بوت على تلك العملة
-            _sy = {b["symbol"] for b in bot_dirs().values()}
+            _pairs = {}
+            _sy = set()
+            for _b in bot_dirs().values():
+                if str((_b.get("cfg") or {}).get("bot_type") or "") == "grid_pair":     # 🔀 v3.36.79: SOL-XRP ليست أداة ⇒ ساقاها بالدولار
+                    _o, _m = _pair_parts(_b)
+                    _q = str((_b.get("cfg") or {}).get("bridge") or "USDT")
+                    _pairs[_b["symbol"]] = (f"{_o}-{_q}", f"{_m}-{_q}")
+                    _sy |= {f"{_o}-{_q}", f"{_m}-{_q}"}
+                else:
+                    _sy.add(_b["symbol"])
             try:
                 _sy |= {a.get("symbol") for a in acc_cfgs() if a.get("symbol")}
             except Exception:
@@ -24737,6 +24822,9 @@ def price_loop():
                 if px:
                     PX[sym] = px
                     got_any = True
+            for _ps, (_lo, _lm) in _pairs.items():         # 🔀 النسبة = سعر الثانية ÷ سعر الرئيسية
+                if float(PX.get(_lo) or 0) > 0 and float(PX.get(_lm) or 0) > 0:
+                    PX[_ps] = float(PX[_lo]) / float(PX[_lm])
             if syms:
                 if got_any:
                     BAL_ERR.pop("السعر العام", None)
@@ -39900,6 +39988,186 @@ _GRIDS_B64 = (
 )
 GRIDS_SRC = _zlib.decompress(_b64.b64decode(_GRIDS_B64)).decode("utf-8")
 GRIDS_VERSION = _eng_fp(GRIDS_SRC)
+# 🔀 v3.36.79: محرك «شبكة عملتين» (جديد — عملة رئيسية مثل الدولار · رجلان عبر الدولار بأمر فوري · ولا أمر قاعد على المنصة) — يُكتب
+#   بمجلد البوت باسم main.py · المصدر devtests/pair/eng/main_pair.py · يتغيّر بـ devtests/step/embed_engine.py … --var=_GRIDX_B64 فقط
+_GRIDX_B64 = (
+"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"
+"DPSSa/z+X37hXBrUgGiLXfk/Wk+RUg=="
+)
+GRIDX_SRC = _zlib.decompress(_b64.b64decode(_GRIDX_B64)).decode("utf-8")
+GRIDX_VERSION = _eng_fp(GRIDX_SRC)
 # 🔁 v3.25.0: محرك البوت الدوري (الشراء/البيع المتكرر) — يُكتب بمجلد البوت باسم recur.py
 _REC_B64 = (
 "eNrVfWlzHMeV4Hf8itriclFFNhoHRQ7doZZDIimLa4mURSpsLRZRanZXA230hapuEHAPNkwSPMRxhCxZs46YnQmNzNUChERRFCXSkiP2g+ZPAPtRf2D9E/Yd"
@@ -41353,6 +41621,8 @@ def engine_for(cfg):
         return GRIDP_SRC, "main.py", GRIDP_VERSION
     if bt == "grid_step":
         return GRIDS_SRC, "main.py", GRIDS_VERSION          # 🪜 v3.36.15: الشبكي المتدرج
+    if bt == "grid_pair":
+        return GRIDX_SRC, "main.py", GRIDX_VERSION          # 🔀 v3.36.79: شبكة عملتين
     if bt == "rec_va":
         return VA_SRC, "vpath.py", VA_VERSION                # 💹 v3.34.0: مسار القيمة
     if bt in ("rec_buy", "rec_sell"):
@@ -42222,14 +42492,14 @@ def books_audit():
         if neg:
             add(f"يوم سالب بدفتر جرد — {k}", False, f"{neg}", "warn")
     cl = load_json(COIN_LEDGER) or {}
-    for src in ("dca", "ri", "rec"):
+    for src in ("dca", "ri", "rec", "pair"):
         tot = {}
         for row in (cl.get("daily") or {}).values():
             for base, e in (row or {}).items():
                 tot[base] = tot.get(base, 0.0) + float((e or {}).get(src) or 0)
         T2 = cl.get("total_" + src) or {}
         okc = all(near(tot.get(k2, 0), T2.get(k2, 0), 1e-8) for k2 in set(tot) | set(T2))
-        add(f"دفتر العملات ({'DCA بيعي' if src == 'dca' else ('الدوري' if src == 'rec' else 'إعادة استثمار')}): الإجمالي = مجموع الأيام", okc, f"أيام {tot} · إجمالي {T2}")
+        add(f"دفتر العملات ({'DCA بيعي' if src == 'dca' else ('الدوري' if src == 'rec' else ('شبكة عملتين' if src == 'pair' else 'إعادة استثمار'))}): الإجمالي = مجموع الأيام", okc, f"أيام {tot} · إجمالي {T2}")
     st_all = _safe(acc_state, default={}) or {}
     for a in _safe(acc_cfgs, default=[]) or []:
         e = st_all.get(a.get("id")) or {}
