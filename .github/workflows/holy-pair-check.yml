@@ -1,22 +1,21 @@
-# 🔀 Holy pair-grid check (the owner 9-11: «sol مع xrp»): is there a direct pair · grid cycles on the SOL/XRP ratio vs XRP-USDT · lines HOLYPAIR.
-# Public market data only — no keys, no orders, no notifications. Runs only when the check, ci/RUN_PAIR or this file changes.
-name: Holy pair-grid check
+name: Holy pair engine check
 on:
   push:
     branches: [claude/eager-brown-jf08ur]
-    paths: ['ci/pair_check.py', 'ci/RUN_PAIR', '.github/workflows/holy-pair-check.yml']
+    paths: ['ci/pair_engine_check.py', 'ci/RUN_PAIR', '.github/workflows/holy-pair-check.yml', 'devtests/pair/eng/main_pair.py']
 permissions:
   contents: read
 jobs:
-  real-prices:
+  pair:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Funding arbitrage vs grid on real OKX data (public data · no keys · no orders · no notifications)
+      - name: «شبكة عملتين» — the REAL engine on REAL OKX prices (XRP main with SOL · XLM · LINK · BTC · ETH · 2% · 20$ of XRP per buy · 400$) — 5-minute closes for 90 days, then 15-minute closes for a year — public data, no keys, no orders
         run: |
-          pip install -q requests
-          python3 ci/pair_check.py Holy_Dashboard.pyw
+          pip install -q requests numpy
+          python3 ci/pair_engine_check.py Holy_Dashboard.pyw 5m
+          python3 ci/pair_engine_check.py Holy_Dashboard.pyw 15m

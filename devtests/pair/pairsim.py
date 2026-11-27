@@ -372,6 +372,7 @@ class PBot:
         self.audit_on, self.audits, self.restarts = True, 0, 0
         self.on_loop = None
         self.max_dev = D(0)
+        self.ff = False                         # ⏩ fast-forward the idle time between price steps (long real-price runs)
 
     def _load(self):
         ex, me = self.ex, self
@@ -517,6 +518,10 @@ class PBot:
             fn(self)
         if self.si >= len(self.steps) and self.clock.t >= self.end:
             raise Stop()
+        if self.ff and self.si < len(self.steps) and not (self.st or {}).get("op") and not self.ex.late:
+            nt = self.steps[self.si][0] - 2.5             # ⏩ nothing in flight: jump to just before the next price step
+            if nt > self.clock.t + 6:
+                self.clock.t = nt
 
     def run(self, steps, end=None, cut_at=None, max_restarts=10000):
         """steps: [(t, fn(bot))] — t relative to the start · a power cut ⇒ a fresh engine on the same folder"""
