@@ -1,0 +1,26 @@
+name: Holy ratio check
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/ratio_check.py', 'ci/RUN_RATIO', '.github/workflows/holy-ratio-check.yml']
+permissions:
+  contents: read
+jobs:
+  ratio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: a bot between two coins through the dollar (XRP and XLM · ratio steps · every fee and OKX lot · real OKX candles 1H 3 years · 15m 1 year · 5m 90 days) — public data, no keys, no orders
+        run: |
+          pip install -q requests numpy
+          python3 ci/ratio_check.py Holy_Dashboard.pyw
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: holyratio
+          path: /tmp/holyratio.json
+          if-no-files-found: ignore
