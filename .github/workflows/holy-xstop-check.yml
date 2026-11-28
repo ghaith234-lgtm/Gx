@@ -1,0 +1,26 @@
+name: Holy XRP stop check
+on:
+  push:
+    branches: [claude/eager-brown-jf08ur]
+    paths: ['ci/xrp_stop_check.py', 'ci/RUN_XSTOP', '.github/workflows/holy-xstop-check.yml']
+permissions:
+  contents: read
+jobs:
+  xstop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: XRP — sell on the way down, buy back on the way up (stop follows the top · confirmed close · parts · cheaper buys) on REAL OKX prices — the last year minute by minute, every year of the hourly history, 200 random years from real pieces — public data, no keys, no orders
+        run: |
+          pip install -q requests numpy
+          python3 ci/xrp_stop_check.py Holy_Dashboard.pyw
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: holyxstop
+          path: /tmp/holyxstop.json
+          if-no-files-found: ignore
